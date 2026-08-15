@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import clsx from 'clsx'
 import type { Account } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName } from '../lib/assets'
+import { Asset } from '../components/Asset'
+import { EmptyState } from '../components/EmptyState'
+import { Skeleton } from '../components/Skeleton'
+import * as Icon from '../components/icons'
 
 type SortKey = 'mastery' | 'games'
 
@@ -16,10 +21,23 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
   })
 
   if (isLoading || !assets) {
-    return <p className="p-6 text-sm text-slate-500">Loading champion stats…</p>
+    return (
+      <div className="mx-auto max-w-4xl space-y-1.5 p-4">
+        {Array.from({ length: 12 }, (_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    )
   }
+
   if (!data) {
-    return <p className="p-6 text-sm text-slate-500">No champion data available.</p>
+    return (
+      <EmptyState
+        icon={<Icon.Trophy />}
+        title="No champion data available"
+        description="Champion mastery comes from Riot and needs a valid API key."
+      />
+    )
   }
 
   const winRateByChamp = new Map(data.localWinRates.map((w) => [w.championId, w]))
@@ -46,52 +64,69 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
     })
     .slice(0, 50)
 
+  const totalGames = data.localWinRates.reduce((n, w) => n + w.games, 0)
+  const maxPoints = Math.max(...rows.map((r) => r.mastery?.championPoints ?? 0), 1)
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={<Icon.Trophy />}
+        title="No champions yet"
+        description="Sync your match history, or refresh to pull mastery from Riot."
+      />
+    )
+  }
+
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-4xl space-y-4 p-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold">Champions</h1>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Mastery from Riot; win rates computed from your {data.localWinRates.reduce((n, w) => n + w.games, 0)} synced games.
+          <h1 className="font-display text-xl text-text">Champions</h1>
+          <p className="mt-0.5 text-sm text-text-mute">
+            Mastery from Riot; win rates computed locally from your {totalGames} synced games.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-md border border-slate-700 text-xs">
-            <button
-              onClick={() => setSort('mastery')}
-              className={`px-3 py-1.5 transition ${sort === 'mastery' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Mastery
-            </button>
-            <button
-              onClick={() => setSort('games')}
-              className={`px-3 py-1.5 transition ${sort === 'games' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Games played
-            </button>
+          <div className="flex overflow-hidden rounded-md border border-hairline text-sm">
+            {(
+              [
+                ['mastery', 'Mastery'],
+                ['games', 'Games played']
+              ] as Array<[SortKey, string]>
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSort(key)}
+                className={clsx(
+                  'px-3 py-1.5 transition',
+                  sort === key ? 'bg-gold/10 text-gold' : 'text-text-dim hover:bg-surface'
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <button
             onClick={() => refetch()}
             disabled={isFetching}
-            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-gold-dim hover:text-gold disabled:opacity-50"
           >
+            <Icon.Sync className={isFetching ? 'animate-spin' : undefined} />
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/40">
-        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 border-b border-slate-800 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 border-b border-hairline px-4 py-2 text-2xs font-medium uppercase tracking-widest text-text-mute">
           <span>Champion</span>
-          <span className="w-20 text-right">Mastery</span>
-          <span className="w-16 text-right">Games</span>
-          <span className="w-20 text-right">Win rate</span>
+          <span className="w-28 text-right">Mastery</span>
+          <span className="w-14 text-right">Games</span>
+          <span className="w-24 text-right">Win rate</span>
         </div>
 
-        <ul className="divide-y divide-slate-800/70">
+        <ul className="divide-y divide-hairline/60">
           {rows.map((row) => {
-            const icon = championIconUrl(assets, row.championId)
-            const name = championName(assets, row.championId)
             const games = row.winRate?.games ?? 0
             const wins = row.winRate?.wins ?? 0
             const wr = games > 0 ? Math.round((wins / games) * 100) : null
@@ -99,48 +134,62 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
             return (
               <li
                 key={row.championId}
-                className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-4 py-2"
+                className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-4 py-2 transition hover:bg-surface"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  {icon ? (
-                    <img src={icon} alt="" className="h-8 w-8 shrink-0 rounded" />
-                  ) : (
-                    <div className="h-8 w-8 shrink-0 rounded bg-slate-800" />
-                  )}
-                  <span className="truncate text-sm text-slate-200">{name}</span>
+                  <Asset
+                    src={championIconUrl(assets, row.championId)}
+                    className="h-9 w-9"
+                    rounded="rounded-full"
+                  />
+                  <span className="truncate text-base text-text">
+                    {championName(assets, row.championId)}
+                  </span>
                 </div>
 
-                <div className="w-20 text-right">
+                <div className="w-28 text-right">
                   {row.mastery ? (
                     <>
-                      <p className="text-xs tabular-nums text-slate-300">
+                      <p className="text-sm tabular-nums text-text-dim">
                         {row.mastery.championPoints.toLocaleString()}
+                        <span className="ml-1.5 text-2xs text-gold">
+                          Lv {row.mastery.championLevel}
+                        </span>
                       </p>
-                      <p className="text-[10px] text-slate-600">Lv {row.mastery.championLevel}</p>
+                      {/* Relative to this player's best champion, not an absolute scale. */}
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-2">
+                        <div
+                          className="h-full rounded-full bg-gold/60"
+                          style={{ width: `${(row.mastery.championPoints / maxPoints) * 100}%` }}
+                        />
+                      </div>
                     </>
                   ) : (
-                    <span className="text-xs text-slate-600">—</span>
+                    <span className="text-sm text-text-mute">—</span>
                   )}
                 </div>
 
-                <span className="w-16 text-right text-xs tabular-nums text-slate-400">
+                <span className="w-14 text-right text-sm tabular-nums text-text-dim">
                   {games > 0 ? games : '—'}
                 </span>
 
-                <div className="w-20 text-right">
+                <div className="w-24 text-right">
                   {wr !== null ? (
                     <>
                       <p
-                        className={`text-xs tabular-nums ${wr >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}
+                        className={clsx(
+                          'text-sm tabular-nums',
+                          wr >= 50 ? 'text-teal' : 'text-text-dim'
+                        )}
                       >
                         {wr}%
                       </p>
-                      <p className="text-[10px] text-slate-600">
+                      <p className="text-2xs tabular-nums text-text-mute">
                         {wins}W {games - wins}L
                       </p>
                     </>
                   ) : (
-                    <span className="text-xs text-slate-600">—</span>
+                    <span className="text-sm text-text-mute">—</span>
                   )}
                 </div>
               </li>

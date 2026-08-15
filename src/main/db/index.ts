@@ -3,13 +3,15 @@ import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import initSql from './migrations/001_init.sql?raw'
+import matchStatsSql from './migrations/002_match_stats.sql?raw'
 
 let db: DatabaseSync | null = null
 
 // Inlined at build time via Vite's ?raw import so migrations work identically
 // in dev and in the packaged app with no file copying.
 const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
-  { name: '001_init.sql', sql: initSql }
+  { name: '001_init.sql', sql: initSql },
+  { name: '002_match_stats.sql', sql: matchStatsSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

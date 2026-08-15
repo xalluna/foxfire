@@ -25,9 +25,14 @@ export async function searchSummoner(input: RiotIdInput): Promise<AdHocSummonerR
   const matchIds = await getMatchIdsByPuuid(regional, account.puuid, 0, AD_HOC_MATCH_COUNT)
   const matches = await Promise.all(matchIds.map((id) => getMatchById(regional, id)))
 
+  // Mirrors the shape getMatchSummaries returns from SQLite, so ad-hoc results
+  // render through exactly the same match row as tracked accounts.
   const recentMatches: MatchSummary[] = matches.flatMap((match) => {
     const me = match.info.participants.find((p) => p.puuid === account.puuid)
     if (!me) return []
+
+    const team = match.info.participants.filter((p) => p.teamId === me.teamId)
+
     return [
       {
         matchId: match.metadata.matchId,
@@ -38,9 +43,21 @@ export async function searchSummoner(input: RiotIdInput): Promise<AdHocSummonerR
         win: me.win,
         championId: me.championId,
         championName: me.championName,
+        champLevel: me.champLevel,
         kills: me.kills,
         deaths: me.deaths,
-        assists: me.assists
+        assists: me.assists,
+        cs: me.totalMinionsKilled + me.neutralMinionsKilled,
+        goldEarned: me.goldEarned,
+        damageDealtToChampions: me.totalDamageDealtToChampions,
+        largestMultiKill: me.largestMultiKill ?? null,
+        items: [me.item0, me.item1, me.item2, me.item3, me.item4, me.item5, me.item6],
+        summoner1Id: me.summoner1Id,
+        summoner2Id: me.summoner2Id,
+        perks: me.perks,
+        teamPosition: me.teamPosition ?? null,
+        teamKills: team.reduce((sum, p) => sum + p.kills, 0),
+        teamDamage: team.reduce((sum, p) => sum + p.totalDamageDealtToChampions, 0)
       }
     ]
   })

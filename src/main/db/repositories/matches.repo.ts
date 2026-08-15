@@ -27,8 +27,9 @@ export function insertMatch(db: DatabaseSync, match: MatchDto): void {
       `INSERT OR IGNORE INTO match_participants
          (match_id, puuid, game_name, tag_line, team_id, win, champion_id, champion_name,
           champ_level, kills, deaths, assists, gold_earned, cs, damage_dealt_to_champions,
-          damage_taken, items_json, summoner1_id, summoner2_id, perks_json, team_position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          damage_taken, items_json, summoner1_id, summoner2_id, perks_json, team_position,
+          largest_multi_kill)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
 
     for (const p of info.participants) {
@@ -53,7 +54,8 @@ export function insertMatch(db: DatabaseSync, match: MatchDto): void {
         p.summoner1Id,
         p.summoner2Id,
         JSON.stringify(p.perks),
-        p.teamPosition ?? null
+        p.teamPosition ?? null,
+        p.largestMultiKill ?? null
       )
     }
 
@@ -82,11 +84,32 @@ interface MatchSummaryRow {
   win: number
   champion_id: number
   champion_name: string | null
+  champ_level: number | null
   kills: number
   deaths: number
   assists: number
+  cs: number | null
+  gold_earned: number | null
+  damage_dealt_to_champions: number | null
+  largest_multi_kill: number | null
+  items_json: string | null
+  summoner1_id: number | null
+  summoner2_id: number | null
+  perks_json: string | null
+  team_position: string | null
+  team_kills: number | null
+  team_damage: number | null
 }
 
+/**
+ * A page of match history for one player.
+ *
+ * Selects the full per-row stat set rather than the bare minimum: every field
+ * is already on disk, so a denser match row costs one query rather than any
+ * additional Riot traffic. The subquery folds each team's kills and damage
+ * into the row so kill participation and damage share can be shown without a
+ * second round trip per match.
+ */
 export function getMatchSummaries(
   db: DatabaseSync,
   puuid: string,
@@ -96,9 +119,19 @@ export function getMatchSummaries(
   const rows = db
     .prepare(
       `SELECT m.match_id, m.game_creation, m.game_duration, m.game_mode, m.queue_id,
-              p.win, p.champion_id, p.champion_name, p.kills, p.deaths, p.assists
+              p.win, p.champion_id, p.champion_name, p.champ_level,
+              p.kills, p.deaths, p.assists, p.cs, p.gold_earned,
+              p.damage_dealt_to_champions, p.largest_multi_kill, p.items_json,
+              p.summoner1_id, p.summoner2_id, p.perks_json, p.team_position,
+              t.team_kills, t.team_damage
          FROM match_participants p
          JOIN matches m ON m.match_id = p.match_id
+         JOIN (SELECT match_id, team_id,
+                      SUM(kills) AS team_kills,
+                      SUM(damage_dealt_to_champions) AS team_damage
+                 FROM match_participants
+                GROUP BY match_id, team_id) t
+           ON t.match_id = p.match_id AND t.team_id = p.team_id
         WHERE p.puuid = ?
         ORDER BY m.game_creation DESC
         LIMIT ? OFFSET ?`
@@ -114,9 +147,21 @@ export function getMatchSummaries(
     win: row.win === 1,
     championId: row.champion_id,
     championName: row.champion_name,
+    champLevel: row.champ_level,
     kills: row.kills,
     deaths: row.deaths,
-    assists: row.assists
+    assists: row.assists,
+    cs: row.cs,
+    goldEarned: row.gold_earned,
+    damageDealtToChampions: row.damage_dealt_to_champions,
+    largestMultiKill: row.largest_multi_kill,
+    items: row.items_json ? (JSON.parse(row.items_json) as number[]) : [],
+    summoner1Id: row.summoner1_id,
+    summoner2Id: row.summoner2_id,
+    perks: row.perks_json ? JSON.parse(row.perks_json) : null,
+    teamPosition: row.team_position,
+    teamKills: row.team_kills ?? 0,
+    teamDamage: row.team_damage ?? 0
   }))
 }
 
@@ -141,6 +186,7 @@ interface ParticipantRow {
   summoner2_id: number | null
   perks_json: string | null
   team_position: string | null
+  largest_multi_kill: number | null
 }
 
 interface MatchRow {
@@ -173,7 +219,8 @@ function toParticipant(row: ParticipantRow): MatchParticipant {
     summoner1Id: row.summoner1_id,
     summoner2Id: row.summoner2_id,
     perks: row.perks_json ? JSON.parse(row.perks_json) : null,
-    teamPosition: row.team_position
+    teamPosition: row.team_position,
+    largestMultiKill: row.largest_multi_kill
   }
 }
 

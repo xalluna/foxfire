@@ -82,6 +82,8 @@ export const MatchParticipantDtoSchema = z
     summoner1Id: z.number(),
     summoner2Id: z.number(),
     teamPosition: z.string().optional(),
+    // Absent on very old matches, so optional rather than required.
+    largestMultiKill: z.number().optional(),
     perks: PerksSchema
   })
   .passthrough()
