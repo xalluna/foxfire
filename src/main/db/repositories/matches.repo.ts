@@ -28,8 +28,8 @@ export function insertMatch(db: DatabaseSync, match: MatchDto): void {
          (match_id, puuid, game_name, tag_line, team_id, win, champion_id, champion_name,
           champ_level, kills, deaths, assists, gold_earned, cs, damage_dealt_to_champions,
           damage_taken, items_json, summoner1_id, summoner2_id, perks_json, team_position,
-          largest_multi_kill)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          largest_multi_kill, game_ended_in_early_surrender)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
 
     for (const p of info.participants) {
@@ -55,7 +55,8 @@ export function insertMatch(db: DatabaseSync, match: MatchDto): void {
         p.summoner2Id,
         JSON.stringify(p.perks),
         p.teamPosition ?? null,
-        p.largestMultiKill ?? null
+        p.largestMultiKill ?? null,
+        p.gameEndedInEarlySurrender ? 1 : 0
       )
     }
 
@@ -99,6 +100,15 @@ interface MatchSummaryRow {
   team_position: string | null
   team_kills: number | null
   team_damage: number | null
+  game_ended_in_early_surrender: number
+  // All null unless a match_rank row exists for this match and account.
+  lp_delta: number | null
+  tier_before: string | null
+  rank_before: string | null
+  tier_after: string | null
+  rank_after: string | null
+  is_promotion: number | null
+  is_demotion: number | null
 }
 
 /**
@@ -109,12 +119,18 @@ interface MatchSummaryRow {
  * additional Riot traffic. The subquery folds each team's kills and damage
  * into the row so kill participation and damage share can be shown without a
  * second round trip per match.
+ *
+ * `queueId` filters here rather than in the renderer so that LIMIT/OFFSET page
+ * over the filtered set — paging first and filtering after would yield short,
+ * uneven pages. The predicate goes on the outer query, leaving the team-totals
+ * subquery whole so kill participation stays correct under any filter.
  */
 export function getMatchSummaries(
   db: DatabaseSync,
   puuid: string,
   limit: number,
-  offset: number
+  offset: number,
+  queueId: number | null = null
 ): MatchSummary[] {
   const rows = db
     .prepare(
@@ -123,7 +139,10 @@ export function getMatchSummaries(
               p.kills, p.deaths, p.assists, p.cs, p.gold_earned,
               p.damage_dealt_to_champions, p.largest_multi_kill, p.items_json,
               p.summoner1_id, p.summoner2_id, p.perks_json, p.team_position,
-              t.team_kills, t.team_damage
+              p.game_ended_in_early_surrender,
+              t.team_kills, t.team_damage,
+              mr.lp_delta, mr.tier_before, mr.rank_before, mr.tier_after, mr.rank_after,
+              mr.is_promotion, mr.is_demotion
          FROM match_participants p
          JOIN matches m ON m.match_id = p.match_id
          JOIN (SELECT match_id, team_id,
@@ -132,11 +151,18 @@ export function getMatchSummaries(
                  FROM match_participants
                 GROUP BY match_id, team_id) t
            ON t.match_id = p.match_id AND t.team_id = p.team_id
+         -- Resolving the account inline keeps this usable for ad-hoc searches:
+         -- a puuid with no tracked account yields NULL and the LEFT JOIN simply
+         -- produces no LP data, rather than needing a separate code path.
+         LEFT JOIN match_rank mr
+           ON mr.match_id = p.match_id
+          AND mr.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
         WHERE p.puuid = ?
+          AND (? IS NULL OR m.queue_id = ?)
         ORDER BY m.game_creation DESC
         LIMIT ? OFFSET ?`
     )
-    .all(puuid, limit, offset) as unknown as MatchSummaryRow[]
+    .all(puuid, queueId, queueId, limit, offset) as unknown as MatchSummaryRow[]
 
   return rows.map((row) => ({
     matchId: row.match_id,
@@ -161,7 +187,20 @@ export function getMatchSummaries(
     perks: row.perks_json ? JSON.parse(row.perks_json) : null,
     teamPosition: row.team_position,
     teamKills: row.team_kills ?? 0,
-    teamDamage: row.team_damage ?? 0
+    teamDamage: row.team_damage ?? 0,
+    isRemake: row.game_ended_in_early_surrender === 1,
+    rank:
+      row.is_promotion === null
+        ? null
+        : {
+            lpDelta: row.lp_delta,
+            tierBefore: row.tier_before,
+            rankBefore: row.rank_before,
+            tierAfter: row.tier_after,
+            rankAfter: row.rank_after,
+            isPromotion: row.is_promotion === 1,
+            isDemotion: row.is_demotion === 1
+          }
   }))
 }
 
@@ -245,17 +284,39 @@ export function getMatchDetail(db: DatabaseSync, matchId: string): MatchDetail |
   }
 }
 
-/** Per-champion win rate computed locally from stored matches — no API call needed. */
-export function getChampionWinRates(db: DatabaseSync, puuid: string): WinRateEntry[] {
+/**
+ * Per-champion win rate computed locally from stored matches — no API call needed.
+ *
+ * Joins `matches` purely to reach `queue_id`, which lives there rather than on
+ * `match_participants`. Without the join this aggregate mixes ARAM and Normals
+ * into the same win rate as Ranked Solo, which is exactly what makes unfiltered
+ * champion stats untrustworthy.
+ *
+ * Remakes are excluded: a game voided after two minutes is not evidence about
+ * how a champion performs, and counting them is what made these numbers differ
+ * from op.gg's.
+ */
+export function getChampionWinRates(
+  db: DatabaseSync,
+  puuid: string,
+  queueId: number | null = null
+): WinRateEntry[] {
   const rows = db
     .prepare(
-      `SELECT champion_id, COUNT(*) AS games, SUM(win) AS wins
-         FROM match_participants
-        WHERE puuid = ?
-        GROUP BY champion_id
+      `SELECT p.champion_id, COUNT(*) AS games, SUM(p.win) AS wins
+         FROM match_participants p
+         JOIN matches m ON m.match_id = p.match_id
+        WHERE p.puuid = ?
+          AND p.game_ended_in_early_surrender = 0
+          AND (? IS NULL OR m.queue_id = ?)
+        GROUP BY p.champion_id
         ORDER BY games DESC`
     )
-    .all(puuid) as unknown as Array<{ champion_id: number; games: number; wins: number }>
+    .all(puuid, queueId, queueId) as unknown as Array<{
+    champion_id: number
+    games: number
+    wins: number
+  }>
 
   return rows.map((row) => ({
     championId: row.champion_id,

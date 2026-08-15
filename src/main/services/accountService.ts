@@ -13,6 +13,7 @@ import {
   upsertLeagueEntries
 } from '../db/repositories/accounts.repo'
 import { ensureSyncState, getSyncState } from '../db/repositories/syncState.repo'
+import { recordRankSnapshot } from './rankHistoryService'
 import { getAccountByRiotId } from '../riot/endpoints/account'
 import { getSummonerByPuuid } from '../riot/endpoints/summoner'
 import { getLeagueEntriesByPuuid } from '../riot/endpoints/league'
@@ -76,6 +77,14 @@ export async function addAccount(input: RiotIdInput): Promise<Account> {
   return getAccountById(db, accountId)!
 }
 
+/**
+ * Refreshes the current rank and records it in the history.
+ *
+ * `league_entries` only ever holds the latest value, so on its own every call
+ * here destroyed the previous reading. Appending a snapshot alongside is the
+ * backstop half of LP tracking: the LCU watcher catches individual games while
+ * the app runs, and this catches whatever moved while it did not.
+ */
 export async function refreshRank(accountId: number): Promise<LeagueEntry[]> {
   const db = getDb()
   const account = getAccountById(db, accountId)
@@ -83,7 +92,24 @@ export async function refreshRank(accountId: number): Promise<LeagueEntry[]> {
 
   const entries = await getLeagueEntriesByPuuid(account.platform as PlatformId, account.puuid)
   upsertLeagueEntries(db, accountId, entries)
-  return getLeagueEntries(db, accountId)
+
+  const stored = getLeagueEntries(db, accountId)
+  for (const entry of stored) {
+    recordRankSnapshot(
+      accountId,
+      {
+        queueType: entry.queueType,
+        tier: entry.tier,
+        rank: entry.rank,
+        leaguePoints: entry.leaguePoints,
+        wins: entry.wins,
+        losses: entry.losses
+      },
+      'league_v4'
+    )
+  }
+
+  return stored
 }
 
 export function removeAccount(accountId: number): void {

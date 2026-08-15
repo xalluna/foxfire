@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Account, LeagueEntry, QueueType } from '@shared/types'
+import { TRACKED_QUEUES } from '@shared/queues'
 
 interface AccountRow {
   id: number
@@ -51,6 +52,29 @@ export function getAccountByPuuid(db: DatabaseSync, puuid: string): Account | nu
   const row = db.prepare('SELECT * FROM accounts WHERE puuid = ?').get(puuid) as
     | unknown as AccountRow
     | undefined
+  return row ? toAccount(row) : null
+}
+
+/**
+ * Looks an account up by Riot ID rather than puuid.
+ *
+ * Needed by the League client watcher: the client reports the canonical
+ * account UUID (36 chars), while everything stored here comes from Riot's
+ * public API, which returns a per-key *encrypted* puuid (78 chars). The two are
+ * different identifiers in different namespaces and never compare equal, so the
+ * Riot ID is the only key the two sources actually share.
+ *
+ * Compared case-insensitively — Riot IDs preserve display case but are unique
+ * without regard to it.
+ */
+export function getAccountByRiotId(
+  db: DatabaseSync,
+  gameName: string,
+  tagLine: string
+): Account | null {
+  const row = db
+    .prepare('SELECT * FROM accounts WHERE LOWER(game_name) = LOWER(?) AND LOWER(tag_line) = LOWER(?)')
+    .get(gameName, tagLine) as unknown as AccountRow | undefined
   return row ? toAccount(row) : null
 }
 
@@ -139,8 +163,6 @@ export function countAccounts(db: DatabaseSync): number {
   const row = db.prepare('SELECT COUNT(*) AS n FROM accounts').get() as unknown as { n: number }
   return row.n
 }
-
-const TRACKED_QUEUES: QueueType[] = ['RANKED_SOLO_5x5', 'RANKED_FLEX_SR']
 
 interface LeagueEntryRow {
   queue_type: string

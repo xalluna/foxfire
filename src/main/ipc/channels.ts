@@ -32,6 +32,18 @@ export const CH = {
   mastery: {
     get: 'mastery:get'
   },
+  rank: {
+    history: 'rank:history'
+  },
+  lcu: {
+    getStatus: 'lcu:getStatus',
+    status: 'lcu:status',
+    rankChanged: 'lcu:rankChanged'
+  },
+  background: {
+    get: 'background:get',
+    set: 'background:set'
+  },
   search: {
     summoner: 'search:summoner'
   },

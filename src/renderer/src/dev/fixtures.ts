@@ -5,9 +5,13 @@ import type {
   MasteryEntry,
   MatchDetail,
   MatchParticipant,
+  MatchRankInfo,
   MatchSummary,
+  QueueType,
+  RankSnapshot,
   WinRateEntry
 } from '@shared/types'
+import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
 
 /**
  * Fixture data for the browser harness (see mockApi.ts).
@@ -178,6 +182,8 @@ interface MatchSeed {
   teamDamage: number
   gold: number
   multiKill?: number
+  /** Voided game: listed in history, excluded from every stat. */
+  remake?: boolean
   agoMs: number
 }
 
@@ -284,6 +290,14 @@ const SEEDS: MatchSeed[] = [
     items: ITEMS_TANK, damage: 13_900, teamKills: 19, teamDamage: 66_000, gold: 10_400, agoMs: 5 * DAY + 11 * HOUR
   },
   {
+    // A remake: someone never connected. Carries a nominal win in the payload
+    // that must not reach any stat, and exercises the muted row treatment.
+    champ: C.Leona, k: 0, d: 0, a: 1, cs: 8, win: true, mins: 1, secs: 14,
+    queueId: 420, position: 'UTILITY', spells: [S.Flash, S.Ignite], keystone: 'Aftershock',
+    items: [], damage: 210, teamKills: 1, teamDamage: 900, gold: 640,
+    remake: true, agoMs: 5 * DAY + 16 * HOUR
+  },
+  {
     champ: C.LeeSin, k: 3, d: 3, a: 10, cs: 271, win: true, mins: 31, secs: 46,
     queueId: 420, position: 'JUNGLE', spells: [S.Smite, S.Flash], keystone: 'Conqueror',
     items: ITEMS_AD, damage: 21_700, teamKills: 32, teamDamage: 84_000, gold: 14_900, agoMs: 5 * DAY + 20 * HOUR
@@ -329,8 +343,124 @@ const SEEDS: MatchSeed[] = [
   }
 ]
 
+const matchIdAt = (index: number): string => `NA1_5${String(1000 - index).padStart(4, '0')}`
+
+/**
+ * Rank tracking begins part-way through this history.
+ *
+ * That mirrors the real constraint rather than papering over it: Riot exposes
+ * no per-match LP, so games played before the app started snapshotting can
+ * never be attributed. The older half of the list therefore renders an empty
+ * chip, which is the state most users will actually see on day one.
+ */
+const TRACKING_STARTED = NOW - 8 * DAY
+
+/** Fixed rather than random so the fixture renders identically every run. */
+const WIN_LP = [21, 19, 23, 18, 22]
+const LOSS_LP = [17, 20, 16, 19, 18]
+
+const SOLO_START = ladderPosition({ tier: 'GOLD', rank: 'IV', leaguePoints: 40 }) ?? 0
+
+/**
+ * Walks the tracked ranked games oldest-first, applying an LP delta per result
+ * and recording a snapshot after each. Deriving both the graph series and the
+ * per-match chips from one walk keeps them consistent — a promotion marker on
+ * the chart always corresponds to a badge on the match that caused it.
+ */
+function buildSoloRankHistory(): {
+  snapshots: RankSnapshot[]
+  byMatchId: Map<string, MatchRankInfo>
+} {
+  const steps = SEEDS.map((s, index) => ({
+    index,
+    at: NOW - s.agoMs,
+    win: s.win,
+    queueId: s.queueId,
+    remake: s.remake ?? false
+  }))
+    // Remakes move no LP, so they get no step and no chip — the same rule the
+    // real attribution applies.
+    .filter((s) => s.queueId === 420 && !s.remake && s.at >= TRACKING_STARTED)
+    .sort((a, b) => a.at - b.at)
+
+  const snapshots: RankSnapshot[] = []
+  const byMatchId = new Map<string, MatchRankInfo>()
+
+  let position = SOLO_START
+  let wins = 42
+  let losses = 38
+
+  const snapshot = (at: number): RankSnapshot => {
+    const r = rankAtPosition(position)
+    return {
+      queueType: 'RANKED_SOLO_5x5',
+      tier: r.tier,
+      rank: r.rank,
+      leaguePoints: r.leaguePoints,
+      wins,
+      losses,
+      ladderPosition: position,
+      source: 'lcu',
+      capturedAt: at
+    }
+  }
+
+  // An anchor shortly before the first tracked game, so that game has a
+  // "before" to diff against. Offset by an hour rather than sitting exactly on
+  // the cutoff, which would coincide with a game and draw a vertical step.
+  snapshots.push(snapshot((steps[0]?.at ?? TRACKING_STARTED) - HOUR))
+
+  for (const [n, step] of steps.entries()) {
+    const before = snapshots[snapshots.length - 1]
+    const delta = step.win ? WIN_LP[n % WIN_LP.length] : -LOSS_LP[n % LOSS_LP.length]
+
+    position = Math.max(0, position + delta)
+    if (step.win) wins += 1
+    else losses += 1
+
+    const after = snapshot(step.at)
+    snapshots.push(after)
+
+    const movement = rankMovement(before, after)
+    byMatchId.set(matchIdAt(step.index), {
+      lpDelta: delta,
+      tierBefore: before.tier,
+      rankBefore: before.rank,
+      tierAfter: after.tier,
+      rankAfter: after.rank,
+      isPromotion: movement === 'promotion',
+      isDemotion: movement === 'demotion'
+    })
+  }
+
+  return { snapshots, byMatchId }
+}
+
+const soloHistory = buildSoloRankHistory()
+
+export const RANK_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
+  RANKED_SOLO_5x5: soloHistory.snapshots,
+  // Flex is deliberately sparse — the queue toggle has to stay legible when one
+  // ladder has far fewer points than the other.
+  RANKED_FLEX_SR: [
+    { tier: 'SILVER', rank: 'I', leaguePoints: 12 },
+    { tier: 'SILVER', rank: 'I', leaguePoints: 63 },
+    { tier: 'GOLD', rank: 'IV', leaguePoints: 8 }
+  ].map((r, i) => ({
+    queueType: 'RANKED_FLEX_SR' as const,
+    tier: r.tier,
+    rank: r.rank,
+    leaguePoints: r.leaguePoints,
+    wins: 8 + i,
+    losses: 7,
+    ladderPosition: ladderPosition(r),
+    source: 'league_v4' as const,
+    capturedAt: NOW - (6 - i * 2) * DAY
+  }))
+}
+
 export const MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
-  matchId: `NA1_5${String(1000 - i).padStart(4, '0')}`,
+  matchId: matchIdAt(i),
   gameCreation: NOW - s.agoMs,
   gameDuration: s.mins * 60 + s.secs,
   gameMode: s.queueId === 450 ? 'ARAM' : 'CLASSIC',
@@ -352,7 +482,9 @@ export const MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   perks: perks(s.keystone),
   teamPosition: s.position,
   teamKills: s.teamKills,
-  teamDamage: s.teamDamage
+  teamDamage: s.teamDamage,
+  isRemake: s.remake ?? false,
+  rank: soloHistory.byMatchId.get(matchIdAt(i)) ?? null
 }))
 
 const FILLER_NAMES = [
@@ -455,15 +587,29 @@ export const MASTERY: MasteryEntry[] = [
 ]
 
 /** Derived from MATCHES so the Champions view agrees with the match list. */
-export const WIN_RATES: WinRateEntry[] = Object.values(
-  MATCHES.reduce<Record<number, WinRateEntry>>((acc, m) => {
-    const entry = acc[m.championId] ?? { championId: m.championId, games: 0, wins: 0 }
-    entry.games += 1
-    if (m.win) entry.wins += 1
-    acc[m.championId] = entry
-    return acc
-  }, {})
-)
+/**
+ * Champion win rates over the visible match list, optionally scoped to a queue.
+ *
+ * Derived rather than hand-written so the harness can never show a win rate
+ * that disagrees with the matches on screen — which is exactly the class of bug
+ * the queue filter exists to fix.
+ */
+export function winRatesFor(queueId: number | null): WinRateEntry[] {
+  return Object.values(
+    MATCHES.filter(
+      // Mirrors getChampionWinRates, which excludes remakes.
+      (m) => !m.isRemake && (queueId === null || m.queueId === queueId)
+    ).reduce<Record<number, WinRateEntry>>((acc, m) => {
+      const entry = acc[m.championId] ?? { championId: m.championId, games: 0, wins: 0 }
+      entry.games += 1
+      if (m.win) entry.wins += 1
+      acc[m.championId] = entry
+      return acc
+    }, {})
+  ).sort((a, b) => b.games - a.games)
+}
+
+export const WIN_RATES: WinRateEntry[] = winRatesFor(null)
 
 export const LIVE_GAME: LiveGameData = {
   gameId: 5_100_200_300,

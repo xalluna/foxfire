@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
-import type { SyncProgressEvent } from '@shared/types'
+import type { LcuStatus, SyncProgressEvent } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
 // The renderer never touches the Riot API or SQLite directly — everything
@@ -25,8 +25,8 @@ const api: Api = {
   },
   dashboard: {
     get: (accountId) => ipcRenderer.invoke(CH.dashboard.get, accountId),
-    matchList: (accountId, limit, offset) =>
-      ipcRenderer.invoke(CH.dashboard.matchList, accountId, limit, offset),
+    matchList: (accountId, limit, offset, queueId) =>
+      ipcRenderer.invoke(CH.dashboard.matchList, accountId, limit, offset, queueId),
     matchDetail: (matchId) => ipcRenderer.invoke(CH.dashboard.matchDetail, matchId)
   },
   sync: {
@@ -49,7 +49,29 @@ const api: Api = {
       ipcRenderer.invoke(CH.liveGame.participantName, regionalRoute, puuid)
   },
   mastery: {
-    get: (accountId, refresh) => ipcRenderer.invoke(CH.mastery.get, accountId, refresh)
+    get: (accountId, refresh, queueId) =>
+      ipcRenderer.invoke(CH.mastery.get, accountId, refresh, queueId)
+  },
+  rank: {
+    history: (accountId, queueType, range) =>
+      ipcRenderer.invoke(CH.rank.history, accountId, queueType, range)
+  },
+  lcu: {
+    getStatus: () => ipcRenderer.invoke(CH.lcu.getStatus),
+    onStatus: (cb) => {
+      const listener = (_e: IpcRendererEvent, status: LcuStatus): void => cb(status)
+      ipcRenderer.on(CH.lcu.status, listener)
+      return () => ipcRenderer.removeListener(CH.lcu.status, listener)
+    },
+    onRankChanged: (cb) => {
+      const listener = (_e: IpcRendererEvent, accountId: number): void => cb(accountId)
+      ipcRenderer.on(CH.lcu.rankChanged, listener)
+      return () => ipcRenderer.removeListener(CH.lcu.rankChanged, listener)
+    }
+  },
+  background: {
+    get: () => ipcRenderer.invoke(CH.background.get),
+    set: (patch) => ipcRenderer.invoke(CH.background.set, patch)
   },
   search: {
     summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)

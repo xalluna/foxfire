@@ -1,0 +1,96 @@
+import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
+import { getBackgroundSettings } from './services/backgroundService'
+import { createMainWindow } from './window'
+
+/**
+ * Keeps the app alive after the window closes, which is what makes per-game LP
+ * tracking possible: rank can only be read from the League client while this
+ * process is running, and games are played with the window closed.
+ *
+ * Only engaged when the user opts into tray mode. With it off, closing the
+ * window quits as before and the league-v4 backstop covers what was missed.
+ */
+let tray: Tray | null = null
+
+/** Distinguishes a real quit from a close that should hide to the tray. */
+let quitting = false
+
+export function isQuitting(): boolean {
+  return quitting
+}
+
+export function beginQuit(): void {
+  quitting = true
+}
+
+function showWindow(): void {
+  const existing = BrowserWindow.getAllWindows()[0]
+  if (existing) {
+    if (existing.isMinimized()) existing.restore()
+    existing.show()
+    existing.focus()
+    return
+  }
+  createMainWindow()
+}
+
+/**
+ * A 16x16 gold trend mark, inlined as base64.
+ *
+ * Embedded rather than loaded from disk because the tray is created in the
+ * main process, whose bundle has no asset pipeline — a file path would resolve
+ * differently in dev and inside the packaged asar, and an icon that fails to
+ * load leaves an invisible tray item the user cannot find.
+ */
+const TRAY_ICON_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPElEQVR42mM4sSqPgRLMMKQM+I+GKXLBwBpAkRdQNJMbiETFArpirJpxGfAfByaYDv6TYjM+A4ZxXsCKAYcp/POndVzqAAAAAElFTkSuQmCC'
+
+function trayIcon(): Electron.NativeImage {
+  return nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_PNG}`)
+}
+
+export function ensureTray(): void {
+  if (tray) return
+
+  tray = new Tray(trayIcon())
+  tray.setToolTip('LoL Stats — tracking rank')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open LoL Stats', click: showWindow },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        click: () => {
+          beginQuit()
+          app.quit()
+        }
+      }
+    ])
+  )
+  tray.on('double-click', showWindow)
+}
+
+export function destroyTray(): void {
+  tray?.destroy()
+  tray = null
+}
+
+/**
+ * Intercepts the window's close button so it hides instead of quitting.
+ *
+ * Attached per window rather than once globally, because the window is
+ * recreated when reopened from the tray.
+ */
+export function attachTrayBehaviour(window: BrowserWindow): void {
+  window.on('close', (event) => {
+    if (quitting || !getBackgroundSettings().runInTray) return
+    event.preventDefault()
+    window.hide()
+  })
+}
+
+/** Adds or removes the tray icon to match the current preference. */
+export function syncTray(): void {
+  if (getBackgroundSettings().runInTray) ensureTray()
+  else destroyTray()
+}

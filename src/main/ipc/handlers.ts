@@ -17,11 +17,15 @@ import {
   resolveParticipantName
 } from '../services/liveGameService'
 import { getMasteryData } from '../services/masteryService'
+import { getRankHistory } from '../services/rankHistoryService'
+import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
+import { getLcuStatus } from '../lcu/watcher'
+import { syncTray } from '../tray'
 import { searchSummoner } from '../services/searchService'
 import { getDb } from '../db'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import { getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
-import type { RiotIdInput } from '@shared/types'
+import type { BackgroundSettings, QueueType, RankRange, RiotIdInput } from '@shared/types'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.settings.get, () => getSettings())
@@ -52,10 +56,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.dashboard.get, (_e, accountId: number) => getDashboard(accountId))
   ipcMain.handle(
     CH.dashboard.matchList,
-    (_e, accountId: number, limit: number, offset: number) => {
+    (_e, accountId: number, limit: number, offset: number, queueId: number | null) => {
       const account = getAccountById(getDb(), accountId)
       if (!account) return []
-      return getMatchSummaries(getDb(), account.puuid, limit, offset)
+      return getMatchSummaries(getDb(), account.puuid, limit, offset, queueId)
     }
   )
   ipcMain.handle(CH.dashboard.matchDetail, (_e, matchId: string) =>
@@ -77,9 +81,28 @@ export function registerIpcHandlers(): void {
     resolveParticipantName(regionalRoute, puuid)
   )
 
-  ipcMain.handle(CH.mastery.get, (_e, accountId: number, refresh: boolean) =>
-    getMasteryData(accountId, refresh)
+  ipcMain.handle(
+    CH.mastery.get,
+    (_e, accountId: number, refresh: boolean, queueId: number | null) =>
+      getMasteryData(accountId, refresh, queueId)
   )
+
+  ipcMain.handle(
+    CH.rank.history,
+    (_e, accountId: number, queueType: QueueType, range: RankRange) =>
+      getRankHistory(accountId, queueType, range)
+  )
+
+  ipcMain.handle(CH.lcu.getStatus, () => getLcuStatus())
+
+  ipcMain.handle(CH.background.get, () => getBackgroundSettings())
+  ipcMain.handle(CH.background.set, (_e, patch: Partial<BackgroundSettings>) => {
+    const next = setBackgroundSettings(patch)
+    // Tray visibility is a main-process concern the service deliberately does
+    // not reach into, so it is applied here where both are already in scope.
+    syncTray()
+    return next
+  })
 
   ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) => searchSummoner(input))
 }

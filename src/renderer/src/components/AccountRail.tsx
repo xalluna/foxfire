@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { Account } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
+import { useLcuStatus } from '../hooks/useLcuStatus'
 import { profileIconUrl } from '../lib/assets'
 import { Asset } from './Asset'
 import { AddAccountForm } from './AddAccountForm'
@@ -25,6 +26,9 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
 
   const activeAccountId = useUiStore((s) => s.activeAccountId)
   const setActiveAccount = useUiStore((s) => s.setActiveAccount)
+
+  const lcuStatus = useLcuStatus()
+  const liveAccountId = lcuStatus.state === 'connected' ? lcuStatus.accountId : null
 
   const setHome = useMutation({
     mutationFn: (id: number) => window.api.accounts.setHome(id),
@@ -66,14 +70,29 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
                     isActive ? 'bg-gold/10' : 'hover:bg-surface'
                   )}
                 >
-                  <Asset
-                    src={assets ? profileIconUrl(assets, account.profileIconId) : null}
-                    className={clsx(
-                      'h-9 w-9 border',
-                      isActive ? 'border-gold' : 'border-hairline'
+                  {/* Presence, in the Slack/Discord position: a dot on the
+                      avatar marks the account currently signed into the League
+                      client, which is the one whose per-game LP is being
+                      captured. Absent on every other account, so an empty
+                      corner means "not this one" rather than "unknown". */}
+                  <span className="relative shrink-0">
+                    <Asset
+                      src={assets ? profileIconUrl(assets, account.profileIconId) : null}
+                      className={clsx(
+                        'h-9 w-9 border',
+                        isActive ? 'border-gold' : 'border-hairline'
+                      )}
+                      rounded="rounded-md"
+                    />
+                    {liveAccountId === account.id && (
+                      <span
+                        title="Signed into the League client — capturing LP"
+                        // Ringed in the rail's own background so the dot reads
+                        // as an overlay rather than part of the artwork.
+                        className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-teal ring-2 ring-canvas"
+                      />
                     )}
-                    rounded="rounded-md"
-                  />
+                  </span>
 
                   {/* Revealed by the rail expanding; kept mounted so the row keeps its height. */}
                   <span className="min-w-0 flex-1 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100">

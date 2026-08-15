@@ -4,15 +4,30 @@ import type {
   AdHocSummonerResult,
   AppSettingsPublic,
   AssetManifest,
+  BackgroundSettings,
+  LcuStatus,
   LeagueEntry,
   LiveGameData,
   MatchDetail,
   MatchSummary,
+  QueueType,
+  RankHistory,
+  RankRange,
   SyncProgressEvent,
   SyncState
 } from '@shared/types'
+import { rankMovement } from '@shared/ladder'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
-import { ACCOUNTS, LEAGUE_ENTRIES, LIVE_GAME, MASTERY, MATCHES, MATCH_DETAILS, WIN_RATES } from './fixtures'
+import {
+  ACCOUNTS,
+  LEAGUE_ENTRIES,
+  LIVE_GAME,
+  MASTERY,
+  MATCHES,
+  MATCH_DETAILS,
+  RANK_SNAPSHOTS,
+  winRatesFor
+} from './fixtures'
 
 /**
  * A fake window.api for running the renderer in a plain browser.
@@ -189,8 +204,17 @@ export const mockApi: Api = {
         syncState: syncState(accountId)
       })
     },
-    matchList: (accountId: number, limit: number, offset: number): Promise<MatchSummary[]> =>
-      delay(matchesFor(accountId).slice(offset, offset + limit), 260),
+    matchList: (
+      accountId: number,
+      limit: number,
+      offset: number,
+      queueId: number | null
+    ): Promise<MatchSummary[]> => {
+      // Filter before slicing, mirroring the real handler's SQL — otherwise the
+      // harness pages differently to the app and hides paging bugs.
+      const all = matchesFor(accountId).filter((m) => queueId === null || m.queueId === queueId)
+      return delay(all.slice(offset, offset + limit), 260)
+    },
     matchDetail: (matchId: string): Promise<MatchDetail | null> =>
       delay(MATCH_DETAILS[matchId] ?? null, 420)
   },
@@ -222,8 +246,57 @@ export const mockApi: Api = {
   },
 
   mastery: {
-    get: (): Promise<MasteryData> =>
-      delay({ riotMastery: MASTERY, localWinRates: WIN_RATES }, 300)
+    get: (_accountId: number, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
+      delay(
+        {
+          // Mastery is lifetime and never narrows; only the win rates do.
+          riotMastery: MASTERY,
+          localWinRates: winRatesFor(queueId)
+        },
+        300
+      )
+  },
+
+  rank: {
+    history: (_accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
+      const since = range === 'all' ? 0 : Date.now() - (range === '7d' ? 7 : 30) * 86_400_000
+      const snapshots = RANK_SNAPSHOTS[queueType].filter((s) => s.capturedAt >= since)
+
+      const milestones = snapshots
+        .flatMap((snapshot, i) => {
+          if (i === 0) return []
+          const movement = rankMovement(snapshots[i - 1], snapshot)
+          if (movement === 'none') return []
+          return [
+            {
+              queueType,
+              movement,
+              tier: snapshot.tier,
+              rank: snapshot.rank,
+              capturedAt: snapshot.capturedAt
+            }
+          ]
+        })
+        .reverse()
+
+      return delay({ snapshots, milestones }, 280)
+    }
+  },
+
+  // The browser harness has no League client and no Electron main process, so
+  // these report the states the renderer must handle rather than pretending to
+  // be connected: a disconnected client, background features switched off.
+  lcu: {
+    getStatus: (): Promise<LcuStatus> => delay({ state: 'disconnected' }, 100),
+    onStatus: () => () => {},
+    onRankChanged: () => () => {}
+  },
+
+  background: {
+    get: (): Promise<BackgroundSettings> =>
+      delay({ runInTray: false, launchAtStartup: false, lcuInstallPath: null }, 100),
+    set: (patch): Promise<BackgroundSettings> =>
+      delay({ runInTray: false, launchAtStartup: false, lcuInstallPath: null, ...patch }, 150)
   },
 
   search: {

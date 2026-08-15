@@ -3,11 +3,16 @@ import type {
   AdHocSummonerResult,
   AppSettingsPublic,
   AssetManifest,
+  BackgroundSettings,
+  LcuStatus,
   LeagueEntry,
   LiveGameData,
   MasteryEntry,
   MatchDetail,
   MatchSummary,
+  QueueType,
+  RankHistory,
+  RankRange,
   RiotIdInput,
   SyncProgressEvent,
   SyncState,
@@ -46,7 +51,13 @@ export interface Api {
   }
   dashboard: {
     get: (accountId: number) => Promise<DashboardData | null>
-    matchList: (accountId: number, limit: number, offset: number) => Promise<MatchSummary[]>
+    /** `queueId` null means every queue; filtering happens in SQL so paging stays even. */
+    matchList: (
+      accountId: number,
+      limit: number,
+      offset: number,
+      queueId: number | null
+    ) => Promise<MatchSummary[]>
     matchDetail: (matchId: string) => Promise<MatchDetail | null>
   }
   sync: {
@@ -66,7 +77,21 @@ export interface Api {
     ) => Promise<{ gameName: string; tagLine: string } | null>
   }
   mastery: {
-    get: (accountId: number, refresh: boolean) => Promise<MasteryData>
+    /** Win rates are scoped to `queueId`; Riot mastery is lifetime and never is. */
+    get: (accountId: number, refresh: boolean, queueId: number | null) => Promise<MasteryData>
+  }
+  rank: {
+    history: (accountId: number, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+  }
+  lcu: {
+    getStatus: () => Promise<LcuStatus>
+    onStatus: (cb: (status: LcuStatus) => void) => () => void
+    /** Fires when the watcher records an LP change, so views can refetch. */
+    onRankChanged: (cb: (accountId: number) => void) => () => void
+  }
+  background: {
+    get: () => Promise<BackgroundSettings>
+    set: (patch: Partial<BackgroundSettings>) => Promise<BackgroundSettings>
   }
   search: {
     summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>

@@ -61,6 +61,83 @@ export interface MatchSummary {
   teamKills: number
   /** Sum over the player's own team — the denominator for damage share. */
   teamDamage: number
+  /**
+   * Voided a few minutes in because someone failed to connect. Still listed in
+   * match history, but excluded from win rates, recent form and LP attribution
+   * — no LP moves and the result says nothing about the champion.
+   */
+  isRemake: boolean
+  /** Null for unranked queues, and for any game LP could not be attributed to. */
+  rank: MatchRankInfo | null
+}
+
+/**
+ * What a single game was worth on the ladder.
+ *
+ * Riot exposes no per-match LP, so this is derived by diffing rank snapshots.
+ * It exists only when exactly one ranked game sat between two consecutive
+ * snapshots — every other match carries null and renders no chip at all.
+ */
+export interface MatchRankInfo {
+  lpDelta: number | null
+  tierBefore: string | null
+  rankBefore: string | null
+  tierAfter: string | null
+  rankAfter: string | null
+  isPromotion: boolean
+  isDemotion: boolean
+}
+
+/** One reading of a ladder position, appended rather than overwritten. */
+export interface RankSnapshot {
+  queueType: QueueType
+  tier: string | null
+  rank: string | null
+  leaguePoints: number | null
+  wins: number | null
+  losses: number | null
+  /** Precomputed by shared/ladder.ts so the graph plots without recomputing. */
+  ladderPosition: number | null
+  source: 'lcu' | 'league_v4'
+  /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
+  capturedAt: number
+}
+
+/** A crossed tier or division boundary, for the climb summary. */
+export interface RankMilestone {
+  queueType: QueueType
+  movement: 'promotion' | 'demotion'
+  tier: string | null
+  rank: string | null
+  capturedAt: number
+}
+
+export interface RankHistory {
+  snapshots: RankSnapshot[]
+  milestones: RankMilestone[]
+}
+
+export type RankRange = '7d' | '30d' | 'all'
+
+/**
+ * Whether the League client is reachable and whose account is logged into it.
+ *
+ * 'untracked' is its own state rather than an error: the client is running fine,
+ * it is just signed in as somebody this app does not follow, and the only
+ * sensible response is to offer to add them.
+ */
+export type LcuStatus =
+  | { state: 'disconnected' }
+  | { state: 'connected'; accountId: number; gameName: string; tagLine: string }
+  | { state: 'untracked'; gameName: string; tagLine: string }
+
+export interface BackgroundSettings {
+  /** Keep running in the tray after the window is closed. */
+  runInTray: boolean
+  /** Opt-in, default off. */
+  launchAtStartup: boolean
+  /** Overrides League client auto-detection when the install is somewhere unusual. */
+  lcuInstallPath: string | null
 }
 
 export interface MatchParticipant {

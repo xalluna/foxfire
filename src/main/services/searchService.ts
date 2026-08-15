@@ -57,7 +57,11 @@ export async function searchSummoner(input: RiotIdInput): Promise<AdHocSummonerR
         perks: me.perks,
         teamPosition: me.teamPosition ?? null,
         teamKills: team.reduce((sum, p) => sum + p.kills, 0),
-        teamDamage: team.reduce((sum, p) => sum + p.totalDamageDealtToChampions, 0)
+        teamDamage: team.reduce((sum, p) => sum + p.totalDamageDealtToChampions, 0),
+        isRemake: me.gameEndedInEarlySurrender === true,
+        // LP history is only ever derived for tracked accounts, and search
+        // deliberately persists nothing — so an ad-hoc lookup never has one.
+        rank: null
       }
     ]
   })
