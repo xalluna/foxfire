@@ -6,6 +6,7 @@ import { championIconUrl, championName } from '../lib/assets'
 import { positionIcon, positionLabel } from '../lib/positions'
 import { formatPercent } from '../lib/matchStats'
 import { Asset } from './Asset'
+import { Bar } from './Bar'
 
 /** Win-rate ring. An SVG arc rather than a chart library — one number, one shape. */
 function WinRateRing({ winRate }: { winRate: number | null }): JSX.Element {
@@ -144,12 +145,7 @@ export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined
                 <span className="w-12 shrink-0 text-2xs text-text-dim">
                   {positionLabel(role.position)}
                 </span>
-                <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-2">
-                  <div
-                    className="h-full rounded-full bg-gold/70"
-                    style={{ width: `${role.share * 100}%` }}
-                  />
-                </div>
+                <Bar fraction={role.share} className="flex-1" />
                 <span className="w-7 shrink-0 text-right text-2xs tabular-nums text-text-mute">
                   {Math.round(role.share * 100)}%
                 </span>

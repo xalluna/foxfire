@@ -1,4 +1,5 @@
 import { useUiStore } from '../store/uiStore'
+import { Bar } from './Bar'
 import * as Icon from './icons'
 
 export function SyncProgressBar({ accountId }: { accountId: number }): JSX.Element | null {
@@ -27,12 +28,7 @@ export function SyncProgressBar({ accountId }: { accountId: number }): JSX.Eleme
           {progress.total > 0 ? `${progress.current} / ${progress.total}` : ''}
         </span>
       </div>
-      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-2">
-        <div
-          className="h-full rounded-full bg-gold transition-all duration-300"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <Bar fraction={pct / 100} tone="accent-solid" className="mt-1.5" />
       {progress.phase === 'backfill' && progress.total > 25 && (
         <p className="mt-1.5 text-[10px] leading-snug text-text-mute">
           About {minutesLeft} min left at the personal-key rate limit. You can keep using the app

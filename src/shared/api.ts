@@ -4,6 +4,7 @@ import type {
   AppSettingsPublic,
   AssetManifest,
   BackgroundSettings,
+  ChampionStats,
   LcuStatus,
   LeagueEntry,
   LiveGameData,
@@ -15,8 +16,7 @@ import type {
   RankRange,
   RiotIdInput,
   SyncProgressEvent,
-  SyncState,
-  WinRateEntry
+  SyncState
 } from './types'
 
 export interface ValidateResult {
@@ -76,6 +76,10 @@ export interface Api {
       puuid: string
     ) => Promise<{ gameName: string; tagLine: string } | null>
   }
+  champions: {
+    /** Local-only, so the Champions screen renders whatever the API key is doing. */
+    stats: (accountId: number, queueId: number | null) => Promise<ChampionStats[]>
+  }
   mastery: {
     /** Win rates are scoped to `queueId`; Riot mastery is lifetime and never is. */
     get: (accountId: number, refresh: boolean, queueId: number | null) => Promise<MasteryData>
@@ -100,5 +104,5 @@ export interface Api {
 
 export interface MasteryData {
   riotMastery: MasteryEntry[]
-  localWinRates: WinRateEntry[]
+  localWinRates: ChampionStats[]
 }

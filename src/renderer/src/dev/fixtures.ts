@@ -9,7 +9,7 @@ import type {
   MatchSummary,
   QueueType,
   RankSnapshot,
-  WinRateEntry
+  ChampionStats
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
 
@@ -586,30 +586,73 @@ export const MASTERY: MasteryEntry[] = [
   { championId: C.Sett, championPoints: 12_330, championLevel: 3, lastPlayTime: NOW - DAY }
 ]
 
-/** Derived from MATCHES so the Champions view agrees with the match list. */
 /**
- * Champion win rates over the visible match list, optionally scoped to a queue.
+ * Champion stats over the visible match list, optionally scoped to a queue.
  *
- * Derived rather than hand-written so the harness can never show a win rate
- * that disagrees with the matches on screen — which is exactly the class of bug
- * the queue filter exists to fix.
+ * Derived rather than hand-written so the harness can never show a stat that
+ * disagrees with the matches on screen — which is exactly the class of bug the
+ * queue filter exists to fix.
+ *
+ * Mirrors getChampionStats field for field, including its split between pooled
+ * totals and per-game-meaned shares. Diverging here would make the web harness
+ * quietly lie about arithmetic the real app gets right.
  */
-export function winRatesFor(queueId: number | null): WinRateEntry[] {
-  return Object.values(
-    MATCHES.filter(
-      // Mirrors getChampionWinRates, which excludes remakes.
-      (m) => !m.isRemake && (queueId === null || m.queueId === queueId)
-    ).reduce<Record<number, WinRateEntry>>((acc, m) => {
-      const entry = acc[m.championId] ?? { championId: m.championId, games: 0, wins: 0 }
-      entry.games += 1
-      if (m.win) entry.wins += 1
-      acc[m.championId] = entry
-      return acc
-    }, {})
-  ).sort((a, b) => b.games - a.games)
+export function championStatsFor(queueId: number | null): ChampionStats[] {
+  // Per-game shares are accumulated separately from the totals: they are meaned
+  // over the games that had a share to give, not over every game played.
+  const shares = new Map<number, { damage: number[]; kp: number[] }>()
+
+  const mean = (xs: number[]): number | null =>
+    xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length
+
+  const stats = MATCHES.filter(
+    // Mirrors getChampionStats, which excludes remakes.
+    (m) => !m.isRemake && (queueId === null || m.queueId === queueId)
+  ).reduce<Record<number, ChampionStats>>((acc, m) => {
+    const entry = acc[m.championId] ?? {
+      championId: m.championId,
+      games: 0,
+      wins: 0,
+      kills: 0,
+      deaths: 0,
+      assists: 0,
+      cs: 0,
+      damageToChampions: 0,
+      durationSeconds: 0,
+      damageShare: null,
+      killParticipation: null
+    }
+
+    entry.games += 1
+    if (m.win) entry.wins += 1
+    entry.kills += m.kills
+    entry.deaths += m.deaths
+    entry.assists += m.assists
+    entry.cs += m.cs ?? 0
+    entry.damageToChampions += m.damageDealtToChampions ?? 0
+    entry.durationSeconds += m.gameDuration
+
+    const bucket = shares.get(m.championId) ?? { damage: [], kp: [] }
+    if (m.teamDamage > 0 && m.damageDealtToChampions !== null) {
+      bucket.damage.push(m.damageDealtToChampions / m.teamDamage)
+    }
+    if (m.teamKills > 0) bucket.kp.push((m.kills + m.assists) / m.teamKills)
+    shares.set(m.championId, bucket)
+
+    acc[m.championId] = entry
+    return acc
+  }, {})
+
+  return Object.values(stats)
+    .map((entry) => ({
+      ...entry,
+      damageShare: mean(shares.get(entry.championId)?.damage ?? []),
+      killParticipation: mean(shares.get(entry.championId)?.kp ?? [])
+    }))
+    .sort((a, b) => b.games - a.games)
 }
 
-export const WIN_RATES: WinRateEntry[] = winRatesFor(null)
+export const CHAMPION_STATS: ChampionStats[] = championStatsFor(null)
 
 export const LIVE_GAME: LiveGameData = {
   gameId: 5_100_200_300,

@@ -8,7 +8,9 @@ import { runeIds } from '../lib/runes'
 import { compactNumber } from '../lib/matchStats'
 import { formatRiotId } from '../lib/riotId'
 import { Asset } from './Asset'
+import { Bar } from './Bar'
 import { Skeleton } from './Skeleton'
+import * as Icon from './icons'
 
 function Items({ m, items }: { m: AssetManifest; items: number[] }): JSX.Element {
   const slots = Array.from({ length: 7 }, (_, i) => items[i] ?? 0)
@@ -41,12 +43,11 @@ function StatBar({
       <p className="text-[10px] leading-tight tabular-nums text-text-dim">
         {compactNumber(value)}
       </p>
-      <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-surface-2">
-        <div
-          className={clsx('h-full rounded-full', tone === 'damage' ? 'bg-gold/70' : 'bg-red/50')}
-          style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }}
-        />
-      </div>
+      <Bar
+        fraction={max > 0 ? value / max : 0}
+        tone={tone === 'damage' ? 'accent' : 'taken'}
+        className="mt-0.5"
+      />
     </div>
   )
 }
@@ -135,8 +136,11 @@ function ParticipantRow({
 
       <span className="w-14 shrink-0 text-2xs tabular-nums text-text-mute">{p.cs ?? 0} CS</span>
 
-      <span className="w-14 shrink-0 text-2xs tabular-nums text-text-mute">
-        {compactNumber(p.goldEarned)}g
+      {/* The "g" that used to sit here butted against compactNumber's "k" and
+          read as a kilogram. A glyph can't be misread as a unit prefix. */}
+      <span className="flex w-14 shrink-0 items-center gap-0.5 text-2xs tabular-nums text-text-mute">
+        {compactNumber(p.goldEarned)}
+        <Icon.Coin width={9} height={9} className="shrink-0 text-gold" />
       </span>
 
       <div className="w-16 shrink-0">
@@ -212,9 +216,10 @@ export function MatchDetailPanel({
             {won ? 'Victory' : 'Defeat'}
           </span>
           <span className="text-2xs uppercase tracking-widest text-text-mute">{label}</span>
-          <span className="ml-auto text-2xs tabular-nums text-text-mute">
+          <span className="ml-auto flex items-center gap-0.5 text-2xs tabular-nums text-text-mute">
             {sum(team.map((p) => p.kills))} kills ·{' '}
-            {compactNumber(sum(team.map((p) => p.goldEarned)))} gold
+            {compactNumber(sum(team.map((p) => p.goldEarned)))}
+            <Icon.Coin width={9} height={9} className="shrink-0 text-gold" />
           </span>
         </div>
         <div className="space-y-0.5">

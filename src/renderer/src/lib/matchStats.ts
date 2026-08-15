@@ -15,9 +15,16 @@ export function kdaRatio(kills: number, deaths: number, assists: number): string
   return ((kills + assists) / deaths).toFixed(2)
 }
 
-export function csPerMin(cs: number | null, durationSeconds: number): number | null {
-  if (cs === null || durationSeconds <= 0) return null
-  return cs / (durationSeconds / 60)
+/**
+ * Any total over its playtime — CS/min, damage/min.
+ *
+ * Rates rather than raw totals because game length varies enough to swamp the
+ * difference between players: a farmed-out 40-minute game and a 20-minute stomp
+ * produce very different totals from identical play.
+ */
+export function perMinute(total: number | null, durationSeconds: number): number | null {
+  if (total === null || durationSeconds <= 0) return null
+  return total / (durationSeconds / 60)
 }
 
 /** Share of the team's kills the player took part in. Null when the team was shut out. */

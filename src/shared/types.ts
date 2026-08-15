@@ -181,10 +181,27 @@ export interface MasteryEntry {
   lastPlayTime: number | null
 }
 
-export interface WinRateEntry {
+/**
+ * One champion's record over the synced matches, scoped to the selected queue.
+ *
+ * Deliberately ships totals rather than pre-divided averages: the view needs
+ * both a per-game figure and a per-minute rate from the same sums, and sending
+ * the totals keeps the two from disagreeing by a rounding step.
+ */
+export interface ChampionStats {
   championId: number
   games: number
   wins: number
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  damageToChampions: number
+  /** Summed across the counted games — the denominator for CS/min and DPM. */
+  durationSeconds: number
+  /** Mean of the per-game shares. Null when every counted game had a shut-out team. */
+  damageShare: number | null
+  killParticipation: number | null
 }
 
 export interface SyncState {

@@ -5,6 +5,7 @@ import type {
   AppSettingsPublic,
   AssetManifest,
   BackgroundSettings,
+  ChampionStats,
   LcuStatus,
   LeagueEntry,
   LiveGameData,
@@ -26,7 +27,7 @@ import {
   MATCHES,
   MATCH_DETAILS,
   RANK_SNAPSHOTS,
-  winRatesFor
+  championStatsFor
 } from './fixtures'
 
 /**
@@ -245,13 +246,18 @@ export const mockApi: Api = {
       delay({ gameName: 'Resolved Later', tagLine: 'NA1' }, 700)
   },
 
+  champions: {
+    stats: (_accountId: number, queueId: number | null): Promise<ChampionStats[]> =>
+      delay(championStatsFor(queueId), 300)
+  },
+
   mastery: {
     get: (_accountId: number, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
       delay(
         {
           // Mastery is lifetime and never narrows; only the win rates do.
           riotMastery: MASTERY,
-          localWinRates: winRatesFor(queueId)
+          localWinRates: championStatsFor(queueId)
         },
         300
       )
