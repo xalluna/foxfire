@@ -43,7 +43,12 @@ export function useRecentSummary(
   return useMemo(() => {
     if (!matches || matches.length === 0) return null
 
-    const recent = matches.slice(0, window)
+    // Remakes are dropped before the window is taken, so recent form measures
+    // games that were actually played rather than being diluted by voided ones.
+    const played = matches.filter((m) => !m.isRemake)
+    if (played.length === 0) return null
+
+    const recent = played.slice(0, window)
     const games = recent.length
 
     const totals = recent.reduce(

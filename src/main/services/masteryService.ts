@@ -14,8 +14,16 @@ export interface MasteryData {
 /**
  * Combines Riot's official mastery (one API call, cached in SQLite) with
  * win rates computed locally from already-synced matches — no extra calls.
+ *
+ * Only the win rates respond to `queueId`. Riot's champion mastery is a single
+ * lifetime figure with no per-queue breakdown, so it stays whole under any
+ * filter and the UI labels it as such rather than implying it narrowed too.
  */
-export async function getMasteryData(accountId: number, refresh: boolean): Promise<MasteryData> {
+export async function getMasteryData(
+  accountId: number,
+  refresh: boolean,
+  queueId: number | null = null
+): Promise<MasteryData> {
   const db = getDb()
   const account = getAccountById(db, accountId)
   if (!account) throw new Error(`Unknown account ${accountId}`)
@@ -29,6 +37,6 @@ export async function getMasteryData(accountId: number, refresh: boolean): Promi
 
   return {
     riotMastery: stored,
-    localWinRates: getChampionWinRates(db, account.puuid)
+    localWinRates: getChampionWinRates(db, account.puuid, queueId)
   }
 }

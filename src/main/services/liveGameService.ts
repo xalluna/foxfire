@@ -5,6 +5,7 @@ import { getLeagueEntriesByPuuid } from '../riot/endpoints/league'
 import { getAccountByPuuid } from '../riot/endpoints/account'
 import type { PlatformId, RegionalRoute } from '../riot/regions'
 import type { LeagueEntry, LiveGameData, LiveGameParticipant, QueueType } from '@shared/types'
+import { TRACKED_QUEUES } from '@shared/queues'
 
 /** Riot's spectator payload carries "gameName#tagLine" as a single string on newer responses. */
 function splitRiotId(riotId: string | undefined): { gameName: string | null; tagLine: string | null } {
@@ -49,8 +50,6 @@ export async function checkLiveGame(accountId: number): Promise<LiveGameData | n
     participants
   }
 }
-
-const TRACKED_QUEUES: QueueType[] = ['RANKED_SOLO_5x5', 'RANKED_FLEX_SR']
 
 /** Resolves one participant's solo-queue rank; called once per row so the UI fills in progressively. */
 export async function getParticipantRank(

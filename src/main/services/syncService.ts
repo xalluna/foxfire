@@ -12,13 +12,28 @@ import { getMatchById, getMatchIdsByPuuid, MATCH_IDS_PAGE_SIZE } from '../riot/e
 import { RiotApiError } from '../riot/rateLimiter'
 import type { RegionalRoute } from '../riot/regions'
 import { CH } from '../ipc/channels'
-import { BACKFILL_TARGET } from './accountService'
+import { BACKFILL_TARGET, refreshRank } from './accountService'
 import { selectNewMatchIds } from './syncPlanning'
 import type { SyncProgressEvent, SyncState } from '@shared/types'
 
 // Guards against a second sync starting for an account that's already syncing
 // (e.g. the user clicking between tabs while a backfill runs).
 const inFlight = new Set<number>()
+
+/**
+ * Records where the ladder stands at the end of a sync.
+ *
+ * Never fails the sync: the matches are already committed by this point, and a
+ * rank call that 404s on an unranked account or trips the rate limiter should
+ * not turn a successful import into an error.
+ */
+async function snapshotRank(accountId: number): Promise<void> {
+  try {
+    await refreshRank(accountId)
+  } catch {
+    // Rank is best-effort; the next sync will try again.
+  }
+}
 
 export function isSyncing(accountId: number): boolean {
   return inFlight.has(accountId)
@@ -110,11 +125,17 @@ export async function syncAccount(accountId: number): Promise<void> {
     if (idsToFetch.length === 0) {
       if (isBackfill) markBackfillComplete(db, accountId, allIds[0] ?? null)
       else markDeltaSynced(db, accountId, allIds[0] ?? null)
+      await snapshotRank(accountId)
       emit({ accountId, phase: 'complete', current: 0, total: 0 })
       return
     }
 
     const { failed } = await fetchAndStore(accountId, region, idsToFetch, phase)
+
+    // Deliberately after the matches are stored: LP attribution looks for games
+    // falling between two snapshots, so a snapshot taken first would find an
+    // empty interval and leave the games that just arrived unattributed.
+    await snapshotRank(accountId)
 
     // Only advance the sync marker when everything landed. Leaving it alone on
     // partial failure means the next run retries just the missing matches —

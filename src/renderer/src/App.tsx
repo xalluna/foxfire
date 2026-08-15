@@ -5,11 +5,12 @@ import { AccountRail } from './components/AccountRail'
 import { Dashboard } from './views/Dashboard'
 import { LiveGame } from './views/LiveGame'
 import { Mastery } from './views/Mastery'
+import { RankHistory } from './views/RankHistory'
 import { Search } from './views/Search'
 import { Settings } from './views/Settings'
 import { EmptyState } from './components/EmptyState'
 import * as Icon from './components/icons'
-import { useSyncProgress } from './hooks/useSyncProgress'
+import { useLcuRankUpdates, useSyncProgress } from './hooks/useSyncProgress'
 import { useKeyRejected } from './hooks/useKeyStatus'
 import { useUiStore, type View } from './store/uiStore'
 
@@ -17,12 +18,13 @@ const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
   { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
   { id: 'liveGame', label: 'Live game', icon: <Icon.Live /> },
   { id: 'mastery', label: 'Champions', icon: <Icon.Trophy /> },
+  { id: 'rank', label: 'Rank', icon: <Icon.TrendingUp /> },
   { id: 'search', label: 'Search', icon: <Icon.Search /> },
   { id: 'settings', label: 'Settings', icon: <Icon.Settings /> }
 ]
 
 /** Views that operate on the selected account and need the rail alongside them. */
-const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'mastery']
+const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'mastery', 'rank']
 
 /**
  * A full-width strip under the title bar. Used for the two Riot key states,
@@ -55,6 +57,7 @@ function Banner({
 
 function App(): JSX.Element {
   useSyncProgress()
+  useLcuRankUpdates()
   const [keyRejected, clearRejected] = useKeyRejected()
 
   const view = useUiStore((s) => s.view)
@@ -146,6 +149,7 @@ function App(): JSX.Element {
                 {view === 'dashboard' && <Dashboard key={activeAccount.id} account={activeAccount} />}
                 {view === 'liveGame' && <LiveGame key={activeAccount.id} account={activeAccount} />}
                 {view === 'mastery' && <Mastery key={activeAccount.id} account={activeAccount} />}
+                {view === 'rank' && <RankHistory key={activeAccount.id} account={activeAccount} />}
               </>
             ) : (
               <EmptyState

@@ -17,6 +17,7 @@ import {
   multiKillLabel
 } from '../lib/matchStats'
 import { Asset } from './Asset'
+import { LpChip } from './LpChip'
 import * as Icon from './icons'
 
 /** Six inventory slots then the trinket, which is round in game. */
@@ -76,25 +77,30 @@ export function MatchListRow({
       className={clsx(
         'flex h-[72px] w-full items-center gap-2.5 border-l-[3px] pl-2.5 pr-3 text-left transition',
         expandable && 'cursor-pointer',
-        match.win
-          ? 'border-l-teal bg-teal/[0.06] hover:bg-teal/[0.11]'
-          : 'border-l-red bg-red/[0.06] hover:bg-red/[0.11]'
+        match.isRemake
+          ? 'border-l-hairline bg-surface/40 hover:bg-surface'
+          : match.win
+            ? 'border-l-teal bg-teal/[0.06] hover:bg-teal/[0.11]'
+            : 'border-l-red bg-red/[0.06] hover:bg-red/[0.11]'
       )}
     >
       {/* Result and context */}
       <div className="w-[92px] shrink-0">
+        {/* A remake has a win/loss in the payload, but showing it would be
+            misleading — the game was voided and counts for nothing. */}
         <p
           className={clsx(
             'font-display text-base leading-tight',
-            match.win ? 'text-teal' : 'text-red'
+            match.isRemake ? 'text-text-dim' : match.win ? 'text-teal' : 'text-red'
           )}
         >
-          {match.win ? 'Victory' : 'Defeat'}
+          {match.isRemake ? 'Remake' : match.win ? 'Victory' : 'Defeat'}
         </p>
         <p className="truncate text-2xs text-text-dim">{queueName(match.queueId, match.gameMode)}</p>
         <p className="whitespace-nowrap text-2xs tabular-nums text-text-mute">
           {formatClock(match.gameDuration)} · {formatAge(match.gameCreation)}
         </p>
+        <LpChip rank={match.rank} />
       </div>
 
       {/* Champion, spells, runes */}

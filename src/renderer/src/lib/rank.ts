@@ -61,6 +61,22 @@ export function tierLabel(tier: string | null, division: string | null): string 
   return isApex || !division ? label : `${label} ${division}`
 }
 
+const ROMAN_TO_ARABIC: Record<string, string> = { I: '1', II: '2', III: '3', IV: '4' }
+
+const APEX_SHORT: Record<string, string> = { MASTER: 'M', GRANDMASTER: 'GM', CHALLENGER: 'C' }
+
+/**
+ * "G1" — the compact form for the match-row LP chip, where the full "Gold II"
+ * would crowd an already dense row. Apex tiers have no division to append.
+ */
+export function formatTierShort(tier: string | null, division: string | null): string | null {
+  if (!isTier(tier)) return null
+  const apex = APEX_SHORT[tier]
+  if (apex) return apex
+  const arabic = ROMAN_TO_ARABIC[division ?? '']
+  return arabic ? `${TIERS[tier].label[0]}${arabic}` : TIERS[tier].label[0]
+}
+
 export function queueLabel(queueType: QueueType): string {
   return queueType === 'RANKED_SOLO_5x5' ? 'Ranked Solo/Duo' : 'Ranked Flex'
 }

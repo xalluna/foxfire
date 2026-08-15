@@ -84,6 +84,9 @@ export const MatchParticipantDtoSchema = z
     teamPosition: z.string().optional(),
     // Absent on very old matches, so optional rather than required.
     largestMultiKill: z.number().optional(),
+    // True when the game was voided as a remake. Such games award no LP and are
+    // excluded from champion stats, matching how op.gg reports them.
+    gameEndedInEarlySurrender: z.boolean().optional(),
     perks: PerksSchema
   })
   .passthrough()

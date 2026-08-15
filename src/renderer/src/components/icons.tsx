@@ -45,6 +45,15 @@ export function Star({ filled, ...props }: IconProps & { filled?: boolean }): JS
   )
 }
 
+export function TrendingUp(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="m3 17 6-6 4 4 8-8" />
+      <path d="M15 7h6v6" />
+    </Icon>
+  )
+}
+
 export function Close(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>
