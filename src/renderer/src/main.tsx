@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/queryClient'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import App from './App'
 import './styles/index.css'
 
@@ -18,11 +19,23 @@ async function start(): Promise<void> {
     installMockApi()
   }
 
-  ReactDOM.createRoot(document.getElementById('root')!).render(
+  const root = ReactDOM.createRoot(document.getElementById('root')!)
+
+  // The telemetry panel is a second BrowserWindow loading this same bundle with
+  // a #telemetry hash, so there is no second Vite entry point to keep in step.
+  // The dynamic import means the main window never downloads or parses it.
+  const Root =
+    window.location.hash === '#telemetry'
+      ? (await import('./telemetry/TelemetryApp')).TelemetryApp
+      : App
+
+  root.render(
     <React.StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <Root />
+        </QueryClientProvider>
+      </ErrorBoundary>
     </React.StrictMode>
   )
 }

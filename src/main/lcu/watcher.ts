@@ -5,12 +5,16 @@ import { getSetting } from '../db/repositories/appSettings.repo'
 import { CH } from '../ipc/channels'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
+import { createLogger } from '../telemetry/logger'
+import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
 import { TRACKED_QUEUES } from '@shared/queues'
 import type { LcuStatus, QueueType } from '@shared/types'
 import { discoverLcu } from './discovery'
 import { lcuGet } from './client'
 
 export const LCU_PATH_SETTING = 'lcu.installPath'
+
+const log = createLogger('lcu')
 
 /**
  * Polls the running League client for rank.
@@ -70,6 +74,8 @@ function setStatus(next: LcuStatus): void {
   const changed = JSON.stringify(next) !== JSON.stringify(status)
   status = next
   if (!changed) return
+  log.debug('LCU status changed', { state: next.state })
+  recordLcuTransition(next.state)
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(CH.lcu.status, next)
   }
@@ -93,6 +99,8 @@ async function tick(): Promise<void> {
     setStatus({ state: 'disconnected' })
     return
   }
+
+  const pollStartedAt = Date.now()
 
   try {
     const summoner = await lcuGet<CurrentSummoner>(creds, '/lol-summoner/v1/current-summoner')
@@ -150,15 +158,23 @@ async function tick(): Promise<void> {
       // The snapshot is already stored; this refreshes league_entries so the
       // profile card matches, and is skipped when nothing moved so an idle
       // client costs no Riot API budget.
-      refreshRank(account.id).catch(() => {})
+      refreshRank(account.id).catch((err) => {
+        log.debug('Backstop rank refresh failed after LP change', { error: String(err) })
+      })
 
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(CH.lcu.rankChanged, account.id)
       }
     }
-  } catch {
+
+    recordLcuPoll(Date.now() - pollStartedAt)
+  } catch (err) {
     // The client can close mid-poll, or refuse requests while it is still
-    // starting up. Neither is worth reporting — the next tick retries.
+    // starting up. Neither is worth reporting to the user — the next tick
+    // retries — but it is worth recording, because this catch is where a real
+    // LCU problem would otherwise disappear without trace.
+    log.debug('LCU poll failed', { error: String(err) })
+    recordLcuError(err)
     setStatus({ state: 'disconnected' })
   }
 }

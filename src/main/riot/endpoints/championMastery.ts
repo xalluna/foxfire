@@ -1,4 +1,4 @@
-import { riotFetch } from '../client'
+import { riotRequest } from '../client'
 import { platformBaseUrl, type PlatformId } from '../regions'
 import { ChampionMasteryDtoSchema, type ChampionMasteryDto } from '../types'
 
@@ -7,6 +7,10 @@ export async function getChampionMasteryByPuuid(
   puuid: string
 ): Promise<ChampionMasteryDto[]> {
   const path = `/lol/champion-mastery/v4/champion-masteries/by-puuid/${encodeURIComponent(puuid)}`
-  const data = await riotFetch<unknown>(platformBaseUrl(platform), path)
-  return ChampionMasteryDtoSchema.array().parse(data)
+  return riotRequest(
+    '/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}',
+    platformBaseUrl(platform),
+    path,
+    ChampionMasteryDtoSchema.array()
+  )
 }

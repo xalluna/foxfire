@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
+import { TelemetrySettings } from '../components/TelemetrySettings'
 import * as Icon from '../components/icons'
 
 export function Settings(): JSX.Element {
@@ -104,6 +105,8 @@ export function Settings(): JSX.Element {
       </section>
 
       <RankTrackingSettings />
+
+      <TelemetrySettings />
 
       <section className="rounded-lg border border-hairline bg-surface p-5">
         <h2 className="font-display text-lg text-text">About</h2>

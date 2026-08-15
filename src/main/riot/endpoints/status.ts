@@ -1,4 +1,4 @@
-import { riotFetch } from '../client'
+import { PASSTHROUGH, riotRequest } from '../client'
 import { platformBaseUrl, type PlatformId } from '../regions'
 
 /**
@@ -7,5 +7,9 @@ import { platformBaseUrl, type PlatformId } from '../regions'
  * than on their first real lookup.
  */
 export async function checkPlatformStatus(platform: PlatformId): Promise<void> {
-  await riotFetch<unknown>(platformBaseUrl(platform), '/lol/status/v4/platform-data')
+  const path = '/lol/status/v4/platform-data'
+  // The body is never read, so there is nothing to validate — but the call
+  // still goes through riotRequest so key checks appear in telemetry alongside
+  // everything else.
+  await riotRequest(path, platformBaseUrl(platform), path, PASSTHROUGH)
 }

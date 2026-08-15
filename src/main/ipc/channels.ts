@@ -54,5 +54,19 @@ export const CH = {
   },
   assets: {
     get: 'assets:get'
+  },
+  // Developer telemetry. Reads are deliberately separate from `getState` so the
+  // panel can poll the cheap table query often and the aggregate rarely.
+  telemetry: {
+    getState: 'telemetry:getState',
+    setEnabled: 'telemetry:setEnabled',
+    openWindow: 'telemetry:openWindow',
+    clear: 'telemetry:clear',
+    requests: 'telemetry:requests',
+    endpoints: 'telemetry:endpoints',
+    summary: 'telemetry:summary',
+    rateLimit: 'telemetry:rateLimit',
+    resources: 'telemetry:resources',
+    lcu: 'telemetry:lcu'
   }
 } as const
