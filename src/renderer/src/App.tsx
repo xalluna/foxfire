@@ -1,27 +1,57 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Disclaimer } from './components/Disclaimer'
-import { AccountSidebar } from './components/AccountSidebar'
-import { AddAccountForm } from './components/AddAccountForm'
+import clsx from 'clsx'
+import { AccountRail } from './components/AccountRail'
 import { Dashboard } from './views/Dashboard'
 import { LiveGame } from './views/LiveGame'
 import { Mastery } from './views/Mastery'
 import { Search } from './views/Search'
 import { Settings } from './views/Settings'
+import { EmptyState } from './components/EmptyState'
+import * as Icon from './components/icons'
 import { useSyncProgress } from './hooks/useSyncProgress'
 import { useKeyRejected } from './hooks/useKeyStatus'
 import { useUiStore, type View } from './store/uiStore'
 
-const NAV: Array<{ id: View; label: string }> = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'liveGame', label: 'Live game' },
-  { id: 'mastery', label: 'Champions' },
-  { id: 'search', label: 'Search' },
-  { id: 'settings', label: 'Settings' }
+const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
+  { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
+  { id: 'liveGame', label: 'Live game', icon: <Icon.Live /> },
+  { id: 'mastery', label: 'Champions', icon: <Icon.Trophy /> },
+  { id: 'search', label: 'Search', icon: <Icon.Search /> },
+  { id: 'settings', label: 'Settings', icon: <Icon.Settings /> }
 ]
 
-/** Views that operate on the selected account and need the sidebar alongside them. */
+/** Views that operate on the selected account and need the rail alongside them. */
 const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'mastery']
+
+/**
+ * A full-width strip under the title bar. Used for the two Riot key states,
+ * which are routine rather than exceptional: personal keys expire every 24h.
+ */
+function Banner({
+  tone,
+  onClick,
+  children
+}: {
+  tone: 'error' | 'warning'
+  onClick: () => void
+  children: React.ReactNode
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'flex shrink-0 items-center gap-2 border-b px-5 py-2 text-left text-sm transition',
+        tone === 'error'
+          ? 'border-red/30 bg-red/10 text-red hover:bg-red/15'
+          : 'border-amber/30 bg-amber/10 text-amber hover:bg-amber/15'
+      )}
+    >
+      <Icon.Warning className="shrink-0" />
+      <span>{children}</span>
+    </button>
+  )
+}
 
 function App(): JSX.Element {
   useSyncProgress()
@@ -52,95 +82,86 @@ function App(): JSX.Element {
 
   const activeAccount = accounts.data?.find((a) => a.id === activeAccountId) ?? null
   const needsKey = settings.data && !settings.data.hasApiKey
+  const showRail = ACCOUNT_VIEWS.includes(view)
 
   return (
-    <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 items-center gap-5 border-b border-slate-800 px-5 py-2.5">
-        <span className="text-sm font-semibold tracking-tight">LoL Stats</span>
-        <nav className="flex gap-1">
+    <div className="flex h-screen flex-col bg-canvas text-text">
+      {/*
+        Drag strip beneath the native caption buttons. The right padding keeps
+        the nav clear of the overlay region Windows draws into; without it the
+        last tab would sit under the close button.
+      */}
+      <header
+        className="drag flex h-titlebar shrink-0 items-center gap-4 border-b border-hairline pl-4"
+        style={{ paddingRight: 'var(--titlebar-controls-w)' }}
+      >
+        <span className="font-display text-base tracking-wide text-gold">LoL Stats</span>
+
+        <nav className="no-drag flex gap-0.5">
           {NAV.map((item) => (
             <button
               key={item.id}
               onClick={() => setView(item.id)}
-              className={`rounded px-3 py-1 text-xs transition ${
+              aria-current={view === item.id ? 'page' : undefined}
+              className={clsx(
+                'flex items-center gap-1.5 rounded px-2.5 py-1 text-sm transition',
                 view === item.id
-                  ? 'bg-slate-800 text-slate-100'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+                  ? 'bg-gold/10 text-gold'
+                  : 'text-text-dim hover:bg-surface hover:text-text'
+              )}
             >
+              {item.icon}
               {item.label}
             </button>
           ))}
         </nav>
-        <div className="ml-auto w-72">
-          <AddAccountForm />
-        </div>
       </header>
 
       {keyRejected && (
-        <button
+        <Banner
+          tone="error"
           onClick={() => {
             clearRejected()
             setView('settings')
           }}
-          className="shrink-0 bg-rose-950/70 px-5 py-2 text-left text-xs text-rose-300 hover:bg-rose-950"
         >
           Riot rejected your API key — personal keys expire every 24 hours. Click here to paste a
           fresh one.
-        </button>
+        </Banner>
       )}
 
       {needsKey && !keyRejected && view !== 'settings' && (
-        <button
-          onClick={() => setView('settings')}
-          className="shrink-0 bg-amber-950/60 px-5 py-2 text-left text-xs text-amber-300 hover:bg-amber-950"
-        >
+        <Banner tone="warning" onClick={() => setView('settings')}>
           No Riot API key saved — open Settings to add one before looking anything up.
-        </button>
+        </Banner>
       )}
 
       <div className="flex min-h-0 flex-1">
-        {ACCOUNT_VIEWS.includes(view) && (
-          <>
-            <AccountSidebar accounts={accounts.data ?? []} />
-            <main className="min-w-0 flex-1 overflow-y-auto">
-              {activeAccount ? (
-                <>
-                  {view === 'dashboard' && (
-                    <Dashboard key={activeAccount.id} account={activeAccount} />
-                  )}
-                  {view === 'liveGame' && (
-                    <LiveGame key={activeAccount.id} account={activeAccount} />
-                  )}
-                  {view === 'mastery' && (
-                    <Mastery key={activeAccount.id} account={activeAccount} />
-                  )}
-                </>
-              ) : (
-                <div className="flex h-full items-center justify-center">
-                  <p className="text-sm text-slate-500">
-                    Add an account above to get started.
-                  </p>
-                </div>
-              )}
-            </main>
-          </>
-        )}
+        {showRail && <AccountRail accounts={accounts.data ?? []} />}
 
-        {view === 'search' && (
-          <main className="flex-1 overflow-y-auto">
-            <Search />
-          </main>
-        )}
-
-        {view === 'settings' && (
-          <main className="flex-1 overflow-y-auto">
-            <Settings />
-          </main>
-        )}
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          {showRail ? (
+            activeAccount ? (
+              <>
+                {view === 'dashboard' && <Dashboard key={activeAccount.id} account={activeAccount} />}
+                {view === 'liveGame' && <LiveGame key={activeAccount.id} account={activeAccount} />}
+                {view === 'mastery' && <Mastery key={activeAccount.id} account={activeAccount} />}
+              </>
+            ) : (
+              <EmptyState
+                icon={<Icon.Plus />}
+                title="No accounts yet"
+                description="Add a Riot ID from the rail on the left to start tracking matches, rank and champion stats."
+              />
+            )
+          ) : (
+            <>
+              {view === 'search' && <Search />}
+              {view === 'settings' && <Settings />}
+            </>
+          )}
+        </main>
       </div>
-
-      <Disclaimer />
     </div>
   )
 }

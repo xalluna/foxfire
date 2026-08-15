@@ -1,89 +1,212 @@
-import { formatDistanceToNow } from 'date-fns'
-import type { MatchSummary } from '@shared/types'
+import clsx from 'clsx'
+import type { AssetManifest, MatchSummary } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, championName } from '../lib/assets'
+import { championIconUrl, championName, itemIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
+import { positionIcon, positionLabel } from '../lib/positions'
+import { queueName } from '../lib/queues'
+import { runeIds } from '../lib/runes'
+import {
+  compactNumber,
+  csPerMin,
+  damageShare,
+  formatAge,
+  formatClock,
+  formatPercent,
+  kdaRatio,
+  killParticipation,
+  multiKillLabel
+} from '../lib/matchStats'
+import { Asset } from './Asset'
+import * as Icon from './icons'
 
-// Only the queues worth naming; anything else falls back to the raw game mode.
-const QUEUE_NAMES: Record<number, string> = {
-  400: 'Normal Draft',
-  420: 'Ranked Solo',
-  430: 'Normal Blind',
-  440: 'Ranked Flex',
-  450: 'ARAM',
-  700: 'Clash',
-  1700: 'Arena',
-  1900: 'URF'
+/** Six inventory slots then the trinket, which is round in game. */
+function Items({ m, items }: { m: AssetManifest; items: number[] }): JSX.Element {
+  const slots = Array.from({ length: 7 }, (_, i) => items[i] ?? 0)
+  return (
+    <div className="flex gap-[3px]">
+      {slots.map((itemId, i) => (
+        <Asset
+          key={i}
+          src={itemIconUrl(m, itemId)}
+          className="h-[21px] w-[21px]"
+          rounded={i === 6 ? 'rounded-full' : 'rounded'}
+        />
+      ))}
+    </div>
+  )
 }
 
+/**
+ * One collapsed match, at a fixed 72px.
+ *
+ * Carries op.gg's substance — spells, runes, CS/min, kill participation, items
+ * — but not its two columns of ten participant names: at 109px only about four
+ * rows fit an 800px window, and those names are already in the panel this row
+ * expands into.
+ */
 export function MatchListRow({
   match,
   expanded,
-  onToggle
+  onToggle,
+  expandable = true
 }: {
   match: MatchSummary
   expanded: boolean
   onToggle: () => void
+  /** False for ad-hoc search results, which aren't stored and have no detail to open. */
+  expandable?: boolean
 }): JSX.Element {
   const assets = useAssets()
-  const icon = assets ? championIconUrl(assets, match.championId) : null
+
   const name = assets
     ? championName(assets, match.championId, match.championName)
     : (match.championName ?? '')
 
-  const kda =
-    match.deaths === 0
-      ? 'Perfect'
-      : ((match.kills + match.assists) / match.deaths).toFixed(2)
-
-  const queueLabel = QUEUE_NAMES[match.queueId ?? -1] ?? match.gameMode ?? 'Game'
-  const durationMin = Math.floor(match.gameDuration / 60)
-  const durationSec = String(match.gameDuration % 60).padStart(2, '0')
+  const { keystone, secondary } = runeIds(match.perks)
+  const cspm = csPerMin(match.cs, match.gameDuration)
+  const kp = killParticipation(match)
+  const share = damageShare(match)
+  const multiKill = multiKillLabel(match.largestMultiKill)
+  const position = positionIcon(match.teamPosition)
 
   return (
     <button
-      onClick={onToggle}
-      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-800/40 ${
-        match.win ? 'border-l-2 border-l-sky-500' : 'border-l-2 border-l-rose-500'
-      }`}
-    >
-      {icon ? (
-        <img src={icon} alt="" className="h-10 w-10 shrink-0 rounded-md" />
-      ) : (
-        <div className="h-10 w-10 shrink-0 rounded-md bg-slate-800" />
+      onClick={expandable ? onToggle : undefined}
+      aria-expanded={expandable ? expanded : undefined}
+      className={clsx(
+        'flex h-[72px] w-full items-center gap-2.5 border-l-[3px] pl-2.5 pr-3 text-left transition',
+        expandable && 'cursor-pointer',
+        match.win
+          ? 'border-l-teal bg-teal/[0.06] hover:bg-teal/[0.11]'
+          : 'border-l-red bg-red/[0.06] hover:bg-red/[0.11]'
       )}
-
-      <div className="w-32 min-w-0">
-        <p className="truncate text-sm font-medium text-slate-200">{name}</p>
-        <p className="text-[11px] text-slate-500">{queueLabel}</p>
-      </div>
-
-      <div className="w-24">
-        <p className="text-sm tabular-nums text-slate-200">
-          {match.kills} / <span className="text-rose-400">{match.deaths}</span> / {match.assists}
-        </p>
-        <p className="text-[11px] text-slate-500">{kda} KDA</p>
-      </div>
-
-      <div className="w-16">
-        <p className={`text-sm font-medium ${match.win ? 'text-sky-400' : 'text-rose-400'}`}>
-          {match.win ? 'Win' : 'Loss'}
-        </p>
-        <p className="text-[11px] tabular-nums text-slate-500">
-          {durationMin}:{durationSec}
-        </p>
-      </div>
-
-      <div className="ml-auto flex items-center gap-3">
-        <span className="text-[11px] text-slate-500">
-          {formatDistanceToNow(new Date(match.gameCreation), { addSuffix: true })}
-        </span>
-        <span
-          className={`text-slate-600 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          aria-hidden
+    >
+      {/* Result and context */}
+      <div className="w-[92px] shrink-0">
+        <p
+          className={clsx(
+            'font-display text-base leading-tight',
+            match.win ? 'text-teal' : 'text-red'
+          )}
         >
-          ▾
-        </span>
+          {match.win ? 'Victory' : 'Defeat'}
+        </p>
+        <p className="truncate text-2xs text-text-dim">{queueName(match.queueId, match.gameMode)}</p>
+        <p className="whitespace-nowrap text-2xs tabular-nums text-text-mute">
+          {formatClock(match.gameDuration)} · {formatAge(match.gameCreation)}
+        </p>
       </div>
+
+      {/* Champion, spells, runes */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        <div className="relative">
+          <Asset
+            src={assets ? championIconUrl(assets, match.championId) : null}
+            className="h-11 w-11"
+            rounded="rounded-full"
+            title={name}
+          />
+          {match.champLevel !== null && (
+            <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-canvas px-1 text-[9px] font-medium tabular-nums text-text-dim ring-1 ring-hairline">
+              {match.champLevel}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-[3px]">
+          <Asset
+            src={assets && match.summoner1Id !== null ? spellIconUrl(assets, match.summoner1Id) : null}
+            className="h-[19px] w-[19px]"
+          />
+          <Asset
+            src={assets && match.summoner2Id !== null ? spellIconUrl(assets, match.summoner2Id) : null}
+            className="h-[19px] w-[19px]"
+          />
+        </div>
+
+        <div className="flex flex-col gap-[3px]">
+          <Asset
+            src={assets && keystone !== null ? runeIconUrl(assets, keystone) : null}
+            className="h-[19px] w-[19px] bg-canvas"
+            rounded="rounded-full"
+          />
+          <Asset
+            src={assets && secondary !== null ? runeIconUrl(assets, secondary) : null}
+            className="h-[19px] w-[19px]"
+            rounded="rounded-full"
+          />
+        </div>
+      </div>
+
+      {/* Champion name and role */}
+      <div className="w-24 shrink-0">
+        <p className="truncate text-base font-medium text-text">{name}</p>
+        {position && (
+          <span className="mt-0.5 flex items-center gap-1 text-2xs text-text-dim">
+            <img src={position} alt="" className="h-3.5 w-3.5" />
+            {positionLabel(match.teamPosition)}
+          </span>
+        )}
+      </div>
+
+      {/* KDA */}
+      <div className="w-[92px] shrink-0">
+        <p className="text-base tabular-nums text-text">
+          {match.kills} <span className="text-text-mute">/</span>{' '}
+          <span className="text-red">{match.deaths}</span> <span className="text-text-mute">/</span>{' '}
+          {match.assists}
+        </p>
+        <p className="text-2xs tabular-nums text-text-dim">
+          {kdaRatio(match.kills, match.deaths, match.assists)}
+          {match.deaths > 0 && ':1'} KDA
+        </p>
+      </div>
+
+      {/* Farm and participation */}
+      <div className="w-[78px] shrink-0">
+        <p className="text-sm tabular-nums text-text-dim">
+          {match.cs ?? 0} CS{' '}
+          {cspm !== null && <span className="text-text-mute">({cspm.toFixed(1)})</span>}
+        </p>
+        <p className="text-2xs tabular-nums text-text-mute">P/Kill {formatPercent(kp)}</p>
+      </div>
+
+      {/* Damage share — a measured ratio, not a rating */}
+      <div className="w-[72px] shrink-0">
+        <p className="text-2xs tabular-nums text-text-dim">
+          {compactNumber(match.damageDealtToChampions)} dmg
+        </p>
+        <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-2">
+          <div
+            className="h-full rounded-full bg-gold/70"
+            style={{ width: `${Math.min(100, (share ?? 0) * 100)}%` }}
+          />
+        </div>
+        <p className="mt-0.5 text-[9px] tabular-nums text-text-mute">
+          {formatPercent(share)} of team
+        </p>
+      </div>
+
+      {/* Items and badges */}
+      <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5">
+        {assets && <Items m={assets} items={match.items} />}
+        {multiKill && (
+          <span className="rounded-full border border-gold-dim bg-gold/10 px-1.5 text-[9px] font-medium uppercase tracking-wide text-gold">
+            {multiKill}
+          </span>
+        )}
+      </div>
+
+      {expandable ? (
+        <Icon.ChevronDown
+          className={clsx(
+            'ml-1 shrink-0 text-text-mute transition-transform',
+            expanded && 'rotate-180'
+          )}
+        />
+      ) : (
+        <span className="ml-1 w-4 shrink-0" />
+      )}
     </button>
   )
 }

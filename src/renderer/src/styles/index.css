@@ -1,3 +1,86 @@
+/* Self-hosted so the CSP's default-src 'self' covers them — no CDN, no FOUT. */
+@import '@fontsource-variable/inter';
+@import '@fontsource/marcellus';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Hextech tokens.
+ *
+ * Dark only by design — this palette is Riot's own client UI, and the two
+ * golds below are lifted from the position icons in src/assets/positions,
+ * which ship filled with #785a28 and #c8aa6e. Defined as custom properties so
+ * a second theme is a variable swap rather than a rewrite; tailwind.config.js
+ * maps every colour utility onto them.
+ */
+:root {
+  --canvas: 1 10 19; /* #010A13 */
+  --surface: 10 20 40; /* #0A1428 */
+  --surface-2: 15 27 45; /* #0F1B2D */
+  --hairline: 30 35 40; /* #1E2328 */
+
+  --gold: 200 170 110; /* #C8AA6E */
+  --gold-dim: 120 90 40; /* #785A28 */
+
+  --teal: 10 200 185; /* #0AC8B9 */
+  --red: 232 64 87; /* #E84057 */
+  --amber: 235 156 0; /* #EB9C00 */
+
+  --text: 240 230 210; /* #F0E6D2 */
+  --text-dim: 160 155 140; /* #A09B8C */
+  --text-mute: 91 90 86; /* #5B5A56 */
+
+  /* Height of the native title-bar overlay reserved in src/main/window.ts. */
+  --titlebar-h: 40px;
+  /* Windows draws minimise/maximise/close here; nothing interactive may sit under it. */
+  --titlebar-controls-w: 140px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-text antialiased;
+    font-feature-settings: 'cv05' 1; /* single-storey l, easier to tell from 1 and I */
+  }
+
+  /* Numbers line up in every stat column without opting in per component. */
+  table,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-2 border-solid border-transparent bg-hairline bg-clip-content;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gold-dim bg-clip-content;
+  }
+
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-gold/70;
+  }
+}
+
+@layer components {
+  /* The window drag strip. Interactive children must opt back out with .no-drag. */
+  .drag {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}

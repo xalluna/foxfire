@@ -10,6 +10,21 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
+    // Painted before first paint so the window never flashes white on open.
+    backgroundColor: '#010A13',
+    // The renderer draws the title bar strip, but Windows keeps drawing the
+    // real caption buttons into the overlay region. That preserves snap
+    // layouts, double-click-to-maximise and the system menu, none of which a
+    // hand-built frameless title bar gets right for free.
+    //
+    // The renderer must leave --titlebar-controls-w clear on the right; see
+    // src/renderer/src/styles/index.css.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#010A13',
+      symbolColor: '#C8AA6E',
+      height: 40
+    },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

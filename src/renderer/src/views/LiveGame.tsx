@@ -1,20 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
+import clsx from 'clsx'
 import type { Account, LiveGameParticipant } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName, spellIconUrl } from '../lib/assets'
-
-const TIER_COLORS: Record<string, string> = {
-  IRON: 'text-zinc-400',
-  BRONZE: 'text-amber-700',
-  SILVER: 'text-slate-300',
-  GOLD: 'text-yellow-400',
-  PLATINUM: 'text-teal-300',
-  EMERALD: 'text-emerald-400',
-  DIAMOND: 'text-sky-300',
-  MASTER: 'text-purple-400',
-  GRANDMASTER: 'text-rose-400',
-  CHALLENGER: 'text-cyan-300'
-}
+import { rankRecord, tierColor, tierCrest, tierLabel } from '../lib/rank'
+import { Asset } from '../components/Asset'
+import { EmptyState } from '../components/EmptyState'
+import { Skeleton } from '../components/Skeleton'
+import * as Icon from '../components/icons'
 
 /** Each row resolves its own rank so the roster paints immediately instead of waiting on 10 calls. */
 function RankBadge({ platform, puuid }: { platform: string; puuid: string }): JSX.Element {
@@ -24,23 +17,26 @@ function RankBadge({ platform, puuid }: { platform: string; puuid: string }): JS
     staleTime: 5 * 60 * 1000
   })
 
-  if (isLoading) {
-    return <span className="text-[11px] text-slate-600">loading…</span>
-  }
+  if (isLoading) return <Skeleton className="h-7 w-20" />
+
   if (!data?.tier) {
-    return <span className="text-[11px] text-slate-600">Unranked</span>
+    return <span className="text-2xs text-text-mute">Unranked</span>
   }
 
-  const games = (data.wins ?? 0) + (data.losses ?? 0)
-  const wr = games > 0 ? Math.round(((data.wins ?? 0) / games) * 100) : null
+  const { winRate } = rankRecord(data)
 
   return (
-    <span className="text-[11px]">
-      <span className={TIER_COLORS[data.tier] ?? 'text-slate-300'}>
-        {data.tier} {data.rank}
-      </span>
-      {wr !== null && <span className="text-slate-600"> · {wr}% WR</span>}
-    </span>
+    <div className="flex shrink-0 items-center gap-1.5">
+      <Asset src={tierCrest(data.tier)} className="h-7 w-7" rounded="rounded-none" />
+      <div className="text-right">
+        <p className="text-2xs leading-tight" style={{ color: tierColor(data.tier) }}>
+          {tierLabel(data.tier, data.rank)}
+        </p>
+        {winRate !== null && (
+          <p className="text-[10px] tabular-nums text-text-mute">{winRate}% WR</p>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -54,10 +50,6 @@ function ParticipantRow({
   isTracked: boolean
 }): JSX.Element {
   const assets = useAssets()
-  const icon = assets ? championIconUrl(assets, p.championId) : null
-  const name = assets ? championName(assets, p.championId) : ''
-  const spell1 = assets ? spellIconUrl(assets, p.spell1Id) : null
-  const spell2 = assets ? spellIconUrl(assets, p.spell2Id) : null
 
   // Some spectator payloads omit the Riot ID; look it up rather than showing "Unknown".
   const { data: resolvedName } = useQuery({
@@ -72,33 +64,47 @@ function ParticipantRow({
 
   return (
     <div
-      className={`flex items-center gap-2.5 rounded px-2 py-2 ${isTracked ? 'bg-slate-700/40' : ''}`}
-    >
-      {icon ? (
-        <img src={icon} alt="" className="h-8 w-8 shrink-0 rounded" />
-      ) : (
-        <div className="h-8 w-8 shrink-0 rounded bg-slate-800" />
+      className={clsx(
+        'flex items-center gap-2.5 rounded px-2 py-1.5',
+        isTracked && 'bg-gold/10 ring-1 ring-inset ring-gold/25'
       )}
-      <div className="flex shrink-0 flex-col gap-0.5">
-        {spell1 ? <img src={spell1} alt="" className="h-3.5 w-3.5 rounded-sm" /> : null}
-        {spell2 ? <img src={spell2} alt="" className="h-3.5 w-3.5 rounded-sm" /> : null}
+    >
+      <Asset
+        src={assets ? championIconUrl(assets, p.championId) : null}
+        className="h-9 w-9"
+        rounded="rounded-full"
+      />
+
+      <div className="flex shrink-0 flex-col gap-[3px]">
+        <Asset
+          src={assets ? spellIconUrl(assets, p.spell1Id) : null}
+          className="h-[17px] w-[17px]"
+        />
+        <Asset
+          src={assets ? spellIconUrl(assets, p.spell2Id) : null}
+          className="h-[17px] w-[17px]"
+        />
       </div>
+
       <div className="min-w-0 flex-1">
         <p
-          className={`truncate text-sm ${isTracked ? 'font-medium text-slate-100' : 'text-slate-300'}`}
+          className={clsx('truncate text-sm', isTracked ? 'font-medium text-text' : 'text-text-dim')}
         >
           {displayName}
-          {displayTag && <span className="text-slate-600">#{displayTag}</span>}
+          {displayTag && <span className="text-text-mute">#{displayTag}</span>}
         </p>
-        <p className="text-[11px] text-slate-500">{name}</p>
+        <p className="truncate text-2xs text-text-mute">
+          {assets ? championName(assets, p.championId) : ''}
+        </p>
       </div>
+
       <RankBadge platform={account.platform} puuid={p.puuid} />
     </div>
   )
 }
 
 export function LiveGame({ account }: { account: Account }): JSX.Element {
-  const { data, isFetching, refetch, isError, error } = useQuery({
+  const { data, isFetching, refetch, isError, error, isFetched } = useQuery({
     queryKey: ['liveGame', account.id],
     queryFn: () => window.api.liveGame.check(account.id),
     enabled: false, // manual check only — no background polling
@@ -108,69 +114,86 @@ export function LiveGame({ account }: { account: Account }): JSX.Element {
   const blue = data?.participants.filter((p) => p.teamId === 100) ?? []
   const red = data?.participants.filter((p) => p.teamId === 200) ?? []
 
+  const team = (participants: LiveGameParticipant[], label: string, won: boolean): JSX.Element => (
+    <section className="rounded-lg border border-hairline bg-surface/40 p-2">
+      <p
+        className={clsx(
+          'px-2 pb-1.5 text-2xs font-medium uppercase tracking-widest',
+          won ? 'text-teal' : 'text-red'
+        )}
+      >
+        {label}
+      </p>
+      <div className="space-y-0.5">
+        {participants.map((p) => (
+          <ParticipantRow
+            key={p.puuid}
+            p={p}
+            account={account}
+            isTracked={p.puuid === account.puuid}
+          />
+        ))}
+      </div>
+    </section>
+  )
+
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold">Live game</h1>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <h1 className="font-display text-xl text-text">Live game</h1>
+          <p className="mt-0.5 text-sm text-text-mute">
             Checks once when you click — nothing polls in the background.
           </p>
         </div>
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          className="flex items-center gap-1.5 rounded-md border border-gold-dim bg-gold/10 px-3.5 py-2 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
+          <Icon.Live className={isFetching ? 'animate-pulse' : undefined} />
           {isFetching ? 'Checking…' : 'Check now'}
         </button>
       </div>
 
       {isError && (
-        <p className="rounded-md border border-rose-900 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
-          {error instanceof Error ? error.message : 'Live game check failed'}
-        </p>
+        <EmptyState
+          icon={<Icon.Warning />}
+          tone="error"
+          title="Live game check failed"
+          description={error instanceof Error ? error.message : 'Unknown error'}
+        />
+      )}
+
+      {!isFetched && !isFetching && !isError && (
+        <EmptyState
+          icon={<Icon.Live />}
+          title="Check for a game in progress"
+          description={`See the full lobby and every player's rank while ${account.gameName} is in champion select or in game.`}
+        />
       )}
 
       {data === null && !isFetching && (
-        <p className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-8 text-center text-sm text-slate-400">
-          {account.gameName} isn&apos;t in a game right now.
-        </p>
+        <EmptyState
+          icon={<Icon.Live />}
+          title="Not in a game right now"
+          description={`${account.gameName} isn't in champion select or a live match. Check again once a game starts.`}
+        />
       )}
 
       {data && (
         <>
-          <div className="flex items-center gap-3 text-xs text-slate-400">
-            <span className="rounded bg-slate-800 px-2 py-1">{data.gameMode}</span>
-            <span>{Math.floor(data.gameLength / 60)} min elapsed</span>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="rounded border border-hairline bg-surface px-2 py-0.5 text-text-dim">
+              {data.gameMode}
+            </span>
+            <span className="tabular-nums text-text-mute">
+              {Math.floor(data.gameLength / 60)} min elapsed
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-              <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-sky-400">
-                Blue team
-              </p>
-              {blue.map((p) => (
-                <ParticipantRow
-                  key={p.puuid}
-                  p={p}
-                  account={account}
-                  isTracked={p.puuid === account.puuid}
-                />
-              ))}
-            </section>
-            <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-              <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-rose-400">
-                Red team
-              </p>
-              {red.map((p) => (
-                <ParticipantRow
-                  key={p.puuid}
-                  p={p}
-                  account={account}
-                  isTracked={p.puuid === account.puuid}
-                />
-              ))}
-            </section>
+          <div className="grid grid-cols-2 gap-3">
+            {team(blue, 'Blue team', true)}
+            {team(red, 'Red team', false)}
           </div>
         </>
       )}

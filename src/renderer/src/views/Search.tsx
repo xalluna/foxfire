@@ -1,20 +1,24 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
 import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, championName, profileIconUrl } from '../lib/assets'
+import { profileIconUrl } from '../lib/assets'
+import { parseRiotId } from '../lib/riotId'
+import { emptyEntry } from '../lib/rank'
+import { Asset } from '../components/Asset'
+import { RankCard } from '../components/RankCard'
+import { MatchListRow } from '../components/MatchListRow'
+import { RecentSummary } from '../components/RecentSummary'
+import { EmptyState } from '../components/EmptyState'
+import { MatchListSkeleton } from '../components/Skeleton'
+import * as Icon from '../components/icons'
 
-function parseRiotId(raw: string): { gameName: string; tagLine: string } | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  const idx = trimmed.lastIndexOf('#')
-  if (idx === -1) return { gameName: trimmed, tagLine: 'NA1' }
-  const gameName = trimmed.slice(0, idx).trim()
-  const tagLine = trimmed.slice(idx + 1).trim()
-  if (!gameName || !tagLine) return null
-  return { gameName, tagLine }
-}
-
+/**
+ * One-off lookup for summoners the user doesn't track.
+ *
+ * Reuses the Dashboard's match row and summary rather than a simplified copy —
+ * searchService returns the same enriched MatchSummary shape the local database
+ * does, so there is no reason for this screen to show less.
+ */
 export function Search(): JSX.Element {
   const assets = useAssets()
   const [value, setValue] = useState('')
@@ -28,13 +32,19 @@ export function Search(): JSX.Element {
   })
 
   const result = search.data
+  const solo =
+    result?.leagueEntries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
+    emptyEntry('RANKED_SOLO_5x5')
+  const flex =
+    result?.leagueEntries.find((e) => e.queueType === 'RANKED_FLEX_SR') ??
+    emptyEntry('RANKED_FLEX_SR')
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
       <div>
-        <h1 className="text-lg font-semibold">Look up a summoner</h1>
-        <p className="mt-0.5 text-xs text-slate-500">
-          One-off lookup — fetched live and not saved. Add an account instead to keep full history.
+        <h1 className="font-display text-xl text-text">Look up a summoner</h1>
+        <p className="mt-0.5 text-sm text-text-mute">
+          Fetched live and not saved. Add an account instead to keep full history.
         </p>
       </div>
 
@@ -50,104 +60,109 @@ export function Search(): JSX.Element {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Summoner#NA1"
           spellCheck={false}
-          className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-slate-500"
+          className="flex-1 rounded-md border border-hairline bg-surface px-3 py-2 text-base text-text outline-none transition placeholder:text-text-mute focus:border-gold-dim"
         />
         <button
           type="submit"
           disabled={!value.trim() || search.isPending}
-          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          className="flex items-center gap-1.5 rounded-md border border-gold-dim bg-gold/10 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
+          <Icon.Search />
           {search.isPending ? 'Searching…' : 'Search'}
         </button>
       </form>
 
       {search.isError && (
-        <p className="rounded-md border border-rose-900 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">
-          {search.error instanceof Error && search.error.message.includes('404')
-            ? 'No summoner found with that Riot ID.'
-            : search.error instanceof Error
-              ? search.error.message
-              : 'Search failed'}
-        </p>
+        <EmptyState
+          icon={<Icon.Warning />}
+          tone="error"
+          title="Lookup failed"
+          description={search.error instanceof Error ? search.error.message : 'Unknown error'}
+        />
       )}
 
-      {result && assets && (
-        <>
-          <section className="flex items-center gap-4 rounded-lg border border-slate-800 bg-slate-900/40 p-5">
-            {(() => {
-              const icon = profileIconUrl(assets, result.profile.profileIconId)
-              return icon ? (
-                <img src={icon} alt="" className="h-14 w-14 rounded-lg border border-slate-700" />
-              ) : (
-                <div className="h-14 w-14 rounded-lg bg-slate-800" />
-              )
-            })()}
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-lg font-semibold">
-                {result.profile.gameName}
-                <span className="text-slate-500">#{result.profile.tagLine}</span>
-              </h2>
-              <p className="text-xs text-slate-500">Level {result.profile.summonerLevel}</p>
-            </div>
-            <div className="flex gap-4">
-              {result.leagueEntries.length === 0 && (
-                <span className="text-xs text-slate-500">Unranked</span>
-              )}
-              {result.leagueEntries.map((entry) => (
-                <div key={entry.queueType} className="text-right text-xs">
-                  <p className="text-slate-500">
-                    {entry.queueType === 'RANKED_SOLO_5x5' ? 'Solo/Duo' : 'Flex'}
-                  </p>
-                  <p className="text-slate-200">
-                    {entry.tier} {entry.rank} · {entry.leaguePoints} LP
-                  </p>
-                  <p className="text-slate-500">
-                    {entry.wins}W {entry.losses}L
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+      {search.isPending && <MatchListSkeleton rows={5} />}
 
-          <section className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/40">
-            <p className="border-b border-slate-800 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Last {result.recentMatches.length} games
-            </p>
-            <ul className="divide-y divide-slate-800/70">
-              {result.recentMatches.map((match) => {
-                const icon = championIconUrl(assets, match.championId)
-                return (
-                  <li
-                    key={match.matchId}
-                    className={`flex items-center gap-3 px-4 py-2.5 ${
-                      match.win ? 'border-l-2 border-l-sky-500' : 'border-l-2 border-l-rose-500'
-                    }`}
-                  >
-                    {icon ? (
-                      <img src={icon} alt="" className="h-9 w-9 rounded" />
-                    ) : (
-                      <div className="h-9 w-9 rounded bg-slate-800" />
-                    )}
-                    <span className="w-28 truncate text-sm text-slate-200">
-                      {championName(assets, match.championId, match.championName)}
-                    </span>
-                    <span className="w-20 tabular-nums text-sm text-slate-300">
-                      {match.kills}/{match.deaths}/{match.assists}
-                    </span>
-                    <span
-                      className={`w-12 text-sm ${match.win ? 'text-sky-400' : 'text-rose-400'}`}
-                    >
-                      {match.win ? 'Win' : 'Loss'}
-                    </span>
-                    <span className="ml-auto text-[11px] text-slate-500">
-                      {formatDistanceToNow(new Date(match.gameCreation), { addSuffix: true })}
-                    </span>
+      {!search.isPending && !result && !search.isError && (
+        <EmptyState
+          icon={<Icon.Search />}
+          title="Search any Riot ID"
+          description="Look up rank and recent games for a player you don't track — a duo partner, or someone from your last lobby."
+        />
+      )}
+
+      {result && (
+        <div className="flex gap-4">
+          {/* Hidden below 1280px for the same reason as the Dashboard rail. */}
+          <aside className="hidden w-stats shrink-0 space-y-3 self-start xl:sticky xl:top-4 xl:block">
+            <section className="rounded-lg border border-hairline bg-surface p-4">
+              <div className="flex flex-col items-center text-center">
+                <div className="relative">
+                  <Asset
+                    src={assets ? profileIconUrl(assets, result.profile.profileIconId) : null}
+                    className="h-20 w-20 border-2 border-gold-dim"
+                    rounded="rounded-lg"
+                  />
+                  <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 rounded-full border border-gold-dim bg-canvas px-2 py-0.5 text-2xs font-medium tabular-nums text-gold">
+                    {result.profile.summonerLevel}
+                  </span>
+                </div>
+                <h2 className="mt-4 max-w-full truncate font-display text-xl text-text">
+                  {result.profile.gameName}
+                </h2>
+                <p className="text-sm text-text-mute">#{result.profile.tagLine}</p>
+              </div>
+            </section>
+
+            <RankCard entry={solo} />
+            <RankCard entry={flex} />
+          </aside>
+
+          {/* flex+gap, not space-y — see the note in Dashboard.tsx. */}
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex items-center gap-3 rounded-lg border border-hairline bg-surface p-3 xl:hidden">
+              <Asset
+                src={assets ? profileIconUrl(assets, result.profile.profileIconId) : null}
+                className="h-12 w-12 border border-gold-dim"
+                rounded="rounded-md"
+              />
+              <div className="min-w-0">
+                <h2 className="truncate font-display text-lg leading-tight text-text">
+                  {result.profile.gameName}
+                </h2>
+                <p className="text-2xs text-text-mute">
+                  #{result.profile.tagLine} · Level {result.profile.summonerLevel}
+                </p>
+              </div>
+              <div className="ml-auto flex gap-2">
+                <div className="w-52">
+                  <RankCard entry={solo} />
+                </div>
+              </div>
+            </div>
+
+            <RecentSummary matches={result.recentMatches} />
+
+            <section className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
+              <p className="border-b border-hairline px-4 py-2 text-2xs font-medium uppercase tracking-widest text-text-mute">
+                Last {result.recentMatches.length} games
+              </p>
+              <ul className="divide-y divide-hairline/60">
+                {result.recentMatches.map((match) => (
+                  <li key={match.matchId}>
+                    {/* Not expandable: ad-hoc lookups aren't stored, so there is no detail to fetch. */}
+                    <MatchListRow
+                      match={match}
+                      expanded={false}
+                      onToggle={() => {}}
+                      expandable={false}
+                    />
                   </li>
-                )
-              })}
-            </ul>
-          </section>
-        </>
+                ))}
+              </ul>
+            </section>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,35 +1,52 @@
 import { useQuery } from '@tanstack/react-query'
+import clsx from 'clsx'
 import type { AssetManifest, MatchParticipant } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, itemIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
-
-interface Perks {
-  styles?: Array<{ selections?: Array<{ perk: number }>; style: number }>
-}
-
-/** Keystone is the first selection of the primary tree; secondary tree shown as its style icon. */
-function runeIds(perks: unknown): { keystone: number | null; secondary: number | null } {
-  const p = perks as Perks | null
-  const primary = p?.styles?.[0]
-  const secondary = p?.styles?.[1]
-  return {
-    keystone: primary?.selections?.[0]?.perk ?? null,
-    secondary: secondary?.style ?? null
-  }
-}
+import { positionIcon } from '../lib/positions'
+import { runeIds } from '../lib/runes'
+import { compactNumber } from '../lib/matchStats'
+import { formatRiotId } from '../lib/riotId'
+import { Asset } from './Asset'
+import { Skeleton } from './Skeleton'
 
 function Items({ m, items }: { m: AssetManifest; items: number[] }): JSX.Element {
-  // Slots 0-5 are inventory, slot 6 is the trinket.
+  const slots = Array.from({ length: 7 }, (_, i) => items[i] ?? 0)
   return (
-    <div className="flex gap-0.5">
-      {items.slice(0, 7).map((itemId, i) => {
-        const url = itemIconUrl(m, itemId)
-        return url ? (
-          <img key={i} src={url} alt="" className="h-6 w-6 rounded-sm" />
-        ) : (
-          <div key={i} className="h-6 w-6 rounded-sm bg-slate-800/70" />
-        )
-      })}
+    <div className="flex gap-[3px]">
+      {slots.map((itemId, i) => (
+        <Asset
+          key={i}
+          src={itemIconUrl(m, itemId)}
+          className="h-[22px] w-[22px]"
+          rounded={i === 6 ? 'rounded-full' : 'rounded'}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** A labelled proportion bar. Both damage columns share a lobby-wide scale so rows compare directly. */
+function StatBar({
+  value,
+  max,
+  tone
+}: {
+  value: number
+  max: number
+  tone: 'damage' | 'taken'
+}): JSX.Element {
+  return (
+    <div className="w-full">
+      <p className="text-[10px] leading-tight tabular-nums text-text-dim">
+        {compactNumber(value)}
+      </p>
+      <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-surface-2">
+        <div
+          className={clsx('h-full rounded-full', tone === 'damage' ? 'bg-gold/70' : 'bg-red/50')}
+          style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }}
+        />
+      </div>
     </div>
   )
 }
@@ -38,78 +55,96 @@ function ParticipantRow({
   p,
   m,
   isTracked,
-  maxDamage
+  maxDamage,
+  maxTaken
 }: {
   p: MatchParticipant
   m: AssetManifest
   isTracked: boolean
   maxDamage: number
+  maxTaken: number
 }): JSX.Element {
-  const champIcon = championIconUrl(m, p.championId)
   const { keystone, secondary } = runeIds(p.perks)
-  const spell1 = p.summoner1Id !== null ? spellIconUrl(m, p.summoner1Id) : null
-  const spell2 = p.summoner2Id !== null ? spellIconUrl(m, p.summoner2Id) : null
-  const keystoneUrl = keystone !== null ? runeIconUrl(m, keystone) : null
-  const secondaryUrl = secondary !== null ? runeIconUrl(m, secondary) : null
-  const damage = p.damageDealtToChampions ?? 0
-  const damagePct = maxDamage > 0 ? (damage / maxDamage) * 100 : 0
+  const position = positionIcon(p.teamPosition)
 
   return (
     <div
-      className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${
-        isTracked ? 'bg-slate-700/40' : ''
-      }`}
+      className={clsx(
+        'flex items-center gap-2 rounded px-2 py-1',
+        isTracked && 'bg-gold/10 ring-1 ring-inset ring-gold/25'
+      )}
     >
+      {position ? (
+        <img src={position} alt="" className="h-4 w-4 shrink-0" />
+      ) : (
+        <span className="h-4 w-4 shrink-0" />
+      )}
+
       <div className="relative shrink-0">
-        {champIcon ? (
-          <img src={champIcon} alt="" className="h-7 w-7 rounded" />
-        ) : (
-          <div className="h-7 w-7 rounded bg-slate-800" />
-        )}
+        <Asset
+          src={championIconUrl(m, p.championId)}
+          className="h-8 w-8"
+          rounded="rounded-full"
+        />
         {p.champLevel !== null && (
-          <span className="absolute -bottom-1 -right-1 rounded-full bg-slate-950 px-1 text-[9px] tabular-nums text-slate-300">
+          <span className="absolute -bottom-0.5 -right-1 rounded-full bg-canvas px-1 text-[9px] tabular-nums text-text-dim ring-1 ring-hairline">
             {p.champLevel}
           </span>
         )}
       </div>
 
-      <div className="flex shrink-0 flex-col gap-0.5">
-        {spell1 ? <img src={spell1} alt="" className="h-3 w-3 rounded-sm" /> : <div className="h-3 w-3" />}
-        {spell2 ? <img src={spell2} alt="" className="h-3 w-3 rounded-sm" /> : <div className="h-3 w-3" />}
+      <div className="flex shrink-0 flex-col gap-[2px]">
+        <Asset
+          src={p.summoner1Id !== null ? spellIconUrl(m, p.summoner1Id) : null}
+          className="h-[15px] w-[15px]"
+        />
+        <Asset
+          src={p.summoner2Id !== null ? spellIconUrl(m, p.summoner2Id) : null}
+          className="h-[15px] w-[15px]"
+        />
       </div>
 
-      <div className="flex shrink-0 flex-col gap-0.5">
-        {keystoneUrl ? (
-          <img src={keystoneUrl} alt="" className="h-3 w-3" />
-        ) : (
-          <div className="h-3 w-3" />
-        )}
-        {secondaryUrl ? (
-          <img src={secondaryUrl} alt="" className="h-3 w-3" />
-        ) : (
-          <div className="h-3 w-3" />
-        )}
+      <div className="flex shrink-0 flex-col gap-[2px]">
+        <Asset
+          src={keystone !== null ? runeIconUrl(m, keystone) : null}
+          className="h-[15px] w-[15px] bg-canvas"
+          rounded="rounded-full"
+        />
+        <Asset
+          src={secondary !== null ? runeIconUrl(m, secondary) : null}
+          className="h-[15px] w-[15px]"
+          rounded="rounded-full"
+        />
       </div>
 
       <span
-        className={`w-28 truncate ${isTracked ? 'font-medium text-slate-100' : 'text-slate-400'}`}
+        className={clsx(
+          'w-32 shrink-0 truncate text-sm',
+          isTracked ? 'font-medium text-text' : 'text-text-dim'
+        )}
+        title={formatRiotId(p.gameName, p.tagLine)}
       >
         {p.gameName ?? 'Unknown'}
       </span>
 
-      <span className="w-16 shrink-0 tabular-nums text-slate-300">
-        {p.kills}/{p.deaths}/{p.assists}
+      <span className="w-[74px] shrink-0 text-sm tabular-nums text-text-dim">
+        {p.kills} <span className="text-text-mute">/</span>{' '}
+        <span className="text-red">{p.deaths}</span> <span className="text-text-mute">/</span>{' '}
+        {p.assists}
       </span>
 
-      <span className="w-14 shrink-0 tabular-nums text-slate-500">{p.cs ?? 0} cs</span>
+      <span className="w-14 shrink-0 text-2xs tabular-nums text-text-mute">{p.cs ?? 0} CS</span>
 
-      <div className="w-20 shrink-0">
-        <div className="h-1 overflow-hidden rounded-full bg-slate-800">
-          <div className="h-full bg-orange-500/70" style={{ width: `${damagePct}%` }} />
-        </div>
-        <span className="text-[10px] tabular-nums text-slate-500">
-          {damage.toLocaleString()}
-        </span>
+      <span className="w-14 shrink-0 text-2xs tabular-nums text-text-mute">
+        {compactNumber(p.goldEarned)}g
+      </span>
+
+      <div className="w-16 shrink-0">
+        <StatBar value={p.damageDealtToChampions ?? 0} max={maxDamage} tone="damage" />
+      </div>
+
+      <div className="w-16 shrink-0">
+        <StatBar value={p.damageTaken ?? 0} max={maxTaken} tone="taken" />
       </div>
 
       <div className="ml-auto shrink-0">
@@ -119,6 +154,17 @@ function ParticipantRow({
   )
 }
 
+function sum(values: Array<number | null>): number {
+  return values.reduce<number>((total, v) => total + (v ?? 0), 0)
+}
+
+/**
+ * The expanded scoreboard.
+ *
+ * Surfaces gold, damage taken and role — all stored since the first migration
+ * but never rendered before. Damage bars are normalised across all ten players
+ * rather than per team, so a carry on the losing side still reads as a carry.
+ */
 export function MatchDetailPanel({
   matchId,
   trackedPuuid
@@ -133,26 +179,44 @@ export function MatchDetailPanel({
   })
 
   if (isLoading || !assets) {
-    return <div className="px-4 py-3 text-xs text-slate-500">Loading match…</div>
+    return (
+      <div className="space-y-1 border-t border-hairline bg-canvas/60 p-3">
+        {Array.from({ length: 10 }, (_, i) => (
+          <Skeleton key={i} className="h-9 w-full" />
+        ))}
+      </div>
+    )
   }
+
   if (!data) {
-    return <div className="px-4 py-3 text-xs text-slate-500">Match details unavailable.</div>
+    return (
+      <p className="border-t border-hairline bg-canvas/60 px-4 py-3 text-sm text-text-mute">
+        Match details unavailable.
+      </p>
+    )
   }
 
-  const blue = data.participants.filter((p) => p.teamId === 100)
-  const red = data.participants.filter((p) => p.teamId === 200)
   const maxDamage = Math.max(...data.participants.map((p) => p.damageDealtToChampions ?? 0), 1)
+  const maxTaken = Math.max(...data.participants.map((p) => p.damageTaken ?? 0), 1)
 
-  const teamBlock = (team: MatchParticipant[], label: string): JSX.Element => {
+  const teamBlock = (teamId: number, label: string): JSX.Element => {
+    const team = data.participants.filter((p) => p.teamId === teamId)
     const won = team[0]?.win ?? false
+
     return (
       <div>
-        <p className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wide">
-          <span className={won ? 'text-sky-400' : 'text-rose-400'}>
+        <div className="mb-1 flex items-baseline gap-2 px-2">
+          <span
+            className={clsx('font-display text-base', won ? 'text-teal' : 'text-red')}
+          >
             {won ? 'Victory' : 'Defeat'}
           </span>
-          <span className="text-slate-600"> · {label}</span>
-        </p>
+          <span className="text-2xs uppercase tracking-widest text-text-mute">{label}</span>
+          <span className="ml-auto text-2xs tabular-nums text-text-mute">
+            {sum(team.map((p) => p.kills))} kills ·{' '}
+            {compactNumber(sum(team.map((p) => p.goldEarned)))} gold
+          </span>
+        </div>
         <div className="space-y-0.5">
           {team.map((p) => (
             <ParticipantRow
@@ -161,6 +225,7 @@ export function MatchDetailPanel({
               m={assets}
               isTracked={p.puuid === trackedPuuid}
               maxDamage={maxDamage}
+              maxTaken={maxTaken}
             />
           ))}
         </div>
@@ -169,9 +234,9 @@ export function MatchDetailPanel({
   }
 
   return (
-    <div className="space-y-3 border-t border-slate-800 bg-slate-950/60 px-2 py-3">
-      {teamBlock(blue, 'Blue side')}
-      {teamBlock(red, 'Red side')}
+    <div className="space-y-3 border-t border-hairline bg-canvas/60 px-2 py-3">
+      {teamBlock(100, 'Blue side')}
+      {teamBlock(200, 'Red side')}
     </div>
   )
 }

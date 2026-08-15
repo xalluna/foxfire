@@ -25,6 +25,14 @@ export interface LeagueEntry {
   fetchedAt: string
 }
 
+/**
+ * One row of match history.
+ *
+ * Everything here is read from the local `match_participants` table in a
+ * single query — no Riot call is made to render a list. The team totals are
+ * aggregates over the row's own team, needed for kill participation and
+ * damage share, which are ratios rather than raw stats.
+ */
 export interface MatchSummary {
   matchId: string
   gameCreation: number
@@ -34,9 +42,25 @@ export interface MatchSummary {
   win: boolean
   championId: number
   championName: string | null
+  champLevel: number | null
   kills: number
   deaths: number
   assists: number
+  cs: number | null
+  goldEarned: number | null
+  damageDealtToChampions: number | null
+  /** Highest multi-kill in the game: 2 = double, 3 = triple, 4 = quadra, 5 = penta. */
+  largestMultiKill: number | null
+  items: number[]
+  summoner1Id: number | null
+  summoner2Id: number | null
+  perks: unknown
+  /** '' for modes without lanes (ARAM, Arena). */
+  teamPosition: string | null
+  /** Sum over the player's own team — the denominator for kill participation. */
+  teamKills: number
+  /** Sum over the player's own team — the denominator for damage share. */
+  teamDamage: number
 }
 
 export interface MatchParticipant {
@@ -60,6 +84,7 @@ export interface MatchParticipant {
   summoner2Id: number | null
   perks: unknown
   teamPosition: string | null
+  largestMultiKill: number | null
 }
 
 export interface MatchDetail {
