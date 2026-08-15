@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { MatchDetail, MatchParticipant, MatchSummary, WinRateEntry } from '@shared/types'
+import type { ChampionStats, MatchDetail, MatchParticipant, MatchSummary } from '@shared/types'
 import type { MatchDto } from '../../riot/types'
 
 /** Persists a match and all 10 participants atomically. Idempotent — re-storing a known match is a no-op. */
@@ -285,27 +285,69 @@ export function getMatchDetail(db: DatabaseSync, matchId: string): MatchDetail |
 }
 
 /**
- * Per-champion win rate computed locally from stored matches — no API call needed.
+ * Per-champion performance computed locally from stored matches — no API call needed.
  *
- * Joins `matches` purely to reach `queue_id`, which lives there rather than on
+ * Joins `matches` for `queue_id`, which lives there rather than on
  * `match_participants`. Without the join this aggregate mixes ARAM and Normals
  * into the same win rate as Ranked Solo, which is exactly what makes unfiltered
- * champion stats untrustworthy.
+ * champion stats untrustworthy. The same join supplies `game_duration`, the
+ * denominator for every per-minute rate.
  *
  * Remakes are excluded: a game voided after two minutes is not evidence about
  * how a champion performs, and counting them is what made these numbers differ
  * from op.gg's.
+ *
+ * Two different averages are returned on purpose:
+ *
+ * - Totals (kills, cs, damage, duration) are pooled, so the caller's derived
+ *   ratios agree with the per-game averages printed beside them. A KDA of
+ *   totalK+A over totalD is the same arithmetic the reader can do from the
+ *   averages on screen; a mean of per-game ratios is not, and looks like a bug.
+ * - Shares are meaned per game, because they are already normalised. Pooling
+ *   them would let one forty-minute game outvote three short ones for a number
+ *   that is supposed to describe a typical game.
  */
-export function getChampionWinRates(
+export function getChampionStats(
   db: DatabaseSync,
   puuid: string,
   queueId: number | null = null
-): WinRateEntry[] {
+): ChampionStats[] {
   const rows = db
     .prepare(
-      `SELECT p.champion_id, COUNT(*) AS games, SUM(p.win) AS wins
+      // The team-totals subquery is the same one getMatchSummaries uses, and for
+      // the same reason: it stays unfiltered so the denominator is the whole
+      // team, while the queue predicate sits on the outer query.
+      //
+      // CAST(... AS REAL) is load-bearing. SQLite integer-divides two INTEGER
+      // columns, so 18900 / 84000 floors to 0 and every share reads 0%.
+      //
+      // The CASE has no ELSE, so a shut-out team yields NULL and AVG skips it —
+      // the game drops out of the mean rather than dragging it toward zero.
+      // Every game shut out leaves the whole average NULL, matching how
+      // damageShare/killParticipation report "no data" for a single match.
+      `SELECT p.champion_id,
+              COUNT(*)                                      AS games,
+              SUM(p.win)                                    AS wins,
+              SUM(p.kills)                                  AS kills,
+              SUM(p.deaths)                                 AS deaths,
+              SUM(p.assists)                                AS assists,
+              COALESCE(SUM(p.cs), 0)                        AS cs,
+              COALESCE(SUM(p.damage_dealt_to_champions), 0) AS damage,
+              COALESCE(SUM(m.game_duration), 0)             AS duration_seconds,
+              AVG(CASE WHEN t.team_damage > 0
+                       THEN CAST(p.damage_dealt_to_champions AS REAL) / t.team_damage END)
+                                                            AS damage_share,
+              AVG(CASE WHEN t.team_kills > 0
+                       THEN CAST(p.kills + p.assists AS REAL) / t.team_kills END)
+                                                            AS kill_participation
          FROM match_participants p
          JOIN matches m ON m.match_id = p.match_id
+         JOIN (SELECT match_id, team_id,
+                      SUM(kills) AS team_kills,
+                      SUM(damage_dealt_to_champions) AS team_damage
+                 FROM match_participants
+                GROUP BY match_id, team_id) t
+           ON t.match_id = p.match_id AND t.team_id = p.team_id
         WHERE p.puuid = ?
           AND p.game_ended_in_early_surrender = 0
           AND (? IS NULL OR m.queue_id = ?)
@@ -316,12 +358,28 @@ export function getChampionWinRates(
     champion_id: number
     games: number
     wins: number
+    kills: number
+    deaths: number
+    assists: number
+    cs: number
+    damage: number
+    duration_seconds: number
+    damage_share: number | null
+    kill_participation: number | null
   }>
 
   return rows.map((row) => ({
     championId: row.champion_id,
     games: row.games,
-    wins: row.wins
+    wins: row.wins,
+    kills: row.kills,
+    deaths: row.deaths,
+    assists: row.assists,
+    cs: row.cs,
+    damageToChampions: row.damage,
+    durationSeconds: row.duration_seconds,
+    damageShare: row.damage_share,
+    killParticipation: row.kill_participation
   }))
 }
 

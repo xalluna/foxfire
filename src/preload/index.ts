@@ -48,6 +48,9 @@ const api: Api = {
     participantName: (regionalRoute, puuid) =>
       ipcRenderer.invoke(CH.liveGame.participantName, regionalRoute, puuid)
   },
+  champions: {
+    stats: (accountId, queueId) => ipcRenderer.invoke(CH.champions.stats, accountId, queueId)
+  },
   mastery: {
     get: (accountId, refresh, queueId) =>
       ipcRenderer.invoke(CH.mastery.get, accountId, refresh, queueId)

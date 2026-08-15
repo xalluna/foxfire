@@ -1,6 +1,7 @@
 import type { LeagueEntry } from '@shared/types'
 import { queueLabel, rankRecord, tierColor, tierCrest, tierLabel } from '../lib/rank'
 import { Asset } from './Asset'
+import { Bar } from './Bar'
 
 /**
  * One ranked queue. Renders in both the ranked and unranked case — an empty
@@ -52,9 +53,7 @@ export function RankCard({ entry }: { entry: LeagueEntry }): JSX.Element {
               {winRate}%
             </span>
           </div>
-          <div className="mt-1 flex h-1 overflow-hidden rounded-full bg-red/40">
-            <div className="h-full bg-teal" style={{ width: `${winRate ?? 0}%` }} />
-          </div>
+          <Bar fraction={(winRate ?? 0) / 100} tone="winrate" className="mt-1" />
         </div>
       )}
     </div>

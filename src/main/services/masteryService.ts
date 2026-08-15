@@ -1,14 +1,14 @@
 import { getDb } from '../db'
 import { getAccountById } from '../db/repositories/accounts.repo'
-import { getChampionWinRates } from '../db/repositories/matches.repo'
+import { getChampionStats } from '../db/repositories/matches.repo'
 import { getMastery, upsertMastery } from '../db/repositories/mastery.repo'
 import { getChampionMasteryByPuuid } from '../riot/endpoints/championMastery'
 import type { PlatformId } from '../riot/regions'
-import type { MasteryEntry, WinRateEntry } from '@shared/types'
+import type { ChampionStats, MasteryEntry } from '@shared/types'
 
 export interface MasteryData {
   riotMastery: MasteryEntry[]
-  localWinRates: WinRateEntry[]
+  localWinRates: ChampionStats[]
 }
 
 /**
@@ -37,6 +37,6 @@ export async function getMasteryData(
 
   return {
     riotMastery: stored,
-    localWinRates: getChampionWinRates(db, account.puuid, queueId)
+    localWinRates: getChampionStats(db, account.puuid, queueId)
   }
 }

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getChampionWinRates, getMatchSummaries, insertMatch } from './matches.repo'
+import { getChampionStats, getMatchSummaries, insertMatch } from './matches.repo'
 import { applyAllMigrations, migrationNames, migrationSql } from '../testMigrations'
 import type { MatchDto } from '../../riot/types'
 
@@ -53,13 +53,14 @@ function participant(overrides: Record<string, unknown> = {}): Record<string, un
 function match(
   matchId: string,
   participants: Array<Record<string, unknown>>,
-  queueId = 420
+  queueId = 420,
+  gameDuration = 1669
 ): MatchDto {
   return {
     metadata: { matchId, participants: participants.map((p) => p.puuid as string) },
     info: {
       gameCreation: 1_700_000_000_000,
-      gameDuration: 1669,
+      gameDuration,
       gameMode: 'CLASSIC',
       gameType: 'MATCHED_GAME',
       queueId,
@@ -193,7 +194,7 @@ describe('getMatchSummaries queue filter', () => {
   })
 })
 
-describe('getChampionWinRates', () => {
+describe('getChampionStats', () => {
   let db: DatabaseSyncType
 
   beforeEach(() => {
@@ -201,16 +202,129 @@ describe('getChampionWinRates', () => {
     applyAllMigrations(db)
   })
 
-  it('aggregates games and wins per champion', () => {
-    insertMatch(db, match('NA1_1', [participant({ puuid: ME, championId: 112, win: true })]))
-    insertMatch(db, match('NA1_2', [participant({ puuid: ME, championId: 112, win: false })]))
-    insertMatch(db, match('NA1_3', [participant({ puuid: ME, championId: 64, win: true })]))
+  /** Me plus one ally on team 100, so team totals are a real denominator. */
+  function withAlly(me: Record<string, unknown>, ally: Record<string, unknown>) {
+    return [
+      participant({ puuid: ME, teamId: 100, ...me }),
+      participant({ puuid: 'ally', teamId: 100, ...ally })
+    ]
+  }
 
-    const rates = getChampionWinRates(db, ME)
-    expect(rates).toEqual([
-      { championId: 112, games: 2, wins: 1 },
-      { championId: 64, games: 1, wins: 1 }
+  it('returns the full stat set per champion', () => {
+    insertMatch(
+      db,
+      match(
+        'NA1_1',
+        withAlly(
+          {
+            championId: 112,
+            win: true,
+            kills: 5,
+            deaths: 2,
+            assists: 5,
+            totalMinionsKilled: 150,
+            neutralMinionsKilled: 50,
+            totalDamageDealtToChampions: 20_000
+          },
+          { kills: 15, totalDamageDealtToChampions: 20_000 }
+        ),
+        420,
+        1200
+      )
+    )
+
+    expect(getChampionStats(db, ME)).toEqual([
+      {
+        championId: 112,
+        games: 1,
+        wins: 1,
+        kills: 5,
+        deaths: 2,
+        assists: 5,
+        cs: 200,
+        damageToChampions: 20_000,
+        durationSeconds: 1200,
+        damageShare: 0.5,
+        killParticipation: 0.5
+      }
     ])
+  })
+
+  it('pools KDA rather than meaning the per-game ratios', () => {
+    // 2/4/4 is a 1.5 ratio and 8/2/6 is a 7.0; their mean is 4.25. Pooling the
+    // totals gives 20/6 ≈ 3.33, which is the only answer consistent with the
+    // per-game averages the UI prints underneath it.
+    insertMatch(db, match('NA1_1', [participant({ puuid: ME, kills: 2, deaths: 4, assists: 4 })]))
+    insertMatch(db, match('NA1_2', [participant({ puuid: ME, kills: 8, deaths: 2, assists: 6 })]))
+
+    const [row] = getChampionStats(db, ME)
+    expect(row).toMatchObject({ kills: 10, deaths: 6, assists: 10 })
+    expect((row.kills + row.assists) / row.deaths).toBeCloseTo(3.333, 3)
+  })
+
+  it('means damage share per game rather than pooling it', () => {
+    // 50% of a small game and 10% of a big one. The mean is 30%; pooling the
+    // totals would give 25k/90k ≈ 27.8% and let the longer game outvote.
+    insertMatch(
+      db,
+      match(
+        'NA1_1',
+        withAlly({ totalDamageDealtToChampions: 20_000 }, { totalDamageDealtToChampions: 20_000 })
+      )
+    )
+    insertMatch(
+      db,
+      match(
+        'NA1_2',
+        withAlly({ totalDamageDealtToChampions: 5_000 }, { totalDamageDealtToChampions: 45_000 })
+      )
+    )
+
+    expect(getChampionStats(db, ME)[0].damageShare).toBeCloseTo(0.3, 5)
+  })
+
+  it('keeps shares fractional instead of integer-dividing them to zero', () => {
+    // Guards the CAST: SQLite would floor 18900 / 84000 to 0 without it, and
+    // every damage share in the app would silently read 0%.
+    insertMatch(
+      db,
+      match(
+        'NA1_1',
+        withAlly({ totalDamageDealtToChampions: 18_900 }, { totalDamageDealtToChampions: 65_100 })
+      )
+    )
+
+    expect(getChampionStats(db, ME)[0].damageShare).toBeCloseTo(0.225, 5)
+  })
+
+  it('drops shut-out games from kill participation instead of scoring them zero', () => {
+    // A team that never got a kill has no share to give. Counting it as 0%
+    // would drag the average down for a game that says nothing either way.
+    insertMatch(db, match('NA1_1', withAlly({ kills: 0, assists: 0 }, { kills: 0, assists: 0 })))
+    insertMatch(db, match('NA1_2', withAlly({ kills: 4, assists: 2 }, { kills: 4 })))
+
+    expect(getChampionStats(db, ME)[0].killParticipation).toBeCloseTo(0.75, 5)
+  })
+
+  it('reports null participation when every game was a shut-out', () => {
+    insertMatch(db, match('NA1_1', withAlly({ kills: 0, assists: 0 }, { kills: 0, assists: 0 })))
+    expect(getChampionStats(db, ME)[0].killParticipation).toBeNull()
+  })
+
+  it('sums duration across games so per-minute rates use real playtime', () => {
+    insertMatch(
+      db,
+      match('NA1_1', [participant({ puuid: ME, totalMinionsKilled: 100, neutralMinionsKilled: 0 })], 420, 1200)
+    )
+    insertMatch(
+      db,
+      match('NA1_2', [participant({ puuid: ME, totalMinionsKilled: 200, neutralMinionsKilled: 0 })], 420, 2400)
+    )
+
+    const [row] = getChampionStats(db, ME)
+    expect(row).toMatchObject({ cs: 300, durationSeconds: 3600 })
+    // 300 CS over 60 minutes — not the 6.25 a mean of the two rates would give.
+    expect(row.cs / (row.durationSeconds / 60)).toBeCloseTo(5, 5)
   })
 
   it('scopes the aggregate to one queue', () => {
@@ -220,28 +334,48 @@ describe('getChampionWinRates', () => {
     insertMatch(db, match('NA1_2', [participant({ puuid: ME, championId: 112, win: true })], 450))
     insertMatch(db, match('NA1_3', [participant({ puuid: ME, championId: 112, win: true })], 450))
 
-    expect(getChampionWinRates(db, ME)).toEqual([{ championId: 112, games: 3, wins: 2 }])
-    expect(getChampionWinRates(db, ME, 420)).toEqual([{ championId: 112, games: 1, wins: 0 }])
-    expect(getChampionWinRates(db, ME, 450)).toEqual([{ championId: 112, games: 2, wins: 2 }])
+    expect(getChampionStats(db, ME)[0]).toMatchObject({ games: 3, wins: 2 })
+    expect(getChampionStats(db, ME, 420)[0]).toMatchObject({ games: 1, wins: 0 })
+    expect(getChampionStats(db, ME, 450)[0]).toMatchObject({ games: 2, wins: 2 })
   })
 
   it('drops a champion entirely when it was never played in the filtered queue', () => {
     insertMatch(db, match('NA1_1', [participant({ puuid: ME, championId: 112 })], 450))
-    expect(getChampionWinRates(db, ME, 420)).toEqual([])
+    expect(getChampionStats(db, ME, 420)).toEqual([])
   })
 
-  it('excludes remakes, which carry a result but decide nothing', () => {
-    insertMatch(db, match('NA1_1', [participant({ puuid: ME, championId: 112, win: false })]))
-    // A remake reports a nominal win; counting it would show 50% off one real
-    // game, which is the discrepancy against op.gg this rule removes.
+  it('excludes remakes from every column, not just games and wins', () => {
     insertMatch(
       db,
-      match('NA1_2', [
-        participant({ puuid: ME, championId: 112, win: true, gameEndedInEarlySurrender: true })
-      ])
+      match('NA1_1', [participant({ puuid: ME, championId: 112, win: false, kills: 3 })], 420, 1500)
+    )
+    // A remake reports a nominal win; counting it would show 50% off one real
+    // game, which is the discrepancy against op.gg this rule removes. Its
+    // kills and duration must stay out of the totals too, or the rates skew.
+    insertMatch(
+      db,
+      match(
+        'NA1_2',
+        [
+          participant({
+            puuid: ME,
+            championId: 112,
+            win: true,
+            kills: 99,
+            gameEndedInEarlySurrender: true
+          })
+        ],
+        420,
+        180
+      )
     )
 
-    expect(getChampionWinRates(db, ME)).toEqual([{ championId: 112, games: 1, wins: 0 }])
+    expect(getChampionStats(db, ME)[0]).toMatchObject({
+      games: 1,
+      wins: 0,
+      kills: 3,
+      durationSeconds: 1500
+    })
   })
 
   it('omits a champion played only in a remake', () => {
@@ -251,7 +385,7 @@ describe('getChampionWinRates', () => {
         participant({ puuid: ME, championId: 54, gameEndedInEarlySurrender: true })
       ])
     )
-    expect(getChampionWinRates(db, ME)).toEqual([])
+    expect(getChampionStats(db, ME)).toEqual([])
   })
 })
 
@@ -287,13 +421,13 @@ describe('backfills from raw_json', () => {
     expect(getMatchSummaries(db, ME, 20, 0)[0].isRemake).toBe(true)
     expect(getMatchSummaries(db, 'ally', 20, 0)[0].isRemake).toBe(false)
     // The nominal win must not reach champion stats.
-    expect(getChampionWinRates(db, ME)).toEqual([])
+    expect(getChampionStats(db, ME)).toEqual([])
   })
 
   it('defaults to not-a-remake when the payload omits the field', () => {
     const db = upgradeFrom001([participant({ puuid: ME })])
     expect(getMatchSummaries(db, ME, 20, 0)[0].isRemake).toBe(false)
-    expect(getChampionWinRates(db, ME)).toHaveLength(1)
+    expect(getChampionStats(db, ME)).toHaveLength(1)
   })
 })
 

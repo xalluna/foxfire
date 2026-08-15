@@ -7,7 +7,7 @@ import { queueName } from '../lib/queues'
 import { runeIds } from '../lib/runes'
 import {
   compactNumber,
-  csPerMin,
+  perMinute,
   damageShare,
   formatAge,
   formatClock,
@@ -17,6 +17,7 @@ import {
   multiKillLabel
 } from '../lib/matchStats'
 import { Asset } from './Asset'
+import { Bar } from './Bar'
 import { LpChip } from './LpChip'
 import * as Icon from './icons'
 
@@ -64,7 +65,7 @@ export function MatchListRow({
     : (match.championName ?? '')
 
   const { keystone, secondary } = runeIds(match.perks)
-  const cspm = csPerMin(match.cs, match.gameDuration)
+  const cspm = perMinute(match.cs, match.gameDuration)
   const kp = killParticipation(match)
   const share = damageShare(match)
   const multiKill = multiKillLabel(match.largestMultiKill)
@@ -182,12 +183,7 @@ export function MatchListRow({
         <p className="text-2xs tabular-nums text-text-dim">
           {compactNumber(match.damageDealtToChampions)} dmg
         </p>
-        <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-2">
-          <div
-            className="h-full rounded-full bg-gold/70"
-            style={{ width: `${Math.min(100, (share ?? 0) * 100)}%` }}
-          />
-        </div>
+        <Bar fraction={share ?? 0} className="mt-1" />
         <p className="mt-0.5 text-[9px] tabular-nums text-text-mute">
           {formatPercent(share)} of team
         </p>

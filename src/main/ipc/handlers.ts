@@ -24,7 +24,7 @@ import { syncTray } from '../tray'
 import { searchSummoner } from '../services/searchService'
 import { getDb } from '../db'
 import { getAccountById } from '../db/repositories/accounts.repo'
-import { getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
+import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import type { BackgroundSettings, QueueType, RankRange, RiotIdInput } from '@shared/types'
 
 export function registerIpcHandlers(): void {
@@ -80,6 +80,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.liveGame.participantName, (_e, regionalRoute: string, puuid: string) =>
     resolveParticipantName(regionalRoute, puuid)
   )
+
+  ipcMain.handle(CH.champions.stats, (_e, accountId: number, queueId: number | null) => {
+    const account = getAccountById(getDb(), accountId)
+    if (!account) return []
+    return getChampionStats(getDb(), account.puuid, queueId)
+  })
 
   ipcMain.handle(
     CH.mastery.get,

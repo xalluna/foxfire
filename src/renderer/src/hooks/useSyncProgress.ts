@@ -17,9 +17,10 @@ export function useSyncProgress(): void {
         queryClient.invalidateQueries({ queryKey: ['matchList'] })
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         queryClient.invalidateQueries({ queryKey: ['rankHistory'] })
-        // Champion win rates are aggregated from the very matches a sync just
+        // Champion stats are aggregated from the very matches a sync just
         // imported, so they are stale the moment it finishes. Without this they
         // keep serving pre-sync counts until the query ages out.
+        queryClient.invalidateQueries({ queryKey: ['championStats'] })
         queryClient.invalidateQueries({ queryKey: ['mastery'] })
       }
     })
