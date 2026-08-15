@@ -1,4 +1,4 @@
-import { recordLcuEvent } from './index'
+import { isTelemetryEnabled, recordLcuEvent } from './index'
 import { describeError } from './redact'
 
 /**
@@ -21,7 +21,19 @@ const POLL_SAMPLE_INTERVAL_MS = 60_000
 let lastPollSampleAt = 0
 let lastState: string | null = null
 
+/**
+ * Both throttles below bail out before touching their state when collection is
+ * off.
+ *
+ * The watcher keeps polling whether telemetry is enabled or not, so advancing
+ * the throttle on a dropped event would let disabled polls consume the window:
+ * after switching telemetry on you would wait up to a minute for the first
+ * sample, and a connection state established earlier would never be recorded at
+ * all, because it never "changes" again. The panel then shows an empty League
+ * client tab next to a client that is plainly connected.
+ */
 export function recordLcuTransition(state: string, detail?: string): void {
+  if (!isTelemetryEnabled()) return
   if (state === lastState) return
   lastState = state
   recordLcuEvent({
@@ -33,6 +45,7 @@ export function recordLcuTransition(state: string, detail?: string): void {
 }
 
 export function recordLcuPoll(latencyMs: number): void {
+  if (!isTelemetryEnabled()) return
   const now = Date.now()
   if (now - lastPollSampleAt < POLL_SAMPLE_INTERVAL_MS) return
   lastPollSampleAt = now
