@@ -18,6 +18,15 @@ import type {
   SyncProgressEvent,
   SyncState
 } from './types'
+import type {
+  LcuTelemetry,
+  RateLimitSeries,
+  ResourceData,
+  TelemetryRequest,
+  TelemetryRequestQuery,
+  TelemetryState,
+  TelemetrySummary
+} from './telemetry'
 
 export interface ValidateResult {
   ok: boolean
@@ -99,6 +108,23 @@ export interface Api {
   }
   search: {
     summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>
+  }
+  /**
+   * Developer telemetry. Off by default; reads still work with collection
+   * disabled so history stays visible after switching it off.
+   */
+  telemetry: {
+    getState: () => Promise<TelemetryState>
+    setEnabled: (enabled: boolean) => Promise<TelemetryState>
+    openWindow: () => Promise<void>
+    clear: () => Promise<TelemetryState>
+    requests: (query: TelemetryRequestQuery) => Promise<TelemetryRequest[]>
+    endpoints: (windowMs: number) => Promise<string[]>
+    summary: (windowMs: number) => Promise<TelemetrySummary>
+    /** Riot's own reported counters — the limiter never reads these itself. */
+    rateLimit: (windowMs: number) => Promise<RateLimitSeries>
+    resources: (windowMs: number) => Promise<ResourceData>
+    lcu: (windowMs: number) => Promise<LcuTelemetry>
   }
 }
 

@@ -187,3 +187,11 @@ export function Key(props: IconProps): JSX.Element {
     </Icon>
   )
 }
+
+export function Activity(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 12h3.5l2.5-7 4 14 2.5-7H21" />
+    </Icon>
+  )
+}

@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { is } from './lib/env'
+import { closeTelemetryWindow } from './telemetryWindow'
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -35,6 +36,14 @@ export function createMainWindow(): BrowserWindow {
 
   window.on('ready-to-show', () => {
     window.show()
+  })
+
+  // The telemetry panel is a second BrowserWindow, so leaving it open would
+  // keep `window-all-closed` from ever firing and the app would linger with no
+  // visible window outside tray mode. In tray mode this never runs — the close
+  // is intercepted and the window only hides.
+  window.on('closed', () => {
+    closeTelemetryWindow()
   })
 
   window.webContents.setWindowOpenHandler((details) => {

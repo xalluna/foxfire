@@ -78,6 +78,18 @@ const api: Api = {
   },
   search: {
     summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)
+  },
+  telemetry: {
+    getState: () => ipcRenderer.invoke(CH.telemetry.getState),
+    setEnabled: (enabled) => ipcRenderer.invoke(CH.telemetry.setEnabled, enabled),
+    openWindow: () => ipcRenderer.invoke(CH.telemetry.openWindow),
+    clear: () => ipcRenderer.invoke(CH.telemetry.clear),
+    requests: (query) => ipcRenderer.invoke(CH.telemetry.requests, query),
+    endpoints: (windowMs) => ipcRenderer.invoke(CH.telemetry.endpoints, windowMs),
+    summary: (windowMs) => ipcRenderer.invoke(CH.telemetry.summary, windowMs),
+    rateLimit: (windowMs) => ipcRenderer.invoke(CH.telemetry.rateLimit, windowMs),
+    resources: (windowMs) => ipcRenderer.invoke(CH.telemetry.resources, windowMs),
+    lcu: (windowMs) => ipcRenderer.invoke(CH.telemetry.lcu, windowMs)
   }
 }
 

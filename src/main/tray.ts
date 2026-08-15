@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { getBackgroundSettings } from './services/backgroundService'
 import { createMainWindow } from './window'
+import { openTelemetryWindow } from './telemetryWindow'
 
 /**
  * Keeps the app alive after the window closes, which is what makes per-game LP
@@ -57,6 +58,9 @@ export function ensureTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open LoL Stats', click: showWindow },
+      // Reachable while the main window is hidden, which is exactly when a
+      // background-mode app misbehaves unobserved.
+      { label: 'Telemetry', accelerator: 'Ctrl+Shift+T', click: openTelemetryWindow },
       { type: 'separator' },
       {
         label: 'Quit',

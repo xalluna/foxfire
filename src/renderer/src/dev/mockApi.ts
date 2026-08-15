@@ -17,6 +17,14 @@ import type {
   SyncProgressEvent,
   SyncState
 } from '@shared/types'
+import type {
+  LcuTelemetry,
+  RateLimitSeries,
+  ResourceData,
+  TelemetryRequest,
+  TelemetryState,
+  TelemetrySummary
+} from '@shared/telemetry'
 import { rankMovement } from '@shared/ladder'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
@@ -325,6 +333,267 @@ export const mockApi: Api = {
         900
       )
     }
+  },
+  /**
+   * The panel opens at `#telemetry` in its own window against the real main
+   * process, so the browser harness cannot produce genuine measurements. It
+   * serves a synthetic backfill instead — the shape the panel exists to show:
+   * queue wait climbing as the sustained window saturates, a couple of 429s,
+   * and one schema drift.
+   *
+   * Without this the panel would only ever be reviewable by running a live
+   * 4-minute sync against a key that expires daily.
+   */
+  telemetry: {
+    getState: () => delay(MOCK_TELEMETRY_STATE, 0),
+    setEnabled: (enabled: boolean) => delay({ ...MOCK_TELEMETRY_STATE, enabled }, 0),
+    openWindow: () => delay(undefined, 0),
+    clear: () => delay({ ...MOCK_TELEMETRY_STATE, dbBytes: 0 }, 0),
+    requests: (query) =>
+      delay(
+        MOCK_REQUESTS.filter(
+          (row) =>
+            (!query.endpoint || row.endpoint === query.endpoint) &&
+            (!query.outcome || row.outcome === query.outcome)
+        ).slice(0, query.limit ?? 200),
+        120
+      ),
+    endpoints: () => delay([...new Set(MOCK_REQUESTS.map((r) => r.endpoint))].sort(), 0),
+    summary: (windowMs: number) => delay(mockSummary(windowMs), 150),
+    rateLimit: (windowMs: number) => delay(mockRateLimit(windowMs), 150),
+    resources: (windowMs: number) => delay(mockResources(windowMs), 150),
+    lcu: (windowMs: number) => delay(mockLcu(windowMs), 100)
+  }
+}
+
+const MOCK_TELEMETRY_STATE: TelemetryState = {
+  enabled: true,
+  dbPath: 'C:\\Users\\dev\\AppData\\Roaming\\my-op-gg\\data\\telemetry.db',
+  pending: 14,
+  dropped: 0,
+  dbBytes: 4_812_544
+}
+
+/**
+ * A synthetic 200-match backfill. Deterministic, so the panel looks the same on
+ * every reload and visual changes are attributable to the code rather than the
+ * data.
+ */
+const MOCK_REQUESTS: TelemetryRequest[] = buildMockRequests()
+
+function buildMockRequests(): TelemetryRequest[] {
+  const rows: TelemetryRequest[] = []
+  const now = Date.now()
+
+  for (let i = 0; i < 180; i += 1) {
+    const startedAt = now - i * 1_180 - (i % 7) * 90
+    // Queue wait grows as the 100-per-2-minute window fills; network time
+    // wobbles around Riot's typical sub-500ms.
+    const waitMs = i < 18 ? 4 + (i % 5) * 3 : 900 + ((i * 37) % 1_400)
+    const networkMs = 120 + ((i * 53) % 320)
+
+    const throttled = i === 41 || i === 96
+    const drifted = i === 63
+    const isPage = i % 60 === 0
+
+    rows.push({
+      id: 5_000 - i,
+      requestId: `req-${5_000 - i}`,
+      spanId: `span-sync-${Math.floor(i / 60)}`,
+      attempt: throttled ? 2 : 1,
+      endpoint: isPage
+        ? '/lol/match/v5/matches/by-puuid/{puuid}/ids'
+        : '/lol/match/v5/matches/{matchId}',
+      pathHash: (0x9e3779b9 * (i + 1)).toString(16).slice(0, 16),
+      host: 'https://americas.api.riotgames.com',
+      scheduledAt: startedAt - waitMs,
+      startedAt,
+      waitMs,
+      networkMs,
+      status: throttled ? 429 : drifted ? 200 : 200,
+      outcome: throttled ? 'http_error' : drifted ? 'parse_error' : 'ok',
+      bytes: isPage ? 2_140 : 96_000 + ((i * 811) % 40_000),
+      errorKind: throttled ? 'RiotApiError' : drifted ? 'ZodError' : null,
+      errorMessage: throttled
+        ? 'Riot API error 429 for /lol/match/v5/matches/{matchId}'
+        : drifted
+          ? 'Invalid input: expected number, received undefined at info.participants[3].challenges'
+          : null,
+      appLimit: '20:1,100:120',
+      appLimitCount: `${Math.min(100, 12 + ((i * 3) % 92))}:120`,
+      methodLimit: '250:10',
+      methodLimitCount: `${8 + (i % 40)}:10`,
+      retryAfterMs: throttled ? 2_000 : null
+    })
+  }
+
+  // A live-game fan-out: ten rank lookups issued at once, queued serially.
+  for (let i = 0; i < 10; i += 1) {
+    rows.push({
+      id: 4_800 - i,
+      requestId: `req-live-${i}`,
+      spanId: null,
+      attempt: 1,
+      endpoint: '/lol/league/v4/entries/by-puuid/{puuid}',
+      pathHash: (0x85ebca6b * (i + 3)).toString(16).slice(0, 16),
+      host: 'https://na1.api.riotgames.com',
+      scheduledAt: now - 240_000,
+      startedAt: now - 240_000 + i * 310,
+      // The whole point of the fan-out: each request waits for all the ones
+      // ahead of it, so wait climbs linearly while network stays flat.
+      waitMs: i * 310,
+      networkMs: 180 + ((i * 29) % 60),
+      status: 200,
+      outcome: 'ok',
+      bytes: 1_180,
+      errorKind: null,
+      errorMessage: null,
+      appLimit: '20:1,100:120',
+      appLimitCount: `${60 + i}:120`,
+      methodLimit: '250:10',
+      methodLimitCount: `${i + 1}:10`,
+      retryAfterMs: null
+    })
+  }
+
+  return rows.sort((a, b) => b.startedAt - a.startedAt)
+}
+
+function mockSummary(windowMs: number): TelemetrySummary {
+  const waits = MOCK_REQUESTS.map((r) => r.waitMs).sort((a, b) => a - b)
+  const nets = MOCK_REQUESTS.map((r) => r.networkMs).sort((a, b) => a - b)
+  const at = (values: number[], p: number): number =>
+    values[Math.max(0, Math.ceil((p / 100) * values.length) - 1)]
+
+  const byEndpoint = [...new Set(MOCK_REQUESTS.map((r) => r.endpoint))].map((endpoint) => {
+    const subset = MOCK_REQUESTS.filter((r) => r.endpoint === endpoint)
+    const subNets = subset.map((r) => r.networkMs).sort((a, b) => a - b)
+    const subWaits = subset.map((r) => r.waitMs).sort((a, b) => a - b)
+    return {
+      endpoint,
+      requests: subset.length,
+      errors: subset.filter((r) => r.outcome !== 'ok').length,
+      waitP95: at(subWaits, 95),
+      netP50: at(subNets, 50),
+      netP95: at(subNets, 95),
+      bytes: subset.reduce((sum, r) => sum + (r.bytes ?? 0), 0)
+    }
+  })
+
+  return {
+    windowMs,
+    attempts: MOCK_REQUESTS.length,
+    logicalRequests: MOCK_REQUESTS.length - 2,
+    errors: MOCK_REQUESTS.filter((r) => r.outcome !== 'ok').length,
+    throttled: MOCK_REQUESTS.filter((r) => r.status === 429).length,
+    bytes: MOCK_REQUESTS.reduce((sum, r) => sum + (r.bytes ?? 0), 0),
+    waitP50: at(waits, 50),
+    waitP95: at(waits, 95),
+    netP50: at(nets, 50),
+    netP95: at(nets, 95),
+    byEndpoint
+  }
+}
+
+/** 120 evenly spaced timestamps across the requested window. */
+function mockBuckets(windowMs: number, count = 120): number[] {
+  const now = Date.now()
+  const step = windowMs / count
+  return Array.from({ length: count }, (_, i) => Math.round(now - windowMs + i * step))
+}
+
+function mockRateLimit(windowMs: number): RateLimitSeries {
+  const buckets = mockBuckets(windowMs)
+  // The sustained window saturates during a backfill and the burst window does
+  // not — which is exactly the shape that says "the 100/2min limit is what's
+  // pacing this, not the 20/s one".
+  return {
+    app: [
+      {
+        windowSeconds: 1,
+        limit: 20,
+        points: buckets.map((at, i) => ({ at, count: 1 + (i % 4) }))
+      },
+      {
+        windowSeconds: 120,
+        limit: 100,
+        points: buckets.map((at, i) => ({
+          at,
+          count: i < 20 ? 8 + i * 3 : Math.min(100, 82 + ((i * 7) % 20))
+        }))
+      }
+    ],
+    method: [
+      {
+        windowSeconds: 10,
+        limit: 250,
+        points: buckets.map((at, i) => ({ at, count: 30 + ((i * 11) % 60) }))
+      }
+    ],
+    throttledAt: [buckets[46], buckets[97]]
+  }
+}
+
+function mockResources(windowMs: number): ResourceData {
+  const buckets = mockBuckets(windowMs)
+  const wave = (i: number, base: number, amp: number, period: number): number =>
+    Number((base + amp * Math.abs(Math.sin((i / period) * Math.PI))).toFixed(2))
+
+  return {
+    series: [
+      {
+        processType: 'Browser',
+        // Working set is in KB, as Electron reports it — ~150MB climbing
+        // slightly over the run, which is roughly what a backfill looks like.
+        points: buckets.map((at, i) => ({
+          at,
+          cpuPercent: wave(i, 3, 22, 17),
+          workingSetKb: Math.round(148_000 + i * 90 + wave(i, 0, 6_000, 23))
+        }))
+      },
+      {
+        processType: 'Tab',
+        points: buckets.map((at, i) => ({
+          at,
+          cpuPercent: wave(i, 1, 9, 11),
+          workingSetKb: Math.round(212_000 + wave(i, 0, 14_000, 31))
+        }))
+      },
+      {
+        processType: 'GPU',
+        points: buckets.map((at, i) => ({
+          at,
+          cpuPercent: wave(i, 0.5, 3, 7),
+          workingSetKb: Math.round(78_000 + wave(i, 0, 3_000, 13))
+        }))
+      }
+    ],
+    // The spikes line up with the synchronous match inserts during backfill.
+    loopDelay: buckets.map((at, i) => ({
+      at,
+      meanMs: wave(i, 1.2, 3, 19),
+      p99Ms: i % 17 === 0 ? wave(i, 40, 90, 5) : wave(i, 6, 14, 19),
+      maxMs: i % 17 === 0 ? wave(i, 90, 160, 5) : wave(i, 12, 22, 19),
+      queueDepth: i > 18 && i < 100 ? Math.max(0, 60 - Math.abs(60 - i)) : 0
+    }))
+  }
+}
+
+function mockLcu(windowMs: number): LcuTelemetry {
+  const buckets = mockBuckets(windowMs, 30)
+  const now = Date.now()
+  return {
+    latency: buckets.map((at, i) => ({ at, ms: 6 + ((i * 5) % 14) })),
+    recent: [
+      { at: now - 180_000, kind: 'connected', latencyMs: null, detail: 'connected' },
+      {
+        at: now - 900_000,
+        kind: 'error',
+        latencyMs: null,
+        detail: 'Error: connect ECONNREFUSED 127.0.0.1:52841'
+      },
+      { at: now - 960_000, kind: 'disconnected', latencyMs: null, detail: 'disconnected' }
+    ]
   }
 }
 

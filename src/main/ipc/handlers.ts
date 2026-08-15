@@ -25,7 +25,19 @@ import { searchSummoner } from '../services/searchService'
 import { getDb } from '../db'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
+import { getTelemetryState, setTelemetryEnabled } from '../telemetry'
+import {
+  clearTelemetry,
+  lcuTelemetry,
+  listEndpoints,
+  listRequests,
+  rateLimitSeries,
+  resourceSeries,
+  summarise
+} from '../telemetry/queries'
+import { openTelemetryWindow } from '../telemetryWindow'
 import type { BackgroundSettings, QueueType, RankRange, RiotIdInput } from '@shared/types'
+import type { TelemetryRequestQuery } from '@shared/telemetry'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.settings.get, () => getSettings())
@@ -111,4 +123,21 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) => searchSummoner(input))
+
+  ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())
+  ipcMain.handle(CH.telemetry.setEnabled, (_e, enabled: boolean) => {
+    setTelemetryEnabled(enabled)
+    return getTelemetryState()
+  })
+  ipcMain.handle(CH.telemetry.openWindow, () => openTelemetryWindow())
+  ipcMain.handle(CH.telemetry.clear, () => {
+    clearTelemetry()
+    return getTelemetryState()
+  })
+  ipcMain.handle(CH.telemetry.requests, (_e, query: TelemetryRequestQuery) => listRequests(query))
+  ipcMain.handle(CH.telemetry.endpoints, (_e, windowMs: number) => listEndpoints(windowMs))
+  ipcMain.handle(CH.telemetry.summary, (_e, windowMs: number) => summarise(windowMs))
+  ipcMain.handle(CH.telemetry.rateLimit, (_e, windowMs: number) => rateLimitSeries(windowMs))
+  ipcMain.handle(CH.telemetry.resources, (_e, windowMs: number) => resourceSeries(windowMs))
+  ipcMain.handle(CH.telemetry.lcu, (_e, windowMs: number) => lcuTelemetry(windowMs))
 }

@@ -1,4 +1,4 @@
-import { riotFetch } from '../client'
+import { riotRequest } from '../client'
 import { platformBaseUrl, type PlatformId } from '../regions'
 import { LeagueEntryDtoSchema, type LeagueEntryDto } from '../types'
 
@@ -9,6 +9,10 @@ export async function getLeagueEntriesByPuuid(
   puuid: string
 ): Promise<LeagueEntryDto[]> {
   const path = `/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
-  const data = await riotFetch<unknown>(platformBaseUrl(platform), path)
-  return LeagueEntryDtoSchema.array().parse(data)
+  return riotRequest(
+    '/lol/league/v4/entries/by-puuid/{puuid}',
+    platformBaseUrl(platform),
+    path,
+    LeagueEntryDtoSchema.array()
+  )
 }

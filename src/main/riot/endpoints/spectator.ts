@@ -1,4 +1,4 @@
-import { isNotFound, riotFetch } from '../client'
+import { isNotFound, riotRequest } from '../client'
 import { platformBaseUrl, type PlatformId } from '../regions'
 import { ActiveGameDtoSchema, type ActiveGameDto } from '../types'
 
@@ -9,8 +9,12 @@ export async function getActiveGameByPuuid(
 ): Promise<ActiveGameDto | null> {
   const path = `/lol/spectator/v5/active-games/by-summoner/${encodeURIComponent(puuid)}`
   try {
-    const data = await riotFetch<unknown>(platformBaseUrl(platform), path)
-    return ActiveGameDtoSchema.parse(data)
+    return await riotRequest(
+      '/lol/spectator/v5/active-games/by-summoner/{puuid}',
+      platformBaseUrl(platform),
+      path,
+      ActiveGameDtoSchema
+    )
   } catch (err) {
     if (isNotFound(err)) return null
     throw err
