@@ -24,7 +24,14 @@ export function beginQuit(): void {
   quitting = true
 }
 
-function showWindow(): void {
+/**
+ * Brings the app back to the front, from the tray menu or from a second launch
+ * that the instance lock turned away.
+ *
+ * The recreated window gets the tray behaviour attached like any other, or
+ * closing it would quit the app outright while tray mode is on.
+ */
+export function showWindow(): void {
   const existing = BrowserWindow.getAllWindows()[0]
   if (existing) {
     if (existing.isMinimized()) existing.restore()
@@ -32,7 +39,7 @@ function showWindow(): void {
     existing.focus()
     return
   }
-  createMainWindow()
+  attachTrayBehaviour(createMainWindow())
 }
 
 /**
