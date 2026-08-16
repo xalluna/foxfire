@@ -106,14 +106,13 @@ function accounts(): Account[] {
 
 function matchesFor(accountId: number): MatchSummary[] {
   if (scenario === 'no-matches') return []
-  // Only the home account has a synced history in the fixtures.
-  return accountId === 1 ? MATCHES : MATCHES.slice(0, 4)
+  return MATCHES[accountId] ?? []
 }
 
 function syncState(accountId: number): SyncState {
   return {
     accountId,
-    mostRecentMatchId: MATCHES[0]?.matchId ?? null,
+    mostRecentMatchId: matchesFor(accountId)[0]?.matchId ?? null,
     backfillComplete: scenario !== 'no-matches',
     backfillTarget: 200,
     lastFullSyncAt: '2026-08-14T18:00:00Z',
@@ -267,26 +266,28 @@ export const mockApi: Api = {
   },
 
   champions: {
-    stats: (_accountId: number, queueId: number | null): Promise<ChampionStats[]> =>
-      delay(championStatsFor(queueId), 300)
+    stats: (accountId: number, queueId: number | null): Promise<ChampionStats[]> =>
+      delay(championStatsFor(accountId, queueId), 300)
   },
 
   mastery: {
-    get: (_accountId: number, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
+    get: (accountId: number, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
       delay(
         {
           // Mastery is lifetime and never narrows; only the win rates do.
-          riotMastery: MASTERY,
-          localWinRates: championStatsFor(queueId)
+          riotMastery: MASTERY[accountId] ?? [],
+          localWinRates: championStatsFor(accountId, queueId)
         },
         300
       )
   },
 
   rank: {
-    history: (_accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
+    history: (accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
       const since = range === 'all' ? 0 : Date.now() - (range === '7d' ? 7 : 30) * 86_400_000
-      const snapshots = RANK_SNAPSHOTS[queueType].filter((s) => s.capturedAt >= since)
+      const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
+        (s) => s.capturedAt >= since
+      )
 
       const milestones = snapshots
         .flatMap((snapshot, i) => {
@@ -336,11 +337,11 @@ export const mockApi: Api = {
             puuid: 'puuid-searched',
             gameName: input.gameName,
             tagLine: input.tagLine,
-            profileIconId: 5789,
+            profileIconId: 5788,
             summonerLevel: 214
           },
           leagueEntries: LEAGUE_ENTRIES[2],
-          recentMatches: MATCHES.slice(0, 10)
+          recentMatches: MATCHES[2].slice(0, 10)
         },
         900
       )
