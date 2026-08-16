@@ -10,10 +10,10 @@ import { cancelAllPostGameSyncs } from './services/postGameSync'
 import { repairAttribution } from './services/rankHistoryService'
 import { startSync } from './services/syncService'
 import { stopLcuWatcher } from './lcu/watcher'
-import { attachTrayBehaviour, beginQuit, syncTray } from './tray'
+import { attachTrayBehaviour, beginQuit, showWindow, syncTray } from './tray'
 import { initTelemetry, shutdownTelemetry } from './telemetry'
 import { peekTelemetryDb } from './telemetry/db'
-import { flushLogs, installCrashHandlers } from './telemetry/logger'
+import { createLogger, flushLogs, installCrashHandlers } from './telemetry/logger'
 import { observeRateLimiter } from './telemetry/limiter'
 import { startResourceSampling, stopResourceSampling } from './telemetry/resources'
 import { startRetention, stopRetention } from './telemetry/retention'
@@ -25,6 +25,8 @@ import { openTelemetryWindow } from './telemetryWindow'
  */
 const TELEMETRY_ACCELERATOR = 'CommandOrControl+Shift+T'
 
+const log = createLogger('app')
+
 // Pin the data directory so the dev build and the packaged build (whose
 // productName would otherwise point at a different folder) share one database
 // and one stored API key. Must run before the app is ready.
@@ -35,7 +37,45 @@ app.setPath('userData', join(app.getPath('appData'), 'my-op-gg'))
 // collection switched off.
 installCrashHandlers()
 
-app.whenReady().then(() => {
+/**
+ * One process at a time.
+ *
+ * Everything durable this app owns is shared: both SQLite databases, the log
+ * file, the encrypted API key, and — the one that misbehaves silently — the
+ * Riot rate limiter, whose budget is per key rather than per process. A second
+ * copy runs a second 20/s queue against the same key and both start collecting
+ * 429s, worst of all at launch, where catchUpOnLaunch syncs every account.
+ *
+ * The lock is keyed on the userData path set just above, so this makes the dev
+ * build and the packaged build mutually exclusive too. That is the honest
+ * outcome of pinning them to one directory: two of them is precisely the case
+ * this prevents.
+ *
+ * The ready work is registered only on the winner. app.quit() does not cancel
+ * an already-registered whenReady callback, so a guard that let it stand would
+ * still let the loser open the database and start a sync sweep on its way out.
+ */
+if (!app.requestSingleInstanceLock()) {
+  // warn rather than info: the chattier levels are dropped while telemetry is
+  // off, and this line is the only explanation for `npm run dev` appearing to
+  // do nothing while the installed app sits in the tray.
+  log.warn('Another instance already holds the lock — exiting')
+  app.quit()
+} else {
+  // A launch that loses the lock is the user asking for the window — which in
+  // tray mode is hidden, with nothing on screen to suggest the app is already
+  // running. No argv to inspect: the app registers no protocol handler and
+  // takes no launch arguments.
+  app.on('second-instance', () => {
+    // Before ready there is no window to raise, and one is already on its way.
+    if (!app.isReady()) return
+    showWindow()
+  })
+
+  app.whenReady().then(bootstrap)
+}
+
+function bootstrap(): void {
   initDatabase()
   // After the database, since the enabled flag lives in app_settings, and
   // before anything that might record.
@@ -61,7 +101,7 @@ app.whenReady().then(() => {
       attachTrayBehaviour(createMainWindow())
     }
   })
-})
+}
 
 /**
  * Catches up on anything played while the app was shut.
@@ -100,6 +140,11 @@ app.on('before-quit', () => {
   beginQuit()
 })
 
+// Registered outside the instance-lock branch, so it also runs on the copy that
+// lost the lock and is quitting without ever having booted. Every teardown below
+// tolerates that: each one either null-checks its handle or returns early on an
+// absent timer. window-all-closed is safe for a different reason — the loser
+// never opens a window, so it never fires and never reaches getDb().
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopLcuWatcher()
