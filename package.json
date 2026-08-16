@@ -1,6 +1,6 @@
 {
   "name": "my-op-gg",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Personal League of Legends stats and live-game tracker",
   "main": "./out/main/index.js",
   "author": "Brandon Barr",
@@ -9,6 +9,7 @@
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.web.config.ts",
     "fetch-assets": "node scripts/fetch-assets.mjs",
+    "make-icon": "node scripts/make-icon.mjs",
     "build": "electron-vite build",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
