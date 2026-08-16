@@ -27,7 +27,8 @@ export function getSettings(): AppSettingsPublic {
   const home = getHomeAccount(getDb())
   return {
     hasApiKey: loadApiKey() !== null,
-    homeAccountId: home?.id ?? null
+    homeAccountId: home?.id ?? null,
+    keyRejected: rateLimiter.keyRejected
   }
 }
 

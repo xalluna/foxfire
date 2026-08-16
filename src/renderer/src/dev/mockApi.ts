@@ -130,7 +130,14 @@ function runFakeSync(accountId: number): void {
   if (scenario === 'sync-error') {
     setTimeout(() => {
       for (const cb of progressListeners) {
-        cb({ accountId, phase: 'error', current: 0, total: 100, message: 'Riot API unreachable' })
+        cb({
+          accountId,
+          phase: 'error',
+          current: 0,
+          total: 100,
+          message: 'Riot API unreachable',
+          trigger: 'manual'
+        })
       }
     }, 400)
     return
@@ -147,7 +154,10 @@ function runFakeSync(accountId: number): void {
         phase: done ? 'complete' : 'backfill',
         current: Math.min(current, total),
         total,
-        message: done ? undefined : `Fetching match ${current} of ${total}`
+        message: done ? undefined : `Fetching match ${current} of ${total}`,
+        // The harness exists to design the progress bar against motion, and an
+        // auto-triggered sync deliberately renders nothing.
+        trigger: 'manual'
       })
     }
     if (done) clearInterval(tick)
@@ -160,7 +170,8 @@ export const mockApi: Api = {
       delay(
         {
           hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1
+          homeAccountId: scenario === 'no-accounts' ? null : 1,
+          keyRejected: scenario === 'key-expired'
         },
         180,
         false
@@ -172,7 +183,8 @@ export const mockApi: Api = {
           : { ok: false, message: 'That does not look like a Riot API key.' },
         600
       ),
-    clearApiKey: (): Promise<AppSettingsPublic> => delay({ hasApiKey: false, homeAccountId: 1 }),
+    clearApiKey: (): Promise<AppSettingsPublic> =>
+      delay({ hasApiKey: false, homeAccountId: 1, keyRejected: false }),
     onKeyInvalid: (cb: () => void) => {
       keyInvalidListeners.add(cb)
       // Fire once on load so the expired-key banner can be inspected.
@@ -362,7 +374,11 @@ export const mockApi: Api = {
     summary: (windowMs: number) => delay(mockSummary(windowMs), 150),
     rateLimit: (windowMs: number) => delay(mockRateLimit(windowMs), 150),
     resources: (windowMs: number) => delay(mockResources(windowMs), 150),
-    lcu: (windowMs: number) => delay(mockLcu(windowMs), 100)
+    lcu: (windowMs: number) => delay(mockLcu(windowMs), 100),
+    // Both act on the real database through the main process, so in the browser
+    // harness they can only report a plausible shape for the buttons.
+    replayAttribution: () => delay(3, 200),
+    simulateGameEnd: () => delay(true, 100)
   }
 }
 

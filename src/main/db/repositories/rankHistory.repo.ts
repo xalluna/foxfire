@@ -65,16 +65,25 @@ export function getLatestSnapshot(
  * plot a flat line made of hundreds of points. Returns the row id when a
  * snapshot was actually written, and null when it was a no-op — callers use
  * that to decide whether LP attribution needs to run.
+ *
+ * `force` overrides the dedupe, for the one caller that knows something the
+ * value alone cannot say: a ranked game just ended. A loss at 0 LP with
+ * demotion protection reads identically to the snapshot before it, so without
+ * this the interval never closes and goes on to swallow the *next* game as
+ * well, costing both of them their LP figure. Forcing is bounded at one row per
+ * ranked game, which is exactly the granularity attribution wants.
  */
 export function insertRankSnapshot(
   db: DatabaseSync,
   accountId: number,
   input: SnapshotInput,
   source: 'lcu' | 'league_v4',
-  capturedAt: number = Date.now()
+  capturedAt: number = Date.now(),
+  force = false
 ): number | null {
   const previous = getLatestSnapshot(db, accountId, input.queueType)
   if (
+    !force &&
     previous &&
     previous.tier === input.tier &&
     previous.rank === input.rank &&

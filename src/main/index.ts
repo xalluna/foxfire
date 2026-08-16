@@ -1,10 +1,14 @@
 import { join } from 'path'
 import { app, BrowserWindow, globalShortcut } from 'electron'
 import { createMainWindow } from './window'
-import { closeDatabase, initDatabase } from './db'
+import { closeDatabase, getDb, initDatabase } from './db'
+import { listAccounts } from './db/repositories/accounts.repo'
 import { registerIpcHandlers } from './ipc/handlers'
 import { initSettings } from './services/settingsService'
 import { getBackgroundSettings, initBackground } from './services/backgroundService'
+import { cancelAllPostGameSyncs } from './services/postGameSync'
+import { repairAttribution } from './services/rankHistoryService'
+import { startSync } from './services/syncService'
 import { stopLcuWatcher } from './lcu/watcher'
 import { attachTrayBehaviour, beginQuit, syncTray } from './tray'
 import { initTelemetry, shutdownTelemetry } from './telemetry'
@@ -50,6 +54,7 @@ app.whenReady().then(() => {
   attachTrayBehaviour(createMainWindow())
   initBackground()
   syncTray()
+  catchUpOnLaunch()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -57,6 +62,25 @@ app.whenReady().then(() => {
     }
   })
 })
+
+/**
+ * Catches up on anything played while the app was shut.
+ *
+ * The gameflow watcher can only see games that finish with the app running, so
+ * without this a session played with it closed still needs the button — the
+ * exact manual step this work exists to remove. A delta is two requests plus
+ * one per genuinely new match, so the cost is proportional to what was actually
+ * missed.
+ *
+ * The attribution repair runs first and separately: it touches only SQLite, so
+ * it must not sit behind a Riot call that an expired key would fail.
+ */
+function catchUpOnLaunch(): void {
+  repairAttribution()
+  for (const account of listAccounts(getDb())) {
+    startSync(account.id, 'auto')
+  }
+}
 
 app.on('window-all-closed', () => {
   // In tray mode the window closing is not the end of the session — the LCU
@@ -79,6 +103,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopLcuWatcher()
+  cancelAllPostGameSyncs()
   stopResourceSampling()
   stopRetention()
   // Before closeDatabase, so the last buffered events are committed while the

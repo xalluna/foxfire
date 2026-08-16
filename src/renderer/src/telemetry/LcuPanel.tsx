@@ -1,7 +1,69 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ChartCard, TimeSeriesChart, type Series } from './TimeSeriesChart'
 import { formatClock, formatMs } from './format'
+
+/**
+ * Manual triggers for the two halves of the post-game path.
+ *
+ * Both normally fire only when a real game ends and Riot gets round to
+ * publishing it — minutes of waiting on something that cannot be arranged on
+ * demand. Kept here rather than in Settings because this window is already the
+ * developer surface and neither button means anything to a normal user.
+ */
+function PostGameTools(): JSX.Element {
+  const [result, setResult] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function run(label: string, action: () => Promise<string>): Promise<void> {
+    setBusy(true)
+    setResult(`${label}…`)
+    try {
+      setResult(await action())
+    } catch (err) {
+      setResult(`${label} failed: ${String(err)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ChartCard title="Post-game path" hint="developer triggers">
+      <div className="flex flex-wrap items-center gap-2 py-2">
+        <button
+          disabled={busy}
+          onClick={() =>
+            run('Replaying attribution', async () => {
+              const n = await window.api.telemetry.replayAttribution()
+              return `Attributed LP to ${n} game${n === 1 ? '' : 's'}.`
+            })
+          }
+          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-gold-dim hover:text-gold disabled:opacity-50"
+        >
+          Replay LP attribution
+        </button>
+
+        <button
+          disabled={busy}
+          onClick={() =>
+            run('Scheduling post-game sync', async () => {
+              const ok = await window.api.telemetry.simulateGameEnd()
+              return ok
+                ? 'Scheduled — attempts run on the usual backoff; watch the log.'
+                : 'No account to sync.'
+            })
+          }
+          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-gold-dim hover:text-gold disabled:opacity-50"
+        >
+          Simulate game end
+        </button>
+
+        {result && <span className="text-2xs text-text-mute">{result}</span>}
+      </div>
+    </ChartCard>
+  )
+}
 
 /**
  * League client connection.
@@ -57,6 +119,8 @@ export function LcuPanel({ windowMs }: { windowMs: number }): JSX.Element {
             : 'no polls sampled in this window'}
         </span>
       </div>
+
+      <PostGameTools />
 
       <ChartCard title="Poll latency" hint="loopback, sampled once a minute">
         <TimeSeriesChart

@@ -14,14 +14,20 @@ export function useSyncProgress(): void {
     return window.api.sync.onProgress((event) => {
       setSyncProgress(event)
       if (event.phase === 'complete') {
-        queryClient.invalidateQueries({ queryKey: ['matchList'] })
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-        queryClient.invalidateQueries({ queryKey: ['rankHistory'] })
+        // Fires for automatic syncs too, and has to: the post-game refresh is
+        // silent in the UI, so this invalidation is the only thing that puts
+        // the finished game on screen.
+        //
+        // Scoped to the account the event is about. The bare prefix matched
+        // every account's cached list and refetched all of them.
+        const { accountId } = event
+        queryClient.invalidateQueries({ queryKey: ['matchList', accountId] })
+        queryClient.invalidateQueries({ queryKey: ['dashboard', accountId] })
+        queryClient.invalidateQueries({ queryKey: ['rankHistory', accountId] })
         // Champion stats are aggregated from the very matches a sync just
         // imported, so they are stale the moment it finishes. Without this they
         // keep serving pre-sync counts until the query ages out.
-        queryClient.invalidateQueries({ queryKey: ['championStats'] })
-        queryClient.invalidateQueries({ queryKey: ['mastery'] })
+        queryClient.invalidateQueries({ queryKey: ['championStats', accountId] })
       }
     })
   }, [setSyncProgress, queryClient])

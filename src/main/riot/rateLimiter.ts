@@ -94,6 +94,19 @@ export class RiotRateLimiter extends EventEmitter {
     return this.queue.length
   }
 
+  /**
+   * Whether Riot has rejected the current key, as a latched value.
+   *
+   * The 'key-invalid' event alone is not enough: it fires the instant a request
+   * comes back 401, which at startup is before the renderer has mounted and
+   * subscribed, so the notification lands on nobody and the user is left with
+   * an app that quietly fetches nothing. Reading the state instead lets the
+   * window find out at any point after the fact.
+   */
+  get keyRejected(): boolean {
+    return this.fatalError !== null
+  }
+
   schedule<T>(run: () => Promise<T>): Promise<T> {
     if (this.fatalError) return Promise.reject(this.fatalError)
     return new Promise<T>((resolve, reject) => {

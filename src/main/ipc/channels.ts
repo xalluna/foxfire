@@ -67,6 +67,11 @@ export const CH = {
     summary: 'telemetry:summary',
     rateLimit: 'telemetry:rateLimit',
     resources: 'telemetry:resources',
-    lcu: 'telemetry:lcu'
+    lcu: 'telemetry:lcu',
+    // Developer triggers for the post-game path. Both are otherwise reachable
+    // only by finishing a real ranked game and waiting on Riot to publish it,
+    // which is not a practical way to check whether it works.
+    replayAttribution: 'telemetry:replayAttribution',
+    simulateGameEnd: 'telemetry:simulateGameEnd'
   }
 } as const

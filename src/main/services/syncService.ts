@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import type { DatabaseSync } from 'node:sqlite'
 import { getDb } from '../db'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import { filterUnstoredMatchIds, insertMatch } from '../db/repositories/matches.repo'
@@ -15,14 +16,29 @@ import { CH } from '../ipc/channels'
 import { createLogger } from '../telemetry/logger'
 import { withSpan } from '../telemetry/spans'
 import { BACKFILL_TARGET, refreshRank } from './accountService'
+import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttribution'
 import { selectNewMatchIds } from './syncPlanning'
-import type { SyncProgressEvent, SyncState } from '@shared/types'
+import type { SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
 
 const log = createLogger('sync')
 
-// Guards against a second sync starting for an account that's already syncing
-// (e.g. the user clicking between tabs while a backfill runs).
-const inFlight = new Set<number>()
+/**
+ * Guards against a second sync starting for an account that's already syncing
+ * (e.g. the user clicking between tabs while a backfill runs).
+ *
+ * Holds the running promise rather than just the id so a colliding caller joins
+ * it instead of being dropped. Dropping silently was a real defect: the caller
+ * got no progress events and no completion, so the renderer never invalidated
+ * and the Sync now button read as dead. It also gives the post-game retry loop
+ * an honest answer when it races the user pressing the button.
+ */
+const inFlight = new Map<number, Promise<SyncResult>>()
+
+export interface SyncResult {
+  /** Matches newly written to SQLite by this run. */
+  stored: number
+  failed: number
+}
 
 /**
  * Records where the ladder stands at the end of a sync.
@@ -42,10 +58,36 @@ async function snapshotRank(accountId: number): Promise<void> {
   }
 }
 
+/**
+ * Closes any interval whose match has since arrived. Pure local SQLite, and
+ * best-effort for the same reason as the rank snapshot above: the matches are
+ * already committed, so a failure here must not fail the import.
+ */
+function replayRecentAttribution(db: DatabaseSync, accountId: number, puuid: string): void {
+  try {
+    const attributed = replayAttribution(
+      db,
+      accountId,
+      puuid,
+      Date.now() - ATTRIBUTION_REPLAY_WINDOW_MS
+    )
+    if (attributed > 0) log.debug('Attributed LP to games', { accountId, attributed })
+  } catch (err) {
+    log.debug('LP attribution replay failed', { accountId, error: String(err) })
+  }
+}
+
 export function isSyncing(accountId: number): boolean {
   return inFlight.has(accountId)
 }
 
+/**
+ * Carries the trigger on every event so the renderer can keep an automatic
+ * post-game sync from flashing the progress bar while Riot catches up. Passed
+ * down the call chain rather than held in module state, because two accounts
+ * can sync concurrently and one's trigger must not leak into the other's
+ * events.
+ */
 function emit(event: SyncProgressEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(CH.sync.progress, event)
@@ -78,7 +120,8 @@ async function fetchAndStore(
   accountId: number,
   region: RegionalRoute,
   matchIds: string[],
-  phase: 'backfill' | 'delta'
+  phase: 'backfill' | 'delta',
+  trigger: SyncTrigger
 ): Promise<{ failed: number }> {
   const db = getDb()
   const total = matchIds.length
@@ -108,41 +151,56 @@ async function fetchAndStore(
       log.error('Failed to sync match', err, { accountId, phase })
     }
     current += 1
-    emit({ accountId, phase, current, total })
+    emit({ accountId, phase, current, total, trigger })
   }
 
   return { failed }
 }
 
-export async function syncAccount(accountId: number): Promise<void> {
-  if (inFlight.has(accountId)) return
-  inFlight.add(accountId)
-
+async function runGuarded(accountId: number, trigger: SyncTrigger): Promise<SyncResult> {
   try {
     // The root span. Everything below nests under it — including the Riot
     // requests, which pick the context up again across the rate limiter's
     // queue. A backfill is the only operation in the app long enough for
     // "where did the time go" to be a real question.
-    await withSpan('sync.account', { accountId }, () => runSync(accountId))
+    return await withSpan('sync.account', { accountId }, () => runSync(accountId, trigger))
   } catch (err) {
     emit({
       accountId,
       phase: 'error',
       current: 0,
       total: 0,
-      message: err instanceof Error ? err.message : 'Sync failed'
+      message: err instanceof Error ? err.message : 'Sync failed',
+      trigger
     })
     throw err
-  } finally {
-    inFlight.delete(accountId)
   }
+}
+
+export function syncAccount(accountId: number, trigger: SyncTrigger = 'manual'): Promise<SyncResult> {
+  // Join a run already under way rather than dropping this call. The joiner
+  // gets that run's result, which is the honest answer to "did anything land" —
+  // the matches it stored are stored either way.
+  const running = inFlight.get(accountId)
+  if (running) return running
+
+  const run = runGuarded(accountId, trigger)
+  inFlight.set(accountId, run)
+
+  // Registered after the set, so the entry can never be cleared before it was
+  // added. The swallowed rejection is only to keep this bookkeeping chain from
+  // surfacing as an unhandled rejection — `run` itself still rejects for the
+  // caller.
+  void run.catch(() => {}).then(() => inFlight.delete(accountId))
+
+  return run
 }
 
 /**
  * The sync itself, extracted so syncAccount is just the in-flight guard, the
  * root span and the error emit.
  */
-async function runSync(accountId: number): Promise<void> {
+async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncResult> {
   const db = getDb()
   const account = getAccountById(db, accountId)
   if (!account) throw new Error(`Unknown account ${accountId}`)
@@ -151,9 +209,9 @@ async function runSync(accountId: number): Promise<void> {
   const state = ensureSyncState(db, accountId, BACKFILL_TARGET)
   const isBackfill = !state.backfillComplete
   const phase = isBackfill ? 'backfill' : 'delta'
-  log.info('Sync started', { accountId, phase })
+  log.info('Sync started', { accountId, phase, trigger })
 
-  emit({ accountId, phase, current: 0, total: 0, message: 'Fetching match list…' })
+  emit({ accountId, phase, current: 0, total: 0, message: 'Fetching match list…', trigger })
 
   const target = isBackfill ? state.backfillTarget : MATCH_IDS_PAGE_SIZE
   const allIds = await fetchMatchIds(region, account.puuid, target)
@@ -166,16 +224,21 @@ async function runSync(accountId: number): Promise<void> {
     if (isBackfill) markBackfillComplete(db, accountId, allIds[0] ?? null)
     else markDeltaSynced(db, accountId, allIds[0] ?? null)
     await snapshotRank(accountId)
-    emit({ accountId, phase: 'complete', current: 0, total: 0 })
-    return
+    // Still worth a pass even though nothing arrived: an interval left open by
+    // an earlier run — a snapshot that landed before its match — closes here.
+    replayRecentAttribution(db, accountId, account.puuid)
+    emit({ accountId, phase: 'complete', current: 0, total: 0, trigger })
+    return { stored: 0, failed: 0 }
   }
 
-  const { failed } = await fetchAndStore(accountId, region, idsToFetch, phase)
+  const { failed } = await fetchAndStore(accountId, region, idsToFetch, phase, trigger)
+  const stored = idsToFetch.length - failed
 
   // Deliberately after the matches are stored: LP attribution looks for games
   // falling between two snapshots, so a snapshot taken first would find an
   // empty interval and leave the games that just arrived unattributed.
   await snapshotRank(accountId)
+  replayRecentAttribution(db, accountId, account.puuid)
 
   // Only advance the sync marker when everything landed. Leaving it alone on
   // partial failure means the next run retries just the missing matches —
@@ -185,21 +248,24 @@ async function runSync(accountId: number): Promise<void> {
     else markDeltaSynced(db, accountId, allIds[0] ?? null)
   }
 
-  log.info('Sync finished', { accountId, phase, stored: idsToFetch.length - failed, failed })
+  log.info('Sync finished', { accountId, phase, stored, failed })
 
   emit({
     accountId,
     phase: 'complete',
-    current: idsToFetch.length - failed,
+    current: stored,
     total: idsToFetch.length,
-    message: failed > 0 ? `${failed} match${failed === 1 ? '' : 'es'} failed — retry to fill gaps` : undefined
+    message: failed > 0 ? `${failed} match${failed === 1 ? '' : 'es'} failed — retry to fill gaps` : undefined,
+    trigger
   })
+
+  return { stored, failed }
 }
 
 /** Fire-and-forget entry point for IPC — the renderer tracks progress via events. */
-export function startSync(accountId: number): void {
-  void syncAccount(accountId).catch((err) => {
-    log.error('Sync failed', err, { accountId })
+export function startSync(accountId: number, trigger: SyncTrigger = 'manual'): void {
+  void syncAccount(accountId, trigger).catch((err) => {
+    log.error('Sync failed', err, { accountId, trigger })
   })
 }
 

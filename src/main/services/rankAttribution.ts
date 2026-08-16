@@ -1,7 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { getRankedMatchesBetween, upsertMatchRank } from '../db/repositories/rankHistory.repo'
+import {
+  getRankSnapshots,
+  getRankedMatchesBetween,
+  upsertMatchRank
+} from '../db/repositories/rankHistory.repo'
 import { rankMovement } from '@shared/ladder'
-import { queueIdForQueueType } from '@shared/queues'
+import { queueIdForQueueType, TRACKED_QUEUES } from '@shared/queues'
 import type { QueueType, RankSnapshot } from '@shared/types'
 
 /**
@@ -57,4 +61,55 @@ export function attributeInterval(
   })
 
   return true
+}
+
+/**
+ * How far back a routine replay reaches.
+ *
+ * Matches the widest range the rank view offers, so everything the user can
+ * actually look at stays self-healing without walking years of snapshots on
+ * every sync. A full repair passes null instead.
+ */
+export const ATTRIBUTION_REPLAY_WINDOW_MS = 30 * 86_400_000
+
+/**
+ * Re-runs attribution across every stored interval, and the reason the LP chip
+ * works at all.
+ *
+ * Attribution used to happen once, inline, the moment a snapshot was written —
+ * which is roughly a minute after the game ends, and Riot does not publish a
+ * match to match-v5 for a couple of minutes after that. So the interval was
+ * always searched before the match it contained existed locally, found nothing,
+ * and was never revisited: the snapshot had already moved the boundary past the
+ * game, and a later sync storing the match changed no rank value, so nothing
+ * re-triggered. Every game came out unattributed.
+ *
+ * Replaying decouples the two arrival orders. Whichever lands second — the
+ * snapshot or the match — the next sync closes the gap, which also backfills
+ * history recorded before this existed.
+ *
+ * No "already done" bookkeeping: attributeInterval writes only when an interval
+ * holds exactly one game, and upsertMatchRank is idempotent, so re-running is
+ * safe and can only ever add information.
+ *
+ * Returns the number of intervals that wrote a row.
+ */
+export function replayAttribution(
+  db: DatabaseSync,
+  accountId: number,
+  puuid: string,
+  sinceMs: number | null = null
+): number {
+  let attributed = 0
+
+  for (const queueType of TRACKED_QUEUES) {
+    const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs)
+    for (let i = 1; i < snapshots.length; i++) {
+      if (attributeInterval(db, accountId, puuid, queueType, snapshots[i - 1], snapshots[i])) {
+        attributed++
+      }
+    }
+  }
+
+  return attributed
 }
