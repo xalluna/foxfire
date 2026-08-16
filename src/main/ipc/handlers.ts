@@ -22,8 +22,10 @@ import { getBackgroundSettings, setBackgroundSettings } from '../services/backgr
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
 import { searchSummoner } from '../services/searchService'
+import { schedulePostGameSync } from '../services/postGameSync'
+import { replayAttribution } from '../services/rankAttribution'
 import { getDb } from '../db'
-import { getAccountById } from '../db/repositories/accounts.repo'
+import { getAccountById, getHomeAccount, listAccounts } from '../db/repositories/accounts.repo'
 import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import { getTelemetryState, setTelemetryEnabled } from '../telemetry'
 import {
@@ -140,4 +142,24 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.telemetry.rateLimit, (_e, windowMs: number) => rateLimitSeries(windowMs))
   ipcMain.handle(CH.telemetry.resources, (_e, windowMs: number) => resourceSeries(windowMs))
   ipcMain.handle(CH.telemetry.lcu, (_e, windowMs: number) => lcuTelemetry(windowMs))
+
+  // The same full-history pass the app runs at startup, on demand. Returns how
+  // many games it managed to attribute.
+  ipcMain.handle(CH.telemetry.replayAttribution, () => {
+    const db = getDb()
+    let attributed = 0
+    for (const account of listAccounts(db)) {
+      attributed += replayAttribution(db, account.id, account.puuid)
+    }
+    return attributed
+  })
+
+  // Runs the real post-game schedule, backoff and all, so the timing can be
+  // watched in the log without waiting on a game to finish.
+  ipcMain.handle(CH.telemetry.simulateGameEnd, () => {
+    const account = getHomeAccount(getDb()) ?? listAccounts(getDb())[0]
+    if (!account) return false
+    schedulePostGameSync(account.id)
+    return true
+  })
 }

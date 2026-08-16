@@ -213,12 +213,22 @@ export interface SyncState {
   lastDeltaSyncAt: string | null
 }
 
+/**
+ * Who asked for a sync.
+ *
+ * 'auto' covers the launch sweep and the post-game retries — work the user did
+ * not initiate and should not have to watch. The events still fire either way;
+ * only their presentation differs.
+ */
+export type SyncTrigger = 'manual' | 'auto'
+
 export interface SyncProgressEvent {
   accountId: number
   phase: 'backfill' | 'delta' | 'complete' | 'error'
   current: number
   total: number
   message?: string
+  trigger: SyncTrigger
 }
 
 export interface LiveGameParticipant {
@@ -260,6 +270,12 @@ export interface RiotIdInput {
 export interface AppSettingsPublic {
   hasApiKey: boolean
   homeAccountId: number | null
+  /**
+   * A stored key that Riot has since rejected — normally an expired personal
+   * key. Readable state rather than only an event, so a rejection that happens
+   * before the window is listening still reaches the user.
+   */
+  keyRejected: boolean
 }
 
 export type ApiKeyStatus = 'valid' | 'missing' | 'expired' | 'invalid'

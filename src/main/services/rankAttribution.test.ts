@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { attributeInterval } from './rankAttribution'
+import { attributeInterval, replayAttribution } from './rankAttribution'
 import { getMatchSummaries, insertMatch } from '../db/repositories/matches.repo'
+import { insertRankSnapshot } from '../db/repositories/rankHistory.repo'
 import { applyAllMigrations } from '../db/testMigrations'
 import type { MatchDto } from '../riot/types'
 import type { RankSnapshot } from '@shared/types'
@@ -213,5 +214,100 @@ describe('attributeInterval', () => {
       snapshot('GOLD', 'II', 41, T0 + 1000, 1441)
     )
     expect(wrote).toBe(false)
+  })
+})
+
+describe('replayAttribution', () => {
+  let db: DatabaseSyncType
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
+      ME,
+      'Alluna',
+      'NA1'
+    )
+  })
+
+  /** Writes a stored snapshot directly, bypassing the dedupe and the service layer. */
+  function storeSnapshot(lp: number, capturedAt: number, ladderPosition: number): void {
+    insertRankSnapshot(
+      db,
+      ACCOUNT,
+      { queueType: SOLO, tier: 'GOLD', rank: 'II', leaguePoints: lp, wins: 10, losses: 8 },
+      'lcu',
+      capturedAt,
+      true
+    )
+    // ladder_position is stamped from tier/rank/LP on write, so the fixture's
+    // intended position has to be applied afterwards to keep these tests
+    // independent of the ladder maths, which ladder.test.ts already covers.
+    db.prepare(
+      'UPDATE rank_snapshots SET ladder_position = ? WHERE account_id = ? AND captured_at = ?'
+    ).run(ladderPosition, ACCOUNT, capturedAt)
+  }
+
+  it('attributes a game that only arrived after both snapshots were taken', () => {
+    // The real ordering: the client reports the new LP within a minute of the
+    // game ending, and Riot publishes the match minutes later. Inline
+    // attribution at snapshot time therefore always found nothing.
+    storeSnapshot(20, T0, 1420)
+    storeSnapshot(41, T0 + 1000, 1441)
+
+    expect(getMatchSummaries(db, ME, 20, 0).length).toBe(0)
+
+    insertMatch(db, match('NA1_1', T0 + 500))
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(1)
+
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toMatchObject({ lpDelta: 21 })
+  })
+
+  it('walks every interval, not just the most recent', () => {
+    storeSnapshot(20, T0, 1420)
+    storeSnapshot(41, T0 + 1000, 1441)
+    storeSnapshot(23, T0 + 2000, 1423)
+
+    insertMatch(db, match('NA1_1', T0 + 500))
+    insertMatch(db, match('NA1_2', T0 + 1500))
+
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(2)
+
+    const rows = getMatchSummaries(db, ME, 20, 0)
+    expect(rows.find((m) => m.matchId === 'NA1_1')?.rank).toMatchObject({ lpDelta: 21 })
+    expect(rows.find((m) => m.matchId === 'NA1_2')?.rank).toMatchObject({ lpDelta: -18 })
+  })
+
+  it('is idempotent — a second pass changes nothing', () => {
+    storeSnapshot(20, T0, 1420)
+    storeSnapshot(41, T0 + 1000, 1441)
+    insertMatch(db, match('NA1_1', T0 + 500))
+
+    replayAttribution(db, ACCOUNT, ME)
+    replayAttribution(db, ACCOUNT, ME)
+
+    expect(db.prepare('SELECT COUNT(*) AS c FROM match_rank').get()).toMatchObject({ c: 1 })
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toMatchObject({ lpDelta: 21 })
+  })
+
+  it('leaves an ambiguous interval alone however often it runs', () => {
+    storeSnapshot(20, T0, 1420)
+    storeSnapshot(61, T0 + 1000, 1461)
+    insertMatch(db, match('NA1_1', T0 + 200))
+    insertMatch(db, match('NA1_2', T0 + 400))
+
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(0)
+    expect(getMatchSummaries(db, ME, 20, 0).every((m) => m.rank === null)).toBe(true)
+  })
+
+  it('honours the time window, ignoring intervals older than it', () => {
+    storeSnapshot(20, T0, 1420)
+    storeSnapshot(41, T0 + 1000, 1441)
+    insertMatch(db, match('NA1_1', T0 + 500))
+
+    // A window opening after both snapshots leaves fewer than two readings to
+    // pair up, so there is no interval to attribute.
+    expect(replayAttribution(db, ACCOUNT, ME, T0 + 5000)).toBe(0)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toBe(null)
   })
 })

@@ -141,6 +141,24 @@ describe('rank snapshots', () => {
     expect(getRankSnapshots(db, accountId, SOLO)).toHaveLength(1)
   })
 
+  it('writes an identical reading anyway when forced', () => {
+    // A ranked loss at 0 LP with demotion protection reads exactly like the
+    // snapshot before it. Deduped away, the interval never closes and goes on
+    // to swallow the next game, costing both of them their LP figure.
+    insertRankSnapshot(db, accountId, gold('II', 45), 'lcu', T0)
+    expect(insertRankSnapshot(db, accountId, gold('II', 45), 'lcu', T0 + 5000, true)).not.toBeNull()
+
+    const all = getRankSnapshots(db, accountId, SOLO)
+    expect(all).toHaveLength(2)
+    expect(all.map((s) => s.capturedAt)).toEqual([T0, T0 + 5000])
+  })
+
+  it('still dedupes the backstop when force is not set', () => {
+    insertRankSnapshot(db, accountId, gold('II', 45), 'lcu', T0, true)
+    expect(insertRankSnapshot(db, accountId, gold('II', 45), 'league_v4', T0 + 5000)).toBeNull()
+    expect(getRankSnapshots(db, accountId, SOLO)).toHaveLength(1)
+  })
+
   it('keeps ladders separate', () => {
     insertRankSnapshot(db, accountId, gold('II', 45), 'league_v4', T0)
     insertRankSnapshot(

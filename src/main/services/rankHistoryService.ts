@@ -1,5 +1,5 @@
 import { getDb } from '../db'
-import { getAccountById } from '../db/repositories/accounts.repo'
+import { getAccountById, listAccounts } from '../db/repositories/accounts.repo'
 import {
   getLatestSnapshot,
   getRankMilestones,
@@ -7,8 +7,11 @@ import {
   insertRankSnapshot,
   type SnapshotInput
 } from '../db/repositories/rankHistory.repo'
-import { attributeInterval } from './rankAttribution'
+import { attributeInterval, replayAttribution } from './rankAttribution'
+import { createLogger } from '../telemetry/logger'
 import type { QueueType, RankHistory, RankRange } from '@shared/types'
+
+const log = createLogger('rank')
 
 const DAY_MS = 86_400_000
 
@@ -32,25 +35,60 @@ export function getRankHistory(
 }
 
 /**
+ * Repairs LP attribution for every account, once, at startup.
+ *
+ * Deliberately not folded into the launch sync. Attribution is pure local
+ * SQLite, while a sync begins with a Riot call — and personal keys expire every
+ * 24 hours, so gating the repair on the sync would mean the games already sat
+ * in the database stayed blank precisely when the key needed replacing. This
+ * needs no key and no network.
+ *
+ * Unbounded rather than the 30-day window a routine sync uses: it runs once per
+ * launch, and the whole point is to reach history recorded before attribution
+ * could keep up with it.
+ */
+export function repairAttribution(): void {
+  const db = getDb()
+  try {
+    let attributed = 0
+    for (const account of listAccounts(db)) {
+      attributed += replayAttribution(db, account.id, account.puuid)
+    }
+    if (attributed > 0) log.info('Backfilled LP for games on startup', { attributed })
+  } catch (err) {
+    // Never worth failing a launch over — the next sync replays anyway.
+    log.debug('Startup LP attribution repair failed', { error: String(err) })
+  }
+}
+
+/**
  * The single entry point for recording rank, used by both the LCU watcher and
  * the league-v4 backstop.
  *
  * Appends a snapshot when the value actually moved, then attributes that
  * movement to a game if it can be pinned to exactly one. Returns whether a
  * snapshot was written.
+ *
+ * `force` writes the row even when the reading is unchanged — see
+ * insertRankSnapshot for why a game that moved no LP still needs one.
+ *
+ * The inline attribution here is a fast path, not the guarantee: it only lands
+ * when the match already happens to be stored. replayAttribution is what
+ * actually closes the interval once the match arrives.
  */
 export function recordRankSnapshot(
   accountId: number,
   input: SnapshotInput,
   source: 'lcu' | 'league_v4',
-  capturedAt: number = Date.now()
+  capturedAt: number = Date.now(),
+  force = false
 ): boolean {
   const db = getDb()
   const account = getAccountById(db, accountId)
   if (!account) return false
 
   const previous = getLatestSnapshot(db, accountId, input.queueType)
-  const inserted = insertRankSnapshot(db, accountId, input, source, capturedAt)
+  const inserted = insertRankSnapshot(db, accountId, input, source, capturedAt, force)
   if (inserted === null) return false
 
   const current = getLatestSnapshot(db, accountId, input.queueType)

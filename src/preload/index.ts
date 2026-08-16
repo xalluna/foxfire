@@ -89,7 +89,9 @@ const api: Api = {
     summary: (windowMs) => ipcRenderer.invoke(CH.telemetry.summary, windowMs),
     rateLimit: (windowMs) => ipcRenderer.invoke(CH.telemetry.rateLimit, windowMs),
     resources: (windowMs) => ipcRenderer.invoke(CH.telemetry.resources, windowMs),
-    lcu: (windowMs) => ipcRenderer.invoke(CH.telemetry.lcu, windowMs)
+    lcu: (windowMs) => ipcRenderer.invoke(CH.telemetry.lcu, windowMs),
+    replayAttribution: () => ipcRenderer.invoke(CH.telemetry.replayAttribution),
+    simulateGameEnd: () => ipcRenderer.invoke(CH.telemetry.simulateGameEnd)
   }
 }
 

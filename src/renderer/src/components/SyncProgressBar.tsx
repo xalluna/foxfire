@@ -6,6 +6,12 @@ export function SyncProgressBar({ accountId }: { accountId: number }): JSX.Eleme
   const progress = useUiStore((s) => s.syncProgress[accountId])
   if (!progress || progress.phase === 'complete') return null
 
+  // Automatic syncs stay out of sight — a post-game refresh retries until Riot
+  // publishes the match, and showing that would flash the bar several times for
+  // work the user never asked for. A backfill is the exception: it runs for
+  // minutes, and hiding one would read as the app having frozen.
+  if (progress.trigger === 'auto' && progress.phase !== 'backfill') return null
+
   if (progress.phase === 'error') {
     return (
       <div className="mt-3 flex items-start gap-2 rounded-md border border-red/40 bg-red/10 px-2.5 py-2 text-2xs leading-snug text-red">

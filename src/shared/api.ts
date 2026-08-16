@@ -125,6 +125,10 @@ export interface Api {
     rateLimit: (windowMs: number) => Promise<RateLimitSeries>
     resources: (windowMs: number) => Promise<ResourceData>
     lcu: (windowMs: number) => Promise<LcuTelemetry>
+    /** Re-attributes LP across all stored history. Returns the games attributed. */
+    replayAttribution: () => Promise<number>
+    /** Starts the post-game sync schedule by hand. False when no account exists. */
+    simulateGameEnd: () => Promise<boolean>
   }
 }
 

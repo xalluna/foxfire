@@ -5,11 +5,13 @@ import { getSetting } from '../db/repositories/appSettings.repo'
 import { CH } from '../ipc/channels'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
+import { schedulePostGameSync } from '../services/postGameSync'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
-import { TRACKED_QUEUES } from '@shared/queues'
+import { isRankedQueue, TRACKED_QUEUES } from '@shared/queues'
 import type { LcuStatus, QueueType } from '@shared/types'
-import { discoverLcu } from './discovery'
+import { discoverLcu, type LcuCredentials } from './discovery'
+import { isGameEndTransition, isPlayingPhase } from './gameflow'
 import { lcuGet } from './client'
 
 export const LCU_PATH_SETTING = 'lcu.installPath'
@@ -42,6 +44,20 @@ let timer: NodeJS.Timeout | null = null
 let running = false
 let status: LcuStatus = { state: 'disconnected' }
 
+/** Previous gameflow phase, so a tick can tell what changed. */
+let lastPhase: string | null = null
+
+/**
+ * The queue of the game currently being played, captured while it is still in
+ * progress.
+ *
+ * Read during the game rather than at the end because that is the only point
+ * the client reliably still has gameData populated — by EndOfGame it may have
+ * been torn down. It decides one thing: whether to force a rank snapshot, which
+ * is meaningful for a ranked game and noise for an ARAM.
+ */
+let currentQueueId: number | null = null
+
 interface CurrentSummoner {
   /**
    * The canonical account UUID. Deliberately unused for lookups: Riot's public
@@ -64,6 +80,10 @@ interface RankedQueue {
 
 interface RankedStats {
   queues: RankedQueue[]
+}
+
+interface GameflowSession {
+  gameData?: { queue?: { id?: number } }
 }
 
 export function getLcuStatus(): LcuStatus {
@@ -89,6 +109,42 @@ function setStatus(next: LcuStatus): void {
  */
 function normaliseRankField(value: string | null): string | null {
   return !value || value === 'NA' ? null : value
+}
+
+/**
+ * Follows the gameflow phase and reports whether a game just ended.
+ *
+ * Also caches the queue while the game runs — see currentQueueId. Failures are
+ * swallowed to null rather than thrown: these two endpoints are an enhancement
+ * to a poll whose real job is rank, and an older client missing one of them
+ * must not take the rank snapshot down with it.
+ */
+async function trackGameflow(creds: LcuCredentials): Promise<boolean> {
+  let phase: string | null = null
+  try {
+    phase = await lcuGet<string>(creds, '/lol-gameflow/v1/gameflow-phase')
+  } catch (err) {
+    log.debug('Gameflow phase read failed', { error: String(err) })
+    return false
+  }
+
+  if (isPlayingPhase(phase)) {
+    try {
+      const session = await lcuGet<GameflowSession>(creds, '/lol-gameflow/v1/session')
+      currentQueueId = session.gameData?.queue?.id ?? null
+    } catch (err) {
+      log.debug('Gameflow session read failed', { error: String(err) })
+    }
+  }
+
+  const ended = isGameEndTransition(lastPhase, phase)
+  // Logged rather than pushed through recordLcuTransition: that helper dedupes
+  // against a single lastState shared with the connection state, so feeding
+  // phases into it would make every connected/disconnected change look new.
+  if (phase !== lastPhase) log.debug('Gameflow phase changed', { from: lastPhase, to: phase })
+  lastPhase = phase
+
+  return ended
 }
 
 async function tick(): Promise<void> {
@@ -128,6 +184,12 @@ async function tick(): Promise<void> {
       tagLine: account.tagLine
     })
 
+    // Read before the rank stats so the snapshot below can be forced when a
+    // ranked game has just concluded.
+    const gameEnded = await trackGameflow(creds)
+    const endedRanked = gameEnded && isRankedQueue(currentQueueId)
+    if (gameEnded) currentQueueId = null
+
     const stats = await lcuGet<RankedStats>(creds, '/lol-ranked/v1/current-ranked-stats')
     let moved = false
 
@@ -149,9 +211,20 @@ async function tick(): Promise<void> {
           wins: queue.wins,
           losses: queue.losses
         },
-        'lcu'
+        'lcu',
+        Date.now(),
+        // A ranked game that moved no LP — a loss at 0 LP with demotion
+        // protection — still has to close its interval, or the open one runs on
+        // and swallows the next game too, costing both their LP figure.
+        endedRanked
       )
       moved ||= recorded
+    }
+
+    if (gameEnded) {
+      // Every queue, not just ranked: a normal or ARAM game moves no LP but
+      // still needs fetching, which is the whole point of the refresh.
+      schedulePostGameSync(account.id)
     }
 
     if (moved) {
@@ -206,4 +279,10 @@ export function stopLcuWatcher(): void {
     clearTimeout(timer)
     timer = null
   }
+  // Only cleared on a full stop, never on a transient disconnect. A poll that
+  // fails mid-game would otherwise forget it was in one, and the end-of-game
+  // transition on the next tick — the one moment this exists to catch — would
+  // read as a phase appearing out of nowhere and be ignored.
+  lastPhase = null
+  currentQueueId = null
 }
