@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import clsx from 'clsx'
+import { roundedPath, type Point } from '../lib/curve'
 import { formatClock } from './format'
 
 const WIDTH = 720
@@ -220,27 +221,43 @@ function buildPath(
   x: (t: number) => number,
   y: (v: number) => number
 ): string | null {
-  let path = ''
-  let previous: { at: number; value: number } | null = null
+  const subpaths = measuredRuns(series).map((run) => {
+    const scaled: Point[] = run.map((p) => [x(p.at), y(p.value)])
+
+    // A counter holds its value between samples, so the staircase *is* the
+    // reading — rounding those corners would draw a ramp that never happened.
+    // Gauges are sampled from something continuous, so they get the curve.
+    if (!series.step) return roundedPath(scaled)
+
+    return scaled
+      .map(([px, py], i) => (i === 0 ? `M${px} ${py}` : ` L${px} ${scaled[i - 1][1]} L${px} ${py}`))
+      .join('')
+  })
+
+  return subpaths.join(' ') || null
+}
+
+/**
+ * The series split into contiguous stretches of measured points.
+ *
+ * A null ends the run rather than being drawn across — idle periods should read
+ * as absent data, not as a value of zero — and each run becomes its own subpath.
+ */
+function measuredRuns(series: Series): Array<Array<{ at: number; value: number }>> {
+  const runs: Array<Array<{ at: number; value: number }>> = []
+  let current: Array<{ at: number; value: number }> = []
 
   for (const point of series.points) {
     if (point.value === null) {
-      // A gap resets the pen rather than drawing a straight line across it —
-      // idle periods should read as absent data, not as a value of zero.
-      previous = null
+      if (current.length > 0) runs.push(current)
+      current = []
       continue
     }
-    if (previous === null) {
-      path += `M${x(point.at)} ${y(point.value)}`
-    } else if (series.step) {
-      path += ` L${x(point.at)} ${y(previous.value)} L${x(point.at)} ${y(point.value)}`
-    } else {
-      path += ` L${x(point.at)} ${y(point.value)}`
-    }
-    previous = { at: point.at, value: point.value }
+    current.push({ at: point.at, value: point.value })
   }
+  if (current.length > 0) runs.push(current)
 
-  return path || null
+  return runs
 }
 
 function readAt(series: Series, at: number, formatValue: (value: number) => string): string {

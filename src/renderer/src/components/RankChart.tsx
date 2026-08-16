@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { format } from 'date-fns'
 import type { RankSnapshot } from '@shared/types'
 import { tierBandBoundaries } from '@shared/ladder'
+import { roundedPath } from '../lib/curve'
 import { tierColor, tierLabel } from '../lib/rank'
 
 const WIDTH = 720
@@ -25,6 +26,11 @@ const PLOT_H = HEIGHT - PAD.top - PAD.bottom
  */
 export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Element {
   const [hover, setHover] = useState<number | null>(null)
+  // The gradient and mask are referenced by id, which is document-global — two
+  // charts on one screen would otherwise silently share the first one's colours.
+  // useId's colons are stripped: they are legal in an id but not in every
+  // engine's parsing of a url(#…) reference.
+  const uid = useId().replace(/:/g, '')
 
   const points = snapshots.filter((s) => s.ladderPosition !== null)
   if (points.length === 0) {
@@ -49,11 +55,22 @@ export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Ele
   const x = (t: number): number => PAD.left + ((t - tMin) / tSpan) * PLOT_W
   const y = (p: number): number => PAD.top + (1 - (p - yMin) / (yMax - yMin || 1)) * PLOT_H
 
-  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.capturedAt)} ${y(p.ladderPosition as number)}`).join(' ')
+  const line = roundedPath(points.map((p) => [x(p.capturedAt), y(p.ladderPosition as number)]))
   const area = `${line} L${x(tMax)} ${PAD.top + PLOT_H} L${x(tMin)} ${PAD.top + PLOT_H} Z`
 
-  const latest = points[points.length - 1]
-  const lineColor = tierColor(latest.tier)
+  // Colour follows the tier the player was actually in at that moment, so a
+  // segment that ends in a promotion is drawn in the tier it was climbing out
+  // of. The stops are hard-edged pairs at the same offset: the new colour
+  // begins exactly at the snapshot that first reported the new tier.
+  const stops: Array<{ offset: number; color: string }> = [
+    { offset: 0, color: tierColor(points[0].tier) }
+  ]
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].tier === points[i - 1].tier) continue
+    const offset = (x(points[i].capturedAt) - PAD.left) / (PLOT_W || 1)
+    stops.push({ offset, color: tierColor(points[i - 1].tier) })
+    stops.push({ offset, color: tierColor(points[i].tier) })
+  }
 
   // Only the boundaries inside the visible range, so a short series is not
   // covered in labels for tiers it never touched.
@@ -75,10 +92,44 @@ export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Ele
         onMouseLeave={() => setHover(null)}
       >
         <defs>
-          <linearGradient id="rank-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={lineColor} stopOpacity="0.22" />
-            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+          {/* One gradient drives both the stroke and the fill, so the two can
+              never disagree about which tier a moment belonged to. */}
+          <linearGradient
+            id={`${uid}-tiers`}
+            gradientUnits="userSpaceOnUse"
+            x1={PAD.left}
+            y1="0"
+            x2={WIDTH - PAD.right}
+            y2="0"
+          >
+            {stops.map((s, i) => (
+              <stop key={i} offset={`${s.offset * 100}%`} stopColor={s.color} />
+            ))}
           </linearGradient>
+
+          {/* The fill needs to fade vertically as well as change colour
+              horizontally, which one gradient cannot do. Masking the tinted
+              area with a vertical ramp gets both. */}
+          <linearGradient id={`${uid}-fade`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#fff" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+          </linearGradient>
+          <mask
+            id={`${uid}-fade-mask`}
+            maskUnits="userSpaceOnUse"
+            x={PAD.left}
+            y={PAD.top}
+            width={PLOT_W}
+            height={PLOT_H}
+          >
+            <rect
+              x={PAD.left}
+              y={PAD.top}
+              width={PLOT_W}
+              height={PLOT_H}
+              fill={`url(#${uid}-fade)`}
+            />
+          </mask>
         </defs>
 
         {divisionLines.map((p) => (
@@ -120,23 +171,42 @@ export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Ele
           </g>
         ))}
 
-        <path d={area} fill="url(#rank-fill)" />
-        <path d={line} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
+        <path d={area} fill={`url(#${uid}-tiers)`} mask={`url(#${uid}-fade-mask)`} />
+        <path
+          d={line}
+          fill="none"
+          stroke={`url(#${uid}-tiers)`}
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
 
-        {points.map((p, i) => {
-          const isEdge = i === 0 || i === points.length - 1
-          return (
-            <circle
-              key={`${p.capturedAt}-${i}`}
-              cx={x(p.capturedAt)}
-              cy={y(p.ladderPosition as number)}
-              r={hover === i ? 4.5 : isEdge ? 3 : 2}
-              fill={hover === i ? lineColor : 'rgb(var(--canvas))'}
-              stroke={lineColor}
-              strokeWidth="1.5"
-            />
-          )
-        })}
+        {/* Only the endpoints are marked. A dot per point would visibly detach
+            from the line wherever a corner was rounded away, and the series is
+            dense enough that the dots read as noise rather than as data. */}
+        {[points[0], points[points.length - 1]].map((p, i) => (
+          <circle
+            key={`edge-${i}`}
+            cx={x(p.capturedAt)}
+            cy={y(p.ladderPosition as number)}
+            r={3}
+            fill="rgb(var(--canvas))"
+            stroke={tierColor(p.tier)}
+            strokeWidth="1.5"
+          />
+        ))}
+
+        {/* The hovered point sits at its true position, not on the curve, so a
+            rounded corner never moves the reading away from the tooltip. */}
+        {active && (
+          <circle
+            cx={x(active.capturedAt)}
+            cy={y(active.ladderPosition as number)}
+            r={4.5}
+            fill={tierColor(active.tier)}
+            stroke={tierColor(active.tier)}
+            strokeWidth="1.5"
+          />
+        )}
 
         {/* Full-height hit strips: the line itself is far too thin to hover
             reliably, and one strip per point keeps the tooltip predictable. */}
