@@ -15,16 +15,3 @@ export async function getAccountByRiotId(
     AccountDtoSchema
   )
 }
-
-export async function getAccountByPuuid(
-  region: RegionalRoute,
-  puuid: string
-): Promise<AccountDto> {
-  const path = `/riot/account/v1/accounts/by-puuid/${encodeURIComponent(puuid)}`
-  return riotRequest(
-    '/riot/account/v1/accounts/by-puuid/{puuid}',
-    regionalBaseUrl(region),
-    path,
-    AccountDtoSchema
-  )
-}

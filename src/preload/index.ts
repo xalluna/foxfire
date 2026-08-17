@@ -47,9 +47,7 @@ const api: Api = {
   liveGame: {
     check: (accountId) => ipcRenderer.invoke(CH.liveGame.check, accountId),
     participantRank: (platform, puuid) =>
-      ipcRenderer.invoke(CH.liveGame.participantRank, platform, puuid),
-    participantName: (regionalRoute, puuid) =>
-      ipcRenderer.invoke(CH.liveGame.participantName, regionalRoute, puuid)
+      ipcRenderer.invoke(CH.liveGame.participantRank, platform, puuid)
   },
   champions: {
     stats: (accountId, queueId) => ipcRenderer.invoke(CH.champions.stats, accountId, queueId)

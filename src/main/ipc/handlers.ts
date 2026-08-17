@@ -11,11 +11,7 @@ import {
 } from '../services/accountService'
 import { readSyncState, startSync } from '../services/syncService'
 import { getAssetManifest } from '../services/ddragonService'
-import {
-  checkLiveGame,
-  getParticipantRank,
-  resolveParticipantName
-} from '../services/liveGameService'
+import { checkLiveGame, getParticipantRank } from '../services/liveGameService'
 import { getMasteryData } from '../services/masteryService'
 import { getRankHistory } from '../services/rankHistoryService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
@@ -119,9 +115,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.liveGame.check, (_e, accountId: number) => checkLiveGame(accountId))
   ipcMain.handle(CH.liveGame.participantRank, (_e, platform: string, puuid: string) =>
     getParticipantRank(platform, puuid)
-  )
-  ipcMain.handle(CH.liveGame.participantName, (_e, regionalRoute: string, puuid: string) =>
-    resolveParticipantName(regionalRoute, puuid)
   )
 
   ipcMain.handle(CH.champions.stats, (_e, accountId: number, queueId: number | null) => {
