@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { getBackgroundSettings } from './services/backgroundService'
-import { createMainWindow } from './window'
+import { createMainWindow, getMainWindow } from './window'
 import { openTelemetryWindow } from './telemetryWindow'
 
 /**
@@ -32,7 +32,7 @@ export function beginQuit(): void {
  * closing it would quit the app outright while tray mode is on.
  */
 export function showWindow(): void {
-  const existing = BrowserWindow.getAllWindows()[0]
+  const existing = getMainWindow()
   if (existing) {
     if (existing.isMinimized()) existing.restore()
     existing.show()

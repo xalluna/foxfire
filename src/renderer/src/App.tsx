@@ -10,7 +10,11 @@ import { Search } from './views/Search'
 import { Settings } from './views/Settings'
 import { EmptyState } from './components/EmptyState'
 import * as Icon from './components/icons'
-import { useLcuRankUpdates, useSyncProgress } from './hooks/useSyncProgress'
+import {
+  useLcuRankUpdates,
+  useManualRankUpdates,
+  useSyncProgress
+} from './hooks/useSyncProgress'
 import { useKeyRejected } from './hooks/useKeyStatus'
 import { useUiStore, type View } from './store/uiStore'
 
@@ -58,6 +62,7 @@ function Banner({
 function App(): JSX.Element {
   useSyncProgress()
   useLcuRankUpdates()
+  useManualRankUpdates()
   const [keyRejected, clearRejected] = useKeyRejected()
 
   const view = useUiStore((s) => s.view)

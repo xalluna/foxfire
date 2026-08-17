@@ -69,6 +69,13 @@ export interface MatchSummary {
   isRemake: boolean
   /** Null for unranked queues, and for any game LP could not be attributed to. */
   rank: MatchRankInfo | null
+  /**
+   * Whether the user has hand-entered the rank after this game.
+   *
+   * Read only to decide which action a row's context menu offers — the LP it
+   * produces renders identically to a derived one, so nothing else looks at it.
+   */
+  hasManualRank: boolean
 }
 
 /**
@@ -98,9 +105,71 @@ export interface RankSnapshot {
   losses: number | null
   /** Precomputed by shared/ladder.ts so the graph plots without recomputing. */
   ladderPosition: number | null
-  source: 'lcu' | 'league_v4'
+  /**
+   * Where the reading came from: the running client, the public API, or the
+   * user. A 'manual' row is an assertion rather than a measurement, and is
+   * dropped as soon as a real reading measures the same interval — see
+   * manualRankService.
+   */
+  source: SnapshotSource
   /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
   capturedAt: number
+}
+
+export type SnapshotSource = 'lcu' | 'league_v4' | 'manual'
+
+/** A rank the user can type: tier plus, below Master, a division and LP. */
+export interface ManualRank {
+  tier: string
+  /** Null for the apex tiers, which have no divisions. */
+  rank: string | null
+  leaguePoints: number
+}
+
+/**
+ * A ranked game with no attributed LP, offered for hand-entry.
+ *
+ * Carries enough of the match to recognise it in a list, plus the rank going
+ * in, so the editor can show what the game moved from without a second query.
+ */
+export interface EditableMatch {
+  matchId: string
+  gameCreation: number
+  gameDuration: number
+  win: boolean
+  championId: number
+  championName: string | null
+  kills: number
+  deaths: number
+  assists: number
+  /** The most recent reading before this game, or null if there is none. */
+  before: ManualRank | null
+  /**
+   * When that reading was taken, or null if there is none.
+   *
+   * Identifies the interval a game sits in: consecutive games sharing this
+   * value are the ones a single ambiguous stretch swallowed. The editor uses it
+   * to chain a preview — once the rank after one game is entered, that is what
+   * the next game in the same stretch actually starts from.
+   */
+  beforeAt: number | null
+  /**
+   * Whether `before` can anchor a delta. False when nothing precedes the game
+   * or the reading was unranked — attributeInterval bails on a null ladder
+   * position, so the editor must collect the before state too rather than
+   * saving to no visible effect.
+   */
+  beforeUsable: boolean
+  /** The user's existing entry for this game, if they have already made one. */
+  manual: ManualRank | null
+}
+
+/** One row of the editor, as submitted. */
+export interface ManualRankEdit {
+  matchId: string
+  after: ManualRank
+  /** Only sent for a game whose preceding reading is unusable. */
+  before?: ManualRank | null
 }
 
 /** A crossed tier or division boundary, for the climb summary. */

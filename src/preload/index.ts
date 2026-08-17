@@ -57,7 +57,25 @@ const api: Api = {
   },
   rank: {
     history: (accountId, queueType, range) =>
-      ipcRenderer.invoke(CH.rank.history, accountId, queueType, range)
+      ipcRenderer.invoke(CH.rank.history, accountId, queueType, range),
+    editable: (accountId, queueType) =>
+      ipcRenderer.invoke(CH.rank.editable, accountId, queueType),
+    saveManual: (accountId, queueType, edits) =>
+      ipcRenderer.invoke(CH.rank.saveManual, accountId, queueType, edits),
+    clearManual: (accountId, queueType, matchId) =>
+      ipcRenderer.invoke(CH.rank.clearManual, accountId, queueType, matchId),
+    openEditor: (accountId, queueType, matchId) =>
+      ipcRenderer.invoke(CH.rank.openEditor, accountId, queueType, matchId),
+    onEdited: (cb) => {
+      const listener = (_e: IpcRendererEvent, accountId: number): void => cb(accountId)
+      ipcRenderer.on(CH.rank.edited, listener)
+      return () => ipcRenderer.removeListener(CH.rank.edited, listener)
+    },
+    onEditorFocus: (cb) => {
+      const listener = (_e: IpcRendererEvent, matchId: string): void => cb(matchId)
+      ipcRenderer.on(CH.rank.editorFocus, listener)
+      return () => ipcRenderer.removeListener(CH.rank.editorFocus, listener)
+    }
   },
   lcu: {
     getStatus: () => ipcRenderer.invoke(CH.lcu.getStatus),

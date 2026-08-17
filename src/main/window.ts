@@ -2,6 +2,20 @@ import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { is } from './lib/env'
 import { closeTelemetryWindow } from './telemetryWindow'
+import { closeLpEditorWindow } from './lpEditorWindow'
+
+/**
+ * The app window, tracked by identity.
+ *
+ * There are now three windows, so "the first one Electron happens to list" is
+ * no longer the main one — the tray and second-instance paths would otherwise
+ * raise whichever panel was created first.
+ */
+let mainWindow: BrowserWindow | null = null
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+}
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -38,12 +52,14 @@ export function createMainWindow(): BrowserWindow {
     window.show()
   })
 
-  // The telemetry panel is a second BrowserWindow, so leaving it open would
-  // keep `window-all-closed` from ever firing and the app would linger with no
-  // visible window outside tray mode. In tray mode this never runs — the close
-  // is intercepted and the window only hides.
+  // The telemetry panel and the LP editor are separate BrowserWindows, so
+  // leaving either open would keep `window-all-closed` from ever firing and the
+  // app would linger with no visible window outside tray mode. In tray mode
+  // this never runs — the close is intercepted and the window only hides.
   window.on('closed', () => {
+    mainWindow = null
     closeTelemetryWindow()
+    closeLpEditorWindow()
   })
 
   window.webContents.setWindowOpenHandler((details) => {
@@ -57,5 +73,6 @@ export function createMainWindow(): BrowserWindow {
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  mainWindow = window
   return window
 }

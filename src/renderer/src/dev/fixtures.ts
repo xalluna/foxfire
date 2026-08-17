@@ -350,6 +350,21 @@ function buildSoloRankHistory(): {
   // the cutoff, which would coincide with a game and draw a vertical step.
   snapshots.push(snapshot((steps[0]?.at ?? TRACKING_STARTED) - HOUR))
 
+  // Games that record no snapshot of their own, standing in for a session
+  // played with the League client closed. The ladder still moves across them,
+  // but nothing observes it until the run ends — so one interval holds four
+  // games, the total cannot be split, and all four come out with no LP.
+  //
+  // Without this every fixture game is unambiguous and the LP editor has
+  // nothing to work on in the browser harness.
+  const UNOBSERVED_RUN = { firstStep: 6, games: 4 }
+  const unobserved = (n: number): boolean =>
+    n >= UNOBSERVED_RUN.firstStep && n < UNOBSERVED_RUN.firstStep + UNOBSERVED_RUN.games - 1
+
+  // The games since the last snapshot. Attribution can name a game's LP only
+  // when this holds exactly one, which is the rule the real engine applies.
+  let sinceSnapshot: number[] = []
+
   for (const [n, step] of steps.entries()) {
     const before = snapshots[snapshots.length - 1]
     const delta = step.win ? WIN_LP[n % WIN_LP.length] : -LOSS_LP[n % LOSS_LP.length]
@@ -357,20 +372,26 @@ function buildSoloRankHistory(): {
     position = Math.max(0, position + delta)
     if (step.win) wins += 1
     else losses += 1
+    sinceSnapshot.push(step.index)
+
+    if (unobserved(n)) continue
 
     const after = snapshot(step.at)
     snapshots.push(after)
 
-    const movement = rankMovement(before, after)
-    byMatchId.set(matchIdAt(step.index), {
-      lpDelta: delta,
-      tierBefore: before.tier,
-      rankBefore: before.rank,
-      tierAfter: after.tier,
-      rankAfter: after.rank,
-      isPromotion: movement === 'promotion',
-      isDemotion: movement === 'demotion'
-    })
+    if (sinceSnapshot.length === 1) {
+      const movement = rankMovement(before, after)
+      byMatchId.set(matchIdAt(sinceSnapshot[0]), {
+        lpDelta: (after.ladderPosition ?? 0) - (before.ladderPosition ?? 0),
+        tierBefore: before.tier,
+        rankBefore: before.rank,
+        tierAfter: after.tier,
+        rankAfter: after.rank,
+        isPromotion: movement === 'promotion',
+        isDemotion: movement === 'demotion'
+      })
+    }
+    sinceSnapshot = []
   }
 
   return { snapshots, byMatchId }
@@ -441,7 +462,8 @@ const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   teamKills: s.teamKills,
   teamDamage: s.teamDamage,
   isRemake: s.remake ?? false,
-  rank: soloHistory.byMatchId.get(matchIdAt(i)) ?? null
+  rank: soloHistory.byMatchId.get(matchIdAt(i)) ?? null,
+  hasManualRank: false
 }))
 
 const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }

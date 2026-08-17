@@ -1,6 +1,7 @@
 import { getDb } from '../db'
 import { getAccountById, listAccounts } from '../db/repositories/accounts.repo'
 import {
+  deleteSupersededManualSnapshots,
   getLatestSnapshot,
   getRankMilestones,
   getRankSnapshots,
@@ -8,6 +9,8 @@ import {
   type SnapshotInput
 } from '../db/repositories/rankHistory.repo'
 import { attributeInterval, replayAttribution } from './rankAttribution'
+import { rebuildAttribution } from './manualRankService'
+import { queueIdForQueueType } from '@shared/queues'
 import { createLogger } from '../telemetry/logger'
 import type { QueueType, RankHistory, RankRange } from '@shared/types'
 
@@ -75,6 +78,10 @@ export function repairAttribution(): void {
  * The inline attribution here is a fast path, not the guarantee: it only lands
  * when the match already happens to be stored. replayAttribution is what
  * actually closes the interval once the match arrives.
+ *
+ * A real reading also settles any hand-entered one it has now measured for the
+ * user — see deleteSupersededManualSnapshots. That happens before the fast path
+ * runs, so attribution never reads a snapshot that is about to disappear.
  */
 export function recordRankSnapshot(
   accountId: number,
@@ -90,6 +97,23 @@ export function recordRankSnapshot(
   const previous = getLatestSnapshot(db, accountId, input.queueType)
   const inserted = insertRankSnapshot(db, accountId, input, source, capturedAt, force)
   if (inserted === null) return false
+
+  const superseded = deleteSupersededManualSnapshots(
+    db,
+    accountId,
+    account.puuid,
+    input.queueType,
+    queueIdForQueueType(input.queueType),
+    capturedAt
+  )
+  if (superseded > 0) {
+    // The LP those entries produced is now stale, and upsertMatchRank cannot
+    // remove a row it no longer has grounds to write. Rebuild instead of
+    // trusting the fast path below.
+    log.info('Live rank reading replaced hand-entered LP', { accountId, superseded })
+    rebuildAttribution(db, accountId, account.puuid, input.queueType)
+    return true
+  }
 
   const current = getLatestSnapshot(db, accountId, input.queueType)
   if (previous && current) {

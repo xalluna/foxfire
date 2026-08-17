@@ -38,7 +38,16 @@ export const CH = {
     get: 'mastery:get'
   },
   rank: {
-    history: 'rank:history'
+    history: 'rank:history',
+    // Hand-entered LP, for the games attribution cannot resolve on its own.
+    editable: 'rank:editable',
+    saveManual: 'rank:saveManual',
+    clearManual: 'rank:clearManual',
+    openEditor: 'rank:openEditor',
+    /** Broadcast after an edit, so the main window refetches what it is showing. */
+    edited: 'rank:edited',
+    /** Scrolls an already-open editor to a row, instead of reloading it. */
+    editorFocus: 'rank:editorFocus'
   },
   lcu: {
     getStatus: 'lcu:getStatus',

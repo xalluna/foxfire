@@ -97,6 +97,36 @@ export function rankAtPosition(position: number): {
   }
 }
 
+/**
+ * Where a bare LP figure most likely places someone, given where they started.
+ *
+ * Typing a full rank for every game is three controls of mostly redundant work:
+ * the tier and division are almost always either unchanged or one step away,
+ * and which one is decided by the LP number itself. Every divisioned rank sits
+ * at `k * 100 + lp` for some whole k, so the candidates for a typed LP are
+ * fixed and the right one is simply the nearest — a game moves 15-30 LP, never
+ * the 100+ that picking the wrong division would imply.
+ *
+ * Iron IV 88 from Iron IV 5 is a real, if unusual, 83 LP jump; there is nothing
+ * below Iron IV for it to have come from, so the clamp keeps it there.
+ *
+ * Returns null when it cannot help: an unplaceable starting rank, or one in the
+ * apex tiers, where LP runs past 100 unbounded and 75 means 75 rather than a
+ * division boundary away.
+ */
+export function rankFromLeaguePoints(
+  before: RankLike,
+  leaguePoints: number
+): { tier: string; rank: string | null; leaguePoints: number } | null {
+  if (!before.tier || isApex(before.tier)) return null
+
+  const from = ladderPosition(before)
+  if (from === null) return null
+
+  const divisions = Math.max(0, Math.round((from - leaguePoints) / LP_PER_DIVISION))
+  return rankAtPosition(divisions * LP_PER_DIVISION + leaguePoints)
+}
+
 export type RankMovement = 'promotion' | 'demotion' | 'none'
 
 /**
