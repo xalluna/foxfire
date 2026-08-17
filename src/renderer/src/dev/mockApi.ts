@@ -37,6 +37,18 @@ import {
   RANK_SNAPSHOTS,
   championStatsFor
 } from './fixtures'
+import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
+
+/**
+ * Stands in for the main process broadcasting rank:edited to every window.
+ * Here there is only one, but the match list and rank graph still have to be
+ * told to refetch after an edit.
+ */
+const editedListeners = new Set<(accountId: number) => void>()
+
+function notifyEdited(accountId: number): void {
+  for (const listener of editedListeners) listener(accountId)
+}
 
 /**
  * A fake window.api for running the renderer in a plain browser.
@@ -307,7 +319,39 @@ export const mockApi: Api = {
         .reverse()
 
       return delay({ snapshots, milestones }, 280)
-    }
+    },
+
+    editable: (accountId: number, queueType: QueueType) =>
+      delay(editableMatches(accountId, queueType), 200),
+
+    saveManual: (accountId: number, queueType: QueueType, edits) => {
+      const fresh = saveManualRanks(accountId, queueType, edits)
+      notifyEdited(accountId)
+      return delay(fresh, 250)
+    },
+
+    clearManual: (accountId: number, queueType: QueueType, matchId: string) => {
+      const fresh = clearManualRank(accountId, queueType, matchId)
+      notifyEdited(accountId)
+      return delay(fresh, 250)
+    },
+
+    // There are no windows in a browser, so the editor takes over the page
+    // instead. main.tsx picks its root from the hash at startup, so setting it
+    // and reloading lands on the editor exactly as the real window does.
+    openEditor: (accountId: number, queueType: QueueType, matchId: string): Promise<void> => {
+      window.location.hash = `#lp-editor?account=${accountId}&queue=${queueType}&match=${encodeURIComponent(matchId)}`
+      window.location.reload()
+      return Promise.resolve()
+    },
+
+    onEdited: (cb) => {
+      editedListeners.add(cb)
+      return () => editedListeners.delete(cb)
+    },
+    // Only fires when a second right-click reaches an already-open window,
+    // which cannot happen with a single page.
+    onEditorFocus: () => () => {}
   },
 
   // The browser harness has no League client and no Electron main process, so

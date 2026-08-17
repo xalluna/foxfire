@@ -109,6 +109,7 @@ interface MatchSummaryRow {
   rank_after: string | null
   is_promotion: number | null
   is_demotion: number | null
+  has_manual_rank: number
 }
 
 /**
@@ -142,7 +143,14 @@ export function getMatchSummaries(
               p.game_ended_in_early_surrender,
               t.team_kills, t.team_damage,
               mr.lp_delta, mr.tier_before, mr.rank_before, mr.tier_after, mr.rank_after,
-              mr.is_promotion, mr.is_demotion
+              mr.is_promotion, mr.is_demotion,
+              -- Only the row's context menu reads this, to choose between
+              -- offering an edit and offering to clear one.
+              EXISTS (SELECT 1 FROM rank_snapshots rs
+                       WHERE rs.match_id = p.match_id
+                         AND rs.source = 'manual'
+                         AND rs.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid))
+                AS has_manual_rank
          FROM match_participants p
          JOIN matches m ON m.match_id = p.match_id
          JOIN (SELECT match_id, team_id,
@@ -200,7 +208,8 @@ export function getMatchSummaries(
             rankAfter: row.rank_after,
             isPromotion: row.is_promotion === 1,
             isDemotion: row.is_demotion === 1
-          }
+          },
+    hasManualRank: row.has_manual_rank === 1
   }))
 }
 

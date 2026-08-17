@@ -6,6 +6,7 @@ import initSql from './migrations/001_init.sql?raw'
 import matchStatsSql from './migrations/002_match_stats.sql?raw'
 import rankHistorySql from './migrations/003_rank_history.sql?raw'
 import remakesSql from './migrations/004_remakes.sql?raw'
+import manualRankSql from './migrations/005_manual_rank.sql?raw'
 
 let db: DatabaseSync | null = null
 
@@ -15,7 +16,8 @@ const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
   { name: '001_init.sql', sql: initSql },
   { name: '002_match_stats.sql', sql: matchStatsSql },
   { name: '003_rank_history.sql', sql: rankHistorySql },
-  { name: '004_remakes.sql', sql: remakesSql }
+  { name: '004_remakes.sql', sql: remakesSql },
+  { name: '005_manual_rank.sql', sql: manualRankSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

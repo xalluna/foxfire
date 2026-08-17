@@ -1,3 +1,4 @@
+import type React from 'react'
 import clsx from 'clsx'
 import type { AssetManifest, MatchSummary } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
@@ -50,11 +51,14 @@ export function MatchListRow({
   match,
   expanded,
   onToggle,
+  onContextMenu,
   expandable = true
 }: {
   match: MatchSummary
   expanded: boolean
   onToggle: () => void
+  /** Opens the row's menu. Omitted where there is nothing to act on. */
+  onContextMenu?: (event: React.MouseEvent) => void
   /** False for ad-hoc search results, which aren't stored and have no detail to open. */
   expandable?: boolean
 }): JSX.Element {
@@ -74,6 +78,7 @@ export function MatchListRow({
   return (
     <button
       onClick={expandable ? onToggle : undefined}
+      onContextMenu={onContextMenu}
       aria-expanded={expandable ? expanded : undefined}
       className={clsx(
         'flex h-[72px] w-full items-center gap-2.5 border-l-[3px] pl-2.5 pr-3 text-left transition',

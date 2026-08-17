@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey } from '../services/settingsService'
 import {
@@ -38,8 +38,35 @@ import {
   summarise
 } from '../telemetry/queries'
 import { openTelemetryWindow } from '../telemetryWindow'
-import type { BackgroundSettings, QueueType, RankRange, RiotIdInput } from '@shared/types'
+import { openLpEditorWindow } from '../lpEditorWindow'
+import {
+  clearManualRank,
+  getEditableMatches,
+  saveManualRanks
+} from '../services/manualRankService'
+import type {
+  BackgroundSettings,
+  ManualRankEdit,
+  QueueType,
+  RankRange,
+  RiotIdInput
+} from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
+
+/**
+ * Tells every window that hand-entered LP changed.
+ *
+ * Broadcast rather than returned, because the window that needs to react is not
+ * the one that made the call: the editor is a separate renderer process with
+ * its own query cache, and the match list and rank graph it just changed live
+ * in the main window. Lives here rather than in manualRankService, which stays
+ * free of Electron so it can be tested against an in-memory database.
+ */
+function broadcastRankEdited(accountId: number): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(CH.rank.edited, accountId)
+  }
+}
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.settings.get, () => getSettings())
@@ -111,6 +138,47 @@ export function registerIpcHandlers(): void {
     CH.rank.history,
     (_e, accountId: number, queueType: QueueType, range: RankRange) =>
       getRankHistory(accountId, queueType, range)
+  )
+
+  ipcMain.handle(
+    CH.rank.editable,
+    (_e, accountId: number, queueType: QueueType) => {
+      const account = getAccountById(getDb(), accountId)
+      if (!account) return []
+      return getEditableMatches(getDb(), accountId, account.puuid, queueType)
+    }
+  )
+
+  // Both writers return the fresh list rather than void: an edit can resolve a
+  // neighbouring game on its own, so what the editor should show afterwards is
+  // not something it can work out from what it sent.
+  ipcMain.handle(
+    CH.rank.saveManual,
+    (_e, accountId: number, queueType: QueueType, edits: ManualRankEdit[]) => {
+      const db = getDb()
+      const account = getAccountById(db, accountId)
+      if (!account) return []
+      saveManualRanks(db, accountId, account.puuid, queueType, edits)
+      broadcastRankEdited(accountId)
+      return getEditableMatches(db, accountId, account.puuid, queueType)
+    }
+  )
+
+  ipcMain.handle(
+    CH.rank.clearManual,
+    (_e, accountId: number, queueType: QueueType, matchId: string) => {
+      const db = getDb()
+      const account = getAccountById(db, accountId)
+      if (!account) return []
+      if (clearManualRank(db, accountId, account.puuid, matchId)) broadcastRankEdited(accountId)
+      return getEditableMatches(db, accountId, account.puuid, queueType)
+    }
+  )
+
+  ipcMain.handle(
+    CH.rank.openEditor,
+    (_e, accountId: number, queueType: QueueType, matchId: string) =>
+      openLpEditorWindow(accountId, queueType, matchId)
   )
 
   ipcMain.handle(CH.lcu.getStatus, () => getLcuStatus())

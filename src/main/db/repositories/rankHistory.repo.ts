@@ -1,5 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { QueueType, RankMilestone, RankSnapshot } from '@shared/types'
+import type {
+  ManualRank,
+  QueueType,
+  RankMilestone,
+  RankSnapshot,
+  SnapshotSource
+} from '@shared/types'
 import { ladderPosition, rankMovement } from '@shared/ladder'
 
 interface SnapshotRow {
@@ -23,7 +29,7 @@ function toSnapshot(row: SnapshotRow): RankSnapshot {
     wins: row.wins,
     losses: row.losses,
     ladderPosition: row.ladder_position,
-    source: row.source as 'lcu' | 'league_v4',
+    source: row.source as SnapshotSource,
     capturedAt: row.captured_at
   }
 }
@@ -77,7 +83,7 @@ export function insertRankSnapshot(
   db: DatabaseSync,
   accountId: number,
   input: SnapshotInput,
-  source: 'lcu' | 'league_v4',
+  source: Exclude<SnapshotSource, 'manual'>,
   capturedAt: number = Date.now(),
   force = false
 ): number | null {
@@ -220,6 +226,275 @@ export function upsertMatchRank(db: DatabaseSync, input: MatchRankInput): void {
     input.isPromotion ? 1 : 0,
     input.isDemotion ? 1 : 0
   )
+}
+
+/** The most recent reading strictly before a moment, or null if none precedes it. */
+export function getSnapshotBefore(
+  db: DatabaseSync,
+  accountId: number,
+  queueType: QueueType,
+  beforeMs: number
+): RankSnapshot | null {
+  const row = db
+    .prepare(
+      `SELECT queue_type, tier, rank, league_points, wins, losses,
+              ladder_position, source, captured_at
+         FROM rank_snapshots
+        WHERE account_id = ? AND queue_type = ? AND captured_at < ?
+        ORDER BY captured_at DESC, id DESC
+        LIMIT 1`
+    )
+    .get(accountId, queueType, beforeMs) as unknown as SnapshotRow | undefined
+
+  return row ? toSnapshot(row) : null
+}
+
+/**
+ * Writes one reading the user has asserted, tagged with the game it describes.
+ *
+ * A pure insert, paired with deleteManualSnapshot by the caller rather than
+ * replacing inline: a game whose preceding reading is unusable needs two rows
+ * written — the state going in as well as the state coming out — and a
+ * self-clearing upsert would have the second call remove the first.
+ *
+ * Deliberately bypasses the insertRankSnapshot dedupe: a game that moved no LP
+ * reads identically to the snapshot before it, and dropping it would leave the
+ * interval open and cost the *next* game its figure too — the same reason the
+ * watcher forces a row after a ranked game.
+ */
+export function insertManualSnapshot(
+  db: DatabaseSync,
+  accountId: number,
+  matchId: string,
+  input: SnapshotInput,
+  capturedAt: number
+): void {
+  db.prepare(
+    `INSERT INTO rank_snapshots
+       (account_id, queue_type, tier, rank, league_points, wins, losses,
+        ladder_position, source, captured_at, match_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`
+  ).run(
+    accountId,
+    input.queueType,
+    input.tier,
+    input.rank,
+    input.leaguePoints,
+    input.wins,
+    input.losses,
+    ladderPosition(input),
+    capturedAt,
+    matchId
+  )
+}
+
+/**
+ * Removes every entry the user made for one game — both the after state and, if
+ * the game needed one, the before. No-op when they never made any.
+ */
+export function deleteManualSnapshot(db: DatabaseSync, accountId: number, matchId: string): void {
+  db.prepare(
+    `DELETE FROM rank_snapshots
+      WHERE account_id = ? AND match_id = ? AND source = 'manual'`
+  ).run(accountId, matchId)
+}
+
+export interface ManualSnapshotRow {
+  matchId: string
+  capturedAt: number
+  rank: ManualRank
+}
+
+/**
+ * Every entry the user made on one ladder.
+ *
+ * Carries capturedAt because a game can have two: callers tell the before state
+ * from the after by which side of the game's own start time it falls on.
+ */
+export function getManualSnapshots(
+  db: DatabaseSync,
+  accountId: number,
+  queueType: QueueType
+): ManualSnapshotRow[] {
+  const rows = db
+    .prepare(
+      `SELECT match_id, tier, rank, league_points, captured_at
+         FROM rank_snapshots
+        WHERE account_id = ? AND queue_type = ? AND source = 'manual'
+          AND match_id IS NOT NULL AND tier IS NOT NULL
+        ORDER BY captured_at ASC`
+    )
+    .all(accountId, queueType) as unknown as Array<{
+    match_id: string
+    tier: string
+    rank: string | null
+    league_points: number | null
+    captured_at: number
+  }>
+
+  return rows.map((row) => ({
+    matchId: row.match_id,
+    capturedAt: row.captured_at,
+    rank: { tier: row.tier, rank: row.rank, leaguePoints: row.league_points ?? 0 }
+  }))
+}
+
+/** Which ladder a game's manual entry sits on, for scoping the rebuild after a clear. */
+export function getManualSnapshotQueueType(
+  db: DatabaseSync,
+  accountId: number,
+  matchId: string
+): QueueType | null {
+  const row = db
+    .prepare(
+      `SELECT queue_type FROM rank_snapshots
+        WHERE account_id = ? AND match_id = ? AND source = 'manual'
+        LIMIT 1`
+    )
+    .get(accountId, matchId) as unknown as { queue_type: string } | undefined
+
+  return row ? (row.queue_type as QueueType) : null
+}
+
+/**
+ * Drops the user's entries that a live reading has just measured for them.
+ *
+ * A manual snapshot asserts a ladder position at a moment. A real reading taken
+ * later with no ranked game in between measures that same position directly, so
+ * it settles the question and the assertion has nothing left to add — if the two
+ * disagree, the assertion was simply wrong.
+ *
+ * The "no game in between" test is what keeps this from eating a legitimate run:
+ * with three games hand-fixed and a sync landing after the third, a game sits
+ * between every entry and the reading, so all of them survive.
+ *
+ * Returns how many were removed; callers rebuild attribution when that is
+ * non-zero, since the rows derived from them are now stale.
+ */
+export function deleteSupersededManualSnapshots(
+  db: DatabaseSync,
+  accountId: number,
+  puuid: string,
+  queueType: QueueType,
+  queueId: number,
+  atMs: number
+): number {
+  const result = db
+    .prepare(
+      `DELETE FROM rank_snapshots
+        WHERE account_id = ? AND queue_type = ? AND source = 'manual'
+          AND captured_at <= ?
+          AND NOT EXISTS (
+                SELECT 1
+                  FROM match_participants p
+                  JOIN matches m ON m.match_id = p.match_id
+                 WHERE p.puuid = ?
+                   AND p.game_ended_in_early_surrender = 0
+                   AND m.queue_id = ?
+                   AND m.game_creation > rank_snapshots.captured_at
+                   AND m.game_creation <= ?
+              )`
+    )
+    .run(accountId, queueType, atMs, puuid, queueId, atMs)
+
+  return Number(result.changes)
+}
+
+/**
+ * Clears the derived LP for one ladder, ahead of a replay.
+ *
+ * upsertMatchRank corrects and inserts but never deletes, so removing a manual
+ * snapshot would otherwise strand the row it produced: attribution would find
+ * the interval ambiguous again, write nothing, and the stale hand-entered value
+ * would sit there looking measured. Wiping first makes every manual mutation a
+ * rebuild from snapshots, which is lossless — match_rank holds nothing that is
+ * not derived from them.
+ */
+export function deleteMatchRankForQueue(
+  db: DatabaseSync,
+  accountId: number,
+  queueType: QueueType
+): void {
+  db.prepare('DELETE FROM match_rank WHERE account_id = ? AND queue_type = ?').run(
+    accountId,
+    queueType
+  )
+}
+
+export interface UnattributedMatchRow {
+  matchId: string
+  gameCreation: number
+  gameDuration: number
+  win: boolean
+  championId: number
+  championName: string | null
+  kills: number
+  deaths: number
+  assists: number
+}
+
+/**
+ * The ranked games the editor can offer, newest first.
+ *
+ * Remakes are left out for the same reason attribution ignores them: they move
+ * no LP, so there is nothing to enter. Games attribution worked out on its own
+ * are left out too, since a measured value needs no assertion over it.
+ *
+ * A game the user has already entered stays in, even though it now has a
+ * figure — it only has one because they supplied it, and dropping it the moment
+ * it was saved would mean a typo could only be corrected by clearing the entry
+ * and starting again.
+ *
+ * Newest first to match the match list, and because a gap worth fixing is
+ * nearly always a recent one: a backlog reaching to the start of the season
+ * would otherwise bury this week's games under months of history.
+ */
+export function getEditableRankedMatches(
+  db: DatabaseSync,
+  accountId: number,
+  puuid: string,
+  queueId: number
+): UnattributedMatchRow[] {
+  const rows = db
+    .prepare(
+      `SELECT m.match_id, m.game_creation, m.game_duration,
+              p.win, p.champion_id, p.champion_name, p.kills, p.deaths, p.assists
+         FROM match_participants p
+         JOIN matches m ON m.match_id = p.match_id
+         LEFT JOIN match_rank mr ON mr.match_id = p.match_id AND mr.account_id = ?
+        WHERE p.puuid = ?
+          AND p.game_ended_in_early_surrender = 0
+          AND m.queue_id = ?
+          AND (mr.match_id IS NULL OR mr.lp_delta IS NULL
+               OR EXISTS (SELECT 1 FROM rank_snapshots rs
+                           WHERE rs.match_id = p.match_id
+                             AND rs.account_id = mr.account_id
+                             AND rs.source = 'manual'))
+        ORDER BY m.game_creation DESC`
+    )
+    .all(accountId, puuid, queueId) as unknown as Array<{
+    match_id: string
+    game_creation: number
+    game_duration: number
+    win: number
+    champion_id: number
+    champion_name: string | null
+    kills: number
+    deaths: number
+    assists: number
+  }>
+
+  return rows.map((row) => ({
+    matchId: row.match_id,
+    gameCreation: row.game_creation,
+    gameDuration: row.game_duration,
+    win: row.win === 1,
+    championId: row.champion_id,
+    championName: row.champion_name,
+    kills: row.kills,
+    deaths: row.deaths,
+    assists: row.assists
+  }))
 }
 
 /**

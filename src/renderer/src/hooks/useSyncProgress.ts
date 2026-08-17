@@ -49,3 +49,22 @@ export function useLcuRankUpdates(): void {
     })
   }, [queryClient])
 }
+
+/**
+ * Refreshes the same views when LP is entered by hand.
+ *
+ * The edit happens in the LP editor's own BrowserWindow, which is a separate
+ * renderer process with its own query cache — so nothing the main window holds
+ * would otherwise know that a match row and the rank graph had both changed.
+ */
+export function useManualRankUpdates(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return window.api.rank.onEdited((accountId) => {
+      queryClient.invalidateQueries({ queryKey: ['rankHistory', accountId] })
+      queryClient.invalidateQueries({ queryKey: ['matchList', accountId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', accountId] })
+    })
+  }, [queryClient])
+}

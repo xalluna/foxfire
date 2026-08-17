@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
-import type { Account } from '@shared/types'
-import { queueFilterLabel } from '@shared/queues'
+import type { Account, MatchSummary, QueueType } from '@shared/types'
+import { queueFilterLabel, queueTypeForQueueId } from '@shared/queues'
+import { ContextMenu, type ContextMenuState } from '../components/ContextMenu'
+import { matchContextItems } from '../components/matchMenu'
 import { ProfileHeader } from '../components/ProfileHeader'
 import { ProfileStrip } from '../components/ProfileStrip'
 import { MatchListRow } from '../components/MatchListRow'
@@ -25,6 +27,7 @@ const PAGE_SIZE = 20
  */
 export function Dashboard({ account }: { account: Account }): JSX.Element {
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
+  const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const queueId = useUiStore((s) => s.matchQueueFilter)
   const setQueueId = useUiStore((s) => s.setMatchQueueFilter)
 
@@ -56,6 +59,35 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
   const sync = useMutation({
     mutationFn: () => window.api.sync.start(account.id)
   })
+
+  // Clearing returns the editor's fresh list, which this window has no use for
+  // — the match row and rank graph refresh off the rank:edited broadcast that
+  // the main process sends to every window, the same as an edit made in the
+  // editor itself.
+  const clearLp = useMutation({
+    mutationFn: ({ queueType, matchId }: { queueType: QueueType; matchId: string }) =>
+      window.api.rank.clearManual(account.id, queueType, matchId)
+  })
+
+  const openMatchMenu = (event: MouseEvent, match: MatchSummary): void => {
+    event.preventDefault()
+    const queueType = queueTypeForQueueId(match.queueId)
+
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: matchContextItems(match, {
+        onEditLp: () => {
+          if (queueType) void window.api.rank.openEditor(account.id, queueType, match.matchId)
+        },
+        onClearLp: () => {
+          if (queueType) clearLp.mutate({ queueType, matchId: match.matchId })
+        },
+        onCopyId: () => void navigator.clipboard.writeText(match.matchId),
+        onOpenDetails: () => setExpandedMatchId(match.matchId)
+      })
+    })
+  }
 
   return (
     <div className="flex gap-4 p-4">
@@ -146,6 +178,7 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
                   onToggle={() =>
                     setExpandedMatchId(expandedMatchId === match.matchId ? null : match.matchId)
                   }
+                  onContextMenu={(event) => openMatchMenu(event, match)}
                 />
                 {expandedMatchId === match.matchId && (
                   <MatchDetailPanel matchId={match.matchId} trackedPuuid={account.puuid} />
@@ -165,6 +198,8 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
           )}
         </section>
       </div>
+
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
     </div>
   )
 }

@@ -5,9 +5,11 @@ import type {
   AssetManifest,
   BackgroundSettings,
   ChampionStats,
+  EditableMatch,
   LcuStatus,
   LeagueEntry,
   LiveGameData,
+  ManualRankEdit,
   MasteryEntry,
   MatchDetail,
   MatchSummary,
@@ -95,6 +97,28 @@ export interface Api {
   }
   rank: {
     history: (accountId: number, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+    /** Ranked games with no LP figure — everything the editor can offer. */
+    editable: (accountId: number, queueType: QueueType) => Promise<EditableMatch[]>
+    /**
+     * Stores a batch of entries and returns what still needs one. Fewer rows can
+     * come back than were left: stating the rank after two games of a run of
+     * three resolves the third on its own.
+     */
+    saveManual: (
+      accountId: number,
+      queueType: QueueType,
+      edits: ManualRankEdit[]
+    ) => Promise<EditableMatch[]>
+    clearManual: (
+      accountId: number,
+      queueType: QueueType,
+      matchId: string
+    ) => Promise<EditableMatch[]>
+    openEditor: (accountId: number, queueType: QueueType, matchId: string) => Promise<void>
+    /** Fires after any edit, so the match list and rank graph refetch. */
+    onEdited: (cb: (accountId: number) => void) => () => void
+    /** Fires when an already-open editor is asked to show a different game. */
+    onEditorFocus: (cb: (matchId: string) => void) => () => void
   }
   lcu: {
     getStatus: () => Promise<LcuStatus>

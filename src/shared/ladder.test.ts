@@ -1,9 +1,68 @@
 import { describe, expect, it } from 'vitest'
-import { APEX_BASE, ladderPosition, rankMovement, tierAtPosition } from './ladder'
+import {
+  APEX_BASE,
+  ladderPosition,
+  rankFromLeaguePoints,
+  rankMovement,
+  tierAtPosition
+} from './ladder'
 
 function at(tier: string | null, rank: string | null, leaguePoints: number | null) {
   return { tier, rank, leaguePoints }
 }
+
+describe('rankFromLeaguePoints', () => {
+  it('keeps a normal result inside the division it started in', () => {
+    expect(rankFromLeaguePoints(at('GOLD', 'I', 85), 68)).toEqual({
+      tier: 'GOLD',
+      rank: 'I',
+      leaguePoints: 68
+    })
+  })
+
+  it('reads a small number after a high one as a promotion', () => {
+    // Gold I 85 to 3 LP is Platinum IV 3 (+18), not Gold I 3 (-82).
+    expect(rankFromLeaguePoints(at('GOLD', 'I', 85), 3)).toEqual({
+      tier: 'PLATINUM',
+      rank: 'IV',
+      leaguePoints: 3
+    })
+  })
+
+  it('reads a high number after a low one as a demotion', () => {
+    expect(rankFromLeaguePoints(at('PLATINUM', 'IV', 8), 91)).toEqual({
+      tier: 'GOLD',
+      rank: 'I',
+      leaguePoints: 91
+    })
+  })
+
+  it('crosses into the apex tiers', () => {
+    expect(rankFromLeaguePoints(at('DIAMOND', 'I', 88), 5)).toEqual({
+      tier: 'MASTER',
+      rank: 'I',
+      leaguePoints: 5
+    })
+  })
+
+  it('declines to guess from an apex rank, where LP runs unbounded', () => {
+    // 75 LP from Master 12 means Master 75, not a drop to Diamond I.
+    expect(rankFromLeaguePoints(at('MASTER', 'I', 12), 75)).toBeNull()
+  })
+
+  it('has nowhere below Iron IV to place a large jump', () => {
+    expect(rankFromLeaguePoints(at('IRON', 'IV', 5), 88)).toEqual({
+      tier: 'IRON',
+      rank: 'IV',
+      leaguePoints: 88
+    })
+  })
+
+  it('declines when the starting rank cannot be placed', () => {
+    expect(rankFromLeaguePoints(at(null, null, null), 40)).toBeNull()
+    expect(rankFromLeaguePoints(at('GOLD', null, 20), 40)).toBeNull()
+  })
+})
 
 describe('ladderPosition', () => {
   it('starts the ladder at Iron IV 0 LP', () => {
