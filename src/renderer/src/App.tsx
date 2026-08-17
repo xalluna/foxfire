@@ -98,9 +98,15 @@ function App(): JSX.Element {
         Drag strip beneath the native caption buttons. The right padding keeps
         the nav clear of the overlay region Windows draws into; without it the
         last tab would sit under the close button.
+
+        h-titlebar is the *content* height, hence box-content: Windows paints the
+        caption buttons over the top --titlebar-h pixels, so a border-box strip
+        of that height would hide its own bottom border behind them and the
+        hairline would stop short of the window edge. Adding the border outside
+        lands it on the first row below the overlay, where it survives.
       */}
       <header
-        className="drag flex h-titlebar shrink-0 items-center gap-4 border-b border-hairline pl-4"
+        className="drag box-content flex h-titlebar shrink-0 items-center gap-4 border-b border-hairline pl-4"
         style={{ paddingRight: 'var(--titlebar-controls-w)' }}
       >
         <span className="font-display text-base tracking-wide text-gold">LoL Stats</span>

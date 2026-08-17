@@ -32,7 +32,12 @@
   --text-dim: 160 155 140; /* #A09B8C */
   --text-mute: 91 90 86; /* #5B5A56 */
 
-  /* Height of the native title-bar overlay reserved in src/main/window.ts. */
+  /*
+   * Height of the native title-bar overlay reserved in src/main/window.ts.
+   * Nothing the renderer draws in the top-right of this band survives — the
+   * caption buttons are composited over it — so the drag strip carries this as
+   * its content height and hangs its hairline on the row just below.
+   */
   --titlebar-h: 40px;
   /* Windows draws minimise/maximise/close here; nothing interactive may sit under it. */
   --titlebar-controls-w: 140px;
