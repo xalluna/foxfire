@@ -16,6 +16,13 @@ export function Settings(): JSX.Element {
     queryFn: () => window.api.settings.get()
   })
 
+  // Fixed for the life of the process, so it never needs refetching.
+  const version = useQuery({
+    queryKey: ['appVersion'],
+    queryFn: () => window.api.app.getVersion(),
+    staleTime: Infinity
+  })
+
   const save = useMutation({
     mutationFn: (value: string) => window.api.settings.setApiKey(value),
     onSuccess: (result) => {
@@ -109,7 +116,12 @@ export function Settings(): JSX.Element {
       <TelemetrySettings />
 
       <section className="rounded-lg border border-hairline bg-surface p-5">
-        <h2 className="font-display text-lg text-text">About</h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="font-display text-lg text-text">About</h2>
+          {version.data && (
+            <span className="text-xs tabular-nums text-text-mute">Version {version.data}</span>
+          )}
+        </div>
         <p className="mt-2 text-sm leading-relaxed text-text-dim">
           A personal League of Legends stats tracker. Match history is stored locally in SQLite and
           served from disk — the Riot API is only called when syncing.

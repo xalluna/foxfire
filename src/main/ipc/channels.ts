@@ -1,6 +1,9 @@
 // Shared channel names — imported by both the main-process handlers and the
 // preload bridge so the two sides can't drift apart.
 export const CH = {
+  app: {
+    getVersion: 'app:getVersion'
+  },
   settings: {
     get: 'settings:get',
     setApiKey: 'settings:setApiKey',

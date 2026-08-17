@@ -46,6 +46,10 @@ export interface DashboardData {
 // in src/main/ipc/handlers.ts — this file is the single source of truth for
 // the shape both sides must agree on.
 export interface Api {
+  app: {
+    /** The packaged version, matching the CHANGELOG entry the build shipped with. */
+    getVersion: () => Promise<string>
+  }
   settings: {
     get: () => Promise<AppSettingsPublic>
     setApiKey: (key: string) => Promise<ValidateResult>

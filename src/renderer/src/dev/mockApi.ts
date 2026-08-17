@@ -176,6 +176,12 @@ function runFakeSync(accountId: number): void {
 }
 
 export const mockApi: Api = {
+  app: {
+    // The harness has no main process to ask, so this is the browser-only
+    // stand-in; the packaged app reads it from app.getVersion().
+    // Never held, even in the loading scenario — this is chrome, not data.
+    getVersion: (): Promise<string> => delay('0.0.0-dev', 0, false)
+  },
   settings: {
     get: (): Promise<AppSettingsPublic> =>
       delay(

@@ -6,6 +6,9 @@ import { CH } from '../main/ipc/channels'
 // The renderer never touches the Riot API or SQLite directly — everything
 // crosses this bridge.
 const api: Api = {
+  app: {
+    getVersion: () => ipcRenderer.invoke(CH.app.getVersion)
+  },
   settings: {
     get: () => ipcRenderer.invoke(CH.settings.get),
     setApiKey: (key) => ipcRenderer.invoke(CH.settings.setApiKey, key),
