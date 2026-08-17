@@ -84,6 +84,10 @@ export const MatchParticipantDtoSchema = z
     teamPosition: z.string().optional(),
     // Absent on very old matches, so optional rather than required.
     largestMultiKill: z.number().optional(),
+    // The role quest reward, which occupies its own slot rather than item0-6.
+    // Absent on matches played before the season it shipped in — required here
+    // would abort the sync of any account with older history.
+    roleBoundItem: z.number().optional(),
     // True when the game was voided as a remake. Such games award no LP and are
     // excluded from champion stats, matching how op.gg reports them.
     gameEndedInEarlySurrender: z.boolean().optional(),

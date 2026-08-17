@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import type { AssetManifest, MatchSummary } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName, itemIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
+import { TRINKET_SLOT, itemSlots } from '../lib/items'
 import { positionIcon, positionLabel } from '../lib/positions'
 import { queueName } from '../lib/queues'
 import { runeIds } from '../lib/runes'
@@ -22,17 +23,31 @@ import { Bar } from './Bar'
 import { LpChip } from './LpChip'
 import * as Icon from './icons'
 
-/** Six inventory slots then the trinket, which is round in game. */
-function Items({ m, items }: { m: AssetManifest; items: number[] }): JSX.Element {
-  const slots = Array.from({ length: 7 }, (_, i) => items[i] ?? 0)
+/**
+ * Six inventory slots, then the trinket, then the lane's quest reward.
+ *
+ * The last two are round because neither was bought. `roleBound` stays a
+ * separate argument rather than an eighth array entry so a caller cannot slip
+ * it into an inventory position. See itemSlots for why the six are packed and
+ * why nothing collapses when a slot is empty.
+ */
+function Items({
+  m,
+  items,
+  roleBound
+}: {
+  m: AssetManifest
+  items: number[]
+  roleBound: number
+}): JSX.Element {
   return (
     <div className="flex gap-[3px]">
-      {slots.map((itemId, i) => (
+      {itemSlots(items, roleBound).map((itemId, i) => (
         <Asset
           key={i}
           src={itemIconUrl(m, itemId)}
           className="h-[21px] w-[21px]"
-          rounded={i === 6 ? 'rounded-full' : 'rounded'}
+          rounded={i >= TRINKET_SLOT ? 'rounded-full' : 'rounded'}
         />
       ))}
     </div>
@@ -196,7 +211,7 @@ export function MatchListRow({
 
       {/* Items and badges */}
       <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5">
-        {assets && <Items m={assets} items={match.items} />}
+        {assets && <Items m={assets} items={match.items} roleBound={match.roleBoundItem} />}
         {multiKill && (
           <span className="rounded-full border border-gold-dim bg-gold/10 px-1.5 text-[9px] font-medium uppercase tracking-wide text-gold">
             {multiKill}

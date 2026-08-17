@@ -87,10 +87,29 @@ export function perks(keystone: Keystone): unknown {
   }
 }
 
-export const ITEMS_AP = [1056, 3157, 3100, 2503, 3067, 3363, 3009]
-export const ITEMS_AD = [6672, 3006, 3031, 1038, 6673, 3363, 0]
-export const ITEMS_TANK = [3068, 3047, 3075, 3143, 1028, 3364, 0]
-export const ITEMS_SUPPORT = [3853, 3158, 3011, 3222, 0, 3364, 0]
+// Index 6 is the trinket, matching match-v5 — these had it at 5, which rendered
+// it as a square inventory item and left an empty circle in the trinket slot.
+// SUPPORT keeps an interior hole and AD a trailing one, so the harness shows
+// both cases itemSlots has to pack.
+export const ITEMS_AP = [1056, 3157, 3100, 2503, 3067, 3089, 3363]
+export const ITEMS_AD = [6672, 3006, 3031, 1038, 6673, 0, 3363]
+export const ITEMS_TANK = [3068, 3047, 3075, 3143, 1028, 3742, 3364]
+export const ITEMS_SUPPORT = [3853, 0, 3011, 3222, 0, 3050, 3364]
+
+/**
+ * The role quest reward each lane finishes with.
+ *
+ * Bottom's is a pair of boots rather than a quest item, which is what made the
+ * missing slot obvious in the first place. Lanes are keyed loosely so the ARAM
+ * seed's empty teamPosition falls through to 0 and exercises the empty slot.
+ */
+export const ROLE_ITEM: Record<string, number> = {
+  TOP: 1221,
+  JUNGLE: 1209,
+  MIDDLE: 1206,
+  BOTTOM: 3009,
+  UTILITY: 1208
+}
 
 const FILLER_NAMES = [
   'MegabyteB', 'wonkybonky', 'Sink', 'lucius', 'Blade Of Light',
@@ -137,6 +156,7 @@ export function detailFor(
         damageDealtToChampions: summary.damageDealtToChampions,
         damageTaken: 24_800,
         items: summary.items,
+        roleBoundItem: summary.roleBoundItem,
         summoner1Id: summary.summoner1Id,
         summoner2Id: summary.summoner2Id,
         perks: summary.perks,
@@ -166,6 +186,7 @@ export function detailFor(
       damageDealtToChampions: 7_000 + seed * 3_900,
       damageTaken: 12_000 + seed * 2_600,
       items: [ITEMS_AD, ITEMS_AP, ITEMS_TANK, ITEMS_SUPPORT][seed % 4],
+      roleBoundItem: ROLE_ITEM[positions[i % 5]] ?? 0,
       summoner1Id: S.Flash,
       summoner2Id: [S.Ignite, S.Teleport, S.Smite, S.Heal][seed % 4],
       perks: perks((Object.keys(K) as Keystone[])[seed % Object.keys(K).length]),

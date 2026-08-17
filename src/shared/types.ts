@@ -52,6 +52,15 @@ export interface MatchSummary {
   /** Highest multi-kill in the game: 2 = double, 3 = triple, 4 = quadra, 5 = penta. */
   largestMultiKill: number | null
   items: number[]
+  /**
+   * The role quest reward, which match-v5 reports in its own slot.
+   *
+   * Kept out of `items` deliberately: it is granted by the lane rather than
+   * bought, and it never appears among item0-6, so folding it in would redefine
+   * what an inventory slot means for the sake of one array. 0 for modes without
+   * lanes, and for matches played before the field existed.
+   */
+  roleBoundItem: number
   summoner1Id: number | null
   summoner2Id: number | null
   perks: unknown
@@ -226,6 +235,8 @@ export interface MatchParticipant {
   damageDealtToChampions: number | null
   damageTaken: number | null
   items: number[]
+  /** The lane's quest reward — see MatchSummary.roleBoundItem. */
+  roleBoundItem: number
   summoner1Id: number | null
   summoner2Id: number | null
   perks: unknown
