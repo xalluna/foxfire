@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import type { AssetManifest, MatchParticipant } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, itemIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
+import { TRINKET_SLOT, itemSlots } from '../lib/items'
 import { positionIcon } from '../lib/positions'
 import { runeIds } from '../lib/runes'
 import { compactNumber } from '../lib/matchStats'
@@ -12,16 +13,24 @@ import { Bar } from './Bar'
 import { Skeleton } from './Skeleton'
 import * as Icon from './icons'
 
-function Items({ m, items }: { m: AssetManifest; items: number[] }): JSX.Element {
-  const slots = Array.from({ length: 7 }, (_, i) => items[i] ?? 0)
+/** Six inventory slots, the trinket, then the lane's quest reward — see MatchListRow. */
+function Items({
+  m,
+  items,
+  roleBound
+}: {
+  m: AssetManifest
+  items: number[]
+  roleBound: number
+}): JSX.Element {
   return (
     <div className="flex gap-[3px]">
-      {slots.map((itemId, i) => (
+      {itemSlots(items, roleBound).map((itemId, i) => (
         <Asset
           key={i}
           src={itemIconUrl(m, itemId)}
           className="h-[22px] w-[22px]"
-          rounded={i === 6 ? 'rounded-full' : 'rounded'}
+          rounded={i >= TRINKET_SLOT ? 'rounded-full' : 'rounded'}
         />
       ))}
     </div>
@@ -152,7 +161,7 @@ function ParticipantRow({
       </div>
 
       <div className="ml-auto shrink-0">
-        <Items m={m} items={p.items} />
+        <Items m={m} items={p.items} roleBound={p.roleBoundItem} />
       </div>
     </div>
   )

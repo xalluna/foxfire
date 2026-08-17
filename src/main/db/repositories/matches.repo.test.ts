@@ -38,12 +38,13 @@ function participant(overrides: Record<string, unknown> = {}): Record<string, un
     item2: 3100,
     item3: 2503,
     item4: 3067,
-    item5: 3363,
-    item6: 3009,
+    item5: 3089,
+    item6: 3340, // item6 is the trinket slot, never an inventory item
     summoner1Id: 12,
     summoner2Id: 4,
     teamPosition: 'MIDDLE',
     largestMultiKill: 2,
+    roleBoundItem: 1206,
     perks: { statPerks: {}, styles: [] },
     ...overrides
   }
@@ -97,7 +98,9 @@ describe('getMatchSummaries', () => {
     expect(row.largestMultiKill).toBe(2)
     expect(row.teamPosition).toBe('MIDDLE')
     // Six inventory slots plus the trinket in slot 6.
-    expect(row.items).toEqual([1056, 3157, 3100, 2503, 3067, 3363, 3009])
+    expect(row.items).toEqual([1056, 3157, 3100, 2503, 3067, 3089, 3340])
+    // The lane's quest reward is its own slot, never one of the seven above.
+    expect(row.roleBoundItem).toBe(1206)
     expect(row.summoner1Id).toBe(12)
   })
 
@@ -428,6 +431,25 @@ describe('backfills from raw_json', () => {
     const db = upgradeFrom001([participant({ puuid: ME })])
     expect(getMatchSummaries(db, ME, 20, 0)[0].isRemake).toBe(false)
     expect(getChampionStats(db, ME)).toHaveLength(1)
+  })
+
+  it('recovers the role quest item, which no inventory slot ever held', () => {
+    const db = upgradeFrom001([
+      participant({ puuid: ME, teamPosition: 'BOTTOM', roleBoundItem: 3009 }),
+      participant({ puuid: 'ally', teamPosition: 'UTILITY', roleBoundItem: 1208 })
+    ])
+
+    // Distinct values per player, so this proves the puuid correlation rather
+    // than the two rows happening to share an answer.
+    expect(getMatchSummaries(db, ME, 20, 0)[0].roleBoundItem).toBe(3009)
+    expect(getMatchSummaries(db, 'ally', 20, 0)[0].roleBoundItem).toBe(1208)
+  })
+
+  it('defaults the role quest item to an empty slot when the payload omits it', () => {
+    // JSON.stringify drops the undefined key, so raw_json genuinely lacks it —
+    // both a pre-feature match and a mode without lanes land here.
+    const db = upgradeFrom001([participant({ puuid: ME, roleBoundItem: undefined })])
+    expect(getMatchSummaries(db, ME, 20, 0)[0].roleBoundItem).toBe(0)
   })
 })
 
