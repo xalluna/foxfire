@@ -6,6 +6,43 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.6.0] — 2026-08-17
+
+The live game screen no longer empties itself when one player asks not to be named, and match rows
+gained the eighth item they had been dropping — in bot lane, that item is the boots.
+
+### Added
+
+- Match rows and match detail show the role quest reward next to the six bought items and the
+  trinket. Bot lane's reward is the player's boots, so bot rows had been showing a finished build
+  with nothing on its feet. Matches already in your history get it too, with no re-sync.
+
+### Fixed
+
+- A live game with a withheld player renders again. Riot hides some players' identities, and a
+  single hidden one used to replace the entire roster with a validation dump — nine visible players
+  lost to the one that was not.
+- A withheld player now shows as their champion, unnamed and without a rank, which is what was
+  asked. The app had been resolving the name by another route, going around the withholding rather
+  than respecting it.
+- Selling an item no longer punches a hole through the middle of a build, with another item
+  stranded past the trinket. The six bought slots close up to the left while the trinket and quest
+  reward stay pinned to the right, so every row stays eight wide and the strips keep their columns
+  down a list mixing Summoner's Rift with ARAM.
+
+### Under the hood
+
+- Migration 006 backfills the quest reward from the full payloads stored since 001, so history is
+  recovered locally with no Riot calls. It takes its own column rather than a seventh inventory
+  slot: it is granted by the lane rather than bought.
+- Every field on a live game participant is now optional, so no single missing value can fail the
+  parse for all ten. The cost is that this endpoint stops reporting payload drift as a parse error —
+  a shape change now arrives as empty fields for the mapper to absorb.
+- The participant-name lookup is gone along with the behaviour it served: its IPC channel, handler,
+  preload binding, and the account endpoint that removal left orphaned.
+- Live game mapping moved into its own module, so its tests need neither a database nor an API key.
+- The release workflow runs `actions/checkout@v5`; v4 targets a Node version GitHub has deprecated.
+
 ## [0.5.0] — 2026-08-17
 
 The app now tells you which version you are running, and these notes exist.
@@ -241,6 +278,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.6.0]: https://github.com/xalluna/my-op-gg/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/xalluna/my-op-gg/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/xalluna/my-op-gg/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/xalluna/my-op-gg/compare/v0.3.0...v0.4.0
