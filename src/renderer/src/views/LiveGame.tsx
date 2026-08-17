@@ -40,6 +40,15 @@ function RankBadge({ platform, puuid }: { platform: string; puuid: string }): JS
   )
 }
 
+/**
+ * Three states, in the order they are tested: a player Riot named, a player it
+ * withheld, and a slot it told us nothing about at all.
+ *
+ * An anonymous row gives its name line over to the champion — that is the whole
+ * of what is known — and shows no rank, because there is no puuid to ask with.
+ * When even the champion is missing, the placeholders <Asset> draws hold the
+ * slot so the team still reads five deep.
+ */
 function ParticipantRow({
   p,
   account,
@@ -50,17 +59,7 @@ function ParticipantRow({
   isTracked: boolean
 }): JSX.Element {
   const assets = useAssets()
-
-  // Some spectator payloads omit the Riot ID; look it up rather than showing "Unknown".
-  const { data: resolvedName } = useQuery({
-    queryKey: ['participantName', p.puuid],
-    queryFn: () => window.api.liveGame.participantName(account.regionalRoute, p.puuid),
-    enabled: p.gameName === null,
-    staleTime: Infinity
-  })
-
-  const displayName = p.gameName ?? resolvedName?.gameName ?? 'Unknown'
-  const displayTag = p.tagLine ?? resolvedName?.tagLine ?? null
+  const champion = assets && p.championId !== null ? championName(assets, p.championId) : ''
 
   return (
     <div
@@ -70,35 +69,42 @@ function ParticipantRow({
       )}
     >
       <Asset
-        src={assets ? championIconUrl(assets, p.championId) : null}
+        src={assets && p.championId !== null ? championIconUrl(assets, p.championId) : null}
         className="h-9 w-9"
         rounded="rounded-full"
       />
 
       <div className="flex shrink-0 flex-col gap-[3px]">
         <Asset
-          src={assets ? spellIconUrl(assets, p.spell1Id) : null}
+          src={assets && p.spell1Id !== null ? spellIconUrl(assets, p.spell1Id) : null}
           className="h-[17px] w-[17px]"
         />
         <Asset
-          src={assets ? spellIconUrl(assets, p.spell2Id) : null}
+          src={assets && p.spell2Id !== null ? spellIconUrl(assets, p.spell2Id) : null}
           className="h-[17px] w-[17px]"
         />
       </div>
 
       <div className="min-w-0 flex-1">
-        <p
-          className={clsx('truncate text-sm', isTracked ? 'font-medium text-text' : 'text-text-dim')}
-        >
-          {displayName}
-          {displayTag && <span className="text-text-mute">#{displayTag}</span>}
-        </p>
-        <p className="truncate text-2xs text-text-mute">
-          {assets ? championName(assets, p.championId) : ''}
-        </p>
+        {p.anonymous ? (
+          <p className="truncate text-sm text-text-mute">{champion}</p>
+        ) : (
+          <>
+            <p
+              className={clsx(
+                'truncate text-sm',
+                isTracked ? 'font-medium text-text' : 'text-text-dim'
+              )}
+            >
+              {p.gameName}
+              {p.tagLine && <span className="text-text-mute">#{p.tagLine}</span>}
+            </p>
+            <p className="truncate text-2xs text-text-mute">{champion}</p>
+          </>
+        )}
       </div>
 
-      <RankBadge platform={account.platform} puuid={p.puuid} />
+      {p.puuid !== null && <RankBadge platform={account.platform} puuid={p.puuid} />}
     </div>
   )
 }
@@ -127,10 +133,10 @@ export function LiveGame({ account }: { account: Account }): JSX.Element {
       <div className="space-y-0.5">
         {participants.map((p) => (
           <ParticipantRow
-            key={p.puuid}
+            key={p.slot}
             p={p}
             account={account}
-            isTracked={p.puuid === account.puuid}
+            isTracked={p.puuid !== null && p.puuid === account.puuid}
           />
         ))}
       </div>

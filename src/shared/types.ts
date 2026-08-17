@@ -301,15 +301,18 @@ export interface SyncProgressEvent {
 }
 
 export interface LiveGameParticipant {
-  puuid: string
+  /** Position in Riot's participant array. The React key, since an anonymous player has no puuid. */
+  slot: number
+  /** Riot withheld this player's identity — no name, no rank, nothing to look them up by. */
+  anonymous: boolean
+  /** Null on anonymous rows, dropped on purpose so the renderer cannot resolve what Riot withheld. */
+  puuid: string | null
   gameName: string | null
   tagLine: string | null
   teamId: number
-  championId: number
-  spell1Id: number
-  spell2Id: number
-  rank: LeagueEntry | null
-  rankLoading: boolean
+  championId: number | null
+  spell1Id: number | null
+  spell2Id: number | null
 }
 
 export interface LiveGameData {

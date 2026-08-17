@@ -278,9 +278,7 @@ export const mockApi: Api = {
   liveGame: {
     check: (): Promise<LiveGameData | null> =>
       scenario === 'not-live' ? delay(null, 800) : delay(LIVE_GAME, 800),
-    participantRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500),
-    participantName: (): Promise<{ gameName: string; tagLine: string } | null> =>
-      delay({ gameName: 'Resolved Later', tagLine: 'NA1' }, 700)
+    participantRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500)
   },
 
   champions: {
