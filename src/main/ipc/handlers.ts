@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey } from '../services/settingsService'
 import {
@@ -69,6 +69,8 @@ function broadcastRankEdited(accountId: number): void {
 }
 
 export function registerIpcHandlers(): void {
+  ipcMain.handle(CH.app.getVersion, () => app.getVersion())
+
   ipcMain.handle(CH.settings.get, () => getSettings())
   ipcMain.handle(CH.settings.setApiKey, (_e, key: string) => setAndValidateApiKey(key))
   ipcMain.handle(CH.settings.clearApiKey, () => {
