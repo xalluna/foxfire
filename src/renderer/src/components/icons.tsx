@@ -301,3 +301,12 @@ export function Maximize(props: IconProps): JSX.Element {
     </Icon>
   )
 }
+
+/** Leave fullscreen. The counterpart to Maximize, arrows pointing inward. */
+export function Minimize(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M9 4v4H5M15 4v4h4M9 20v-4H5M15 20v-4h4" />
+    </Icon>
+  )
+}

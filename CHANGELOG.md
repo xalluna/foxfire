@@ -29,7 +29,8 @@ two clicks rather than a scrub hunt through half an hour of footage.
   Clicking one seeks to a few seconds before it, because the approach to a fight explains more than
   the moment somebody dies. Hovering anywhere shows the frame at that timestamp.
 - Right-click a match to watch its replay. A game with no recording says so on the menu item
-  rather than hiding it.
+  rather than hiding it, and a match row that has one is marked, so you can see at a glance which
+  games there is footage of without right-clicking them one at a time.
 - Every replay window owns one replay, so several can be open at once — the same game at two
   timestamps on two monitors, or two games side by side.
 - A **View match history** button on a replay, which brings the main window forward with that

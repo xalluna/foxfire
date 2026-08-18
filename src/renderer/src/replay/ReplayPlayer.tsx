@@ -39,11 +39,23 @@ export function ReplayPlayer({
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
 
   const seek = useCallback((seconds: number) => {
     const video = videoRef.current
     if (!video) return
     video.currentTime = Math.max(0, Math.min(seconds, video.duration || seconds))
+  }, [])
+
+  /**
+   * In and out, rather than only in.
+   *
+   * The button used to call requestFullscreen unconditionally, so once
+   * fullscreen it did nothing and Escape was the only way back.
+   */
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void containerRef.current?.requestFullscreen?.()
   }, [])
 
   const togglePlay = useCallback(() => {
@@ -61,6 +73,14 @@ export function ReplayPlayer({
     },
     [currentTime, events, seek]
   )
+
+  // Tracked from the event rather than from our own clicks, so the icon is
+  // still right when the user leaves fullscreen with Escape or F11.
+  useEffect(() => {
+    const onChange = (): void => setFullscreen(document.fullscreenElement !== null)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
 
   useEffect(() => {
     const video = videoRef.current
@@ -99,14 +119,14 @@ export function ReplayPlayer({
           jumpEvent(1)
           break
         case 'f':
-          void containerRef.current?.requestFullscreen?.()
+          toggleFullscreen()
           break
       }
     }
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [currentTime, jumpEvent, seek, togglePlay])
+  }, [currentTime, jumpEvent, seek, togglePlay, toggleFullscreen])
 
   if (failed) {
     return (
@@ -194,10 +214,10 @@ export function ReplayPlayer({
           </select>
 
           <ControlButton
-            label="Fullscreen (f)"
-            onClick={() => void containerRef.current?.requestFullscreen?.()}
+            label={fullscreen ? 'Exit fullscreen (f)' : 'Fullscreen (f)'}
+            onClick={toggleFullscreen}
           >
-            <Icon.Maximize />
+            {fullscreen ? <Icon.Minimize /> : <Icon.Maximize />}
           </ControlButton>
         </div>
       </div>

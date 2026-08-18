@@ -195,6 +195,23 @@ export function MatchListRow({
         )}
       </div>
 
+      {/*
+        Marks a game there is footage of.
+        
+        Not a button: the row itself is one, and nesting is invalid. Watching is
+        a right-click, and this is what tells you the option will be there —
+        without it, the only way to find out which games have a replay is to
+        right-click them one at a time.
+      */}
+      <span
+        className="ml-2 w-3.5 shrink-0"
+        title={match.replayId !== null ? 'Replay available — right-click to watch' : undefined}
+      >
+        {match.replayId !== null && (
+          <Icon.Film width={14} height={14} className="text-gold/60" />
+        )}
+      </span>
+
       {expandable ? (
         <Icon.ChevronDown
           className={clsx(
