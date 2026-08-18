@@ -1,7 +1,14 @@
 import { createLogger } from '../telemetry/logger'
 import { isObsConnected, obsCall, obsTry } from './client'
-import { setCurrentScene, setRecordDirectory, setRecordFormat } from './config'
-import type { CaptureAudio } from '@shared/types'
+import {
+  setCurrentScene,
+  setRecordDirectory,
+  setRecordFormat,
+  setRecordQuality,
+  setVideoOutput
+} from './config'
+import { captureQualityOption, OBS_RECORD_QUALITY } from '@shared/captureQuality'
+import type { CaptureAudio, CaptureQuality } from '@shared/types'
 
 /**
  * Managed mode: an OBS profile and scene collection this app owns outright.
@@ -233,7 +240,11 @@ export async function applyManagedAudio(audio: CaptureAudio): Promise<void> {
  * Returns false if OBS could not be brought into a recordable state, so the
  * caller can report the failure instead of starting a recording of nothing.
  */
-export async function enterManagedMode(folder: string, audio: CaptureAudio): Promise<boolean> {
+export async function enterManagedMode(
+  folder: string,
+  audio: CaptureAudio,
+  quality: CaptureQuality
+): Promise<boolean> {
   if (!isObsConnected()) return false
 
   // Captured before the first switch, or the "previous" profile would be ours.
@@ -246,6 +257,14 @@ export async function enterManagedMode(folder: string, audio: CaptureAudio): Pro
 
     await setRecordFormat('mp4')
     await setRecordDirectory(folder)
+
+    // Re-applied every time rather than only when the profile is built. A
+    // profile made by an earlier version keeps whatever it was born with, so a
+    // setting changed in this app would otherwise never reach OBS.
+    const { width, height, fps } = captureQualityOption(quality)
+    await setVideoOutput(width, height, fps)
+    await setRecordQuality(OBS_RECORD_QUALITY)
+
     await applyManagedAudio(audio)
     await setCurrentScene(SCENE)
     return true

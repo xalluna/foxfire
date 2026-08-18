@@ -75,6 +75,54 @@ export async function setRecordFormat(format: string): Promise<void> {
   })
 }
 
+/**
+ * The recording quality preset, in Simple output mode.
+ *
+ * Left at whatever OBS defaults to until now, which meant recordings inherited
+ * the stream bitrate — a constant 6 Mbps regardless of what the picture needed.
+ */
+export async function setRecordQuality(quality: string): Promise<void> {
+  await obsTry('SetProfileParameter', {
+    parameterCategory: 'SimpleOutput',
+    parameterName: 'RecQuality',
+    parameterValue: quality
+  })
+}
+
+interface VideoSettings {
+  baseWidth: number
+  baseHeight: number
+  outputWidth: number
+  outputHeight: number
+  fpsNumerator: number
+  fpsDenominator: number
+}
+
+/**
+ * Sets what gets encoded, leaving the canvas alone.
+ *
+ * The base canvas is the user's screen and is none of our business; the output
+ * size is what the encoder actually works on, and is the lever that matters on
+ * a machine already struggling to hold frames. Output is clamped to the canvas,
+ * since upscaling past it adds encoder load for no detail.
+ *
+ * A dedicated request rather than profile parameters: those are read at
+ * startup, so writing them would not take effect until OBS restarted.
+ */
+export async function setVideoOutput(width: number, height: number, fps: number): Promise<void> {
+  const current = await obsTry<VideoSettings>('GetVideoSettings')
+  if (!current) return
+
+  await obsTry('SetVideoSettings', {
+    baseWidth: current.baseWidth,
+    baseHeight: current.baseHeight,
+    outputWidth: Math.min(width, current.baseWidth),
+    outputHeight: Math.min(height, current.baseHeight),
+    fpsNumerator: fps,
+    fpsDenominator: 1
+  })
+}
+
 export async function getRecordDirectory(): Promise<string | null> {
   const result = await obsTry<{ recordDirectory: string }>('GetRecordDirectory')
   return result?.recordDirectory ?? null

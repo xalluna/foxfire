@@ -2,9 +2,15 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { CAPTURE_QUEUE_OPTIONS } from '@shared/queues'
+import { CAPTURE_QUALITY_OPTIONS } from '@shared/captureQuality'
 import { Toggle } from './Toggle'
 import * as Icon from './icons'
-import type { CaptureAudio, CaptureSettings as Settings, ObsMode } from '@shared/types'
+import type {
+  CaptureAudio,
+  CaptureQuality,
+  CaptureSettings as Settings,
+  ObsMode
+} from '@shared/types'
 
 /**
  * Recording setup.
@@ -165,6 +171,13 @@ export function CaptureSettings(): JSX.Element {
               otherQueues={current.otherQueues}
               disabled={disabled}
               onChange={(patch) => update.mutate(patch)}
+            />
+
+            <QualityPicker
+              value={current.quality}
+              mode={current.mode}
+              disabled={disabled}
+              onChange={(quality) => update.mutate({ quality })}
             />
 
             <AudioPicker
@@ -500,6 +513,59 @@ function QueuePicker({
         “Other” covers customs, Practice Tool and whatever rotating mode is running, so a new
         gamemode is not silently missed. It never overrides a queue you unticked above.
       </p>
+    </div>
+  )
+}
+
+/**
+ * What managed mode records at.
+ *
+ * Resolution and frame rate are the two things that decide how hard the encoder
+ * works, so this is the control that matters on a machine already struggling to
+ * hold frames in game — turning it down costs picture and buys performance.
+ *
+ * Disabled in manual mode for the same reason the audio choice is: those
+ * settings live in a profile the user built, and this app does not rewrite it.
+ */
+function QualityPicker({
+  value,
+  mode,
+  disabled,
+  onChange
+}: {
+  value: CaptureQuality
+  mode: ObsMode
+  disabled: boolean
+  onChange: (quality: CaptureQuality) => void
+}): JSX.Element {
+  const managed = mode === 'managed'
+  const chosen = CAPTURE_QUALITY_OPTIONS.find((option) => option.value === value)
+
+  return (
+    <div className="rounded-md border border-hairline bg-canvas p-3">
+      <span className="block text-sm text-text">Recording quality</span>
+      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
+        {managed
+          ? 'Lower this if recording costs you frames in game. It changes what the encoder has to work on, not what you see while playing.'
+          : 'Your own OBS profile decides this — Settings → Video in OBS.'}
+      </span>
+
+      <select
+        value={value}
+        disabled={disabled || !managed}
+        onChange={(event) => onChange(event.target.value as CaptureQuality)}
+        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-gold-dim focus:outline-none disabled:opacity-50"
+      >
+        {CAPTURE_QUALITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label} — about {option.approxGbPerHour} GB per hour
+          </option>
+        ))}
+      </select>
+
+      {managed && chosen && (
+        <p className="mt-2 text-2xs leading-relaxed text-text-mute">{chosen.hint}</p>
+      )}
     </div>
   )
 }

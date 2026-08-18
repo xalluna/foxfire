@@ -1,4 +1,7 @@
 import type { Position } from './positions'
+import type { CaptureQuality } from './captureQuality'
+
+export type { CaptureQuality } from './captureQuality'
 
 export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
 
@@ -448,6 +451,11 @@ export interface CaptureSettings {
   /** Whether a queue outside CAPTURE_QUEUE_OPTIONS records too — customs, rotating modes. */
   otherQueues: boolean
   audio: CaptureAudio
+  /**
+   * What managed mode records at. Ignored in manual mode, where the user's own
+   * OBS profile decides — see CaptureQuality.
+   */
+  quality: CaptureQuality
   /** Advisory ceiling in bytes. Nothing is ever deleted to honour it; 0 means no cap. */
   softCapBytes: number
   obsHost: string

@@ -106,6 +106,7 @@ const CAPTURE_SETTINGS: CaptureSettings = {
   queues: [420, 440],
   otherQueues: false,
   audio: 'game',
+  quality: '1080p60',
   softCapBytes: 50 * 1024 * 1024 * 1024,
   obsHost: '127.0.0.1',
   obsPort: 4455,

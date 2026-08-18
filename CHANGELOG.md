@@ -42,6 +42,9 @@ two clicks rather than a scrub hunt through half an hour of footage.
   recorded, so a recording that silently failed is noticed before the game rather than after it.
 - The Live game tab turns teal while a game is in progress, and its centre dot turns red while that
   game is being recorded — both facts readable from the nav without opening anything.
+- A recording quality setting — 720p or 1080p, 30 or 60fps, with the rough disk cost of each. Turn
+  it down if capture costs you frames in game; it changes what the encoder works on, not what you
+  see while playing.
 - An advisory disk warning you set yourself. Nothing is ever deleted automatically; crossing the
   number shows a warning with a one-click clear-out of the oldest games.
 
@@ -65,6 +68,10 @@ two clicks rather than a scrub hunt through half an hour of footage.
 - Video reaches the replay window over a `replay://` scheme rather than `file://`. The renderer
   sends a replay id and never a path, the file is confirmed to be inside the replay folder, and
   byte ranges are served properly so seeking works.
+- Managed mode sets the resolution, frame rate and recording quality preset it records with, rather
+  than inheriting OBS's defaults for a new profile — which were 720p30 at a constant 6 Mbps, a
+  bitrate that resolution and frame rate could not spend. They are re-applied before every
+  recording, so a profile built by an earlier version picks up a changed setting.
 - MP4 is required and MKV is refused with an explanation. MKV is OBS's default and records
   perfectly; Chromium simply has no demuxer for it, so the file would be written and then never
   play.

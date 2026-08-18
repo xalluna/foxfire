@@ -199,7 +199,7 @@ async function beginRecording(): Promise<void> {
   mkdirSync(settings.folder, { recursive: true })
 
   if (settings.mode === 'managed') {
-    const ready = await enterManagedMode(settings.folder, settings.audio)
+    const ready = await enterManagedMode(settings.folder, settings.audio, settings.quality)
     if (!ready) throw new Error('Managed OBS setup failed')
   } else if (settings.obsScene) {
     // A user-configured scene is switched to but never edited — its sources,

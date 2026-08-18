@@ -4,6 +4,7 @@ import { getBoolSetting, getSetting, setBoolSetting, setSetting } from '../db/re
 import { getDb } from '../db'
 import { clearSecret, hasSecret, loadSecret, saveSecret } from '../security/keyStore'
 import type { CaptureAudio, CaptureSettings, ObsMode } from '@shared/types'
+import { DEFAULT_CAPTURE_QUALITY, type CaptureQuality } from '@shared/captureQuality'
 
 /**
  * Capture configuration, stored the same way the background settings are — a
@@ -20,6 +21,7 @@ const KEY = {
   queues: 'capture.queues',
   otherQueues: 'capture.otherQueues',
   audio: 'capture.audio',
+  quality: 'capture.quality',
   softCap: 'capture.softCapBytes',
   obsHost: 'capture.obsHost',
   obsPort: 'capture.obsPort',
@@ -87,6 +89,8 @@ export function getCaptureSettings(): CaptureSettings {
     queues: readQueues(text(getSetting(db, KEY.queues))),
     otherQueues: getBoolSetting(db, KEY.otherQueues, false),
     audio: (text(getSetting(db, KEY.audio)) as CaptureAudio | null) ?? 'game',
+    quality:
+      (text(getSetting(db, KEY.quality)) as CaptureQuality | null) ?? DEFAULT_CAPTURE_QUALITY,
     softCapBytes: readNumber(text(getSetting(db, KEY.softCap)), DEFAULT_SOFT_CAP),
     obsHost: text(getSetting(db, KEY.obsHost)) ?? '127.0.0.1',
     obsPort: readNumber(text(getSetting(db, KEY.obsPort)), DEFAULT_PORT),
@@ -110,6 +114,7 @@ export function setCaptureSettings(patch: Partial<CaptureSettings>): CaptureSett
   if (patch.queues !== undefined) setSetting(db, KEY.queues, JSON.stringify(patch.queues))
   if (patch.otherQueues !== undefined) setBoolSetting(db, KEY.otherQueues, patch.otherQueues)
   if (patch.audio !== undefined) setSetting(db, KEY.audio, patch.audio)
+  if (patch.quality !== undefined) setSetting(db, KEY.quality, patch.quality)
   if (patch.softCapBytes !== undefined) setSetting(db, KEY.softCap, String(patch.softCapBytes))
   if (patch.obsHost !== undefined) setSetting(db, KEY.obsHost, patch.obsHost)
   if (patch.obsPort !== undefined) setSetting(db, KEY.obsPort, String(patch.obsPort))
