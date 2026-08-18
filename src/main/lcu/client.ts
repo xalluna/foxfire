@@ -1,17 +1,6 @@
-import { Agent, request } from 'node:https'
+import { request } from 'node:https'
+import { loopbackAgent } from '../loopbackAgent'
 import type { LcuCredentials } from './discovery'
-
-/**
- * The League client serves its API over HTTPS on loopback using a self-signed
- * certificate that no trust store will ever accept, so verification has to be
- * off for the connection to succeed at all.
- *
- * Scoped deliberately to this one agent rather than set globally: every other
- * request the app makes — Riot's API, Data Dragon — keeps full verification.
- * The blast radius is one hard-coded loopback host that is not reachable off
- * the machine.
- */
-const loopbackAgent = new Agent({ rejectUnauthorized: false, keepAlive: true })
 
 export class LcuError extends Error {
   constructor(

@@ -115,35 +115,6 @@ export const MatchDtoSchema = z.object({
 })
 export type MatchDto = z.infer<typeof MatchDtoSchema>
 
-/**
- * Every field is nullish because Riot withholds a participant's identity in some
- * games, and a zod array is all-or-nothing — one missing field on one player
- * failed the parse for the whole roster, so the live game screen showed an error
- * instead of the other nine. What a half-empty participant renders as is the
- * service's decision, not the schema's.
- *
- * The cost is that this endpoint no longer reports payload drift as a
- * parse_error; a shape change now arrives as null fields. Accepted deliberately.
- */
-export const ActiveGameParticipantDtoSchema = z
-  .object({
-    puuid: z.string().nullish(),
-    teamId: z.number().nullish(),
-    championId: z.number().nullish(),
-    spell1Id: z.number().nullish(),
-    spell2Id: z.number().nullish(),
-    riotId: z.string().nullish() // "gameName#tagLine" on newer payloads, absent or null on some
-  })
-  .passthrough()
-
-export const ActiveGameDtoSchema = z.object({
-  gameId: z.number(),
-  gameMode: z.string(),
-  gameLength: z.number(),
-  participants: z.array(ActiveGameParticipantDtoSchema)
-})
-export type ActiveGameDto = z.infer<typeof ActiveGameDtoSchema>
-
 export const ChampionMasteryDtoSchema = z.object({
   championId: z.number(),
   championPoints: z.number(),
