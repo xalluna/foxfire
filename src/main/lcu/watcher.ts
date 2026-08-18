@@ -6,6 +6,7 @@ import { CH } from '../ipc/channels'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
+import { onGamePhase } from '../capture/captureService'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
 import { isRankedQueue, TRACKED_QUEUES } from '@shared/queues'
@@ -57,6 +58,14 @@ let lastPhase: string | null = null
  * is meaningful for a ranked game and noise for an ARAM.
  */
 let currentQueueId: number | null = null
+
+/**
+ * Whether the client is in a game right now, for the Live game tab's indicator.
+ *
+ * Separate from currentQueueId, which is only meaningful for a ranked snapshot
+ * and is cleared the moment a game ends. This follows the phase itself.
+ */
+let inGame = false
 
 interface CurrentSummoner {
   /**
@@ -119,7 +128,7 @@ function normaliseRankField(value: string | null): string | null {
  * to a poll whose real job is rank, and an older client missing one of them
  * must not take the rank snapshot down with it.
  */
-async function trackGameflow(creds: LcuCredentials): Promise<boolean> {
+async function trackGameflow(creds: LcuCredentials, accountId: number): Promise<boolean> {
   let phase: string | null = null
   try {
     phase = await lcuGet<string>(creds, '/lol-gameflow/v1/gameflow-phase')
@@ -136,6 +145,13 @@ async function trackGameflow(creds: LcuCredentials): Promise<boolean> {
       log.debug('Gameflow session read failed', { error: String(err) })
     }
   }
+
+  // The only signal capture gets that a game exists at all. Ten seconds is far
+  // too coarse to time a recording by, but arming does not need to be quick:
+  // the loading screen that follows lasts at least a minute, and the recording
+  // itself is started by the game answering on loopback.
+  inGame = isPlayingPhase(phase)
+  onGamePhase(accountId, currentQueueId, inGame)
 
   const ended = isGameEndTransition(lastPhase, phase)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
@@ -177,16 +193,22 @@ async function tick(): Promise<void> {
       return
     }
 
-    setStatus({
-      state: 'connected',
+    const connected = {
+      state: 'connected' as const,
       accountId: account.id,
       gameName: account.gameName,
       tagLine: account.tagLine
-    })
+    }
+    // Reported before the phase is read, so a client that has just appeared is
+    // shown as connected without waiting on two more requests.
+    setStatus({ ...connected, inGame })
 
     // Read before the rank stats so the snapshot below can be forced when a
     // ranked game has just concluded.
-    const gameEnded = await trackGameflow(creds)
+    const gameEnded = await trackGameflow(creds, account.id)
+    // Again with the fresh phase. setStatus ignores an unchanged value, so the
+    // repeat costs nothing on the many ticks where nothing moved.
+    setStatus({ ...connected, inGame })
     const endedRanked = gameEnded && isRankedQueue(currentQueueId)
     if (gameEnded) currentQueueId = null
 
@@ -285,4 +307,5 @@ export function stopLcuWatcher(): void {
   // read as a phase appearing out of nowhere and be ignored.
   lastPhase = null
   currentQueueId = null
+  inGame = false
 }

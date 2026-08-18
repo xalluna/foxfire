@@ -64,7 +64,9 @@ export async function searchSummoner(input: RiotIdInput): Promise<AdHocSummonerR
         // deliberately persists nothing — so an ad-hoc lookup never has one,
         // and there is nothing for the LP editor to act on either.
         rank: null,
-        hasManualRank: false
+        hasManualRank: false,
+        // Ad-hoc results are somebody else's games played on another machine.
+        replayId: null
       }
     ]
   })

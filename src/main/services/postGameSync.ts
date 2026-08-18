@@ -1,6 +1,7 @@
 import { RiotApiError } from '../riot/rateLimiter'
 import { createLogger } from '../telemetry/logger'
 import { syncAccount } from './syncService'
+import { bindPendingReplays } from './replayService'
 
 const log = createLogger('postGameSync')
 
@@ -70,6 +71,10 @@ async function attempt(accountId: number, index: number): Promise<void> {
     const { stored } = await syncAccount(accountId, 'auto')
     if (stored > 0) {
       log.info('Post-game sync stored new matches', { accountId, stored, attempt: index + 1 })
+      // The match that just landed is the one a recording has been waiting for.
+      // This is the only moment a new candidate can appear, so binding is
+      // attempted here rather than on a schedule of its own.
+      bindPendingReplays(accountId)
       return
     }
   } catch (err) {

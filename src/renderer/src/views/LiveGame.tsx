@@ -11,6 +11,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ItemStrip } from '../components/ItemStrip'
 import { Skeleton } from '../components/Skeleton'
 import * as Icon from '../components/icons'
+import { CaptureBanner } from '../components/CaptureIndicator'
 
 /** How often the board asks the game where things stand. */
 const POLL_MS = 1000
@@ -274,6 +275,13 @@ export function LiveGame({ account }: { account: Account }): JSX.Element {
           </div>
         )}
       </div>
+
+      {/*
+        Mid-game is when it matters and when the title bar is behind a
+        fullscreen League, so the capture state is worth repeating on the one
+        screen somebody alt-tabs to.
+      */}
+      <CaptureBanner />
 
       {stalled && (
         <p className="rounded border border-amber/30 bg-amber/10 px-3 py-1.5 text-2xs text-amber">

@@ -4,6 +4,8 @@ import type {
   AppSettingsPublic,
   AssetManifest,
   BackgroundSettings,
+  CaptureSettings,
+  CaptureStatus,
   ChampionStats,
   EditableMatch,
   LcuStatus,
@@ -12,9 +14,13 @@ import type {
   MasteryEntry,
   MatchDetail,
   MatchSummary,
+  ObsValidation,
   QueueType,
   RankHistory,
   RankRange,
+  Replay,
+  ReplayDetail,
+  ReplayDiskUsage,
   RiotIdInput,
   Scoreboard,
   SyncProgressEvent,
@@ -135,6 +141,41 @@ export interface Api {
   background: {
     get: () => Promise<BackgroundSettings>
     set: (patch: Partial<BackgroundSettings>) => Promise<BackgroundSettings>
+  }
+  /** Recording games as they are played, through a local OBS over its websocket. */
+  capture: {
+    getSettings: () => Promise<CaptureSettings>
+    set: (patch: Partial<CaptureSettings>) => Promise<CaptureSettings>
+    /** Write-only. The stored password never comes back — only `hasObsPassword`. */
+    setObsPassword: (password: string) => Promise<CaptureSettings>
+    clearObsPassword: () => Promise<CaptureSettings>
+    /** Native folder picker. Null when the user cancels. */
+    chooseFolder: () => Promise<string | null>
+    chooseObsPath: () => Promise<string | null>
+    getStatus: () => Promise<CaptureStatus>
+    onStatus: (cb: (status: CaptureStatus) => void) => () => void
+    /** What OBS is configured to do, and everything wrong with it. */
+    validate: () => Promise<ObsValidation>
+    /** One frame of the capture source as a data URI, or null when unavailable. */
+    preview: () => Promise<string | null>
+    reconnect: () => Promise<CaptureStatus>
+  }
+  replays: {
+    /** Every recording for an account, newest first, bound or not. */
+    list: (accountId: number) => Promise<Replay[]>
+    detail: (replayId: number) => Promise<ReplayDetail | null>
+    usage: () => Promise<ReplayDiskUsage>
+    remove: (replayId: number) => Promise<void>
+    /** Deletes the N oldest recordings, for the one-click cleanup on the cap warning. */
+    removeOldest: (accountId: number, count: number) => Promise<number>
+    /** Opens a window owning this replay. Called again, it opens another one. */
+    open: (replayId: number) => Promise<void>
+    reveal: (replayId: number) => Promise<void>
+    /** Fires when a replay is added, bound or deleted. */
+    onChanged: (cb: () => void) => () => void
+    /** Sent by a replay window; the main window focuses and expands that match. */
+    showMatch: (accountId: number, matchId: string) => Promise<void>
+    onShowMatch: (cb: (accountId: number, matchId: string) => void) => () => void
   }
   search: {
     summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>

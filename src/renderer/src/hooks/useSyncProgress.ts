@@ -68,3 +68,25 @@ export function useManualRankUpdates(): void {
     })
   }, [queryClient])
 }
+
+/**
+ * Refreshes the replay list and the match rows when a recording appears,
+ * binds to its match, or is deleted.
+ *
+ * The match list matters as much as the list of replays: a row's context menu
+ * offers "Watch replay" only when the row carries a replay id, and that id
+ * arrives minutes after the game ends, when the match finally syncs and the
+ * fingerprint matches. Without this the option stays greyed out until something
+ * else happens to refetch.
+ */
+export function useReplayUpdates(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return window.api.replays.onChanged(() => {
+      queryClient.invalidateQueries({ queryKey: ['replays'] })
+      queryClient.invalidateQueries({ queryKey: ['replayUsage'] })
+      queryClient.invalidateQueries({ queryKey: ['matchList'] })
+    })
+  }, [queryClient])
+}

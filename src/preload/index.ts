@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
-import type { LcuStatus, SyncProgressEvent } from '@shared/types'
+import type { CaptureStatus, LcuStatus, SyncProgressEvent } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
 // The renderer never touches the Riot API or SQLite directly — everything
@@ -94,6 +94,46 @@ const api: Api = {
   background: {
     get: () => ipcRenderer.invoke(CH.background.get),
     set: (patch) => ipcRenderer.invoke(CH.background.set, patch)
+  },
+  capture: {
+    getSettings: () => ipcRenderer.invoke(CH.capture.getSettings),
+    set: (patch) => ipcRenderer.invoke(CH.capture.setSettings, patch),
+    setObsPassword: (password) => ipcRenderer.invoke(CH.capture.setObsPassword, password),
+    clearObsPassword: () => ipcRenderer.invoke(CH.capture.clearObsPassword),
+    chooseFolder: () => ipcRenderer.invoke(CH.capture.chooseFolder),
+    chooseObsPath: () => ipcRenderer.invoke(CH.capture.chooseObsPath),
+    getStatus: () => ipcRenderer.invoke(CH.capture.getStatus),
+    onStatus: (cb) => {
+      const listener = (_e: IpcRendererEvent, status: CaptureStatus): void => cb(status)
+      ipcRenderer.on(CH.capture.status, listener)
+      return () => ipcRenderer.removeListener(CH.capture.status, listener)
+    },
+    validate: () => ipcRenderer.invoke(CH.capture.validate),
+    preview: () => ipcRenderer.invoke(CH.capture.preview),
+    reconnect: () => ipcRenderer.invoke(CH.capture.reconnect)
+  },
+  replays: {
+    list: (accountId) => ipcRenderer.invoke(CH.replays.list, accountId),
+    detail: (replayId) => ipcRenderer.invoke(CH.replays.detail, replayId),
+    usage: () => ipcRenderer.invoke(CH.replays.usage),
+    remove: (replayId) => ipcRenderer.invoke(CH.replays.remove, replayId),
+    removeOldest: (accountId, count) =>
+      ipcRenderer.invoke(CH.replays.removeOldest, accountId, count),
+    open: (replayId) => ipcRenderer.invoke(CH.replays.open, replayId),
+    reveal: (replayId) => ipcRenderer.invoke(CH.replays.reveal, replayId),
+    onChanged: (cb) => {
+      const listener = (): void => cb()
+      ipcRenderer.on(CH.replays.changed, listener)
+      return () => ipcRenderer.removeListener(CH.replays.changed, listener)
+    },
+    showMatch: (accountId, matchId) =>
+      ipcRenderer.invoke(CH.replays.showMatch, accountId, matchId),
+    onShowMatch: (cb) => {
+      const listener = (_e: IpcRendererEvent, accountId: number, matchId: string): void =>
+        cb(accountId, matchId)
+      ipcRenderer.on(CH.replays.showMatch, listener)
+      return () => ipcRenderer.removeListener(CH.replays.showMatch, listener)
+    }
   },
   search: {
     summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)

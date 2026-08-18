@@ -1,4 +1,7 @@
 import type { Position } from './positions'
+import type { CaptureQuality } from './captureQuality'
+
+export type { CaptureQuality } from './captureQuality'
 
 export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
 
@@ -87,6 +90,13 @@ export interface MatchSummary {
    * produces renders identically to a derived one, so nothing else looks at it.
    */
   hasManualRank: boolean
+  /**
+   * The recording of this game, when one exists.
+   *
+   * Read only to decide whether the row's context menu can offer to watch it,
+   * so it is a bare id rather than the whole replay.
+   */
+  replayId: number | null
 }
 
 /**
@@ -208,7 +218,20 @@ export type RankRange = '7d' | '30d' | 'all'
  */
 export type LcuStatus =
   | { state: 'disconnected' }
-  | { state: 'connected'; accountId: number; gameName: string; tagLine: string }
+  | {
+      state: 'connected'
+      accountId: number
+      gameName: string
+      tagLine: string
+      /**
+       * Whether a game is actually being played right now.
+       *
+       * The client's own playing phase, so it goes true at the loading screen —
+       * before the game answers on loopback and well before there is a
+       * scoreboard to show. That is the honest answer to "is a game on".
+       */
+      inGame: boolean
+    }
   | { state: 'untracked'; gameName: string; tagLine: string }
 
 export interface BackgroundSettings {
@@ -397,4 +420,166 @@ export interface AssetManifest {
   championById: Record<number, { id: string; name: string }>
   spellById: Record<number, { id: string; name: string }>
   runeById: Record<number, { icon: string; name: string }>
+}
+
+/**
+ * Which audio OBS is told to record.
+ *
+ * Only honoured in managed mode. A scene the user built is theirs, and muting
+ * inputs inside it would leave their microphone muted if we crashed between
+ * setting and restoring — so in manual mode this is reported rather than applied.
+ */
+export type CaptureAudio = 'none' | 'game' | 'game+mic'
+
+/**
+ * Whether the app owns the OBS scene it records with, or validates one the user
+ * built themselves.
+ *
+ * Managed keeps every setting we care about — container, output folder, audio —
+ * inside a profile and scene collection nothing else touches. Manual exists for
+ * people who already stream and whose OBS is configured the way they want it.
+ */
+export type ObsMode = 'managed' | 'manual'
+
+export interface CaptureSettings {
+  enabled: boolean
+  mode: ObsMode
+  /** Where recordings are written. Capture cannot arm without one. */
+  folder: string | null
+  /** Queue ids that record. */
+  queues: number[]
+  /** Whether a queue outside CAPTURE_QUEUE_OPTIONS records too — customs, rotating modes. */
+  otherQueues: boolean
+  audio: CaptureAudio
+  /**
+   * What managed mode records at. Ignored in manual mode, where the user's own
+   * OBS profile decides — see CaptureQuality.
+   */
+  quality: CaptureQuality
+  /** Advisory ceiling in bytes. Nothing is ever deleted to honour it; 0 means no cap. */
+  softCapBytes: number
+  obsHost: string
+  obsPort: number
+  /** The password itself never crosses IPC, exactly as the Riot key never does. */
+  hasObsPassword: boolean
+  obsInstallPath: string | null
+  /** Manual mode only: the scene to switch to before recording. */
+  obsScene: string | null
+}
+
+/**
+ * What capture is doing right now, broadcast to every window on change.
+ *
+ * 'armed' is its own state rather than folded into 'idle': between the client
+ * reporting a game and the game itself answering on loopback there is a loading
+ * screen lasting minutes, and "we know about your game and are waiting for it"
+ * is a different thing to say than "nothing is happening".
+ */
+export type CaptureStatus =
+  | { state: 'off' }
+  | { state: 'connecting' }
+  | { state: 'idle' }
+  | { state: 'armed'; queueId: number | null }
+  | { state: 'recording'; replayId: number; startedAt: number }
+  | { state: 'error'; message: string }
+
+/** One reason a user-configured OBS cannot be recorded from as it stands. */
+export type ObsProblem =
+  | { kind: 'notConnected' }
+  | { kind: 'noFolder' }
+  /** MKV is OBS's default and Electron's <video> cannot play it at all. */
+  | { kind: 'recordFormat'; found: string }
+  | { kind: 'sceneNotChosen' }
+  | { kind: 'sceneMissing'; scene: string }
+  | { kind: 'noCaptureSource'; scene: string }
+  | { kind: 'recordDirectory'; found: string; expected: string }
+
+export interface ObsAudioInput {
+  name: string
+  muted: boolean
+}
+
+export interface ObsValidation {
+  ok: boolean
+  problems: ObsProblem[]
+  /** Scenes offered in the picker, so manual mode does not need a typed name. */
+  scenes: string[]
+  /** What the chosen scene will actually record. Reported, never changed. */
+  audioInputs: ObsAudioInput[]
+}
+
+/**
+ * Whether a recording has found its match yet.
+ *
+ * 'unmatched' is a resting state, not a failure: a Practice Tool game produces
+ * no match-v5 match at all and never will, and the footage is still worth
+ * keeping. Nothing is deleted for failing to bind.
+ */
+export type ReplayBindState = 'pending' | 'bound' | 'unmatched'
+
+/** The match a bound replay belongs to, denormalised so a list renders in one query. */
+export interface ReplayMatchInfo {
+  matchId: string
+  gameCreation: number
+  gameDuration: number
+  gameMode: string | null
+  queueId: number | null
+  win: boolean
+  championId: number
+  championName: string | null
+  kills: number
+  deaths: number
+  assists: number
+}
+
+export interface Replay {
+  id: number
+  accountId: number
+  matchId: string | null
+  bindState: ReplayBindState
+  fileBytes: number | null
+  /**
+   * False once the file has gone missing behind our back — moved, or deleted
+   * from Explorer. The row is kept so the disappearance is visible rather than
+   * the replay silently vanishing from the list.
+   */
+  fileExists: boolean
+  queueId: number | null
+  /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
+  startedAt: number
+  endedAt: number | null
+  durationSeconds: number | null
+  selfChampionId: number | null
+  match: ReplayMatchInfo | null
+}
+
+/** Which side of an event the tracked player was on. */
+export type ReplayEventRole = 'kill' | 'death' | 'assist' | 'multikill'
+
+export interface ReplayEvent {
+  /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
+  eventId: number
+  name: string
+  /** Seconds on the game clock, as the game reported it. */
+  gameTime: number
+  /** Seconds into the video file — gameTime minus the offset captured at record start. */
+  videoTime: number
+  role: ReplayEventRole
+  /** The other player for a kill or death, the streak size for a multikill. */
+  label: string | null
+}
+
+/** Everything a replay window needs, fetched once when it opens. */
+export interface ReplayDetail {
+  replay: Replay
+  events: ReplayEvent[]
+}
+
+export interface ReplayDiskUsage {
+  totalBytes: number
+  count: number
+  unmatchedCount: number
+  missingCount: number
+  /** Mirrored from settings so the warning can be drawn without a second query. */
+  softCapBytes: number
 }

@@ -6,6 +6,84 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.7.0] — 2026-08-18
+
+Games can now record themselves. With OBS installed, LoL Stats captures each game as you play it
+and marks the seek bar with your kills, deaths and multikills — so finding the fight you threw is
+two clicks rather than a scrub hunt through half an hour of footage.
+
+### Added
+
+- Game capture, driven through OBS. Turn it on in Settings, pick the queues worth recording, and
+  each game is written to a folder you choose. OBS does the encoding, so it uses your graphics
+  card rather than fighting the game for CPU during the game.
+- Two ways to set OBS up. **Set OBS up for me** builds a profile and scene collection of its own
+  and switches into them only while recording, so a setup you already stream with is never
+  touched. **Use my own scene** records with a scene you built and reports anything that would
+  stop the recording playing instead of changing it. A live preview shows the frame OBS would
+  capture, so setup can be checked before a game rather than after one.
+- Replays open in their own window, with the player's own controls: play, scrub, volume,
+  fullscreen, quarter-speed to double-speed, and buttons that hop between events. Space, the arrow
+  keys and `,` / `.` do the same from the keyboard.
+- An event timeline on the seek bar, marked with your kills, deaths, assists and multikills.
+  Clicking one seeks to a few seconds before it, because the approach to a fight explains more than
+  the moment somebody dies. Hovering anywhere shows the frame at that timestamp.
+- Right-click a match to watch its replay. A game with no recording says so on the menu item
+  rather than hiding it, and a match row that has one is marked, so you can see at a glance which
+  games there is footage of without right-clicking them one at a time.
+- Every replay window owns one replay, so several can be open at once — the same game at two
+  timestamps on two monitors, or two games side by side.
+- A **View match history** button on a replay, which brings the main window forward with that
+  match expanded.
+- A **Replays** screen listing every recording, whether or not it found its match, with what it is
+  using on disk and controls to delete it or open its folder. Recordings that never match a game —
+  Practice Tool produces no match history entry at all — stay here and stay watchable.
+- A capture indicator in the title bar, and a line on the Live game screen while a game is being
+  recorded, so a recording that silently failed is noticed before the game rather than after it.
+- The Live game tab turns teal while a game is in progress, and its centre dot turns red while that
+  game is being recorded — both facts readable from the nav without opening anything.
+- A recording quality setting — 720p or 1080p, 30 or 60fps, with the rough disk cost of each. Turn
+  it down if capture costs you frames in game; it changes what the encoder works on, not what you
+  see while playing.
+- An advisory disk warning you set yourself. Nothing is ever deleted automatically; crossing the
+  number shows a warning with a one-click clear-out of the oldest games.
+
+### Changed
+
+- Recording starts when the game itself comes up rather than when the client says a game began.
+  The client reports a game at the loading screen, minutes early, and starting there records a
+  black screen OBS has no window to capture yet.
+
+### Under the hood
+
+- A recording is tied to its match by fingerprinting the roster — the ten champions plus the one
+  you played. A live game carries no match id anywhere, and matching on end time alone picks the
+  wrong game when two finish within a few minutes of each other. The attempt runs off the existing
+  post-game sync retries, since that is the only moment a new match can appear.
+- Migration 007 adds the `replays` and `replay_events` tables. Deleting a match sets a replay's
+  match id to null rather than cascading: losing a match row must never destroy footage.
+- Events come from the Live Client Data API the game already serves on loopback, polled while
+  recording and written as they arrive, so a crash costs one poll rather than the whole timeline.
+  The endpoint resends every event each call, so the write is an upsert on the game's own event id.
+- Video reaches the replay window over a `replay://` scheme rather than `file://`. The renderer
+  sends a replay id and never a path, the file is confirmed to be inside the replay folder, and
+  byte ranges are served properly so seeking works.
+- Managed mode sets the resolution, frame rate and recording quality preset it records with, rather
+  than inheriting OBS's defaults for a new profile — which were 720p30 at a constant 6 Mbps, a
+  bitrate that resolution and frame rate could not spend. They are re-applied before every
+  recording, so a profile built by an earlier version picks up a changed setting.
+- MP4 is required and MKV is refused with an explanation. MKV is OBS's default and records
+  perfectly; Chromium simply has no demuxer for it, so the file would be written and then never
+  play.
+- The obs-websocket password is stored encrypted beside the Riot API key rather than in the
+  database, and never crosses IPC — only whether one is set.
+- `obs-websocket-js` is the one new runtime dependency. It is pure JavaScript, so nothing about the
+  build or the installer changes.
+- The capture state machine, the event mapping, the roster fingerprint, the OBS validation rules
+  and the timeline's marker clustering are all pure modules with tests. None of their interesting
+  cases — a dodge, a loading screen that never ends, a game that crashes mid-recording, two games
+  finishing minutes apart — can be produced on demand by playing League.
+
 ## [0.6.0] — 2026-08-17
 
 The live game screen no longer empties itself when one player asks not to be named, and match rows
@@ -278,6 +356,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.7.0]: https://github.com/xalluna/my-op-gg/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/xalluna/my-op-gg/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/xalluna/my-op-gg/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/xalluna/my-op-gg/compare/v0.4.0...v0.4.1

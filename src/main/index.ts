@@ -18,6 +18,9 @@ import { observeRateLimiter } from './telemetry/limiter'
 import { startResourceSampling, stopResourceSampling } from './telemetry/resources'
 import { startRetention, stopRetention } from './telemetry/retention'
 import { openTelemetryWindow } from './telemetryWindow'
+import { registerReplayProtocol, registerReplayScheme } from './replayProtocol'
+import { initCapture, stopCapture } from './capture/captureService'
+import { quitLaunchedObs } from './obs/launch'
 
 /**
  * Opens the telemetry panel without needing the tray, which only exists when
@@ -36,6 +39,11 @@ app.setPath('userData', join(app.getPath('appData'), 'my-op-gg'))
 // regardless of the telemetry setting, so a crash leaves a trace even with
 // collection switched off.
 installCrashHandlers()
+
+// Must run before the app is ready — Electron will not accept a privileged
+// scheme afterwards. See replayProtocol.ts for why the replay window cannot
+// simply point a <video> at a file:// URL.
+registerReplayScheme()
 
 /**
  * One process at a time.
@@ -87,12 +95,16 @@ function bootstrap(): void {
   startResourceSampling()
   startRetention(() => peekTelemetryDb())
   initSettings()
+  registerReplayProtocol()
   registerIpcHandlers()
   globalShortcut.register(TELEMETRY_ACCELERATOR, openTelemetryWindow)
   // After the window exists, so the watcher's status events have somewhere to
   // go on the very first tick.
   attachTrayBehaviour(createMainWindow())
   initBackground()
+  // After initBackground, so the LCU watcher it starts already has somewhere to
+  // report a game to.
+  initCapture()
   syncTray()
   catchUpOnLaunch()
 
@@ -148,6 +160,10 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopLcuWatcher()
+  stopCapture()
+  // Only quits an OBS this app started; one the user was already running,
+  // possibly mid-stream, is left alone.
+  quitLaunchedObs()
   cancelAllPostGameSyncs()
   stopResourceSampling()
   stopRetention()
