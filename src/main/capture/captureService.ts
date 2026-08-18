@@ -39,7 +39,7 @@ import {
 } from './captureState'
 import { selfNameSet, toReplayEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
-import { isClockRunning } from './gameClock'
+import { containsGameStart, gameReadiness } from './gameClock'
 import type { CaptureStatus, Scoreboard } from '@shared/types'
 
 /**
@@ -92,6 +92,12 @@ let gameTimeOffset = 0
  * one. The API answers all through the loading screen with the clock stopped.
  */
 let lastGameTime: number | null = null
+
+/** When the game first answered on loopback, for the readiness backstop. */
+let answeringSince: number | null = null
+
+/** Logged once per game rather than every two seconds. */
+let loggedAnswering = false
 
 export function getCaptureStatus(): CaptureStatus {
   const settings = getCaptureSettings()
@@ -286,6 +292,23 @@ async function readScoreboard(accountId: number): Promise<Scoreboard | null> {
   }
 }
 
+/**
+ * Whether the game's own feed has announced that play began.
+ *
+ * The explicit signal, and the one that survives a payload with no usable game
+ * clock. Failures are swallowed to false: this is one of two ways to notice a
+ * game has started, and a feed that is briefly unavailable must not be able to
+ * stop the other one working.
+ */
+async function sawGameStart(): Promise<boolean> {
+  try {
+    const raw = await liveClientGet<{ Events?: LiveEventDto[] }>('/liveclientdata/eventdata')
+    return containsGameStart(raw.Events ?? [])
+  } catch {
+    return false
+  }
+}
+
 async function pollEvents(replayId: number): Promise<void> {
   try {
     const raw = await liveClientGet<{ Events?: LiveEventDto[] }>('/liveclientdata/eventdata')
@@ -308,11 +331,32 @@ async function tick(): Promise<void> {
     // the wait. It starts answering during the loading screen though, with the
     // clock stopped — so an answer alone is not enough to record on.
     const board = await readScoreboard(state.accountId)
-    if (board) {
-      gameLastSeen = now
-      const running = isClockRunning(lastGameTime, board.gameTime)
-      lastGameTime = board.gameTime
-      if (running) dispatch({ type: 'gameReady', gameTime: board.gameTime, at: now })
+    if (!board) return
+
+    gameLastSeen = now
+    if (answeringSince === null) answeringSince = now
+    if (!loggedAnswering) {
+      // The one line that makes a game which never records diagnosable. Without
+      // it, a readiness check that never passes looks identical to a game that
+      // never happened.
+      log.info('Game is answering; waiting for it to start', { gameTime: board.gameTime })
+      loggedAnswering = true
+    }
+
+    const readiness = gameReadiness({
+      previousGameTime: lastGameTime,
+      gameTime: board.gameTime,
+      sawGameStart: await sawGameStart(),
+      answeringForMs: now - answeringSince
+    })
+    lastGameTime = board.gameTime
+
+    if (readiness !== 'wait') {
+      log.info('Game is live; starting the recording', {
+        via: readiness,
+        gameTime: board.gameTime
+      })
+      dispatch({ type: 'gameReady', gameTime: board.gameTime, at: now })
     }
     return
   }
@@ -360,6 +404,8 @@ export function onGamePhase(accountId: number, queueId: number | null, playing: 
       // Forgotten between games, or the previous game's final reading would
       // look like an advance against the next game's first one.
       lastGameTime = null
+      answeringSince = null
+      loggedAnswering = false
       gameLastSeen = Date.now()
       scheduleNextPoll()
     }
@@ -430,4 +476,6 @@ export function stopCapture(): void {
   }
   state = INITIAL_STATE
   lastGameTime = null
+  answeringSince = null
+  loggedAnswering = false
 }

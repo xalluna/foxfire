@@ -1,31 +1,78 @@
 import { describe, expect, it } from 'vitest'
-import { CLOCK_ADVANCE_S, isClockRunning } from './gameClock'
+import {
+  CLOCK_ADVANCE_S,
+  containsGameStart,
+  gameReadiness,
+  isClockRunning,
+  READY_FALLBACK_MS,
+  type ReadinessInput
+} from './gameClock'
+
+function input(over: Partial<ReadinessInput> = {}): ReadinessInput {
+  return {
+    previousGameTime: null,
+    gameTime: 0,
+    sawGameStart: false,
+    answeringForMs: 0,
+    ...over
+  }
+}
+
+describe('gameReadiness', () => {
+  it('waits through the loading screen, where the API answers but nothing has started', () => {
+    // Measured on a real ARAM: 243 seconds of this, clock sitting at 0.027.
+    expect(
+      gameReadiness(input({ previousGameTime: 0.027, gameTime: 0.027, answeringForMs: 200_000 }))
+    ).toBe('wait')
+  })
+
+  it('starts on the clock advancing', () => {
+    expect(gameReadiness(input({ previousGameTime: 0.027, gameTime: 2.1 }))).toBe('clock')
+  })
+
+  it('starts on the game saying so, even with the clock stuck at zero', () => {
+    // The failure this exists for: gameTime is optional in the payload and the
+    // mapper defaults it to 0, so a game that omits it never advances and
+    // nothing was recorded at all.
+    expect(
+      gameReadiness(input({ previousGameTime: 0, gameTime: 0, sawGameStart: true }))
+    ).toBe('event')
+  })
+
+  it('prefers the game saying so over inferring it from the clock', () => {
+    const both = gameReadiness(
+      input({ previousGameTime: 0, gameTime: 5, sawGameStart: true })
+    )
+
+    // Both would start it; the explicit signal is the one worth logging.
+    expect(both).toBe('event')
+  })
+
+  it('records anyway rather than miss a game when both signals fail', () => {
+    expect(
+      gameReadiness(input({ previousGameTime: 0, gameTime: 0, answeringForMs: READY_FALLBACK_MS }))
+    ).toBe('fallback')
+  })
+
+  it('does not let the backstop fire during an ordinary slow load', () => {
+    // The longest loading screen actually seen was 243 seconds.
+    expect(
+      gameReadiness(input({ previousGameTime: 0, gameTime: 0, answeringForMs: 243_000 }))
+    ).toBe('wait')
+  })
+
+  it('starts on a reconnect into a game already under way', () => {
+    expect(gameReadiness(input({ previousGameTime: 842.2, gameTime: 844.3 }))).toBe('clock')
+  })
+
+  it('never starts on the first reading alone', () => {
+    expect(gameReadiness(input({ previousGameTime: null, gameTime: 600 }))).toBe('wait')
+  })
+})
 
 describe('isClockRunning', () => {
-  it('does not start on a single reading, however plausible', () => {
-    expect(isClockRunning(null, 0)).toBe(false)
+  it('needs two readings', () => {
     expect(isClockRunning(null, 600)).toBe(false)
-  })
-
-  it('holds through the loading screen, where the clock does not move', () => {
-    // Measured on a real ARAM: the API answered for 243 seconds with gameTime
-    // sitting at 0.027, which is what made every marker four minutes early.
-    expect(isClockRunning(0.027, 0.027)).toBe(false)
-    expect(isClockRunning(0, 0)).toBe(false)
-  })
-
-  it('is not fooled by the small non-zero value the API reports while loading', () => {
-    // 0.027 > 0, so a bare "is it above zero" check would have started here.
-    expect(isClockRunning(0, 0.027)).toBe(false)
-  })
-
-  it('starts once the clock ticks', () => {
-    // Two seconds between polls, so a live game advances by about two seconds.
-    expect(isClockRunning(0.027, 2.1)).toBe(true)
-  })
-
-  it('starts on a reconnect into a game already well under way', () => {
-    expect(isClockRunning(842.2, 844.3)).toBe(true)
   })
 
   it('needs a real tick, not jitter', () => {
@@ -34,8 +81,29 @@ describe('isClockRunning', () => {
   })
 
   it('does not treat the clock going backwards as running', () => {
-    // Should not happen, but a reading that regresses must not start a
-    // recording whose offset would then be wrong in the other direction.
     expect(isClockRunning(600, 10)).toBe(false)
+  })
+})
+
+describe('containsGameStart', () => {
+  it('finds the event by name', () => {
+    expect(containsGameStart([{ EventName: 'GameStart', EventID: 0 }])).toBe(true)
+  })
+
+  it('finds it by its fixed id, in case the name is ever spelled differently', () => {
+    expect(containsGameStart([{ EventID: 0 }])).toBe(true)
+  })
+
+  it('is not fooled by the events of a game already running', () => {
+    expect(
+      containsGameStart([
+        { EventName: 'ChampionKill', EventID: 12 },
+        { EventName: 'TurretKilled', EventID: 14 }
+      ])
+    ).toBe(false)
+  })
+
+  it('copes with an empty feed, which is what loading returns', () => {
+    expect(containsGameStart([])).toBe(false)
   })
 })
