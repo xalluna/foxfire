@@ -44,6 +44,8 @@ export const CH = {
   },
   rank: {
     history: 'rank:history',
+    /** The ranked years this account has data for, for the period pickers. */
+    periods: 'rank:periods',
     // Hand-entered LP, for the games attribution cannot resolve on its own.
     editable: 'rank:editable',
     saveManual: 'rank:saveManual',

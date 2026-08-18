@@ -6,6 +6,7 @@ import {
 } from '../db/repositories/rankHistory.repo'
 import { rankMovement } from '@shared/ladder'
 import { queueIdForQueueType, TRACKED_QUEUES } from '@shared/queues'
+import { sameSeason } from '@shared/seasons'
 import type { QueueType, RankSnapshot } from '@shared/types'
 
 /**
@@ -31,6 +32,15 @@ export function attributeInterval(
   after: RankSnapshot
 ): boolean {
   if (before.ladderPosition === null || after.ladderPosition === null) return false
+
+  // Never attribute across a ranked year. The interval from a December reading
+  // to the first January one holds the annual reset, and its ladder delta is
+  // the entire height of the player's rank — roughly -1,900 for a Diamond
+  // player. If a single ranked game happens to sit in that interval it would be
+  // handed that number as its LP change, and because replayAttribution reruns
+  // unbounded on every launch, the chip would come back every time it was
+  // cleared. The reset is not a result of any game, so no game gets it.
+  if (!sameSeason(before.capturedAt, after.capturedAt)) return false
 
   const matches = getRankedMatchesBetween(
     db,
@@ -66,9 +76,11 @@ export function attributeInterval(
 /**
  * How far back a routine replay reaches.
  *
- * Matches the widest range the rank view offers, so everything the user can
- * actually look at stays self-healing without walking years of snapshots on
- * every sync. A full repair passes null instead.
+ * A cost control rather than a guarantee: it keeps a sync from walking years of
+ * snapshots while still covering everything recent enough to still be arriving.
+ * The rank view can now ask for a whole ranked year, which is wider than this —
+ * what actually backstops the rest is repairAttribution, which runs unbounded
+ * once per launch. A full repair passes null instead.
  */
 export const ATTRIBUTION_REPLAY_WINDOW_MS = 30 * 86_400_000
 

@@ -7,12 +7,14 @@ import type {
   MatchRankInfo,
   MatchSummary,
   QueueType,
+  RankRange,
   RankSnapshot,
   Replay,
   ReplayEvent,
   Scoreboard
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
+import { rangeBounds } from '@shared/seasons'
 import {
   C,
   DAY,
@@ -34,7 +36,10 @@ import {
   CLIMB_ENTRY,
   CLIMB_MASTERY,
   CLIMB_MATCHES,
-  CLIMB_SNAPSHOTS
+  CLIMB_SNAPSHOTS,
+  PRIOR_DETAILS,
+  PRIOR_MATCHES,
+  PRIOR_SNAPSHOTS
 } from './climb'
 
 /**
@@ -434,7 +439,10 @@ const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
 export const RANK_SNAPSHOTS: Record<number, Record<QueueType, RankSnapshot[]>> = {
   1: ALLUNA_SNAPSHOTS,
   2: {
-    RANKED_SOLO_5x5: CLIMB_SNAPSHOTS,
+    // Two ranked years, oldest first. The gap between them is January's reset:
+    // the all-time chart has to break the line there rather than draw a
+    // thousand-point cliff, and no milestone may be reported across it.
+    RANKED_SOLO_5x5: [...PRIOR_SNAPSHOTS, ...CLIMB_SNAPSHOTS],
     // The climb account's flex ladder was never played, so the queue toggle has
     // a genuinely empty series to render.
     RANKED_FLEX_SR: []
@@ -485,13 +493,16 @@ const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
  */
 export const MATCHES: Record<number, MatchSummary[]> = {
   1: ALLUNA_MATCHES,
-  2: CLIMB_MATCHES
+  // Newest first across both seasons: each block is already reversed, and the
+  // prior one is wholly older, so concatenating keeps the list ordered.
+  2: [...CLIMB_MATCHES, ...PRIOR_MATCHES]
 }
 
 /** Keyed by match id across both accounts, which is how the detail view looks them up. */
 export const MATCH_DETAILS: Record<string, MatchDetail> = {
   ...Object.fromEntries(ALLUNA_MATCHES.map((m, i) => [m.matchId, detailFor(m, i, ALLUNA)])),
-  ...CLIMB_DETAILS
+  ...CLIMB_DETAILS,
+  ...PRIOR_DETAILS
 }
 
 const ALLUNA_MASTERY: MasteryEntry[] = [
@@ -524,7 +535,11 @@ export const MASTERY: Record<number, MasteryEntry[]> = {
  * totals and per-game-meaned shares. Diverging here would make the web harness
  * quietly lie about arithmetic the real app gets right.
  */
-export function championStatsFor(accountId: number, queueId: number | null): ChampionStats[] {
+export function championStatsFor(
+  accountId: number,
+  queueId: number | null,
+  range: RankRange = 'all'
+): ChampionStats[] {
   // Per-game shares are accumulated separately from the totals: they are meaned
   // over the games that had a share to give, not over every game played.
   const shares = new Map<number, { damage: number[]; kp: number[] }>()
@@ -532,9 +547,15 @@ export function championStatsFor(accountId: number, queueId: number | null): Cha
   const mean = (xs: number[]): number | null =>
     xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length
 
+  const { sinceMs, untilMs } = rangeBounds(range)
+
   const stats = (MATCHES[accountId] ?? []).filter(
-    // Mirrors getChampionStats, which excludes remakes.
-    (m) => !m.isRemake && (queueId === null || m.queueId === queueId)
+    // Mirrors getChampionStats, which excludes remakes and scopes to a period.
+    (m) =>
+      !m.isRemake &&
+      (queueId === null || m.queueId === queueId) &&
+      (sinceMs === null || m.gameCreation >= sinceMs) &&
+      (untilMs === null || m.gameCreation < untilMs)
   ).reduce<Record<number, ChampionStats>>((acc, m) => {
     const entry = acc[m.championId] ?? {
       championId: m.championId,

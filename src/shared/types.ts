@@ -30,6 +30,7 @@ export interface LeagueEntry {
   fetchedAt: string
 }
 
+
 /**
  * One row of match history.
  *
@@ -207,7 +208,14 @@ export interface RankHistory {
   milestones: RankMilestone[]
 }
 
-export type RankRange = '7d' | '30d' | 'all'
+/**
+ * A window over rank history.
+ *
+ * `7d` and `30d` are relative to now; `season:2026` names a ranked year, whose
+ * bounds come from shared/seasons.ts. They share one union because the Rank
+ * screen offers them from a single control — see RANGES in views/RankHistory.tsx.
+ */
+export type RankRange = '7d' | '30d' | 'all' | `season:${number}`
 
 /**
  * Whether the League client is reachable and whose account is logged into it.

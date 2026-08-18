@@ -3,9 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { format } from 'date-fns'
 import type { Account, QueueType, RankRange } from '@shared/types'
+import { parseSeasonRange, sameSeason, seasonLabel, seasonOf, seasonRange } from '@shared/seasons'
 import { EmptyState } from '../components/EmptyState'
 import { LcuIndicator } from '../components/LcuIndicator'
 import { RankChart } from '../components/RankChart'
+import { Segmented } from '../components/Segmented'
 import { Skeleton } from '../components/Skeleton'
 import * as Icon from '../components/icons'
 import { queueLabel, tierColor, tierCrest, tierLabel } from '../lib/rank'
@@ -15,10 +17,14 @@ const QUEUES: Array<[QueueType, string]> = [
   ['RANKED_FLEX_SR', 'Flex']
 ]
 
-const RANGES: Array<[RankRange, string]> = [
+/**
+ * The two relative windows, which exist whether or not anything was recorded.
+ * Ranked years are appended between these and All, from what the account
+ * actually has — see the periods query below.
+ */
+const RELATIVE_RANGES: Array<[RankRange, string]> = [
   ['7d', '7 days'],
-  ['30d', '30 days'],
-  ['all', 'All']
+  ['30d', '30 days']
 ]
 
 /**
@@ -37,13 +43,36 @@ export function RankHistory({ account }: { account: Account }): JSX.Element {
     queryFn: () => window.api.rank.history(account.id, queueType, range)
   })
 
+  const { data: periods } = useQuery({
+    queryKey: ['rankPeriods', account.id],
+    queryFn: () => window.api.rank.periods(account.id)
+  })
+
+  const ranges: Array<[RankRange, string]> = [
+    ...RELATIVE_RANGES,
+    ...(periods ?? []).map((year): [RankRange, string] => [seasonRange(year), seasonLabel(year)]),
+    ['all', 'All']
+  ]
+
+  // Null for the relative windows and for All, which is what separates "the
+  // last 30 days happen to be empty" from "this ranked year has nothing in it".
+  const selectedSeason = parseSeasonRange(range)
+  const pastSeason = selectedSeason !== null && selectedSeason < seasonOf(Date.now())
+
   const snapshots = data?.snapshots ?? []
   const milestones = data?.milestones ?? []
   const latest = snapshots[snapshots.length - 1]
   const first = snapshots[0]
 
+  // Only meaningful inside a single ranked year. Across a reset the gap between
+  // the two ends is not LP anyone won or lost — it is the reset itself — and
+  // reporting it would be the same lie the chart avoids by breaking its line.
   const netLp =
-    first && latest && first.ladderPosition !== null && latest.ladderPosition !== null
+    first &&
+    latest &&
+    first.ladderPosition !== null &&
+    latest.ladderPosition !== null &&
+    sameSeason(first.capturedAt, latest.capturedAt)
       ? latest.ladderPosition - first.ladderPosition
       : null
 
@@ -54,15 +83,19 @@ export function RankHistory({ account }: { account: Account }): JSX.Element {
           <h1 className="font-display text-xl text-text">Rank</h1>
           <p className="mt-0.5 text-sm text-text-mute">
             {latest
-              ? `Currently ${tierLabel(latest.tier, latest.rank)} · ${latest.leaguePoints ?? 0} LP`
+              ? // "Currently" would be a lie on a year the player has since been
+                // reset out of — that reading is where they finished, not where
+                // they stand.
+                `${pastSeason ? 'Finished' : 'Currently'} ${tierLabel(latest.tier, latest.rank)} · ${latest.leaguePoints ?? 0} LP`
               : 'No rank recorded yet.'}
           </p>
           <LcuIndicator />
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Wraps because the range picker grows by one button every January. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Segmented options={QUEUES} value={queueType} onChange={setQueueType} />
-          <Segmented options={RANGES} value={range} onChange={setRange} />
+          <Segmented options={ranges} value={range} onChange={setRange} />
         </div>
       </div>
 
@@ -72,11 +105,19 @@ export function RankHistory({ account }: { account: Account }): JSX.Element {
         <div className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
           <EmptyState
             icon={<Icon.TrendingUp />}
-            title="Rank tracking starts now"
+            title={
+              selectedSeason === null
+                ? 'Rank tracking starts now'
+                : `Nothing recorded in ${seasonLabel(selectedSeason)}`
+            }
             description={
               // Deliberately explicit about the limitation rather than looking
-              // like a loading state that never resolves.
-              'Riot does not publish past rank or per-game LP, so there is nothing to backfill. Play a ranked game with the League client open, or hit Sync, and points will start appearing here.'
+              // like a loading state that never resolves. A named year gets its
+              // own wording: the general explanation reads as though the app is
+              // broken when the user has simply picked a year it predates.
+              selectedSeason === null
+                ? 'Riot does not publish past rank or per-game LP, so there is nothing to backfill. Play a ranked game with the League client open, or hit Sync, and points will start appearing here.'
+                : 'Rank history only covers the time this app has been tracking. Pick a more recent year to see the climb it did record.'
             }
           />
         </div>
@@ -152,30 +193,3 @@ export function RankHistory({ account }: { account: Account }): JSX.Element {
   )
 }
 
-/** The app's segmented-toggle idiom, shared by the queue and range pickers. */
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange
-}: {
-  options: Array<[T, string]>
-  value: T
-  onChange: (value: T) => void
-}): JSX.Element {
-  return (
-    <div className="flex h-8 overflow-hidden rounded-md border border-hairline text-sm">
-      {options.map(([key, label]) => (
-        <button
-          key={key}
-          onClick={() => onChange(key)}
-          className={clsx(
-            'whitespace-nowrap px-3 transition',
-            value === key ? 'bg-gold/10 text-gold' : 'text-text-dim hover:bg-surface'
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}

@@ -2,6 +2,7 @@ import { getDb } from '../db'
 import { getAccountById, listAccounts } from '../db/repositories/accounts.repo'
 import {
   deleteSupersededManualSnapshots,
+  getHistorySpan,
   getLatestSnapshot,
   getRankMilestones,
   getRankSnapshots,
@@ -11,17 +12,11 @@ import {
 import { attributeInterval, replayAttribution } from './rankAttribution'
 import { rebuildAttribution } from './manualRankService'
 import { queueIdForQueueType } from '@shared/queues'
+import { rangeBounds, seasonOf, seasonsBetween } from '@shared/seasons'
 import { createLogger } from '../telemetry/logger'
 import type { QueueType, RankHistory, RankRange } from '@shared/types'
 
 const log = createLogger('rank')
-
-const DAY_MS = 86_400_000
-
-function windowStart(range: RankRange): number | null {
-  if (range === 'all') return null
-  return Date.now() - (range === '7d' ? 7 : 30) * DAY_MS
-}
 
 export function getRankHistory(
   accountId: number,
@@ -29,12 +24,32 @@ export function getRankHistory(
   range: RankRange
 ): RankHistory {
   const db = getDb()
-  const since = windowStart(range)
+  const { sinceMs, untilMs } = rangeBounds(range)
 
   return {
-    snapshots: getRankSnapshots(db, accountId, queueType, since),
-    milestones: getRankMilestones(db, accountId, queueType, since)
+    snapshots: getRankSnapshots(db, accountId, queueType, sinceMs, untilMs),
+    milestones: getRankMilestones(db, accountId, queueType, sinceMs, untilMs)
   }
+}
+
+/**
+ * The ranked years this account has history for, newest first.
+ *
+ * Drives the period picker on the Rank and Champions screens, and its first
+ * entry is what both default to — which is why an account that has not played
+ * since last year keeps showing last year rather than opening on an empty
+ * January. A brand new account reports the current year so the picker is never
+ * empty; the year it is actually in appears on its own once a game lands in it.
+ */
+export function getRankPeriods(accountId: number): number[] {
+  const db = getDb()
+  const account = getAccountById(db, accountId)
+  if (!account) return []
+
+  const span = getHistorySpan(db, accountId, account.puuid)
+  if (!span) return [seasonOf(Date.now())]
+
+  return seasonsBetween(span.oldestMs, span.newestMs)
 }
 
 /**

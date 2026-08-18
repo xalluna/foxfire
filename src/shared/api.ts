@@ -101,7 +101,11 @@ export interface Api {
   }
   champions: {
     /** Local-only, so the Champions screen renders whatever the API key is doing. */
-    stats: (accountId: number, queueId: number | null) => Promise<ChampionStats[]>
+    stats: (
+      accountId: number,
+      queueId: number | null,
+      range: RankRange
+    ) => Promise<ChampionStats[]>
   }
   mastery: {
     /** Win rates are scoped to `queueId`; Riot mastery is lifetime and never is. */
@@ -109,6 +113,8 @@ export interface Api {
   }
   rank: {
     history: (accountId: number, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+    /** Ranked years with data, newest first. The first is what the pickers open on. */
+    periods: (accountId: number) => Promise<number[]>
     /** Ranked games with no LP figure — everything the editor can offer. */
     editable: (accountId: number, queueType: QueueType) => Promise<EditableMatch[]>
     /**

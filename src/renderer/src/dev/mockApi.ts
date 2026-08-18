@@ -32,6 +32,7 @@ import type {
   TelemetrySummary
 } from '@shared/telemetry'
 import { rankMovement } from '@shared/ladder'
+import { rangeBounds, sameSeason, seasonOf, seasonsBetween } from '@shared/seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
   REPLAYS,
@@ -310,8 +311,11 @@ export const mockApi: Api = {
   },
 
   champions: {
-    stats: (accountId: number, queueId: number | null): Promise<ChampionStats[]> =>
-      delay(championStatsFor(accountId, queueId), 300)
+    stats: (
+      accountId: number,
+      queueId: number | null,
+      range: RankRange
+    ): Promise<ChampionStats[]> => delay(championStatsFor(accountId, queueId, range), 300)
   },
 
   mastery: {
@@ -328,14 +332,19 @@ export const mockApi: Api = {
 
   rank: {
     history: (accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
-      const since = range === 'all' ? 0 : Date.now() - (range === '7d' ? 7 : 30) * 86_400_000
+      const { sinceMs, untilMs } = rangeBounds(range)
       const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
-        (s) => s.capturedAt >= since
+        (s) =>
+          (sinceMs === null || s.capturedAt >= sinceMs) &&
+          (untilMs === null || s.capturedAt < untilMs)
       )
 
       const milestones = snapshots
         .flatMap((snapshot, i) => {
           if (i === 0) return []
+          // Mirrors getRankMilestones: January's reset is not a demotion, so a
+          // pair spanning two ranked years yields nothing.
+          if (!sameSeason(snapshots[i - 1].capturedAt, snapshot.capturedAt)) return []
           const movement = rankMovement(snapshots[i - 1], snapshot)
           if (movement === 'none') return []
           return [
@@ -351,6 +360,17 @@ export const mockApi: Api = {
         .reverse()
 
       return delay({ snapshots, milestones }, 280)
+    },
+
+    periods: (accountId: number): Promise<number[]> => {
+      const times = [
+        ...Object.values(RANK_SNAPSHOTS[accountId] ?? {}).flatMap((series) =>
+          series.map((s) => s.capturedAt)
+        ),
+        ...(MATCHES[accountId] ?? []).map((m) => m.gameCreation)
+      ]
+      if (times.length === 0) return delay([seasonOf(Date.now())], 120)
+      return delay(seasonsBetween(Math.min(...times), Math.max(...times)), 120)
     },
 
     editable: (accountId: number, queueType: QueueType) =>

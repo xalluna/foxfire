@@ -6,6 +6,7 @@ import type {
   RankSnapshot
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
+import { seasonOf } from '@shared/seasons'
 import {
   C,
   DAY,
@@ -447,4 +448,146 @@ if (climb.snapshots[climb.snapshots.length - 1].ladderPosition !== TARGET) {
   throw new Error(
     `climb fixture: ended at ${climb.snapshots[climb.snapshots.length - 1].ladderPosition}, expected ${TARGET}`
   )
+}
+
+/**
+ * A short season the year before, so the ranked-year boundary can be seen.
+ *
+ * The whole point of periods is what happens at January's reset, and that is
+ * five months away at the time of writing — without this the picker has one
+ * entry, the all-time chart has nothing to break, and the guard that stops a
+ * reset being attributed as a -1,900 LP game can only be checked by unit test.
+ *
+ * Deliberately additive. The 30-day climb above rests on three exact
+ * invariants — 301 games, 169 wins, an exact finishing position — and rewriting
+ * its tables to span a year would cost all of them. This is a second, smaller
+ * block that ends in December and leaves the first untouched.
+ *
+ * It ends well above where the current season starts, because that drop is the
+ * thing being demonstrated: Gold I into a Silver II reset.
+ */
+const PRIOR_START = ladderPosition({ tier: 'GOLD', rank: 'IV', leaguePoints: 0 }) ?? 0
+
+/** Ten days of a quieter season: 85 games, 52 of them won. */
+const PRIOR_GAMES_PER_DAY = [7, 9, 8, 10, 8, 9, 7, 10, 9, 8]
+const PRIOR_WINS_PER_DAY = [4, 6, 4, 7, 4, 6, 4, 7, 5, 5]
+
+/**
+ * The same champions, without the exact per-champion invariants the current
+ * climb needs — nothing reads this season's distribution, only its shape.
+ */
+const PRIOR_POOL = shuffled(
+  POOL.flatMap((p) => Array<number>(Math.max(1, Math.round((p.wins + p.losses) / 4))).fill(p.champ))
+)
+
+/**
+ * December 20 of the previous ranked year.
+ *
+ * Late enough to be unmistakably the end of that season, and clear of the days
+ * around New Year when ranked queues are closed and nothing could be recorded.
+ */
+function priorLastSession(): number {
+  const day = new Date(seasonOf(NOW) - 1, 11, 20)
+  day.setHours(SESSION_START_HOUR, 0, 0, 0)
+  return day.getTime()
+}
+
+function priorSchedule(): Game[] {
+  const lastStart = priorLastSession()
+  const games: Game[] = []
+  let drawn = 0
+
+  for (const [dayIndex, count] of PRIOR_GAMES_PER_DAY.entries()) {
+    const results = streaks(PRIOR_WINS_PER_DAY[dayIndex], count - PRIOR_WINS_PER_DAY[dayIndex])
+    const day = new Date(lastStart)
+    day.setDate(day.getDate() - (PRIOR_GAMES_PER_DAY.length - 1 - dayIndex))
+    const start = day.getTime()
+    const gap = SESSION_MS / count
+
+    for (const [n, win] of results.entries()) {
+      games.push({
+        at: Math.round(start + n * gap),
+        win,
+        champ: PRIOR_POOL[drawn++ % PRIOR_POOL.length]
+      })
+    }
+  }
+
+  return games
+}
+
+/** The same ladder walk as buildClimb, over the earlier season. */
+function buildPrior(): { matches: MatchSummary[]; snapshots: RankSnapshot[] } {
+  const games = priorSchedule()
+  // Offset past the current climb so match ids cannot collide.
+  const summaries = games.map((game, i) => summaryFor(game, TOTAL_GAMES + i))
+
+  const snapshots: RankSnapshot[] = []
+  let position = PRIOR_START
+  let wins = 0
+  let losses = 0
+
+  const snapshot = (at: number): RankSnapshot => {
+    const r = rankAtPosition(position)
+    return {
+      queueType: 'RANKED_SOLO_5x5',
+      tier: r.tier,
+      rank: r.rank,
+      leaguePoints: r.leaguePoints,
+      wins,
+      losses,
+      ladderPosition: position,
+      source: 'lcu',
+      capturedAt: at
+    }
+  }
+
+  snapshots.push(snapshot(games[0].at - HOUR))
+
+  for (const [index, game] of games.entries()) {
+    const before = snapshots[snapshots.length - 1]
+    const delta = game.win ? LP_PER_GAME : -LP_PER_GAME
+
+    position = Math.max(0, position + delta)
+    if (game.win) wins += 1
+    else losses += 1
+
+    const after = snapshot(game.at)
+    snapshots.push(after)
+
+    const movement = rankMovement(before, after)
+    summaries[index].rank = {
+      lpDelta: delta,
+      tierBefore: before.tier,
+      rankBefore: before.rank,
+      tierAfter: after.tier,
+      rankAfter: after.rank,
+      isPromotion: movement === 'promotion',
+      isDemotion: movement === 'demotion'
+    } satisfies MatchRankInfo
+  }
+
+  return { matches: [...summaries].reverse(), snapshots }
+}
+
+const prior = buildPrior()
+
+export const PRIOR_MATCHES = prior.matches
+export const PRIOR_SNAPSHOTS = prior.snapshots
+
+export const PRIOR_DETAILS: Record<string, MatchDetail> = Object.fromEntries(
+  PRIOR_MATCHES.map((m, i) => [m.matchId, detailFor(m, TOTAL_GAMES + i, ME)])
+)
+
+// The reset is the whole reason this season exists. If it ever finished below
+// where the current one opens, the chart would show a climb across the boundary
+// rather than the drop it is supposed to demonstrate.
+const priorFinish = prior.snapshots[prior.snapshots.length - 1].ladderPosition ?? 0
+if (priorFinish <= START) {
+  throw new Error(
+    `climb fixture: prior season finished at ${priorFinish}, which is not above the current season's start of ${START} — the reset would be invisible`
+  )
+}
+if (seasonOf(prior.snapshots[prior.snapshots.length - 1].capturedAt) === seasonOf(NOW)) {
+  throw new Error('climb fixture: the prior season must land in an earlier ranked year')
 }

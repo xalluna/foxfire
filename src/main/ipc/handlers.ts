@@ -13,7 +13,8 @@ import { readSyncState, startSync } from '../services/syncService'
 import { getAssetManifest } from '../services/ddragonService'
 import { getRankByRiotId, getScoreboard } from '../services/liveClientService'
 import { getMasteryData } from '../services/masteryService'
-import { getRankHistory } from '../services/rankHistoryService'
+import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
+import { rangeBounds } from '@shared/seasons'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
@@ -141,11 +142,15 @@ export function registerIpcHandlers(): void {
       getRankByRiotId(platform, gameName, tagLine)
   )
 
-  ipcMain.handle(CH.champions.stats, (_e, accountId: number, queueId: number | null) => {
-    const account = getAccountById(getDb(), accountId)
-    if (!account) return []
-    return getChampionStats(getDb(), account.puuid, queueId)
-  })
+  ipcMain.handle(
+    CH.champions.stats,
+    (_e, accountId: number, queueId: number | null, range: RankRange) => {
+      const account = getAccountById(getDb(), accountId)
+      if (!account) return []
+      const { sinceMs, untilMs } = rangeBounds(range)
+      return getChampionStats(getDb(), account.puuid, queueId, sinceMs, untilMs)
+    }
+  )
 
   ipcMain.handle(
     CH.mastery.get,
@@ -158,6 +163,8 @@ export function registerIpcHandlers(): void {
     (_e, accountId: number, queueType: QueueType, range: RankRange) =>
       getRankHistory(accountId, queueType, range)
   )
+
+  ipcMain.handle(CH.rank.periods, (_e, accountId: number) => getRankPeriods(accountId))
 
   ipcMain.handle(
     CH.rank.editable,

@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { format } from 'date-fns'
 import type { RankSnapshot } from '@shared/types'
 import { tierBandBoundaries } from '@shared/ladder'
+import { sameSeason } from '@shared/seasons'
 import { roundedPath } from '../lib/curve'
 import { tierColor, tierLabel } from '../lib/rank'
 
@@ -55,8 +56,25 @@ export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Ele
   const x = (t: number): number => PAD.left + ((t - tMin) / tSpan) * PLOT_W
   const y = (p: number): number => PAD.top + (1 - (p - yMin) / (yMax - yMin || 1)) * PLOT_H
 
-  const line = roundedPath(points.map((p) => [x(p.capturedAt), y(p.ladderPosition as number)]))
-  const area = `${line} L${x(tMax)} ${PAD.top + PLOT_H} L${x(tMin)} ${PAD.top + PLOT_H} Z`
+  // One path per ranked year rather than one for the whole series. Drawn
+  // straight through, January's reset puts a two-thousand-point vertical drop
+  // across the middle of the chart and reads as a collapse the player never
+  // suffered — the ladder was emptied, not lost. Breaking the line says the
+  // true thing: these are separate climbs that cannot be compared by eye.
+  const segments: RankSnapshot[][] = []
+  for (const point of points) {
+    const open = segments[segments.length - 1]
+    if (open && sameSeason(open[open.length - 1].capturedAt, point.capturedAt)) open.push(point)
+    else segments.push([point])
+  }
+
+  const baseline = PAD.top + PLOT_H
+  const paths = segments.map((segment) => {
+    const line = roundedPath(segment.map((p) => [x(p.capturedAt), y(p.ladderPosition as number)]))
+    const from = x(segment[0].capturedAt)
+    const to = x(segment[segment.length - 1].capturedAt)
+    return { line, area: `${line} L${to} ${baseline} L${from} ${baseline} Z` }
+  })
 
   // Colour follows the tier the player was actually in at that moment, so a
   // segment that ends in a promotion is drawn in the tier it was climbing out
@@ -171,29 +189,43 @@ export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Ele
           </g>
         ))}
 
-        <path d={area} fill={`url(#${uid}-tiers)`} mask={`url(#${uid}-fade-mask)`} />
-        <path
-          d={line}
-          fill="none"
-          stroke={`url(#${uid}-tiers)`}
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
+        {paths.map((p, i) => (
+          <path
+            key={`area-${i}`}
+            d={p.area}
+            fill={`url(#${uid}-tiers)`}
+            mask={`url(#${uid}-fade-mask)`}
+          />
+        ))}
+        {paths.map((p, i) => (
+          <path
+            key={`line-${i}`}
+            d={p.line}
+            fill="none"
+            stroke={`url(#${uid}-tiers)`}
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        ))}
 
         {/* Only the endpoints are marked. A dot per point would visibly detach
             from the line wherever a corner was rounded away, and the series is
-            dense enough that the dots read as noise rather than as data. */}
-        {[points[0], points[points.length - 1]].map((p, i) => (
-          <circle
-            key={`edge-${i}`}
-            cx={x(p.capturedAt)}
-            cy={y(p.ladderPosition as number)}
-            r={3}
-            fill="rgb(var(--canvas))"
-            stroke={tierColor(p.tier)}
-            strokeWidth="1.5"
-          />
-        ))}
+            dense enough that the dots read as noise rather than as data. Every
+            segment gets its own pair, so where a ranked year starts and ends is
+            marked rather than merely implied by the gap. */}
+        {segments.flatMap((segment, s) =>
+          [segment[0], segment[segment.length - 1]].map((p, i) => (
+            <circle
+              key={`edge-${s}-${i}`}
+              cx={x(p.capturedAt)}
+              cy={y(p.ladderPosition as number)}
+              r={3}
+              fill="rgb(var(--canvas))"
+              stroke={tierColor(p.tier)}
+              strokeWidth="1.5"
+            />
+          ))
+        )}
 
         {/* The hovered point sits at its true position, not on the curve, so a
             rounded corner never moves the reading away from the tooltip. */}

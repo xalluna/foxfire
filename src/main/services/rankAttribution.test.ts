@@ -311,3 +311,91 @@ describe('replayAttribution', () => {
     expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toBe(null)
   })
 })
+
+describe('the ranked-year boundary', () => {
+  let db: DatabaseSyncType
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
+      ME,
+      'Alluna',
+      'NA1'
+    )
+  })
+
+  // Local time, because that is how seasonBounds decides which year a moment
+  // belongs to — a UTC literal would land on the wrong side west of Greenwich.
+  const DEC = new Date(2026, 11, 28, 20).getTime()
+  const JAN = new Date(2027, 0, 8, 14).getTime()
+
+  // Real ladder positions: Emerald II 20 LP against Bronze IV 0 LP is a 1,820
+  // point fall, which is the number that would land on the game beside it.
+  const EMERALD_II = 2220
+  const BRONZE_IV = 400
+
+  it('refuses to attribute the annual reset to the one game beside it', () => {
+    // The exact shape that would otherwise poison a match forever: a December
+    // reading, a January one after the reset, and a single ranked game between
+    // them for the delta to land on.
+    insertMatch(db, match('NA1_1', JAN - 3_600_000))
+
+    const wrote = attributeInterval(
+      db,
+      ACCOUNT,
+      ME,
+      SOLO,
+      snapshot('EMERALD', 'II', 20, DEC, EMERALD_II),
+      snapshot('BRONZE', 'IV', 0, JAN, BRONZE_IV)
+    )
+
+    expect(wrote).toBe(false)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toBe(null)
+    expect(db.prepare('SELECT COUNT(*) AS c FROM match_rank').get()).toMatchObject({ c: 0 })
+  })
+
+  it('still attributes normally on either side of the boundary', () => {
+    // The guard must be narrow: two readings inside the same year attribute as
+    // they always did, even in the days right before a reset.
+    insertMatch(db, match('NA1_1', DEC + 500))
+
+    const wrote = attributeInterval(
+      db,
+      ACCOUNT,
+      ME,
+      SOLO,
+      snapshot('EMERALD', 'II', 20, DEC, EMERALD_II),
+      snapshot('EMERALD', 'II', 41, DEC + 1000, EMERALD_II + 21)
+    )
+
+    expect(wrote).toBe(true)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toMatchObject({ lpDelta: 21 })
+  })
+
+  it('survives repeated unbounded replays, which is how the chip used to return', () => {
+    // repairAttribution runs replayAttribution unbounded on every launch, so a
+    // guard that only held on the first pass would be no guard at all.
+    insertRankSnapshot(
+      db,
+      ACCOUNT,
+      { queueType: SOLO, tier: 'EMERALD', rank: 'II', leaguePoints: 20, wins: 90, losses: 70 },
+      'lcu',
+      DEC,
+      true
+    )
+    insertRankSnapshot(
+      db,
+      ACCOUNT,
+      { queueType: SOLO, tier: 'BRONZE', rank: 'IV', leaguePoints: 0, wins: 1, losses: 0 },
+      'lcu',
+      JAN,
+      true
+    )
+    insertMatch(db, match('NA1_1', JAN - 3_600_000))
+
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(0)
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) AS c FROM match_rank').get()).toMatchObject({ c: 0 })
+  })
+})

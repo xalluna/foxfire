@@ -12,6 +12,9 @@ Games can now record themselves. With OBS installed, LoL Stats captures each gam
 and marks the seek bar with your kills, deaths and multikills — so finding the fight you threw is
 two clicks rather than a scrub hunt through half an hour of footage.
 
+This release also teaches the app what a ranked season is, so that when January resets everyone's
+rank the climb you spent a year on stays readable instead of turning into one long cliff.
+
 ### Added
 
 - Game capture, driven through OBS. Turn it on in Settings, pick the queues worth recording, and
@@ -47,12 +50,29 @@ two clicks rather than a scrub hunt through half an hour of footage.
   see while playing.
 - An advisory disk warning you set yourself. Nothing is ever deleted automatically; crossing the
   number shows a warning with a one-click clear-out of the oldest games.
+- A season picker on the Rank and Champions screens. Rank sits it beside the 7- and 30-day ranges,
+  Champions beside the queue filter, and both open on the most recent season you have games in.
+  Champion win rates have until now blended every season you have ever played into one figure, so
+  a champion you gave up on two seasons ago was still dragging on the number.
+- The Rank screen's "All" now draws each season as its own line. January empties the ladder rather
+  than demoting anybody, so a line drawn straight through the reset would show a fall that never
+  happened, and the net LP figure is left off entirely on a view that spans one.
 
 ### Changed
 
 - Recording starts when the game itself comes up rather than when the client says a game began.
   The client reports a game at the loading screen, minutes early, and starting there records a
   black screen OBS has no window to capture yet.
+
+### Fixed
+
+- January's rank reset can no longer be recorded as a game that lost you two thousand LP. LP is
+  worked out from the gap between two rank readings, and the gap spanning New Year holds the whole
+  height of your rank; if a single ranked game happened to sit in it, that game was handed the lot.
+  It would also have come back on every launch, because the repair pass that rebuilds LP runs over
+  all of history each time. Readings from different seasons are now never compared.
+- A reset no longer appears in the milestone list as a demotion — "Demoted to Bronze IV" every
+  January, for the rest of the account's life.
 
 ### Under the hood
 
@@ -83,6 +103,22 @@ two clicks rather than a scrub hunt through half an hour of footage.
   and the timeline's marker clustering are all pure modules with tests. None of their interesting
   cases — a dodge, a loading screen that never ends, a game that crashes mid-recording, two games
   finishing minutes apart — can be produced on demand by playing League.
+- A season is a calendar year, worked out from timestamps already in the database. Riot publishes
+  no way to ask which season is current — the static season list stopped updating in 2019, ranked
+  entries carry no season field, and the match API dropped the one it used to send — but patch
+  numbers have been year-based since 2025, so the year is the boundary the game itself uses. That
+  means no season table, no dates to keep up to date, and no migration: the two columns compared
+  against were already stored as epoch milliseconds.
+- Season bounds are computed once in TypeScript and passed to SQL as parameters, never as a SQL
+  year expression. SQLite would resolve one in UTC while the app decides in local time, which would
+  put a New Year's Eve game in different seasons on the rank graph and the champions table.
+- The season pickers are built from the years an account actually has data in, spanning its oldest
+  and newest record — so a year off from the game still appears between two played ones rather
+  than leaving a hole that reads as lost data.
+- The dev harness gains a second, earlier season ending the December before, which is what makes
+  any of this checkable before January: the picker has two entries, the all-time chart has a
+  boundary to break at, and the reset has a game beside it to wrongly attribute. It is additive —
+  the existing 301-game climb and the three exact invariants it rests on are untouched.
 
 ## [0.6.0] — 2026-08-17
 

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import type { Account, ChampionStats } from '@shared/types'
+import type { Account, ChampionStats, RankRange } from '@shared/types'
 import { queueFilterLabel } from '@shared/queues'
+import { parseSeasonRange, seasonLabel, seasonRange } from '@shared/seasons'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName } from '../lib/assets'
 import { formatPercent, kdaRatio, perMinute } from '../lib/matchStats'
@@ -10,6 +11,7 @@ import { Asset } from '../components/Asset'
 import { Bar } from '../components/Bar'
 import { EmptyState } from '../components/EmptyState'
 import { QueueFilter } from '../components/QueueFilter'
+import { Segmented } from '../components/Segmented'
 import { Skeleton } from '../components/Skeleton'
 import * as Icon from '../components/icons'
 import { useUiStore } from '../store/uiStore'
@@ -137,11 +139,32 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
   const queueId = useUiStore((s) => s.championQueueFilter)
   const setQueueId = useUiStore((s) => s.setChampionQueueFilter)
 
+  const { data: periods } = useQuery({
+    queryKey: ['rankPeriods', account.id],
+    queryFn: () => window.api.rank.periods(account.id)
+  })
+
+  // Null until the user picks one, so the default can follow the newest ranked
+  // year that actually has games. That is not always the calendar year — in
+  // January, before the first game of the new one, last year is the only thing
+  // worth opening on — and it is not known until the periods query lands.
+  const [picked, setPicked] = useState<RankRange | null>(null)
+  const range: RankRange = picked ?? (periods?.[0] !== undefined ? seasonRange(periods[0]) : 'all')
+  const selectedSeason = parseSeasonRange(range)
+
+  const rangeOptions: Array<[RankRange, string]> = [
+    ...(periods ?? []).map((year): [RankRange, string] => [seasonRange(year), seasonLabel(year)]),
+    ['all', 'All time']
+  ]
+
   const { data, isLoading } = useQuery({
-    // The queue belongs in the key, or switching filters would serve the
-    // previous queue's cached stats.
-    queryKey: ['championStats', account.id, queueId],
-    queryFn: () => window.api.champions.stats(account.id, queueId)
+    // Both the queue and the period belong in the key, or switching either
+    // would serve the previous selection's cached stats.
+    queryKey: ['championStats', account.id, queueId, range],
+    queryFn: () => window.api.champions.stats(account.id, queueId, range),
+    // Held until the periods land, so the table never flashes a blended
+    // all-time number on its way to the year the user is going to see.
+    enabled: periods !== undefined
   })
 
   // A new column sorts descending first — "best on this stat" is the question
@@ -155,7 +178,7 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
     }
   }
 
-  if (isLoading || !assets) {
+  if (periods === undefined || isLoading || !assets) {
     return (
       <div className="mx-auto max-w-5xl space-y-1.5 p-4">
         {Array.from({ length: 12 }, (_, i) => (
@@ -203,10 +226,16 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
           <h1 className="font-display text-xl text-text">Champions</h1>
           <p className="mt-0.5 text-sm text-text-mute">
             From your {totalGames} synced {queueId === null ? '' : `${queueName} `}
-            {totalGames === 1 ? 'game' : 'games'}. Remakes excluded.
+            {totalGames === 1 ? 'game' : 'games'}
+            {selectedSeason === null ? ' across all time' : ` in ${seasonLabel(selectedSeason)}`}.
+            Remakes excluded.
           </p>
         </div>
-        <QueueFilter value={queueId} onChange={setQueueId} />
+        {/* Wraps because the period picker grows by one button every January. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Segmented options={rangeOptions} value={range} onChange={setPicked} />
+          <QueueFilter value={queueId} onChange={setQueueId} />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
@@ -237,9 +266,11 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
             icon={<Icon.Trophy />}
             title={queueId === null ? 'No champions yet' : `No ${queueName} games found`}
             description={
-              queueId === null
-                ? 'Sync your match history to see which champions you play and how they do.'
-                : 'Try a different queue, or sync more of your match history.'
+              selectedSeason !== null
+                ? 'Nothing stored for this year. Pick another, or sync more of your match history.'
+                : queueId === null
+                  ? 'Sync your match history to see which champions you play and how they do.'
+                  : 'Try a different queue, or sync more of your match history.'
             }
           />
         )}

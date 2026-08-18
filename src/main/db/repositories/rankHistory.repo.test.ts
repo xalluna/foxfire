@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  getHistorySpan,
   getLatestSnapshot,
   getRankMilestones,
   getRankSnapshots,
@@ -12,6 +13,7 @@ import {
 import { getMatchSummaries, insertMatch } from './matches.repo'
 import { getAccountByRiotId } from './accounts.repo'
 import { applyAllMigrations } from '../testMigrations'
+import { seasonBounds } from '@shared/seasons'
 import type { MatchDto } from '../../riot/types'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
@@ -209,6 +211,52 @@ describe('getRankMilestones', () => {
     insertRankSnapshot(db, accountId, gold('III', 20), 'lcu', T0)
     expect(getRankMilestones(db, accountId, SOLO)).toEqual([])
   })
+
+  // Local time, matching how seasonBounds decides which year a moment is in.
+  const DEC = new Date(2026, 11, 28, 20).getTime()
+  const JAN = new Date(2027, 0, 8, 14).getTime()
+
+  it('does not report the annual reset as a demotion', () => {
+    insertRankSnapshot(
+      db,
+      accountId,
+      { queueType: SOLO, tier: 'EMERALD', rank: 'II', leaguePoints: 20, wins: 90, losses: 70 },
+      'lcu',
+      DEC
+    )
+    insertRankSnapshot(
+      db,
+      accountId,
+      { queueType: SOLO, tier: 'BRONZE', rank: 'IV', leaguePoints: 0, wins: 0, losses: 0 },
+      'lcu',
+      JAN
+    )
+
+    // Unguarded this is a five-tier fall and the all-time view would announce
+    // "Demoted to Bronze IV" every January for the rest of the account's life.
+    expect(getRankMilestones(db, accountId, SOLO)).toEqual([])
+  })
+
+  it('still reports a real demotion inside one ranked year', () => {
+    insertRankSnapshot(db, accountId, gold('II', 8), 'lcu', DEC)
+    insertRankSnapshot(db, accountId, gold('III', 88), 'lcu', DEC + 1000)
+
+    expect(getRankMilestones(db, accountId, SOLO).map((m) => m.movement)).toEqual(['demotion'])
+  })
+
+  it('bounds a period above as well as below', () => {
+    insertRankSnapshot(db, accountId, gold('III', 20), 'lcu', DEC)
+    insertRankSnapshot(db, accountId, gold('II', 12), 'lcu', DEC + 1000)
+    insertRankSnapshot(db, accountId, gold('I', 12), 'lcu', JAN + 1000)
+    insertRankSnapshot(db, accountId, gold('I', 90), 'lcu', JAN + 2000)
+
+    const y2026 = seasonBounds(2026)
+    expect(getRankSnapshots(db, accountId, SOLO, y2026.startMs, y2026.endMs)).toHaveLength(2)
+    // The promotion into Gold I happened in 2027 and must not leak backwards.
+    expect(
+      getRankMilestones(db, accountId, SOLO, y2026.startMs, y2026.endMs).map((m) => m.rank)
+    ).toEqual(['II'])
+  })
 })
 
 describe('getRankedMatchesBetween', () => {
@@ -295,5 +343,37 @@ describe('upsertMatchRank', () => {
     upsertMatchRank(db, { ...base, lpDelta: 23 })
 
     expect(getMatchSummaries(db, ME, 20, 0)[0].rank?.lpDelta).toBe(23)
+  })
+})
+
+describe('getHistorySpan', () => {
+  let db: DatabaseSyncType
+  let accountId: number
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    accountId = seedAccount(db)
+  })
+
+  it('returns null when the account has nothing at all', () => {
+    expect(getHistorySpan(db, accountId, ME)).toBeNull()
+  })
+
+  it('spans snapshots and matches together', () => {
+    // The oldest evidence is a match and the newest is a snapshot, so a span
+    // taken from either table alone would be short at one end.
+    insertMatch(db, soloMatch('NA1_1', T0))
+    insertRankSnapshot(db, accountId, gold('III', 20), 'lcu', T0 + 10_000)
+
+    expect(getHistorySpan(db, accountId, ME)).toEqual({
+      oldestMs: T0,
+      newestMs: T0 + 10_000
+    })
+  })
+
+  it('works from snapshots alone, before any match has synced', () => {
+    insertRankSnapshot(db, accountId, gold('III', 20), 'lcu', T0)
+    expect(getHistorySpan(db, accountId, ME)).toEqual({ oldestMs: T0, newestMs: T0 })
   })
 })

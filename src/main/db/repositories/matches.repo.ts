@@ -320,6 +320,13 @@ export function getMatchDetail(db: DatabaseSync, matchId: string): MatchDetail |
  * how a champion performs, and counting them is what made these numbers differ
  * from op.gg's.
  *
+ * `sinceMs`/`untilMs` scope the aggregate to a ranked year. Unbounded, this
+ * blends every year of games into one win rate with no way to tell them apart —
+ * a champion abandoned two seasons ago still drags on the number. The bounds
+ * arrive as epoch milliseconds rather than as a year, because game_creation is
+ * epoch ms and a SQL year expression would resolve in UTC while the app decides
+ * periods in local time. See shared/seasons.ts.
+ *
  * Two different averages are returned on purpose:
  *
  * - Totals (kills, cs, damage, duration) are pooled, so the caller's derived
@@ -333,7 +340,9 @@ export function getMatchDetail(db: DatabaseSync, matchId: string): MatchDetail |
 export function getChampionStats(
   db: DatabaseSync,
   puuid: string,
-  queueId: number | null = null
+  queueId: number | null = null,
+  sinceMs: number | null = null,
+  untilMs: number | null = null
 ): ChampionStats[] {
   const rows = db
     .prepare(
@@ -374,10 +383,12 @@ export function getChampionStats(
         WHERE p.puuid = ?
           AND p.game_ended_in_early_surrender = 0
           AND (? IS NULL OR m.queue_id = ?)
+          AND (? IS NULL OR m.game_creation >= ?)
+          AND (? IS NULL OR m.game_creation < ?)
         GROUP BY p.champion_id
         ORDER BY games DESC`
     )
-    .all(puuid, queueId, queueId) as unknown as Array<{
+    .all(puuid, queueId, queueId, sinceMs, sinceMs, untilMs, untilMs) as unknown as Array<{
     champion_id: number
     games: number
     wins: number
