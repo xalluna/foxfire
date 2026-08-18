@@ -215,7 +215,20 @@ export type RankRange = '7d' | '30d' | 'all'
  */
 export type LcuStatus =
   | { state: 'disconnected' }
-  | { state: 'connected'; accountId: number; gameName: string; tagLine: string }
+  | {
+      state: 'connected'
+      accountId: number
+      gameName: string
+      tagLine: string
+      /**
+       * Whether a game is actually being played right now.
+       *
+       * The client's own playing phase, so it goes true at the loading screen —
+       * before the game answers on loopback and well before there is a
+       * scoreboard to show. That is the honest answer to "is a game on".
+       */
+      inGame: boolean
+    }
   | { state: 'untracked'; gameName: string; tagLine: string }
 
 export interface BackgroundSettings {

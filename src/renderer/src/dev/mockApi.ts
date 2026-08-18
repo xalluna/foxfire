@@ -389,7 +389,21 @@ export const mockApi: Api = {
   // these report the states the renderer must handle rather than pretending to
   // be connected: a disconnected client, background features switched off.
   lcu: {
-    getStatus: (): Promise<LcuStatus> => delay({ state: 'disconnected' }, 100),
+    getStatus: (): Promise<LcuStatus> =>
+      delay(
+        scenario === 'not-live'
+          ? { state: 'disconnected' }
+          : {
+              state: 'connected',
+              accountId: 1,
+              gameName: 'Alluna',
+              tagLine: 'NA1',
+              // A game in progress in the default scenario, so the Live tab's
+              // indicator has something to show without a client running.
+              inGame: true
+            },
+        100
+      ),
     onStatus: () => () => {},
     onRankChanged: () => () => {}
   },

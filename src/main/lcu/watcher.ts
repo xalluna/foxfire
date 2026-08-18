@@ -59,6 +59,14 @@ let lastPhase: string | null = null
  */
 let currentQueueId: number | null = null
 
+/**
+ * Whether the client is in a game right now, for the Live game tab's indicator.
+ *
+ * Separate from currentQueueId, which is only meaningful for a ranked snapshot
+ * and is cleared the moment a game ends. This follows the phase itself.
+ */
+let inGame = false
+
 interface CurrentSummoner {
   /**
    * The canonical account UUID. Deliberately unused for lookups: Riot's public
@@ -142,7 +150,8 @@ async function trackGameflow(creds: LcuCredentials, accountId: number): Promise<
   // too coarse to time a recording by, but arming does not need to be quick:
   // the loading screen that follows lasts at least a minute, and the recording
   // itself is started by the game answering on loopback.
-  onGamePhase(accountId, currentQueueId, isPlayingPhase(phase))
+  inGame = isPlayingPhase(phase)
+  onGamePhase(accountId, currentQueueId, inGame)
 
   const ended = isGameEndTransition(lastPhase, phase)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
@@ -184,16 +193,22 @@ async function tick(): Promise<void> {
       return
     }
 
-    setStatus({
-      state: 'connected',
+    const connected = {
+      state: 'connected' as const,
       accountId: account.id,
       gameName: account.gameName,
       tagLine: account.tagLine
-    })
+    }
+    // Reported before the phase is read, so a client that has just appeared is
+    // shown as connected without waiting on two more requests.
+    setStatus({ ...connected, inGame })
 
     // Read before the rank stats so the snapshot below can be forced when a
     // ranked game has just concluded.
     const gameEnded = await trackGameflow(creds, account.id)
+    // Again with the fresh phase. setStatus ignores an unchanged value, so the
+    // repeat costs nothing on the many ticks where nothing moved.
+    setStatus({ ...connected, inGame })
     const endedRanked = gameEnded && isRankedQueue(currentQueueId)
     if (gameEnded) currentQueueId = null
 
@@ -292,4 +307,5 @@ export function stopLcuWatcher(): void {
   // read as a phase appearing out of nowhere and be ignored.
   lastPhase = null
   currentQueueId = null
+  inGame = false
 }

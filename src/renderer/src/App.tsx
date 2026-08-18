@@ -11,6 +11,7 @@ import { Search } from './views/Search'
 import { Settings } from './views/Settings'
 import { EmptyState } from './components/EmptyState'
 import { CaptureIndicator } from './components/CaptureIndicator'
+import { LiveNavIcon } from './components/LiveNavIcon'
 import * as Icon from './components/icons'
 import {
   useLcuRankUpdates,
@@ -23,7 +24,8 @@ import { useUiStore, type View } from './store/uiStore'
 
 const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
   { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
-  { id: 'liveGame', label: 'Live game', icon: <Icon.Live /> },
+  // Coloured by whether a game is on and whether it is being recorded.
+  { id: 'liveGame', label: 'Live game', icon: <LiveNavIcon /> },
   { id: 'replays', label: 'Replays', icon: <Icon.Film /> },
   { id: 'mastery', label: 'Champions', icon: <Icon.Trophy /> },
   { id: 'rank', label: 'Rank', icon: <Icon.TrendingUp /> },

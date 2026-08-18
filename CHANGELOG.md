@@ -40,6 +40,8 @@ two clicks rather than a scrub hunt through half an hour of footage.
   Practice Tool produces no match history entry at all — stay here and stay watchable.
 - A capture indicator in the title bar, and a line on the Live game screen while a game is being
   recorded, so a recording that silently failed is noticed before the game rather than after it.
+- The Live game tab turns teal while a game is in progress, and its centre dot turns red while that
+  game is being recorded — both facts readable from the nav without opening anything.
 - An advisory disk warning you set yourself. Nothing is ever deleted automatically; crossing the
   number shows a warning with a one-click clear-out of the oldest games.
 
