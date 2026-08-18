@@ -100,51 +100,130 @@ async function inputExists(name: string): Promise<boolean> {
   return result?.inputs.some((input) => input.inputName === name) ?? false
 }
 
-async function ensureScene(): Promise<void> {
+/**
+ * Existing audio inputs of a given kind, whatever they are called.
+ *
+ * A fresh OBS profile already carries a global Desktop Audio and Mic/Aux, so
+ * adding our own of the same kind opened a second loopback capture of the same
+ * endpoint. Finding what is already there and driving that instead is both
+ * fewer capture handles and the way OBS is meant to be configured.
+ */
+async function inputsOfKind(kind: string): Promise<string[]> {
+  const result = await obsTry<{ inputs: Array<{ inputName: string; inputKind: string }> }>(
+    'GetInputList'
+  )
+  return (result?.inputs ?? []).filter((i) => i.inputKind === kind).map((i) => i.inputName)
+}
+
+/**
+ * Silences OBS's monitoring on an input.
+ *
+ * Monitoring plays captured audio back out through the monitoring device, which
+ * arrives a buffer or two behind the game's own output and is heard as an echo
+ * or a delay. Set explicitly rather than trusted to default, so this app can
+ * never be the cause of it.
+ */
+async function stopMonitoring(inputName: string): Promise<void> {
+  await obsTry('SetInputAudioMonitorType', {
+    inputName,
+    monitorType: 'OBS_MONITORING_TYPE_NONE'
+  })
+}
+
+/**
+ * The Game Capture settings, applied whether the source is new or already there.
+ *
+ * Re-applied rather than only set at creation, because a collection built by an
+ * earlier version of this app still carries whatever it was made with — and one
+ * of these settings is the audio hook.
+ */
+const GAME_CAPTURE_SETTINGS = {
+  capture_mode: 'window',
+  window: LEAGUE_WINDOW,
+  // Match on the executable when the window title does not line up — League's
+  // title carries a trademark symbol that has moved between patches, and the
+  // process name has not.
+  priority: 2,
+  capture_cursor: true,
+  // Off, explicitly. Game Capture's audio option injects an audio hook into the
+  // game process, and that hook is a known cause of added latency in the game's
+  // own output — intolerable in a game played on sound cues. Desktop audio is
+  // captured passively off the output device instead, where nothing is hooked.
+  capture_audio: false
+} as const
+
+async function ensureScene(audio: CaptureAudio): Promise<void> {
   if (!(await sceneExists(SCENE))) await obsTry('CreateScene', { sceneName: SCENE })
 
-  if (!(await inputExists(GAME_INPUT))) {
+  if (await inputExists(GAME_INPUT)) {
+    await obsTry('SetInputSettings', {
+      inputName: GAME_INPUT,
+      inputSettings: GAME_CAPTURE_SETTINGS,
+      overlay: true
+    })
+  } else {
     await obsTry('CreateInput', {
       sceneName: SCENE,
       inputName: GAME_INPUT,
       inputKind: 'game_capture',
-      inputSettings: {
-        capture_mode: 'window',
-        window: LEAGUE_WINDOW,
-        // Match on the executable when the window title does not line up —
-        // League's title carries a trademark symbol that has moved between
-        // patches, and the process name has not.
-        priority: 2,
-        capture_cursor: true
-      }
+      inputSettings: GAME_CAPTURE_SETTINGS
     })
   }
 
-  for (const [name, kind] of [
-    [DESKTOP_INPUT, 'wasapi_output_capture'],
-    [MIC_INPUT, 'wasapi_input_capture']
-  ] as const) {
-    if (!(await inputExists(name))) {
-      // Both are created up front and muted per the setting, rather than
-      // created on demand: adding an input mid-recording is not something OBS
-      // handles gracefully, and an unused muted input costs nothing.
-      await obsTry('CreateInput', {
-        sceneName: SCENE,
-        inputName: name,
-        inputKind: kind,
-        inputSettings: { device_id: 'default' }
-      })
-    }
+  // Only created if OBS has nothing of the kind already. A fresh profile has a
+  // global Desktop Audio, and adding ours alongside it captured the same output
+  // device twice.
+  if ((await inputsOfKind('wasapi_output_capture')).length === 0) {
+    await obsTry('CreateInput', {
+      sceneName: SCENE,
+      inputName: DESKTOP_INPUT,
+      inputKind: 'wasapi_output_capture',
+      inputSettings: { device_id: 'default' }
+    })
+  }
+
+  // The microphone is only opened if it is actually wanted. A muted source
+  // still holds a capture handle on the device, which is not something to do
+  // to somebody who asked for game audio only.
+  if (audio === 'game+mic' && (await inputsOfKind('wasapi_input_capture')).length === 0) {
+    await obsTry('CreateInput', {
+      sceneName: SCENE,
+      inputName: MIC_INPUT,
+      inputKind: 'wasapi_input_capture',
+      inputSettings: { device_id: 'default' }
+    })
   }
 }
 
-/** Applies the audio choice by muting inputs we created ourselves. */
+/**
+ * Applies the audio choice across every audio input in our own collection.
+ *
+ * By kind rather than by name, so the profile's own global Desktop Audio is
+ * driven too. Muting only the sources we named left OBS's global one recording
+ * regardless of the setting, and capturing the output device twice over.
+ */
 export async function applyManagedAudio(audio: CaptureAudio): Promise<void> {
   const wantDesktop = audio === 'game' || audio === 'game+mic'
   const wantMic = audio === 'game+mic'
 
-  await obsTry('SetInputMute', { inputName: DESKTOP_INPUT, inputMuted: !wantDesktop })
-  await obsTry('SetInputMute', { inputName: MIC_INPUT, inputMuted: !wantMic })
+  for (const [kind, wanted] of [
+    ['wasapi_output_capture', wantDesktop],
+    ['wasapi_input_capture', wantMic]
+  ] as const) {
+    // OBS's own global device is preferred over one this app added, so a
+    // collection that ended up with both settles on the one that was already
+    // there. Only that one is unmuted: leaving two live would record the same
+    // device twice and mix it with itself.
+    const inputs = (await inputsOfKind(kind)).sort((a, b) => {
+      const ours = (name: string): number => (name.startsWith('LoL Stats ') ? 1 : 0)
+      return ours(a) - ours(b)
+    })
+
+    for (const [index, inputName] of inputs.entries()) {
+      await obsTry('SetInputMute', { inputName, inputMuted: !wanted || index > 0 })
+      await stopMonitoring(inputName)
+    }
+  }
 }
 
 /**
@@ -163,7 +242,7 @@ export async function enterManagedMode(folder: string, audio: CaptureAudio): Pro
   try {
     await ensureProfile()
     await ensureCollection()
-    await ensureScene()
+    await ensureScene(audio)
 
     await setRecordFormat('mp4')
     await setRecordDirectory(folder)

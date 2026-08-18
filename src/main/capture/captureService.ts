@@ -39,6 +39,7 @@ import {
 } from './captureState'
 import { selfNameSet, toReplayEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
+import { isClockRunning } from './gameClock'
 import type { CaptureStatus, Scoreboard } from '@shared/types'
 
 /**
@@ -85,6 +86,12 @@ let selfNames: ReadonlySet<string> = new Set()
 
 /** The game clock at the first recorded frame — every event is measured from it. */
 let gameTimeOffset = 0
+
+/**
+ * The previous game-clock reading, so a loaded game can be told from a loading
+ * one. The API answers all through the loading screen with the clock stopped.
+ */
+let lastGameTime: number | null = null
 
 export function getCaptureStatus(): CaptureStatus {
   const settings = getCaptureSettings()
@@ -296,13 +303,16 @@ async function tick(): Promise<void> {
   dispatch({ type: 'tick', at: now })
 
   if (state.phase === 'armed' && state.accountId !== null) {
-    // The 404 that lasts from champion select through the loading screen is
-    // swallowed by isNotRunning, so this simply keeps returning null until the
-    // game world is actually up.
+    // The 404 that lasts from champion select until the game process is up is
+    // swallowed by isNotRunning, so this keeps returning null through most of
+    // the wait. It starts answering during the loading screen though, with the
+    // clock stopped — so an answer alone is not enough to record on.
     const board = await readScoreboard(state.accountId)
     if (board) {
       gameLastSeen = now
-      dispatch({ type: 'gameReady', gameTime: board.gameTime, at: now })
+      const running = isClockRunning(lastGameTime, board.gameTime)
+      lastGameTime = board.gameTime
+      if (running) dispatch({ type: 'gameReady', gameTime: board.gameTime, at: now })
     }
     return
   }
@@ -344,8 +354,12 @@ function scheduleNextPoll(): void {
 export function onGamePhase(accountId: number, queueId: number | null, playing: boolean): void {
   if (!running) return
   if (playing) {
+    const wasIdle = state.phase === 'idle'
     dispatch({ type: 'gameStarted', accountId, queueId, at: Date.now() })
-    if (state.phase === 'armed') {
+    if (wasIdle && state.phase === 'armed') {
+      // Forgotten between games, or the previous game's final reading would
+      // look like an advance against the next game's first one.
+      lastGameTime = null
       gameLastSeen = Date.now()
       scheduleNextPoll()
     }
@@ -415,4 +429,5 @@ export function stopCapture(): void {
     timer = null
   }
   state = INITIAL_STATE
+  lastGameTime = null
 }
