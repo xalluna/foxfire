@@ -148,7 +148,13 @@ export function ReplayPlayer({
         <video
           ref={videoRef}
           src={src}
-          className="max-h-full max-w-full"
+          // h-full w-full to fill the space, object-contain to letterbox rather
+          // than crop. max-h/max-w only capped the size, so a recording smaller
+          // than the window — which fullscreen always is — sat at its intrinsic
+          // resolution in the middle of a black field instead of scaling up.
+          // Cropping is not an option: the minimap and the HUD live in the
+          // corners, and they are half of what a replay is read for.
+          className="h-full w-full object-contain"
           onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
           onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
           onPlay={() => setPlaying(true)}
