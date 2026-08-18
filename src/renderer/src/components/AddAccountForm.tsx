@@ -1,18 +1,22 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { randomExampleRiotId } from '../lib/exampleRiotId'
 import { parseRiotId } from '../lib/riotId'
 import { useUiStore } from '../store/uiStore'
 
 export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Element {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Drawn once per mount so the hint below never names a different player than
+  // the one greyed out in the box.
+  const [example] = useState(randomExampleRiotId)
   const queryClient = useQueryClient()
   const setActiveAccount = useUiStore((s) => s.setActiveAccount)
 
   const add = useMutation({
     mutationFn: (raw: string) => {
       const parsed = parseRiotId(raw)
-      if (!parsed) throw new Error('Enter a Riot ID like Alluna#NA1')
+      if (!parsed) throw new Error(`Enter a Riot ID like ${example}`)
       return window.api.accounts.add(parsed)
     },
     onSuccess: (account) => {
@@ -44,7 +48,7 @@ export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Eleme
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Alluna#NA1"
+          placeholder={example}
           spellCheck={false}
           autoFocus
           className="w-full rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-sm text-text outline-none transition placeholder:text-text-mute focus:border-gold-dim"

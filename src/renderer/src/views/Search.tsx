@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useAssets } from '../hooks/useAssets'
 import { profileIconUrl } from '../lib/assets'
+import { randomExampleRiotId } from '../lib/exampleRiotId'
 import { parseRiotId } from '../lib/riotId'
 import { emptyEntry } from '../lib/rank'
 import { Asset } from '../components/Asset'
@@ -22,11 +23,14 @@ import * as Icon from '../components/icons'
 export function Search(): JSX.Element {
   const assets = useAssets()
   const [value, setValue] = useState('')
+  // Drawn once per mount so the failure message names the player the
+  // placeholder just showed.
+  const [example] = useState(randomExampleRiotId)
 
   const search = useMutation({
     mutationFn: (raw: string) => {
       const parsed = parseRiotId(raw)
-      if (!parsed) throw new Error('Enter a Riot ID like Alluna#NA1')
+      if (!parsed) throw new Error(`Enter a Riot ID like ${example}`)
       return window.api.search.summoner(parsed)
     }
   })
@@ -58,7 +62,7 @@ export function Search(): JSX.Element {
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Summoner#NA1"
+          placeholder={example}
           spellCheck={false}
           className="flex-1 rounded-md border border-hairline bg-surface px-3 py-2 text-base text-text outline-none transition placeholder:text-text-mute focus:border-gold-dim"
         />
