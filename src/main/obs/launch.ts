@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { createConnection } from 'node:net'
 import { dirname, join } from 'node:path'
 import { createLogger } from '../telemetry/logger'
 
@@ -52,15 +53,46 @@ export function isObsRunningFromUs(): boolean {
 }
 
 /**
- * Starts OBS minimised, unless it is already running.
+ * Whether something is already listening on the websocket port.
  *
- * There is no reliable way to ask "is OBS running" without shelling out, so
- * this does not try: launching a second instance is harmless because OBS
- * refuses to start one and exits immediately, which leaves the first instance —
- * and its websocket — exactly as it was.
+ * This is the condition that actually matters — not "is an obs64.exe running"
+ * but "is there an OBS we can talk to" — and it needs no process enumeration.
+ *
+ * Observed rather than assumed: this used to launch unconditionally on the
+ * theory that a second OBS exits on its own. It does not. Two instances were
+ * left running, and only one of them could hold port 4455.
  */
-export function launchObs(configuredPath: string | null): void {
+function websocketIsListening(host: string, port: number, timeoutMs = 400): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host, port })
+    const done = (answer: boolean): void => {
+      socket.destroy()
+      resolve(answer)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}
+
+/**
+ * Starts OBS minimised, unless one is already there.
+ *
+ * Checked against the port rather than a process list, so an OBS the user
+ * started themselves — including one left over from a previous run of this app
+ * — counts and is left alone.
+ */
+export async function launchObs(
+  configuredPath: string | null,
+  host = '127.0.0.1',
+  port = 4455
+): Promise<void> {
   if (isObsRunningFromUs()) return
+  if (await websocketIsListening(host, port)) {
+    log.debug('OBS already listening; not launching another', { host, port })
+    return
+  }
 
   const exe = resolveObsExecutable(configuredPath)
   if (!exe) {

@@ -38,6 +38,7 @@ import {
   type SessionEvent
 } from './captureState'
 import { selfNameSet, toReplayEvents, type LiveEventDto } from './eventMapping'
+import { recordSignalFor, resolveOutputPath } from './recordEvents'
 import type { CaptureStatus, Scoreboard } from '@shared/types'
 
 /**
@@ -70,6 +71,14 @@ let awaitingStart: { accountId: number; queueId: number | null } | null = null
 
 /** Last moment the game answered on loopback, so a crash can be told from a stall. */
 let gameLastSeen = 0
+
+/**
+ * The filename StopRecord replied with, held until the matching event arrives.
+ *
+ * Both sources are kept because either can be absent: the reply is lost if the
+ * request throws, and the event only carries a path on the final stop.
+ */
+let stopReplyPath: string | null = null
 
 /** Names the event feed might use for the tracked player, resolved once per game. */
 let selfNames: ReadonlySet<string> = new Set()
@@ -147,11 +156,13 @@ async function runEffect(effect: SessionEffect): Promise<void> {
 
     case 'endRecording': {
       try {
-        await stopRecording()
+        // Kept rather than acted on: OBS also announces the stop as an event,
+        // and finalising happens there so a stop the user pressed in OBS
+        // themselves closes the row out the same way.
+        stopReplyPath = await stopRecording()
       } catch (err) {
         log.debug('Could not stop recording cleanly', { error: String(err) })
-        // The file OBS wrote is still there; it just never told us the name.
-        // Close the row out on what we know rather than losing the row.
+        // No stop event is coming, so close the row out here on what is known.
         finalizeRecording(effect.replayId, null)
       }
       return
@@ -230,9 +241,11 @@ async function onRecordingStarted(): Promise<void> {
   broadcastReplaysChanged()
 }
 
-function finalizeRecording(replayId: number, path: string | null): void {
+function finalizeRecording(replayId: number, eventPath: string | null): void {
   const db = getDb()
   const endedAt = Date.now()
+  const path = resolveOutputPath(eventPath, stopReplyPath)
+  stopReplyPath = null
 
   let bytes: number | null = null
   if (path) {
@@ -352,8 +365,9 @@ export function initCapture(): void {
   }
 
   // Started with the app rather than with a game: OBS takes seconds to come up
-  // and accept a connection, and a loading screen does not wait.
-  launchObs(settings.obsInstallPath)
+  // and accept a connection, and a loading screen does not wait. Not awaited —
+  // the websocket client retries on its own, so nothing needs to block on it.
+  void launchObs(settings.obsInstallPath, settings.obsHost, settings.obsPort)
   startObsClient()
 
   onObsConnectionChange(() => {
@@ -366,13 +380,19 @@ export function initCapture(): void {
   })
 
   onObsRecordState((event) => {
-    if (event.active) {
+    // OBS reports a start and a stop in two steps each, and only the second
+    // carries the filename — see recordEvents.ts. Acting on outputActive alone
+    // closed the recording out on the STOPPING event, with nothing to point at.
+    const signal = recordSignalFor(event)
+    if (signal === 'started') {
       void onRecordingStarted()
       return
     }
-    // Also fires when the user presses Stop in OBS themselves, which is a
-    // perfectly reasonable thing to do and should still close the row out.
-    if (state.replayId !== null) finalizeRecording(state.replayId, event.path)
+    // 'finished' also fires when the user presses Stop in OBS themselves, which
+    // is a reasonable thing to do and should still close the row out.
+    if (signal === 'finished' && state.replayId !== null) {
+      finalizeRecording(state.replayId, event.path)
+    }
   })
 
   broadcastStatus()
@@ -382,7 +402,7 @@ export function initCapture(): void {
 export function refreshCapture(): void {
   const settings = getCaptureSettings()
   if (settings.enabled && running) {
-    launchObs(settings.obsInstallPath)
+    void launchObs(settings.obsInstallPath, settings.obsHost, settings.obsPort)
     startObsClient()
   }
   broadcastStatus()
