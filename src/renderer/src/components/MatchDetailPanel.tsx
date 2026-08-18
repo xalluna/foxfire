@@ -2,40 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { AssetManifest, MatchParticipant } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, itemIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
-import { TRINKET_SLOT, itemSlots } from '../lib/items'
+import { championIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
 import { positionIcon } from '../lib/positions'
 import { runeIds } from '../lib/runes'
 import { compactNumber } from '../lib/matchStats'
 import { formatRiotId } from '../lib/riotId'
 import { Asset } from './Asset'
+import { ItemStrip } from './ItemStrip'
 import { Bar } from './Bar'
 import { Skeleton } from './Skeleton'
 import * as Icon from './icons'
-
-/** Six inventory slots, the trinket, then the lane's quest reward — see MatchListRow. */
-function Items({
-  m,
-  items,
-  roleBound
-}: {
-  m: AssetManifest
-  items: number[]
-  roleBound: number
-}): JSX.Element {
-  return (
-    <div className="flex gap-[3px]">
-      {itemSlots(items, roleBound).map((itemId, i) => (
-        <Asset
-          key={i}
-          src={itemIconUrl(m, itemId)}
-          className="h-[22px] w-[22px]"
-          rounded={i >= TRINKET_SLOT ? 'rounded-full' : 'rounded'}
-        />
-      ))}
-    </div>
-  )
-}
 
 /** A labelled proportion bar. Both damage columns share a lobby-wide scale so rows compare directly. */
 function StatBar({
@@ -161,7 +137,7 @@ function ParticipantRow({
       </div>
 
       <div className="ml-auto shrink-0">
-        <Items m={m} items={p.items} roleBound={p.roleBoundItem} />
+        <ItemStrip m={m} items={p.items} roleBound={p.roleBoundItem} />
       </div>
     </div>
   )

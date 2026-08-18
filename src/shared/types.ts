@@ -1,3 +1,5 @@
+import type { Position } from './positions'
+
 export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
 
 export interface Account {
@@ -311,26 +313,52 @@ export interface SyncProgressEvent {
   trigger: SyncTrigger
 }
 
-export interface LiveGameParticipant {
-  /** Position in Riot's participant array. The React key, since an anonymous player has no puuid. */
+/**
+ * One row of the in-game scoreboard, built from the Live Client Data API the
+ * running game serves on loopback.
+ *
+ * Richer than anything the spectator endpoint could offer — it is the game's
+ * own view of itself — but it carries no puuid, so a player is identified by
+ * their Riot ID and nothing else.
+ */
+export interface ScoreboardPlayer {
+  /** Index in the game's own player array. The React key, since two players can share a name. */
   slot: number
-  /** Riot withheld this player's identity — no name, no rank, nothing to look them up by. */
-  anonymous: boolean
-  /** Null on anonymous rows, dropped on purpose so the renderer cannot resolve what Riot withheld. */
-  puuid: string | null
   gameName: string | null
   tagLine: string | null
+  /** The account this window is showing, so the row can be picked out of the ten. */
+  isSelf: boolean
+  isBot: boolean
+  isDead: boolean
+  /** Seconds until respawn; 0 whenever alive. */
+  respawnTimer: number
+  level: number | null
+  position: Position | null
   teamId: number
   championId: number | null
+  /** The name the game sent, so a champion the manifest has not caught up with still reads. */
+  championName: string | null
   spell1Id: number | null
   spell2Id: number | null
+  keystoneId: number | null
+  secondaryTreeId: number | null
+  /** Seven slots, index 6 the trinket — the shape itemSlots() takes. */
+  items: number[]
+  /** Granted by the lane rather than bought, exactly as on a stored match. */
+  roleBoundItem: number
+  kills: number
+  deaths: number
+  assists: number
+  creepScore: number
+  wardScore: number
 }
 
-export interface LiveGameData {
-  gameId: number
+export interface Scoreboard {
   gameMode: string
-  gameLength: number
-  participants: LiveGameParticipant[]
+  mapName: string
+  /** Seconds elapsed. */
+  gameTime: number
+  players: ScoreboardPlayer[]
 }
 
 export interface AdHocSummonerResult {

@@ -11,7 +11,7 @@ import {
 } from '../services/accountService'
 import { readSyncState, startSync } from '../services/syncService'
 import { getAssetManifest } from '../services/ddragonService'
-import { checkLiveGame, getParticipantRank } from '../services/liveGameService'
+import { getRankByRiotId, getScoreboard } from '../services/liveClientService'
 import { getMasteryData } from '../services/masteryService'
 import { getRankHistory } from '../services/rankHistoryService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
@@ -112,9 +112,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
 
-  ipcMain.handle(CH.liveGame.check, (_e, accountId: number) => checkLiveGame(accountId))
-  ipcMain.handle(CH.liveGame.participantRank, (_e, platform: string, puuid: string) =>
-    getParticipantRank(platform, puuid)
+  ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: number) => getScoreboard(accountId))
+  ipcMain.handle(
+    CH.liveClient.playerRank,
+    (_e, platform: string, gameName: string, tagLine: string) =>
+      getRankByRiotId(platform, gameName, tagLine)
   )
 
   ipcMain.handle(CH.champions.stats, (_e, accountId: number, queueId: number | null) => {

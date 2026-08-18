@@ -44,10 +44,10 @@ const api: Api = {
   assets: {
     get: () => ipcRenderer.invoke(CH.assets.get)
   },
-  liveGame: {
-    check: (accountId) => ipcRenderer.invoke(CH.liveGame.check, accountId),
-    participantRank: (platform, puuid) =>
-      ipcRenderer.invoke(CH.liveGame.participantRank, platform, puuid)
+  liveClient: {
+    scoreboard: (accountId) => ipcRenderer.invoke(CH.liveClient.scoreboard, accountId),
+    playerRank: (platform, gameName, tagLine) =>
+      ipcRenderer.invoke(CH.liveClient.playerRank, platform, gameName, tagLine)
   },
   champions: {
     stats: (accountId, queueId) => ipcRenderer.invoke(CH.champions.stats, accountId, queueId)

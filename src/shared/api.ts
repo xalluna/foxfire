@@ -8,7 +8,6 @@ import type {
   EditableMatch,
   LcuStatus,
   LeagueEntry,
-  LiveGameData,
   ManualRankEdit,
   MasteryEntry,
   MatchDetail,
@@ -17,6 +16,7 @@ import type {
   RankHistory,
   RankRange,
   RiotIdInput,
+  Scoreboard,
   SyncProgressEvent,
   SyncState
 } from './types'
@@ -83,9 +83,15 @@ export interface Api {
   assets: {
     get: () => Promise<AssetManifest>
   }
-  liveGame: {
-    check: (accountId: number) => Promise<LiveGameData | null>
-    participantRank: (platform: string, puuid: string) => Promise<LeagueEntry | null>
+  liveClient: {
+    /** Null whenever no game is running on this machine, which is not an error. */
+    scoreboard: (accountId: number) => Promise<Scoreboard | null>
+    /** The one call on this screen that reaches Riot, hence the one that needs a key. */
+    playerRank: (
+      platform: string,
+      gameName: string,
+      tagLine: string
+    ) => Promise<LeagueEntry | null>
   }
   champions: {
     /** Local-only, so the Champions screen renders whatever the API key is doing. */

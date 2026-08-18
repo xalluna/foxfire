@@ -8,12 +8,12 @@ import type {
   ChampionStats,
   LcuStatus,
   LeagueEntry,
-  LiveGameData,
   MatchDetail,
   MatchSummary,
   QueueType,
   RankHistory,
   RankRange,
+  Scoreboard,
   SyncProgressEvent,
   SyncState
 } from '@shared/types'
@@ -30,11 +30,11 @@ import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
   ACCOUNTS,
   LEAGUE_ENTRIES,
-  LIVE_GAME,
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
   RANK_SNAPSHOTS,
+  SCOREBOARD,
   championStatsFor
 } from './fixtures'
 import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
@@ -275,10 +275,12 @@ export const mockApi: Api = {
     get: (): Promise<AssetManifest> => delay(DDRAGON_MANIFEST, 60, false)
   },
 
-  liveGame: {
-    check: (): Promise<LiveGameData | null> =>
-      scenario === 'not-live' ? delay(null, 800) : delay(LIVE_GAME, 800),
-    participantRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500)
+  liveClient: {
+    // Answered fast and without the shell hold, because the real one polls: a
+    // held promise under ?scenario=loading would stall every tick behind it.
+    scoreboard: (): Promise<Scoreboard | null> =>
+      scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false),
+    playerRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500)
   },
 
   champions: {
