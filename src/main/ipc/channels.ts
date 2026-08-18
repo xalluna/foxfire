@@ -29,8 +29,7 @@ export const CH = {
   },
   liveGame: {
     check: 'liveGame:check',
-    participantRank: 'liveGame:participantRank',
-    participantName: 'liveGame:participantName'
+    participantRank: 'liveGame:participantRank'
   },
   // Separate from mastery:get on purpose. Champion stats are pure SQLite, so
   // they must not sit behind a channel that can reach out to Riot and fail.

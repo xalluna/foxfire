@@ -86,10 +86,6 @@ export interface Api {
   liveGame: {
     check: (accountId: number) => Promise<LiveGameData | null>
     participantRank: (platform: string, puuid: string) => Promise<LeagueEntry | null>
-    participantName: (
-      regionalRoute: string,
-      puuid: string
-    ) => Promise<{ gameName: string; tagLine: string } | null>
   }
   champions: {
     /** Local-only, so the Champions screen renders whatever the API key is doing. */

@@ -52,6 +52,15 @@ export interface MatchSummary {
   /** Highest multi-kill in the game: 2 = double, 3 = triple, 4 = quadra, 5 = penta. */
   largestMultiKill: number | null
   items: number[]
+  /**
+   * The role quest reward, which match-v5 reports in its own slot.
+   *
+   * Kept out of `items` deliberately: it is granted by the lane rather than
+   * bought, and it never appears among item0-6, so folding it in would redefine
+   * what an inventory slot means for the sake of one array. 0 for modes without
+   * lanes, and for matches played before the field existed.
+   */
+  roleBoundItem: number
   summoner1Id: number | null
   summoner2Id: number | null
   perks: unknown
@@ -226,6 +235,8 @@ export interface MatchParticipant {
   damageDealtToChampions: number | null
   damageTaken: number | null
   items: number[]
+  /** The lane's quest reward — see MatchSummary.roleBoundItem. */
+  roleBoundItem: number
   summoner1Id: number | null
   summoner2Id: number | null
   perks: unknown
@@ -301,15 +312,18 @@ export interface SyncProgressEvent {
 }
 
 export interface LiveGameParticipant {
-  puuid: string
+  /** Position in Riot's participant array. The React key, since an anonymous player has no puuid. */
+  slot: number
+  /** Riot withheld this player's identity — no name, no rank, nothing to look them up by. */
+  anonymous: boolean
+  /** Null on anonymous rows, dropped on purpose so the renderer cannot resolve what Riot withheld. */
+  puuid: string | null
   gameName: string | null
   tagLine: string | null
   teamId: number
-  championId: number
-  spell1Id: number
-  spell2Id: number
-  rank: LeagueEntry | null
-  rankLoading: boolean
+  championId: number | null
+  spell1Id: number | null
+  spell2Id: number | null
 }
 
 export interface LiveGameData {

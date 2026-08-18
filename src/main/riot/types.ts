@@ -84,6 +84,10 @@ export const MatchParticipantDtoSchema = z
     teamPosition: z.string().optional(),
     // Absent on very old matches, so optional rather than required.
     largestMultiKill: z.number().optional(),
+    // The role quest reward, which occupies its own slot rather than item0-6.
+    // Absent on matches played before the season it shipped in — required here
+    // would abort the sync of any account with older history.
+    roleBoundItem: z.number().optional(),
     // True when the game was voided as a remake. Such games award no LP and are
     // excluded from champion stats, matching how op.gg reports them.
     gameEndedInEarlySurrender: z.boolean().optional(),
@@ -111,14 +115,24 @@ export const MatchDtoSchema = z.object({
 })
 export type MatchDto = z.infer<typeof MatchDtoSchema>
 
+/**
+ * Every field is nullish because Riot withholds a participant's identity in some
+ * games, and a zod array is all-or-nothing — one missing field on one player
+ * failed the parse for the whole roster, so the live game screen showed an error
+ * instead of the other nine. What a half-empty participant renders as is the
+ * service's decision, not the schema's.
+ *
+ * The cost is that this endpoint no longer reports payload drift as a
+ * parse_error; a shape change now arrives as null fields. Accepted deliberately.
+ */
 export const ActiveGameParticipantDtoSchema = z
   .object({
-    puuid: z.string(),
-    teamId: z.number(),
-    championId: z.number(),
-    spell1Id: z.number(),
-    spell2Id: z.number(),
-    riotId: z.string().optional() // "gameName#tagLine" on newer payloads, absent on some
+    puuid: z.string().nullish(),
+    teamId: z.number().nullish(),
+    championId: z.number().nullish(),
+    spell1Id: z.number().nullish(),
+    spell2Id: z.number().nullish(),
+    riotId: z.string().nullish() // "gameName#tagLine" on newer payloads, absent or null on some
   })
   .passthrough()
 

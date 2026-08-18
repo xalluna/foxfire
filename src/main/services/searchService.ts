@@ -52,6 +52,7 @@ export async function searchSummoner(input: RiotIdInput): Promise<AdHocSummonerR
         damageDealtToChampions: me.totalDamageDealtToChampions,
         largestMultiKill: me.largestMultiKill ?? null,
         items: [me.item0, me.item1, me.item2, me.item3, me.item4, me.item5, me.item6],
+        roleBoundItem: me.roleBoundItem ?? 0,
         summoner1Id: me.summoner1Id,
         summoner2Id: me.summoner2Id,
         perks: me.perks,

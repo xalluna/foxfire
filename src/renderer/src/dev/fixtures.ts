@@ -20,6 +20,7 @@ import {
   ITEMS_SUPPORT,
   ITEMS_TANK,
   NOW,
+  ROLE_ITEM,
   S,
   detailFor,
   perks,
@@ -455,6 +456,7 @@ const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   damageDealtToChampions: s.damage,
   largestMultiKill: s.multiKill ?? 1,
   items: s.items,
+  roleBoundItem: ROLE_ITEM[s.position] ?? 0,
   summoner1Id: s.spells[0],
   summoner2Id: s.spells[1],
   perks: perks(s.keystone),
@@ -571,20 +573,25 @@ export function championStatsFor(accountId: number, queueId: number | null): Cha
     .sort((a, b) => b.games - a.games)
 }
 
+/**
+ * Ten slots covering all three row states: eight players Riot named, one whose
+ * identity it withheld (slot 4 — champion only, no rank), and one it returned
+ * nothing usable for (slot 9 — a blank row holding its place).
+ */
 export const LIVE_GAME: LiveGameData = {
   gameId: 5_100_200_300,
   gameMode: 'CLASSIC',
   gameLength: 847,
   participants: [
-    { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1', teamId: 100, championId: C.Viktor, spell1Id: S.Teleport, spell2Id: S.Flash, rank: LEAGUE_ENTRIES[1][0], rankLoading: false },
-    { puuid: 'p-b1', gameName: 'Runnit Downy Jr', tagLine: 'NA1', teamId: 100, championId: C.Sett, spell1Id: S.Flash, spell2Id: S.Teleport, rank: { queueType: 'RANKED_SOLO_5x5', tier: 'PLATINUM', rank: 'I', leaguePoints: 88, wins: 40, losses: 33, fetchedAt: '' }, rankLoading: false },
-    { puuid: 'p-b2', gameName: 'phantomduval', tagLine: 'NA1', teamId: 100, championId: C.Vi, spell1Id: S.Smite, spell2Id: S.Flash, rank: { queueType: 'RANKED_SOLO_5x5', tier: 'GOLD', rank: 'III', leaguePoints: 12, wins: 28, losses: 30, fetchedAt: '' }, rankLoading: false },
-    { puuid: 'p-b3', gameName: 'Killua', tagLine: 'NA1', teamId: 100, championId: C.Kaisa, spell1Id: S.Flash, spell2Id: S.Heal, rank: null, rankLoading: true },
-    { puuid: 'p-b4', gameName: null, tagLine: null, teamId: 100, championId: C.Thresh, spell1Id: S.Flash, spell2Id: S.Ignite, rank: null, rankLoading: false },
-    { puuid: 'p-r0', gameName: 'cpdd Ontario', tagLine: 'NA1', teamId: 200, championId: C.Aatrox, spell1Id: S.Teleport, spell2Id: S.Flash, rank: { queueType: 'RANKED_SOLO_5x5', tier: 'DIAMOND', rank: 'IV', leaguePoints: 4, wins: 91, losses: 88, fetchedAt: '' }, rankLoading: false },
-    { puuid: 'p-r1', gameName: 'jg TTVritchhi', tagLine: 'NA1', teamId: 200, championId: C.LeeSin, spell1Id: S.Smite, spell2Id: S.Flash, rank: { queueType: 'RANKED_SOLO_5x5', tier: 'MASTER', rank: 'I', leaguePoints: 231, wins: 155, losses: 140, fetchedAt: '' }, rankLoading: false },
-    { puuid: 'p-r2', gameName: 'StayyKawaii', tagLine: 'NA1', teamId: 200, championId: C.Ahri, spell1Id: S.Flash, spell2Id: S.Ignite, rank: { queueType: 'RANKED_SOLO_5x5', tier: 'IRON', rank: 'IV', leaguePoints: 0, wins: 3, losses: 21, fetchedAt: '' }, rankLoading: false },
-    { puuid: 'p-r3', gameName: 'Harrowhold', tagLine: 'NA1', teamId: 200, championId: C.Jhin, spell1Id: S.Flash, spell2Id: S.Heal, rank: { queueType: 'RANKED_SOLO_5x5', tier: 'EMERALD', rank: 'II', leaguePoints: 55, wins: 66, losses: 61, fetchedAt: '' }, rankLoading: false },
-    { puuid: 'p-r4', gameName: 'MightyPatriarch', tagLine: 'NA1', teamId: 200, championId: C.Leona, spell1Id: S.Flash, spell2Id: S.Exhaust, rank: null, rankLoading: false }
+    { slot: 0, anonymous: false, puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1', teamId: 100, championId: C.Viktor, spell1Id: S.Teleport, spell2Id: S.Flash },
+    { slot: 1, anonymous: false, puuid: 'p-b1', gameName: 'Runnit Downy Jr', tagLine: 'NA1', teamId: 100, championId: C.Sett, spell1Id: S.Flash, spell2Id: S.Teleport },
+    { slot: 2, anonymous: false, puuid: 'p-b2', gameName: 'phantomduval', tagLine: 'NA1', teamId: 100, championId: C.Vi, spell1Id: S.Smite, spell2Id: S.Flash },
+    { slot: 3, anonymous: false, puuid: 'p-b3', gameName: 'Killua', tagLine: 'NA1', teamId: 100, championId: C.Kaisa, spell1Id: S.Flash, spell2Id: S.Heal },
+    { slot: 4, anonymous: true, puuid: null, gameName: null, tagLine: null, teamId: 100, championId: C.Thresh, spell1Id: S.Flash, spell2Id: S.Ignite },
+    { slot: 5, anonymous: false, puuid: 'p-r0', gameName: 'cpdd Ontario', tagLine: 'NA1', teamId: 200, championId: C.Aatrox, spell1Id: S.Teleport, spell2Id: S.Flash },
+    { slot: 6, anonymous: false, puuid: 'p-r1', gameName: 'jg TTVritchhi', tagLine: 'NA1', teamId: 200, championId: C.LeeSin, spell1Id: S.Smite, spell2Id: S.Flash },
+    { slot: 7, anonymous: false, puuid: 'p-r2', gameName: 'StayyKawaii', tagLine: 'NA1', teamId: 200, championId: C.Ahri, spell1Id: S.Flash, spell2Id: S.Ignite },
+    { slot: 8, anonymous: false, puuid: 'p-r3', gameName: 'Harrowhold', tagLine: 'NA1', teamId: 200, championId: C.Jhin, spell1Id: S.Flash, spell2Id: S.Heal },
+    { slot: 9, anonymous: true, puuid: null, gameName: null, tagLine: null, teamId: 200, championId: null, spell1Id: null, spell2Id: null }
   ]
 }
