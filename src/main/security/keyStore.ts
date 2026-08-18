@@ -54,3 +54,57 @@ export function clearApiKey(): void {
 export function hasStoredApiKey(): boolean {
   return loadApiKey() !== null
 }
+
+/**
+ * A second credential store, for secrets that are not the Riot key.
+ *
+ * The obs-websocket password is the first of them. It goes here rather than in
+ * `app_settings` for the same reason the Riot key does: the database file is
+ * something a user might reasonably copy or hand over when reporting a problem,
+ * and it should not carry a password when they do.
+ */
+function secretPath(name: string): string {
+  // Named rather than pathed by the caller, so nothing can write outside
+  // `secure/` by passing a traversing name.
+  return join(secureDir(), `${name.replace(/[^a-z0-9._-]/gi, '_')}.enc`)
+}
+
+export function saveSecret(name: string, value: string): void {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    clearSecret(name)
+    return
+  }
+
+  mkdirSync(secureDir(), { recursive: true })
+
+  if (safeStorage.isEncryptionAvailable()) {
+    writeFileSync(secretPath(name), safeStorage.encryptString(trimmed))
+  } else {
+    writeFileSync(secretPath(name), Buffer.from(`plain:${trimmed}`, 'utf8'))
+  }
+}
+
+export function loadSecret(name: string): string | null {
+  const path = secretPath(name)
+  if (!existsSync(path)) return null
+
+  try {
+    const buf = readFileSync(path)
+    const asText = buf.toString('utf8')
+    if (asText.startsWith('plain:')) return asText.slice('plain:'.length)
+    if (!safeStorage.isEncryptionAvailable()) return null
+    return safeStorage.decryptString(buf)
+  } catch {
+    return null
+  }
+}
+
+export function clearSecret(name: string): void {
+  const path = secretPath(name)
+  if (existsSync(path)) rmSync(path)
+}
+
+export function hasSecret(name: string): boolean {
+  return existsSync(secretPath(name))
+}

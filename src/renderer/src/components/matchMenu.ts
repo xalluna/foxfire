@@ -17,6 +17,18 @@ export function lpEditBlockedReason(match: MatchSummary): string | null {
   return null
 }
 
+/**
+ * Why a game cannot be watched back, or null when it can.
+ *
+ * Stated rather than hidden, exactly as the LP reasons are: "why does this game
+ * have a replay and that one not?" is a real question, and an item that
+ * silently disappears from half the rows cannot answer it.
+ */
+export function replayBlockedReason(match: MatchSummary): string | null {
+  if (match.replayId === null) return 'No recording for this game'
+  return null
+}
+
 export function matchContextItems(
   match: MatchSummary,
   actions: {
@@ -24,12 +36,19 @@ export function matchContextItems(
     onClearLp: () => void
     onCopyId: () => void
     onOpenDetails: () => void
+    onWatchReplay: () => void
   },
   { expandable = true }: { expandable?: boolean } = {}
 ): ContextMenuItem[] {
   const blocked = lpEditBlockedReason(match)
+  const noReplay = replayBlockedReason(match)
 
   return [
+    {
+      label: 'Watch replay',
+      onSelect: actions.onWatchReplay,
+      ...(noReplay ? { disabledReason: noReplay } : {})
+    },
     match.hasManualRank
       ? { label: 'Clear LP edit', onSelect: actions.onClearLp }
       : {

@@ -112,6 +112,7 @@ interface MatchSummaryRow {
   is_promotion: number | null
   is_demotion: number | null
   has_manual_rank: number
+  replay_id: number | null
 }
 
 /**
@@ -152,7 +153,14 @@ export function getMatchSummaries(
                        WHERE rs.match_id = p.match_id
                          AND rs.source = 'manual'
                          AND rs.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid))
-                AS has_manual_rank
+                AS has_manual_rank,
+              -- Only the context menu reads this, to decide whether watching
+              -- the game is on offer. An ad-hoc search resolves no account, so
+              -- the correlated lookup yields NULL and no row claims a replay.
+              (SELECT rp.id FROM replays rp
+                WHERE rp.match_id = p.match_id
+                  AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
+                ORDER BY rp.id DESC LIMIT 1) AS replay_id
          FROM match_participants p
          JOIN matches m ON m.match_id = p.match_id
          JOIN (SELECT match_id, team_id,
@@ -212,7 +220,8 @@ export function getMatchSummaries(
             isPromotion: row.is_promotion === 1,
             isDemotion: row.is_demotion === 1
           },
-    hasManualRank: row.has_manual_rank === 1
+    hasManualRank: row.has_manual_rank === 1,
+    replayId: row.replay_id
   }))
 }
 

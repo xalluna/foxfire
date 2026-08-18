@@ -1,14 +1,16 @@
 import type {
   Account,
+  ChampionStats,
   LeagueEntry,
-  Scoreboard,
   MasteryEntry,
   MatchDetail,
   MatchRankInfo,
   MatchSummary,
   QueueType,
   RankSnapshot,
-  ChampionStats
+  Replay,
+  ReplayEvent,
+  Scoreboard
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
 import {
@@ -466,7 +468,10 @@ const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   teamDamage: s.teamDamage,
   isRemake: s.remake ?? false,
   rank: soloHistory.byMatchId.get(matchIdAt(i)) ?? null,
-  hasManualRank: false
+  hasManualRank: false,
+  // The first three games were recorded; the rest were not, so the context menu
+  // is exercised both enabled and disabled without switching scenario.
+  replayId: i < 3 ? i + 1 : null
 }))
 
 const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
@@ -599,3 +604,89 @@ export const SCOREBOARD: Scoreboard = {
     { slot: 9, gameName: 'Nami Bot', tagLine: 'BOT', isSelf: false, isBot: true, isDead: false, respawnTimer: 0, level: 9, position: 'UTILITY', teamId: 200, championId: C.Nami, championName: 'Nami', spell1Id: S.Flash, spell2Id: S.Exhaust, keystoneId: K.Grasp[0], secondaryTreeId: K.Grasp[1], items: ITEMS_SUPPORT, roleBoundItem: ROLE_ITEM.UTILITY, kills: 0, deaths: 7, assists: 10, creepScore: 18, wardScore: 33.1 }
   ]
 }
+
+/**
+ * Recordings, covering the three states the Replays view has to draw.
+ *
+ * A bound replay, one still hunting for its match, and one that never found a
+ * game — the Practice Tool case, which is the normal reason a recording stays
+ * unmatched and is exactly the row most likely to be got wrong.
+ */
+export const REPLAYS: Record<number, Replay[]> = {
+  1: [
+    {
+      id: 1,
+      accountId: 1,
+      matchId: matchIdAt(0),
+      bindState: 'bound',
+      fileBytes: 1_820_000_000,
+      fileExists: true,
+      queueId: 420,
+      startedAt: NOW - 42 * 60_000,
+      endedAt: NOW - 12 * 60_000,
+      durationSeconds: 1_802,
+      selfChampionId: C.Viktor,
+      match: {
+        matchId: matchIdAt(0),
+        gameCreation: NOW - 45 * 60_000,
+        gameDuration: 1_802,
+        gameMode: 'CLASSIC',
+        queueId: 420,
+        win: true,
+        championId: C.Viktor,
+        championName: 'Viktor',
+        kills: 11,
+        deaths: 3,
+        assists: 8
+      }
+    },
+    {
+      id: 2,
+      accountId: 1,
+      matchId: null,
+      bindState: 'pending',
+      fileBytes: 1_100_000_000,
+      fileExists: true,
+      queueId: 440,
+      startedAt: NOW - 8 * 60_000,
+      endedAt: NOW - 60_000,
+      durationSeconds: 1_412,
+      selfChampionId: C.Ahri,
+      match: null
+    },
+    {
+      id: 3,
+      accountId: 1,
+      matchId: null,
+      bindState: 'unmatched',
+      fileBytes: 260_000_000,
+      // Deleted from Explorer behind the app's back, which is the state the
+      // "file missing" badge and the disabled Watch button exist for.
+      fileExists: false,
+      queueId: 0,
+      startedAt: NOW - 3 * 60 * 60_000,
+      endedAt: NOW - 3 * 60 * 60_000 + 420_000,
+      durationSeconds: 420,
+      selfChampionId: C.LeeSin,
+      match: null
+    }
+  ],
+  2: []
+}
+
+/**
+ * A timeline dense enough to exercise clustering.
+ *
+ * Two kills seconds apart plus the multikill they add up to land on top of each
+ * other on the bar, which is the case the marker clustering exists for.
+ */
+export const REPLAY_EVENTS: ReplayEvent[] = [
+  { eventId: 1, name: 'ChampionKill', gameTime: 214, videoTime: 174, role: 'kill', label: 'Ahri' },
+  { eventId: 2, name: 'ChampionKill', gameTime: 402, videoTime: 362, role: 'death', label: 'LeeSin' },
+  { eventId: 3, name: 'ChampionKill', gameTime: 640, videoTime: 600, role: 'assist', label: 'Aatrox' },
+  { eventId: 4, name: 'ChampionKill', gameTime: 902, videoTime: 862, role: 'kill', label: 'Aatrox' },
+  { eventId: 5, name: 'ChampionKill', gameTime: 906, videoTime: 866, role: 'kill', label: 'LeeSin' },
+  { eventId: 6, name: 'Multikill', gameTime: 907, videoTime: 867, role: 'multikill', label: '2' },
+  { eventId: 7, name: 'ChampionKill', gameTime: 1_240, videoTime: 1_200, role: 'death', label: 'Ahri' },
+  { eventId: 8, name: 'ChampionKill', gameTime: 1_690, videoTime: 1_650, role: 'kill', label: 'Nami' }
+]

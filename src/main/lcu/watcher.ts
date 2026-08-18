@@ -6,6 +6,7 @@ import { CH } from '../ipc/channels'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
+import { onGamePhase } from '../capture/captureService'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
 import { isRankedQueue, TRACKED_QUEUES } from '@shared/queues'
@@ -119,7 +120,7 @@ function normaliseRankField(value: string | null): string | null {
  * to a poll whose real job is rank, and an older client missing one of them
  * must not take the rank snapshot down with it.
  */
-async function trackGameflow(creds: LcuCredentials): Promise<boolean> {
+async function trackGameflow(creds: LcuCredentials, accountId: number): Promise<boolean> {
   let phase: string | null = null
   try {
     phase = await lcuGet<string>(creds, '/lol-gameflow/v1/gameflow-phase')
@@ -136,6 +137,12 @@ async function trackGameflow(creds: LcuCredentials): Promise<boolean> {
       log.debug('Gameflow session read failed', { error: String(err) })
     }
   }
+
+  // The only signal capture gets that a game exists at all. Ten seconds is far
+  // too coarse to time a recording by, but arming does not need to be quick:
+  // the loading screen that follows lasts at least a minute, and the recording
+  // itself is started by the game answering on loopback.
+  onGamePhase(accountId, currentQueueId, isPlayingPhase(phase))
 
   const ended = isGameEndTransition(lastPhase, phase)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
@@ -186,7 +193,7 @@ async function tick(): Promise<void> {
 
     // Read before the rank stats so the snapshot below can be forced when a
     // ranked game has just concluded.
-    const gameEnded = await trackGameflow(creds)
+    const gameEnded = await trackGameflow(creds, account.id)
     const endedRanked = gameEnded && isRankedQueue(currentQueueId)
     if (gameEnded) currentQueueId = null
 

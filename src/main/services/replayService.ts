@@ -1,0 +1,182 @@
+import { BrowserWindow, shell } from 'electron'
+import { rmSync } from 'node:fs'
+import { getDb } from '../db'
+import { CH } from '../ipc/channels'
+import { createLogger } from '../telemetry/logger'
+import { getAccountById } from '../db/repositories/accounts.repo'
+import {
+  bindReplay,
+  countMissingFiles,
+  deleteReplay,
+  getOldestReplayIds,
+  getPendingReplays,
+  getReplay,
+  getReplayEvents,
+  getReplayFilePath,
+  getReplayUsage,
+  getReplays,
+  markReplayUnmatched
+} from '../db/repositories/replays.repo'
+import {
+  findMatchForReplay,
+  shouldGiveUpBinding,
+  type MatchCandidate
+} from '../capture/matchBinding'
+import { getCaptureSettings } from './captureSettings'
+import type { Replay, ReplayDetail, ReplayDiskUsage } from '@shared/types'
+
+const log = createLogger('replays')
+
+export function broadcastReplaysChanged(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(CH.replays.changed)
+  }
+}
+
+export function listReplays(accountId: number): Replay[] {
+  return getReplays(getDb(), accountId)
+}
+
+export function getReplayDetail(replayId: number): ReplayDetail | null {
+  const db = getDb()
+  const replay = getReplay(db, replayId)
+  if (!replay) return null
+  return { replay, events: getReplayEvents(db, replayId) }
+}
+
+export function getDiskUsage(): ReplayDiskUsage {
+  const db = getDb()
+  const usage = getReplayUsage(db)
+  return {
+    ...usage,
+    missingCount: countMissingFiles(db),
+    softCapBytes: getCaptureSettings().softCapBytes
+  }
+}
+
+/** Deletes the row and the file it points at. */
+export function removeReplay(replayId: number): void {
+  const path = deleteReplay(getDb(), replayId)
+  if (path) {
+    try {
+      rmSync(path, { force: true })
+    } catch (err) {
+      // The row is already gone, so the replay has left the app either way.
+      // A file locked by a player still open on it is the usual cause.
+      log.debug('Could not delete replay file', { path, error: String(err) })
+    }
+  }
+  broadcastReplaysChanged()
+}
+
+/** The one-click cleanup offered when the advisory cap is crossed. */
+export function removeOldestReplays(accountId: number, count: number): number {
+  const ids = getOldestReplayIds(getDb(), accountId, count)
+  for (const id of ids) removeReplay(id)
+  return ids.length
+}
+
+export function revealReplay(replayId: number): void {
+  const path = getReplayFilePath(getDb(), replayId)
+  if (path) shell.showItemInFolder(path)
+}
+
+interface CandidateRow {
+  match_id: string
+  game_creation: number
+  game_duration: number
+  champion_ids: string
+  self_champion_id: number | null
+  taken: number
+}
+
+/**
+ * Matches finished around the same time as any pending recording.
+ *
+ * Scoped by time in SQL rather than loading the account's whole history: a
+ * long-standing library is thousands of matches and the fingerprint only ever
+ * looks at the last few hours.
+ */
+function candidatesFor(accountId: number, since: number, until: number): MatchCandidate[] {
+  const account = getAccountById(getDb(), accountId)
+  if (!account) return []
+
+  const rows = getDb()
+    .prepare(
+      `SELECT m.match_id, m.game_creation, m.game_duration,
+              (SELECT group_concat(p2.champion_id)
+                 FROM match_participants p2 WHERE p2.match_id = m.match_id) AS champion_ids,
+              p.champion_id AS self_champion_id,
+              EXISTS (SELECT 1 FROM replays r WHERE r.match_id = m.match_id) AS taken
+         FROM matches m
+         JOIN match_participants p ON p.match_id = m.match_id AND p.puuid = ?
+        WHERE m.game_creation BETWEEN ? AND ?`
+    )
+    .all(account.puuid, since, until) as unknown as CandidateRow[]
+
+  return rows.map((row) => ({
+    matchId: row.match_id,
+    gameCreation: row.game_creation,
+    gameDuration: row.game_duration,
+    championIds: row.champion_ids
+      ? row.champion_ids.split(',').map((id) => Number(id))
+      : [],
+    selfChampionId: row.self_champion_id,
+    taken: row.taken === 1
+  }))
+}
+
+/** Widened either side of the recording so clock differences cannot exclude the game. */
+const CANDIDATE_WINDOW_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Tries to give every finished recording its match.
+ *
+ * Called after each post-game sync, because that is when a new match can first
+ * appear. Recordings that have waited past the whole retry schedule are marked
+ * unmatched — a resting state, not a deletion: a Practice Tool game has no
+ * match-v5 match and never will, and the footage is still worth keeping.
+ */
+export function bindPendingReplays(accountId: number): number {
+  const db = getDb()
+  const pending = getPendingReplays(db, accountId)
+  if (pending.length === 0) return 0
+
+  const now = Date.now()
+  const oldest = Math.min(...pending.map((replay) => replay.startedAt))
+  const candidates = candidatesFor(
+    accountId,
+    oldest - CANDIDATE_WINDOW_MS,
+    now + CANDIDATE_WINDOW_MS
+  )
+
+  let bound = 0
+  const claimed = new Set<string>()
+
+  for (const replay of pending) {
+    const result = findMatchForReplay(replay,
+      // A match bound earlier in this same pass is off the table too, or two
+      // back-to-back games on the same champion could both take the first one.
+      candidates.map((candidate) =>
+        claimed.has(candidate.matchId) ? { ...candidate, taken: true } : candidate
+      )
+    )
+
+    if (result) {
+      bindReplay(db, replay.id, result.matchId)
+      claimed.add(result.matchId)
+      bound += 1
+      log.info('Bound replay to match', {
+        replayId: replay.id,
+        matchId: result.matchId,
+        confidence: result.confidence
+      })
+    } else if (shouldGiveUpBinding(replay, now)) {
+      markReplayUnmatched(db, replay.id)
+      log.info('Replay left unmatched; keeping the footage', { replayId: replay.id })
+    }
+  }
+
+  if (bound > 0) broadcastReplaysChanged()
+  return bound
+}

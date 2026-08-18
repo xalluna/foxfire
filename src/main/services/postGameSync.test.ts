@@ -10,6 +10,14 @@ vi.mock('../telemetry/logger', () => ({
 const syncAccount = vi.fn()
 vi.mock('./syncService', () => ({ syncAccount: (...args: unknown[]) => syncAccount(...args) }))
 
+// Reaches SQLite and Electron to bind a finished recording to the match a sync
+// just landed. Mocked for the same reason syncService is — this file is about
+// the retry schedule, not about what each attempt goes on to do.
+const bindPendingReplays = vi.fn()
+vi.mock('./replayService', () => ({
+  bindPendingReplays: (...args: unknown[]) => bindPendingReplays(...args)
+}))
+
 const { cancelAllPostGameSyncs, schedulePostGameSync } = await import('./postGameSync')
 
 const ACCOUNT = 1
@@ -25,6 +33,7 @@ describe('schedulePostGameSync', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     syncAccount.mockReset()
+    bindPendingReplays.mockReset()
   })
 
   afterEach(() => {
@@ -116,5 +125,25 @@ describe('schedulePostGameSync', () => {
 
     await vi.advanceTimersByTimeAsync(PAST_EVERYTHING)
     expect(syncAccount).not.toHaveBeenCalled()
+  })
+
+  it('looks for a recording to bind as soon as a match lands', async () => {
+    syncAccount.mockResolvedValue(FOUND)
+    schedulePostGameSync(ACCOUNT)
+
+    await vi.advanceTimersByTimeAsync(PAST_EVERYTHING)
+
+    // The moment a new match appears is the only moment a recording can find
+    // the game it belongs to, so binding is attempted here rather than polled.
+    expect(bindPendingReplays).toHaveBeenCalledWith(ACCOUNT)
+  })
+
+  it('does not look for a binding on an attempt that found nothing', async () => {
+    syncAccount.mockResolvedValue(EMPTY)
+    schedulePostGameSync(ACCOUNT)
+
+    await vi.advanceTimersByTimeAsync(PAST_EVERYTHING)
+
+    expect(bindPendingReplays).not.toHaveBeenCalled()
   })
 })

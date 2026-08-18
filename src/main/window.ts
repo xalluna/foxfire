@@ -3,6 +3,7 @@ import { BrowserWindow, shell } from 'electron'
 import { is } from './lib/env'
 import { closeTelemetryWindow } from './telemetryWindow'
 import { closeLpEditorWindow } from './lpEditorWindow'
+import { closeReplayWindows } from './replayWindow'
 
 /**
  * The app window, tracked by identity.
@@ -52,14 +53,15 @@ export function createMainWindow(): BrowserWindow {
     window.show()
   })
 
-  // The telemetry panel and the LP editor are separate BrowserWindows, so
-  // leaving either open would keep `window-all-closed` from ever firing and the
-  // app would linger with no visible window outside tray mode. In tray mode
-  // this never runs — the close is intercepted and the window only hides.
+  // The telemetry panel, the LP editor and any open replay windows are separate
+  // BrowserWindows, so leaving one open would keep `window-all-closed` from ever
+  // firing and the app would linger with no visible window outside tray mode. In
+  // tray mode this never runs — the close is intercepted and the window only hides.
   window.on('closed', () => {
     mainWindow = null
     closeTelemetryWindow()
     closeLpEditorWindow()
+    closeReplayWindows()
   })
 
   window.webContents.setWindowOpenHandler((details) => {

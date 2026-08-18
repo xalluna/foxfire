@@ -325,7 +325,8 @@ function summaryFor(game: Game, index: number): MatchSummary {
     teamDamage,
     isRemake: false,
     rank: null,
-    hasManualRank: false
+    hasManualRank: false,
+    replayId: null
   }
 }
 
