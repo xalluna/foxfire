@@ -56,11 +56,11 @@ export function ProfileStrip({
         <div className="relative shrink-0">
           <Asset
             src={assets ? profileIconUrl(assets, account.profileIconId) : null}
-            className="h-12 w-12 border border-gold-dim"
+            className="h-12 w-12 border border-accent-dim"
             rounded="rounded-md"
           />
           {account.summonerLevel !== null && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full border border-gold-dim bg-canvas px-1.5 text-[9px] font-medium tabular-nums text-gold">
+            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full border border-accent-dim bg-canvas px-1.5 text-[9px] font-medium tabular-nums text-accent">
               {account.summonerLevel}
             </span>
           )}
@@ -85,7 +85,7 @@ export function ProfileStrip({
         <button
           onClick={onRefresh}
           disabled={refreshing}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-gold-dim bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
           <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
           {refreshing ? 'Syncing…' : 'Sync now'}

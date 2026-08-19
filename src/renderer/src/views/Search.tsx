@@ -64,12 +64,12 @@ export function Search(): JSX.Element {
           onChange={(e) => setValue(e.target.value)}
           placeholder={example}
           spellCheck={false}
-          className="flex-1 rounded-md border border-hairline bg-surface px-3 py-2 text-base text-text outline-none transition placeholder:text-text-mute focus:border-gold-dim"
+          className="flex-1 rounded-md border border-hairline bg-surface px-3 py-2 text-base text-text outline-none transition placeholder:text-text-mute focus:border-accent-dim"
         />
         <button
           type="submit"
           disabled={!value.trim() || search.isPending}
-          className="flex items-center gap-1.5 rounded-md border border-gold-dim bg-gold/10 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+          className="flex items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
           <Icon.Search />
           {search.isPending ? 'Searching…' : 'Search'}
@@ -104,10 +104,10 @@ export function Search(): JSX.Element {
                 <div className="relative">
                   <Asset
                     src={assets ? profileIconUrl(assets, result.profile.profileIconId) : null}
-                    className="h-20 w-20 border-2 border-gold-dim"
+                    className="h-20 w-20 border-2 border-accent-dim"
                     rounded="rounded-lg"
                   />
-                  <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 rounded-full border border-gold-dim bg-canvas px-2 py-0.5 text-2xs font-medium tabular-nums text-gold">
+                  <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 rounded-full border border-accent-dim bg-canvas px-2 py-0.5 text-2xs font-medium tabular-nums text-accent">
                     {result.profile.summonerLevel}
                   </span>
                 </div>
@@ -127,7 +127,7 @@ export function Search(): JSX.Element {
             <div className="flex items-center gap-3 rounded-lg border border-hairline bg-surface p-3 xl:hidden">
               <Asset
                 src={assets ? profileIconUrl(assets, result.profile.profileIconId) : null}
-                className="h-12 w-12 border border-gold-dim"
+                className="h-12 w-12 border border-accent-dim"
                 rounded="rounded-md"
               />
               <div className="min-w-0">

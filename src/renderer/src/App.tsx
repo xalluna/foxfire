@@ -10,6 +10,7 @@ import { RankHistory } from './views/RankHistory'
 import { Search } from './views/Search'
 import { Settings } from './views/Settings'
 import { EmptyState } from './components/EmptyState'
+import { Logo } from './components/Logo'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { LiveNavIcon } from './components/LiveNavIcon'
 import * as Icon from './components/icons'
@@ -116,7 +117,10 @@ function App(): JSX.Element {
         className="drag box-content flex h-titlebar shrink-0 items-center gap-4 border-b border-hairline pl-4"
         style={{ paddingRight: 'var(--titlebar-controls-w)' }}
       >
-        <span className="font-display text-base tracking-wide text-gold">LoL Stats</span>
+        <div className="flex items-center gap-2">
+          <Logo className="shrink-0 text-accent" />
+          <span className="font-display text-base tracking-wide text-accent">Foxfire</span>
+        </div>
 
         <nav className="no-drag flex gap-0.5">
           {NAV.map((item) => (
@@ -127,7 +131,7 @@ function App(): JSX.Element {
               className={clsx(
                 'flex items-center gap-1.5 rounded px-2.5 py-1 text-sm transition',
                 view === item.id
-                  ? 'bg-gold/10 text-gold'
+                  ? 'bg-accent/10 text-accent'
                   : 'text-text-dim hover:bg-surface hover:text-text'
               )}
             >

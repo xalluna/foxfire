@@ -165,7 +165,7 @@ function ReplayHeader({ replay }: { replay: Replay }): JSX.Element {
           <button
             type="button"
             onClick={() => void window.api.replays.showMatch(replay.accountId, match.matchId)}
-            className="rounded-md border border-gold-dim bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20"
+            className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
           >
             View match history
           </button>

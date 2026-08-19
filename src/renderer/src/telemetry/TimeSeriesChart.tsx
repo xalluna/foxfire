@@ -191,7 +191,7 @@ export function TimeSeriesChart({
             x2={x(hoverAt)}
             y1={PAD.top}
             y2={PAD.top + PLOT_H}
-            stroke="rgb(var(--gold))"
+            stroke="rgb(var(--accent))"
             strokeWidth="1"
             strokeOpacity="0.5"
           />

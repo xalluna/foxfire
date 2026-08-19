@@ -48,7 +48,7 @@ export function TelemetryApp(): JSX.Element {
     <div className="min-h-screen bg-canvas text-text">
       <header className="sticky top-0 z-10 border-b border-hairline bg-canvas/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-3 px-5 py-3">
-          <Icon.Activity className="text-gold" />
+          <Icon.Activity className="text-accent" />
           <h1 className="font-display text-base text-text">Telemetry</h1>
 
           {data && (
@@ -59,7 +59,7 @@ export function TelemetryApp(): JSX.Element {
                 'rounded-full border px-2.5 py-0.5 text-2xs font-medium transition',
                 data.enabled
                   ? 'border-teal/30 bg-teal/10 text-teal hover:bg-teal/20'
-                  : 'border-hairline bg-surface text-text-mute hover:border-gold-dim hover:text-gold'
+                  : 'border-hairline bg-surface text-text-mute hover:border-accent-dim hover:text-accent'
               )}
             >
               {data.enabled ? 'Collecting' : 'Paused'}
@@ -74,7 +74,7 @@ export function TelemetryApp(): JSX.Element {
                 className={clsx(
                   'rounded-md px-2 py-1 text-2xs font-medium transition',
                   windowMs === option.ms
-                    ? 'bg-gold/15 text-gold'
+                    ? 'bg-accent/15 text-accent'
                     : 'text-text-mute hover:bg-surface hover:text-text-dim'
                 )}
               >
@@ -92,7 +92,7 @@ export function TelemetryApp(): JSX.Element {
               className={clsx(
                 'border-b-2 px-3 py-2 text-2xs font-medium transition',
                 tab === entry.id
-                  ? 'border-gold text-gold'
+                  ? 'border-accent text-accent'
                   : 'border-transparent text-text-mute hover:text-text-dim'
               )}
             >
@@ -126,7 +126,7 @@ export function TelemetryApp(): JSX.Element {
             <button
               onClick={() => setEnabled.mutate(true)}
               disabled={setEnabled.isPending}
-              className="mt-4 rounded-md border border-gold-dim bg-gold/10 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/20"
+              className="mt-4 rounded-md border border-accent-dim bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20"
             >
               Start collecting
             </button>

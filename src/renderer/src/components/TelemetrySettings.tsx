@@ -42,7 +42,7 @@ export function TelemetrySettings(): JSX.Element {
 
   return (
     <SettingsSection
-      icon={<Icon.Activity className="shrink-0 text-gold" />}
+      icon={<Icon.Activity className="shrink-0 text-accent" />}
       title="Developer telemetry"
       summary={
         enabled ? (
@@ -74,7 +74,7 @@ export function TelemetrySettings(): JSX.Element {
       <div className="mt-4 flex items-center gap-2">
         <button
           onClick={() => window.api.telemetry.openWindow()}
-          className="rounded-md border border-gold-dim bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20"
+          className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
         >
           Open panel
         </button>

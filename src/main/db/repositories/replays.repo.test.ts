@@ -38,7 +38,7 @@ const WITHIN_HORIZON = T0 - 1
 const PAST_HORIZON = T0 + 1
 
 /** Nothing in these tests writes a file, so every path is a missing one. */
-const FILE = 'C:\\Videos\\LoL Stats\\2026-08-18 20-14-03.mp4'
+const FILE = 'C:\\Videos\\Foxfire\\2026-08-18 20-14-03.mp4'
 
 let db: DatabaseSyncType
 

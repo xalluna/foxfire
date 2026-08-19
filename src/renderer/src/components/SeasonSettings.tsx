@@ -117,7 +117,7 @@ export function SeasonSettings(): JSX.Element {
 
   return (
     <SettingsSection
-      icon={<Icon.Trophy className="shrink-0 text-gold" />}
+      icon={<Icon.Trophy className="shrink-0 text-accent" />}
       title="Ranked seasons"
       // Folded, the summary is all that is left of this section, so it carries
       // the count — and flags edits that would otherwise sit forgotten behind
@@ -149,14 +149,14 @@ export function SeasonSettings(): JSX.Element {
                 placeholder="Season 2027"
                 spellCheck={false}
                 aria-label="Season name"
-                className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-gold-dim focus:outline-none"
+                className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
               />
               <input
                 type="datetime-local"
                 value={Number.isFinite(row.startsAt) ? toLocalInput(row.startsAt) : ''}
                 onChange={(e) => patch(row.key, { startsAt: fromLocalInput(e.target.value) })}
                 aria-label="Season start"
-                className="shrink-0 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-gold-dim focus:outline-none"
+                className="shrink-0 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-accent-dim focus:outline-none"
               />
               <button
                 onClick={() => setRows((c) => (c ?? []).filter((r) => r.key !== row.key))}
@@ -173,7 +173,7 @@ export function SeasonSettings(): JSX.Element {
                   type="checkbox"
                   checked={row.resetsRank}
                   onChange={(e) => patch(row.key, { resetsRank: e.target.checked })}
-                  className="accent-gold"
+                  className="accent-accent"
                 />
                 Rank was reset
               </label>
@@ -182,7 +182,7 @@ export function SeasonSettings(): JSX.Element {
                   type="checkbox"
                   checked={row.isPreseason}
                   onChange={(e) => patch(row.key, { isPreseason: e.target.checked })}
-                  className="accent-gold"
+                  className="accent-accent"
                 />
                 Preseason
               </label>
@@ -205,7 +205,7 @@ export function SeasonSettings(): JSX.Element {
       <div className="mt-4 flex items-center gap-2">
         <button
           onClick={addSeason}
-          className="flex items-center gap-1.5 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-gold-dim hover:text-gold"
+          className="flex items-center gap-1.5 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
         >
           <Icon.Plus width={12} height={12} />
           Add season
@@ -214,7 +214,7 @@ export function SeasonSettings(): JSX.Element {
         <button
           onClick={() => save.mutate(draft.map(({ key: _key, ...season }) => season))}
           disabled={problem !== null || unchanged || save.isPending}
-          className="ml-auto rounded-md border border-gold-dim bg-gold/10 px-4 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+          className="ml-auto rounded-md border border-accent-dim bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
           {save.isPending ? 'Saving…' : 'Save seasons'}
         </button>

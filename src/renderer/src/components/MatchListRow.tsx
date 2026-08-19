@@ -189,7 +189,7 @@ export function MatchListRow({
           />
         )}
         {multiKill && (
-          <span className="rounded-full border border-gold-dim bg-gold/10 px-1.5 text-[9px] font-medium uppercase tracking-wide text-gold">
+          <span className="rounded-full border border-accent-dim bg-accent/10 px-1.5 text-[9px] font-medium uppercase tracking-wide text-accent">
             {multiKill}
           </span>
         )}
@@ -208,7 +208,7 @@ export function MatchListRow({
         title={match.replayId !== null ? 'Replay available — right-click to watch' : undefined}
       >
         {match.replayId !== null && (
-          <Icon.Film width={14} height={14} className="text-gold/60" />
+          <Icon.Film width={14} height={14} className="text-accent/60" />
         )}
       </span>
 

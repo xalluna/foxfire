@@ -25,12 +25,21 @@ import type { CaptureAudio, CaptureQuality } from '@shared/types'
  */
 const log = createLogger('obs')
 
-const PROFILE = 'LoL Stats Capture'
-const COLLECTION = 'LoL Stats Capture'
+/**
+ * Prefixes everything this app creates inside OBS.
+ *
+ * Named rather than repeated, because applyManagedAudio below tells our inputs
+ * from the user's by this exact string. The two drifting apart is silent and
+ * costs the wrong microphone.
+ */
+const OURS = 'Foxfire '
+
+const PROFILE = `${OURS}Capture`
+const COLLECTION = `${OURS}Capture`
 const SCENE = 'League'
 const GAME_INPUT = 'League of Legends'
-const DESKTOP_INPUT = 'LoL Stats Desktop Audio'
-const MIC_INPUT = 'LoL Stats Microphone'
+const DESKTOP_INPUT = `${OURS}Desktop Audio`
+const MIC_INPUT = `${OURS}Microphone`
 
 /**
  * OBS's own window spec, "title:class:executable".
@@ -222,7 +231,7 @@ export async function applyManagedAudio(audio: CaptureAudio): Promise<void> {
     // there. Only that one is unmuted: leaving two live would record the same
     // device twice and mix it with itself.
     const inputs = (await inputsOfKind(kind)).sort((a, b) => {
-      const ours = (name: string): number => (name.startsWith('LoL Stats ') ? 1 : 0)
+      const ours = (name: string): number => (name.startsWith(OURS) ? 1 : 0)
       return ours(a) - ours(b)
     })
 

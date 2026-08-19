@@ -1,6 +1,6 @@
-# LoL Stats
+# Foxfire
 
-A personal, ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts.
+A personal, ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts. Foxfire records your ranked games, keeps the LP ledger for every season you have played, and never asks anyone else about them.
 
 Built with Electron, React, and TypeScript. All data comes from **Riot's official Developer API** (op.gg's Terms of Use prohibit scraping their site, and everything here is available from Riot directly).
 
@@ -32,7 +32,7 @@ The app needs a Riot API key, entered through **Settings** inside the app — ne
 1. Get a key from [developer.riotgames.com](https://developer.riotgames.com)
 2. Open the app → **Settings** → paste it → **Save**
 
-The key is validated against Riot before being saved, then encrypted with Electron's `safeStorage` (Windows DPAPI) and written to `%APPDATA%/my-op-gg/secure/riot-api-key.enc`. It never touches the repo or the database file.
+The key is validated against Riot before being saved, then encrypted with Electron's `safeStorage` (Windows DPAPI) and written to `%APPDATA%/Foxfire/secure/riot-api-key.enc`. It never touches the repo or the database file.
 
 **Personal development keys expire every 24 hours.** When lookups start failing, generate a fresh one and paste it again.
 
@@ -73,7 +73,9 @@ Storage uses Node 24's built-in `node:sqlite` (bundled with Electron 43) rather 
 | `npm test` | Run unit tests |
 | `npm run typecheck` | Type-check both processes |
 | `npm run lint` | Lint |
+| `npm run make-mark` | Regenerate the logo geometry in `src/shared/logoMark.json` |
+| `npm run make-icon` | Redraw the app icon, tray icon and favicon from that geometry |
 
 ## Disclaimer
 
-This app isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.
+Foxfire isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.

@@ -37,7 +37,7 @@ export function LcuIndicator(): JSX.Element {
       onClick={() => setView('settings')}
       title="Open rank tracking settings"
       className={clsx(
-        'mt-1.5 flex items-center gap-1.5 text-2xs transition hover:text-gold',
+        'mt-1.5 flex items-center gap-1.5 text-2xs transition hover:text-accent',
         tone
       )}
     >

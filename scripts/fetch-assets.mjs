@@ -41,8 +41,9 @@ const TIERS = [
   'challenger'
 ]
 
-// Riot's own champ-select icons. They ship already filled with #785a28 and
-// #c8aa6e — the same two golds as our --gold-dim and --gold tokens.
+// Riot's own champ-select icons. They ship already filled with Riot's #785a28
+// and #c8aa6e, and are left that way — the app's own accent moved off gold in
+// 0.8.0, but Riot's art keeps Riot's palette. See src/renderer/src/lib/positions.ts.
 const POSITIONS = ['top', 'jungle', 'middle', 'bottom', 'utility']
 
 /** Smallest plausible download per type — guards against a 404 page or empty body being written as an asset. */

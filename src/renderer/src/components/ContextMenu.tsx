@@ -104,7 +104,7 @@ export function ContextMenu({
           className={clsx(
             'block w-full px-3 py-1.5 text-left text-2xs transition',
             item.disabledReason === undefined
-              ? 'text-text-dim hover:bg-gold/10 hover:text-gold'
+              ? 'text-text-dim hover:bg-accent/10 hover:text-accent'
               : 'cursor-not-allowed text-text-mute'
           )}
         >

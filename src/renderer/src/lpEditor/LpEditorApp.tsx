@@ -227,7 +227,7 @@ export function LpEditorApp(): JSX.Element {
     <div className="flex min-h-screen flex-col bg-canvas text-text">
       <header className="sticky top-0 z-10 border-b border-hairline bg-canvas/95 px-5 py-3 backdrop-blur">
         <div className="flex items-center gap-3">
-          <Icon.TrendingUp className="text-gold" />
+          <Icon.TrendingUp className="text-accent" />
           <h1 className="font-display text-base text-text">Edit LP</h1>
           <span className="rounded-full border border-hairline bg-surface px-2.5 py-0.5 text-2xs text-text-dim">
             {queueFilterLabel(queueIdForQueueType(queueType))}
@@ -271,7 +271,7 @@ export function LpEditorApp(): JSX.Element {
                   className={clsx(
                     'flex flex-wrap items-center gap-x-4 gap-y-2 border-l-[3px] px-3 py-2.5 transition',
                     match.win ? 'border-l-teal' : 'border-l-red',
-                    focusedMatchId === match.matchId && 'bg-gold/[0.07]'
+                    focusedMatchId === match.matchId && 'bg-accent/[0.07]'
                   )}
                 >
                   <div className="flex w-[210px] shrink-0 items-center gap-2">
@@ -368,7 +368,7 @@ export function LpEditorApp(): JSX.Element {
           <button
             onClick={() => save.mutate(pending)}
             disabled={pending.length === 0 || save.isPending}
-            className="rounded-md border border-gold-dim bg-gold/10 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+            className="rounded-md border border-accent-dim bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
           >
             {save.isPending ? 'Saving…' : `Save ${pending.length || ''}`.trim()}
           </button>

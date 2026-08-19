@@ -14,7 +14,7 @@ import { formatMs } from './format'
 
 /** Electron's own process-type names, kept verbatim so they match its docs. */
 const PROCESS_COLOURS: Record<string, string> = {
-  Browser: 'rgb(var(--gold))',
+  Browser: 'rgb(var(--accent))',
   Tab: 'rgb(var(--teal))',
   GPU: 'rgb(var(--amber))',
   Utility: 'rgb(var(--text-dim))'
@@ -87,7 +87,7 @@ export function ResourcesPanel({ windowMs }: { windowMs: number }): JSX.Element 
   const queueSeries: Series[] = [
     {
       label: 'Limiter queue depth',
-      colour: 'rgb(var(--gold))',
+      colour: 'rgb(var(--accent))',
       points: loopDelay.map((p) => ({ at: p.at, value: p.queueDepth })),
       fill: true,
       step: true

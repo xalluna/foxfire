@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { describeObsProblem, validateObs, type ObsConfigReading } from './validate'
 
-const FOLDER = 'C:\\Videos\\LoL Stats'
+const FOLDER = 'C:\\Videos\\Foxfire'
 
 function reading(over: Partial<ObsConfigReading> = {}): ObsConfigReading {
   return {
     connected: true,
     recordFormat: 'mp4',
     // OBS reports forward slashes even on Windows.
-    recordDirectory: 'C:/Videos/LoL Stats',
+    recordDirectory: 'C:/Videos/Foxfire',
     scenes: ['Streaming', 'League'],
     sceneItems: [
       { name: 'League of Legends', kind: 'game_capture' },
@@ -58,7 +58,7 @@ describe('validateObs', () => {
 
   it('does not care that OBS spells the path with forward slashes', () => {
     const result = validateObs(
-      reading({ recordDirectory: 'c:/videos/lol stats/' }),
+      reading({ recordDirectory: 'c:/videos/foxfire/' }),
       EXPECT
     )
 

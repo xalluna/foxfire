@@ -39,7 +39,7 @@ function PostGameTools(): JSX.Element {
               return `Attributed LP to ${n} game${n === 1 ? '' : 's'}.`
             })
           }
-          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-gold-dim hover:text-gold disabled:opacity-50"
+          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-50"
         >
           Replay LP attribution
         </button>
@@ -54,7 +54,7 @@ function PostGameTools(): JSX.Element {
                 : 'No account to sync.'
             })
           }
-          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-gold-dim hover:text-gold disabled:opacity-50"
+          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-50"
         >
           Simulate game end
         </button>

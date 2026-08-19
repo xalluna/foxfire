@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
+import { Logo } from './Logo'
 
 /**
  * The shared shell for every "nothing here" screen. A personal Riot key
@@ -13,7 +14,8 @@ export function EmptyState({
   action,
   tone = 'neutral'
 }: {
-  icon: ReactNode
+  /** Falls back to the app mark where no glyph says anything more useful. */
+  icon?: ReactNode
   title: string
   description?: ReactNode
   action?: ReactNode
@@ -33,7 +35,7 @@ export function EmptyState({
           toneRing
         )}
       >
-        {icon}
+        {icon ?? <Logo />}
       </div>
       <p className="font-display text-lg text-text">{title}</p>
       {description && (

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { recordSignalFor, resolveOutputPath, type RecordStateEvent } from './recordEvents'
 
-const FILE = 'C:/Users/me/Videos/LoL Stats/2026-08-18 11-21-08.mp4'
+const FILE = 'C:/Users/me/Videos/Foxfire/2026-08-18 11-21-08.mp4'
 
 function event(over: Partial<RecordStateEvent> = {}): RecordStateEvent {
   return { active: false, state: '', path: null, ...over }

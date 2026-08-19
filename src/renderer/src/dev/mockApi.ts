@@ -596,7 +596,7 @@ export const mockApi: Api = {
 
 const MOCK_TELEMETRY_STATE: TelemetryState = {
   enabled: true,
-  dbPath: 'C:\\Users\\dev\\AppData\\Roaming\\my-op-gg\\data\\telemetry.db',
+  dbPath: 'C:\\Users\\dev\\AppData\\Roaming\\Foxfire\\data\\telemetry.db',
   pending: 14,
   dropped: 0,
   dbBytes: 4_812_544
