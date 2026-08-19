@@ -18,6 +18,7 @@ One or two sentences on what this release is and why it exists.
 
 ### Added
 ### Changed
+### Removed
 ### Fixed
 ### Under the hood
 ```

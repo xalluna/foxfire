@@ -5,15 +5,23 @@ import type {
   AppSettingsPublic,
   AssetManifest,
   BackgroundSettings,
+  CaptureSettings,
+  CaptureStatus,
   ChampionStats,
   LcuStatus,
   LeagueEntry,
-  LiveGameData,
   MatchDetail,
   MatchSummary,
   QueueType,
+  ObsValidation,
   RankHistory,
   RankRange,
+  Replay,
+  ReplayDetail,
+  ReplayDiskUsage,
+  Scoreboard,
+  Season,
+  SeasonInput,
   SyncProgressEvent,
   SyncState
 } from '@shared/types'
@@ -26,15 +34,19 @@ import type {
   TelemetrySummary
 } from '@shared/telemetry'
 import { rankMovement } from '@shared/ladder'
+import { rangeBounds, resetsBetween, seasonsSpanning } from '@shared/seasons'
+import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
+  REPLAYS,
+  REPLAY_EVENTS,
   ACCOUNTS,
   LEAGUE_ENTRIES,
-  LIVE_GAME,
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
   RANK_SNAPSHOTS,
+  SCOREBOARD,
   championStatsFor
 } from './fixtures'
 import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
@@ -81,6 +93,7 @@ export type Scenario =
   | 'no-matches'
   | 'sync-error'
   | 'not-live'
+  | 'no-obs'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')
@@ -88,6 +101,23 @@ function currentScenario(): Scenario {
 }
 
 const scenario = currentScenario()
+
+/** Mutable, so toggling a setting in the harness actually sticks for the session. */
+const CAPTURE_SETTINGS: CaptureSettings = {
+  enabled: true,
+  mode: 'managed',
+  folder: 'D:\\Replays',
+  queues: [420, 440],
+  otherQueues: false,
+  audio: 'game',
+  quality: '1080p60',
+  softCapBytes: 50 * 1024 * 1024 * 1024,
+  obsHost: '127.0.0.1',
+  obsPort: 4455,
+  hasObsPassword: true,
+  obsInstallPath: null,
+  obsScene: null
+}
 
 /** Never resolves — holds the UI in its loading state for inspection. */
 const NEVER = new Promise<never>(() => {})
@@ -275,15 +305,33 @@ export const mockApi: Api = {
     get: (): Promise<AssetManifest> => delay(DDRAGON_MANIFEST, 60, false)
   },
 
-  liveGame: {
-    check: (): Promise<LiveGameData | null> =>
-      scenario === 'not-live' ? delay(null, 800) : delay(LIVE_GAME, 800),
-    participantRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500)
+  liveClient: {
+    // Answered fast and without the shell hold, because the real one polls: a
+    // held promise under ?scenario=loading would stall every tick behind it.
+    scoreboard: (): Promise<Scoreboard | null> =>
+      scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false),
+    playerRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500)
   },
 
   champions: {
-    stats: (accountId: number, queueId: number | null): Promise<ChampionStats[]> =>
-      delay(championStatsFor(accountId, queueId), 300)
+    stats: (
+      accountId: number,
+      queueId: number | null,
+      range: RankRange
+    ): Promise<ChampionStats[]> => delay(championStatsFor(accountId, queueId, range), 300)
+  },
+
+  // Editable in the harness so the Settings form can be designed against it,
+  // but held in memory: DEV_SEASONS is what every other mock reads, and
+  // rewriting it at runtime would desync the already-stamped fixture
+  // snapshots from the list the pickers are built from.
+  seasons: {
+    list: (): Promise<Season[]> => delay(DEV_SEASONS, 120),
+    save: (seasons: SeasonInput[]): Promise<Season[]> =>
+      delay(
+        seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i })),
+        200
+      )
   },
 
   mastery: {
@@ -300,14 +348,22 @@ export const mockApi: Api = {
 
   rank: {
     history: (accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
-      const since = range === 'all' ? 0 : Date.now() - (range === '7d' ? 7 : 30) * 86_400_000
+      const { sinceMs, untilMs } = rangeBounds(range, DEV_SEASONS)
       const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
-        (s) => s.capturedAt >= since
+        (s) =>
+          (sinceMs === null || s.capturedAt >= sinceMs) &&
+          (untilMs === null || s.capturedAt < untilMs)
       )
 
       const milestones = snapshots
         .flatMap((snapshot, i) => {
           if (i === 0) return []
+          // Mirrors getRankMilestones: a reset is not a demotion. Keyed on the
+          // reset rather than the season boundary, so a promotion across a
+          // preseason — which carries rank forward — still counts.
+          if (resetsBetween(DEV_SEASONS, snapshots[i - 1].capturedAt, snapshot.capturedAt)) {
+            return []
+          }
           const movement = rankMovement(snapshots[i - 1], snapshot)
           if (movement === 'none') return []
           return [
@@ -323,6 +379,17 @@ export const mockApi: Api = {
         .reverse()
 
       return delay({ snapshots, milestones }, 280)
+    },
+
+    periods: (accountId: number): Promise<Season[]> => {
+      const times = [
+        ...Object.values(RANK_SNAPSHOTS[accountId] ?? {}).flatMap((series) =>
+          series.map((s) => s.capturedAt)
+        ),
+        ...(MATCHES[accountId] ?? []).map((m) => m.gameCreation)
+      ]
+      if (times.length === 0) return delay(DEV_SEASONS.slice(-1), 120)
+      return delay(seasonsSpanning(DEV_SEASONS, Math.min(...times), Math.max(...times)), 120)
     },
 
     editable: (accountId: number, queueType: QueueType) =>
@@ -362,7 +429,21 @@ export const mockApi: Api = {
   // these report the states the renderer must handle rather than pretending to
   // be connected: a disconnected client, background features switched off.
   lcu: {
-    getStatus: (): Promise<LcuStatus> => delay({ state: 'disconnected' }, 100),
+    getStatus: (): Promise<LcuStatus> =>
+      delay(
+        scenario === 'not-live'
+          ? { state: 'disconnected' }
+          : {
+              state: 'connected',
+              accountId: 1,
+              gameName: 'Alluna',
+              tagLine: 'NA1',
+              // A game in progress in the default scenario, so the Live tab's
+              // indicator has something to show without a client running.
+              inGame: true
+            },
+        100
+      ),
     onStatus: () => () => {},
     onRankChanged: () => () => {}
   },
@@ -405,6 +486,88 @@ export const mockApi: Api = {
    * Without this the panel would only ever be reviewable by running a live
    * 4-minute sync against a key that expires daily.
    */
+  /**
+   * Capture, as it looks on a machine with OBS running and set up. The 'no-obs'
+   * scenario is the other half — the state most people will meet first.
+   */
+  capture: {
+    getSettings: (): Promise<CaptureSettings> => delay(CAPTURE_SETTINGS, 150, false),
+    set: (patch: Partial<CaptureSettings>): Promise<CaptureSettings> => {
+      Object.assign(CAPTURE_SETTINGS, patch)
+      return delay({ ...CAPTURE_SETTINGS }, 100, false)
+    },
+    setObsPassword: (): Promise<CaptureSettings> => {
+      CAPTURE_SETTINGS.hasObsPassword = true
+      return delay({ ...CAPTURE_SETTINGS }, 100, false)
+    },
+    clearObsPassword: (): Promise<CaptureSettings> => {
+      CAPTURE_SETTINGS.hasObsPassword = false
+      return delay({ ...CAPTURE_SETTINGS }, 100, false)
+    },
+    chooseFolder: (): Promise<string | null> => delay('D:\\Replays', 200, false),
+    chooseObsPath: (): Promise<string | null> =>
+      delay('C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe', 200, false),
+    getStatus: (): Promise<CaptureStatus> =>
+      delay(
+        scenario === 'no-obs'
+          ? { state: 'error', message: 'No OBS listening — is it running?' }
+          : scenario === 'not-live'
+            ? { state: 'idle' }
+            : { state: 'recording', replayId: 1, startedAt: Date.now() - 640_000 },
+        120,
+        false
+      ),
+    onStatus: () => () => undefined,
+    validate: (): Promise<ObsValidation> =>
+      delay(
+        scenario === 'no-obs'
+          ? { ok: false, problems: [{ kind: 'notConnected' }], scenes: [], audioInputs: [] }
+          : {
+              ok: CAPTURE_SETTINGS.mode === 'managed',
+              // Manual mode with a scene nobody has picked yet — the state a
+              // first-time user actually lands in.
+              problems:
+                CAPTURE_SETTINGS.mode === 'managed' ? [] : [{ kind: 'sceneNotChosen' as const }],
+              scenes: ['Streaming', 'League', 'Just Chatting'],
+              audioInputs: [
+                { name: 'Desktop Audio', muted: false },
+                { name: 'Mic/Aux', muted: true }
+              ]
+            },
+        200,
+        false
+      ),
+    // No OBS to screenshot in a browser, so the empty-preview copy is what the
+    // harness exercises.
+    preview: (): Promise<string | null> => delay(null, 200, false),
+    reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
+  },
+  replays: {
+    list: (accountId: number): Promise<Replay[]> => delay(REPLAYS[accountId] ?? [], 220),
+    detail: (replayId: number): Promise<ReplayDetail | null> => {
+      const replay = (REPLAYS[1] ?? []).find((item) => item.id === replayId)
+      return delay(replay ? { replay, events: REPLAY_EVENTS } : null, 220)
+    },
+    usage: (): Promise<ReplayDiskUsage> =>
+      delay(
+        {
+          totalBytes: 3_180_000_000,
+          count: 3,
+          unmatchedCount: 1,
+          missingCount: 1,
+          softCapBytes: 50 * 1024 * 1024 * 1024
+        },
+        180,
+        false
+      ),
+    remove: (): Promise<void> => delay(undefined, 120, false),
+    removeOldest: (): Promise<number> => delay(1, 200, false),
+    open: (): Promise<void> => delay(undefined, 0, false),
+    reveal: (): Promise<void> => delay(undefined, 0, false),
+    onChanged: () => () => undefined,
+    showMatch: (): Promise<void> => delay(undefined, 0, false),
+    onShowMatch: () => () => undefined
+  },
   telemetry: {
     getState: () => delay(MOCK_TELEMETRY_STATE, 0),
     setEnabled: (enabled: boolean) => delay({ ...MOCK_TELEMETRY_STATE, enabled }, 0),

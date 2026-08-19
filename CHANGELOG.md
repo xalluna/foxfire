@@ -6,6 +6,183 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.7.0] — 2026-08-18
+
+Games can now record themselves. With OBS installed, LoL Stats captures each game as you play it
+and marks the seek bar with your kills, deaths and multikills — so finding the fight you threw is
+two clicks rather than a scrub hunt through half an hour of footage.
+
+This release also teaches the app what a ranked season is — you tell it when each one started, in
+Settings — so that when January resets everyone's rank the climb you spent a year on stays readable
+instead of turning into one long cliff.
+
+The Live game screen is also rebuilt. It now reads the game running on this PC instead of asking
+Riot about it, which is what lets it show lane order, items, runes and a running score — and what
+costs it the ability to look at a game running anywhere else.
+
+### Added
+
+- Game capture, driven through OBS. Turn it on in Settings, pick the queues worth recording, and
+  each game is written to a folder you choose. OBS does the encoding, so it uses your graphics
+  card rather than fighting the game for CPU during the game.
+- Two ways to set OBS up. **Set OBS up for me** builds a profile and scene collection of its own
+  and switches into them only while recording, so a setup you already stream with is never
+  touched. **Use my own scene** records with a scene you built and reports anything that would
+  stop the recording playing instead of changing it. A live preview shows the frame OBS would
+  capture, so setup can be checked before a game rather than after one.
+- Replays open in their own window, with the player's own controls: play, scrub, volume,
+  fullscreen, quarter-speed to double-speed, and buttons that hop between events. Space, the arrow
+  keys and `,` / `.` do the same from the keyboard.
+- An event timeline on the seek bar, marked with your kills, deaths, assists and multikills.
+  Clicking one seeks to a few seconds before it, because the approach to a fight explains more than
+  the moment somebody dies. Hovering anywhere shows the frame at that timestamp.
+- Right-click a match to watch its replay. A game with no recording says so on the menu item
+  rather than hiding it, and a match row that has one is marked, so you can see at a glance which
+  games there is footage of without right-clicking them one at a time.
+- Every replay window owns one replay, so several can be open at once — the same game at two
+  timestamps on two monitors, or two games side by side.
+- A **View match history** button on a replay, which brings the main window forward with that
+  match expanded.
+- A **Replays** screen listing every recording, whether or not it found its match, with what it is
+  using on disk and controls to delete it or open its folder. Recordings that never match a game —
+  Practice Tool produces no match history entry at all — stay here and stay watchable.
+- A capture indicator in the title bar, and a line on the Live game screen while a game is being
+  recorded, so a recording that silently failed is noticed before the game rather than after it.
+- The Live game tab turns teal while a game is in progress, and its centre dot turns red while that
+  game is being recorded — both facts readable from the nav without opening anything.
+- A recording quality setting — 720p or 1080p, 30 or 60fps, with the rough disk cost of each. Turn
+  it down if capture costs you frames in game; it changes what the encoder works on, not what you
+  see while playing.
+- An advisory disk warning you set yourself. Nothing is ever deleted automatically; crossing the
+  number shows a warning with a one-click clear-out of the oldest games.
+- A season picker on the Rank and Champions screens. Rank sits it beside the 7- and 30-day ranges,
+  Champions beside the queue filter, and both open on the most recent season you have games in.
+  Champion win rates have until now blended every season you have ever played into one figure, so
+  a champion you gave up on two seasons ago was still dragging on the number.
+- Ranked seasons are set in Settings, because Riot offers no way to ask when one started. Each
+  season is a name and a start date, runs until the next one begins, and the newest never ends — so
+  nothing breaks if you add January a few weeks late, and a preseason that drags into February is a
+  row you add rather than a date the app got wrong. It ships knowing when the 2026 season opened.
+- A **Rank was reset** tick on each season, for the seasons where the ladder was actually emptied
+  and you played placements. That is what keeps the reset from being recorded as a game that cost
+  you two thousand LP, and it is separate from the season boundary on purpose: rank carries into a
+  preseason, so a game either side of one still earned its LP.
+- The Rank screen's "All" now draws each season as its own line. January empties the ladder rather
+  than demoting anybody, so a line drawn straight through the reset would show a fall that never
+  happened, and the net LP figure is left off entirely on a view that spans one.
+- The Live game screen is a recreation of the in-game scoreboard: both teams in lane order — top,
+  jungle, mid, bot, support — with each player's level, items, runes, K/D/A, CS, ward score, rank
+  and respawn timer, updated as the game plays. Lane order was the original ask, and it was
+  impossible from where the screen used to get its data.
+
+### Changed
+
+- Recording starts when the game itself comes up rather than when the client says a game began.
+  The client reports a game at the loading screen, minutes early, and starting there records a
+  black screen OBS has no window to capture yet.
+- Settings folds. Every section is collapsed by default and each one reports the fact worth
+  knowing while it is shut — whether a key is saved, whether recording is on, how many seasons are
+  set — so the page is a list of what exists rather than a scroll through all of it. The Riot key
+  says so in amber when it is missing, since nothing else works without one.
+- The Live game screen reads the game running on this PC rather than asking Riot. The game serves
+  its own view of itself on loopback, with no key and no rate limit, and that one carries a
+  position for each player — which is what makes lane order, and everything beside it, possible.
+  Riot's spectator endpoint sent a champion, a team and two summoner spells per player and no
+  position at all, so the rows had been sitting in Riot's array order because there was nothing to
+  sort by.
+- The Riot ID examples on the Add account form and on Search no longer name the app's author. They
+  are drawn from a pool of pros each time either form opens, with region-accurate tags — Faker#KR1,
+  Caps#EUW, Uzi#CN. A pool rather than one replacement name, because whoever got picked would
+  become the account the app implicitly points at; and accurate tags because someone who has only
+  ever seen #NA1 tends to assume that is the shape of every tag.
+
+### Removed
+
+- Checking a live game from another PC, and seeing the lobby during champion select. Both came from
+  Riot's spectator endpoint, which nothing now calls: it carried none of what the new scoreboard
+  shows, and keeping it alongside would have meant two Live game screens that agree on nothing.
+  Nothing answers on loopback until the game process itself starts, so there is nothing to show
+  before then.
+
+### Fixed
+
+- January's rank reset can no longer be recorded as a game that lost you two thousand LP. LP is
+  worked out from the gap between two rank readings, and the gap spanning New Year holds the whole
+  height of your rank; if a single ranked game happened to sit in it, that game was handed the lot.
+  It would also have come back on every launch, because the repair pass that rebuilds LP runs over
+  all of history each time. Two readings either side of a season marked as having reset the ladder
+  are now never compared.
+- A reset no longer appears in the milestone list as a demotion — "Demoted to Bronze IV" every
+  January, for the rest of the account's life.
+- The account rail no longer closes the Add account form when the pointer slips out of it. Typing a
+  Riot ID takes long enough that a wrist brushing the trackpad, or a nudge past the edge of a strip
+  224px wide, was enough to unmount the form — and it took the half-typed ID and any error message
+  with it. An open form now holds the rail open, and Escape or a click outside dismisses it.
+
+### Under the hood
+
+- A recording is tied to its match by fingerprinting the roster — the ten champions plus the one
+  you played. A live game carries no match id anywhere, and matching on end time alone picks the
+  wrong game when two finish within a few minutes of each other. The attempt runs off the existing
+  post-game sync retries, since that is the only moment a new match can appear.
+- Migration 007 adds the `replays` and `replay_events` tables. Deleting a match sets a replay's
+  match id to null rather than cascading: losing a match row must never destroy footage.
+- Events come from the Live Client Data API the game already serves on loopback, polled while
+  recording and written as they arrive, so a crash costs one poll rather than the whole timeline.
+  The endpoint resends every event each call, so the write is an upsert on the game's own event id.
+- Video reaches the replay window over a `replay://` scheme rather than `file://`. The renderer
+  sends a replay id and never a path, the file is confirmed to be inside the replay folder, and
+  byte ranges are served properly so seeking works.
+- Managed mode sets the resolution, frame rate and recording quality preset it records with, rather
+  than inheriting OBS's defaults for a new profile — which were 720p30 at a constant 6 Mbps, a
+  bitrate that resolution and frame rate could not spend. They are re-applied before every
+  recording, so a profile built by an earlier version picks up a changed setting.
+- MP4 is required and MKV is refused with an explanation. MKV is OBS's default and records
+  perfectly; Chromium simply has no demuxer for it, so the file would be written and then never
+  play.
+- The obs-websocket password is stored encrypted beside the Riot API key rather than in the
+  database, and never crosses IPC — only whether one is set.
+- `obs-websocket-js` is the one new runtime dependency. It is pure JavaScript, so nothing about the
+  build or the installer changes.
+- The capture state machine, the event mapping, the roster fingerprint, the OBS validation rules
+  and the timeline's marker clustering are all pure modules with tests. None of their interesting
+  cases — a dodge, a loading screen that never ends, a game that crashes mid-recording, two games
+  finishing minutes apart — can be produced on demand by playing League.
+- Season boundaries are hand-entered rather than derived. Riot publishes no way to ask which season
+  is current — the static season list stopped updating in 2019, ranked entries carry no season
+  field, and the match API dropped the one it used to send. Deriving one from the calendar was
+  tried first and is wrong: 2026 opened on 8 January, so a hard 1 January cut misfiles a week of
+  games every year with nothing anyone can do about it. Migration 008 adds the table and seeds the
+  one date that could be verified.
+- Each reading is stamped with the season it falls in as it is read, so the chart knows where one
+  climb ends without holding a copy of the table and cannot draw before that table has loaded.
+- Season bounds are computed once in TypeScript and passed to SQL as parameters, never as a SQL
+  year expression. SQLite would resolve one in UTC while the app decides in local time, which would
+  put a New Year's Eve game in different seasons on the rank graph and the champions table.
+- The season pickers span an account's oldest and newest record rather than listing only the
+  seasons it has games in, so a season off from the game still appears between two played ones
+  rather than leaving a hole that reads as lost data. The oldest season reaches backwards forever
+  and the newest forwards, so no game can fall outside every season and a boundary nobody has
+  entered yet cannot cut the current one short.
+- The dev harness gains an earlier season ending the December before, plus a preseason between the
+  two, which is what makes any of this checkable before January: the picker has three entries, the
+  all-time chart has a boundary to break at, the reset has a game beside it to wrongly attribute,
+  and the preseason proves a carry-over boundary still attributes normally. It is additive — the
+  existing 301-game climb and the three exact invariants it rests on are untouched.
+- Rank is the only thing on the live scoreboard that still reaches Riot. The game names players
+  without identifying them, so each Riot ID is resolved to a puuid before a ladder can be asked
+  about it — fetched per row so the board paints without waiting, and cached well past the poll.
+- The loopback port refuses connections and then 404s for about three seconds while the game
+  process starts. That is an ordinary state rather than a fault; reporting it as one put an error
+  on screen every time somebody queued.
+- Behaviour was confirmed against a live payload rather than assumed, and a real ARAM corrected two
+  guesses: a mode without lanes reports `"NONE"` rather than the empty string match-v5 uses, and a
+  player the game has no identity for arrives named with empty strings — which `??` does not catch,
+  and which sent a blank Riot ID off to be looked up.
+- The example Riot ID pool is asserted to survive `parseRiotId`. That is the failure worth
+  guarding: a typo'd entry would ship a placeholder the app itself rejects, and nothing else would
+  catch it.
+
 ## [0.6.0] — 2026-08-17
 
 The live game screen no longer empties itself when one player asks not to be named, and match rows
@@ -278,6 +455,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.7.0]: https://github.com/xalluna/my-op-gg/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/xalluna/my-op-gg/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/xalluna/my-op-gg/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/xalluna/my-op-gg/compare/v0.4.0...v0.4.1

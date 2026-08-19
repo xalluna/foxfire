@@ -27,9 +27,12 @@ export const CH = {
     getState: 'sync:getState',
     progress: 'sync:progress'
   },
-  liveGame: {
-    check: 'liveGame:check',
-    participantRank: 'liveGame:participantRank'
+  // The scoreboard is read from the game running on this machine and costs no
+  // Riot call at all; playerRank is the one thing on that screen that does, so
+  // it stays a separate channel rather than making the board fail with the key.
+  liveClient: {
+    scoreboard: 'liveClient:scoreboard',
+    playerRank: 'liveClient:playerRank'
   },
   // Separate from mastery:get on purpose. Champion stats are pure SQLite, so
   // they must not sit behind a channel that can reach out to Riot and fail.
@@ -39,8 +42,16 @@ export const CH = {
   mastery: {
     get: 'mastery:get'
   },
+  // Hand-entered, because Riot exposes no way to ask which season is current
+  // and the calendar is not a stand-in for one. See migration 008.
+  seasons: {
+    list: 'seasons:list',
+    save: 'seasons:save'
+  },
   rank: {
     history: 'rank:history',
+    /** The seasons this account has data in, for the period pickers. */
+    periods: 'rank:periods',
     // Hand-entered LP, for the games attribution cannot resolve on its own.
     editable: 'rank:editable',
     saveManual: 'rank:saveManual',
@@ -59,6 +70,39 @@ export const CH = {
   background: {
     get: 'background:get',
     set: 'background:set'
+  },
+  // Recording the game as it is played. Settings and status are separate reads
+  // for the same reason telemetry splits them: the status pill polls, and the
+  // settings form does not.
+  capture: {
+    getSettings: 'capture:getSettings',
+    setSettings: 'capture:setSettings',
+    /** Write-only, like the Riot key — the password itself never comes back. */
+    setObsPassword: 'capture:setObsPassword',
+    clearObsPassword: 'capture:clearObsPassword',
+    chooseFolder: 'capture:chooseFolder',
+    chooseObsPath: 'capture:chooseObsPath',
+    getStatus: 'capture:getStatus',
+    status: 'capture:status',
+    /** What a user-configured OBS would record, and what is wrong with it. */
+    validate: 'capture:validate',
+    /** A single frame of the capture source, so setup can be checked by eye. */
+    preview: 'capture:preview',
+    reconnect: 'capture:reconnect'
+  },
+  replays: {
+    list: 'replays:list',
+    detail: 'replays:detail',
+    usage: 'replays:usage',
+    remove: 'replays:remove',
+    removeOldest: 'replays:removeOldest',
+    /** Opens a window that owns one replay. Repeat calls open more windows. */
+    open: 'replays:open',
+    reveal: 'replays:reveal',
+    /** Broadcast when a replay is added, bound or deleted, so lists refetch. */
+    changed: 'replays:changed',
+    /** A replay window asking the main window to show its match. */
+    showMatch: 'replays:showMatch'
   },
   search: {
     summoner: 'search:summoner'

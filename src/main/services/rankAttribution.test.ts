@@ -6,7 +6,7 @@ import { getMatchSummaries, insertMatch } from '../db/repositories/matches.repo'
 import { insertRankSnapshot } from '../db/repositories/rankHistory.repo'
 import { applyAllMigrations } from '../db/testMigrations'
 import type { MatchDto } from '../riot/types'
-import type { RankSnapshot } from '@shared/types'
+import type { RankSnapshot, Season } from '@shared/types'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -18,6 +18,35 @@ const ME = 'puuid-me'
 const SOLO = 'RANKED_SOLO_5x5' as const
 const T0 = 1_700_000_000_000
 const ACCOUNT = 1
+
+/**
+ * Season 2026 as migration 008 seeds it, then a preseason that carries rank
+ * forward and a 2027 season that resets. The middle row is the one that proves
+ * the guard keys on the reset and not on the boundary.
+ */
+const SEASONS: Season[] = [
+  {
+    id: 1,
+    label: 'Season 2026',
+    startsAt: new Date(2026, 0, 8).getTime(),
+    isPreseason: false,
+    resetsRank: true
+  },
+  {
+    id: 2,
+    label: 'Preseason 2027',
+    startsAt: new Date(2026, 11, 22).getTime(),
+    isPreseason: true,
+    resetsRank: false
+  },
+  {
+    id: 3,
+    label: 'Season 2027',
+    startsAt: new Date(2027, 0, 8).getTime(),
+    isPreseason: false,
+    resetsRank: true
+  }
+]
 
 function snapshot(
   tier: string,
@@ -35,7 +64,8 @@ function snapshot(
     losses: 8,
     ladderPosition,
     source: 'lcu',
-    capturedAt
+    capturedAt,
+    seasonId: null
   }
 }
 
@@ -309,5 +339,123 @@ describe('replayAttribution', () => {
     // pair up, so there is no interval to attribute.
     expect(replayAttribution(db, ACCOUNT, ME, T0 + 5000)).toBe(0)
     expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toBe(null)
+  })
+})
+
+describe('the ladder reset', () => {
+  let db: DatabaseSyncType
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
+      ME,
+      'Alluna',
+      'NA1'
+    )
+    // Migration 008 seeds Season 2026 only; the boundary under test is the one
+    // after it. replayAttribution reads these back out of the database.
+    for (const s of SEASONS.slice(1)) {
+      db.prepare(
+        'INSERT INTO seasons (id, label, starts_at, is_preseason, resets_rank) VALUES (?, ?, ?, ?, ?)'
+      ).run(s.id, s.label, s.startsAt, s.isPreseason ? 1 : 0, s.resetsRank ? 1 : 0)
+    }
+  })
+
+  // Local time, matching how a hand-entered boundary is stored.
+  const DEC = new Date(2026, 11, 28, 20).getTime()
+  const JAN = new Date(2027, 0, 8, 14).getTime()
+
+  // Real ladder positions: Emerald II 20 LP against Bronze IV 0 LP is a 1,820
+  // point fall, which is the number that would land on the game beside it.
+  const EMERALD_II = 2220
+  const BRONZE_IV = 400
+
+  it('refuses to attribute the annual reset to the one game beside it', () => {
+    // The exact shape that would otherwise poison a match forever: a December
+    // reading, a January one after the reset, and a single ranked game between
+    // them for the delta to land on.
+    insertMatch(db, match('NA1_1', JAN - 3_600_000))
+
+    const wrote = attributeInterval(
+      db,
+      ACCOUNT,
+      ME,
+      SOLO,
+      snapshot('EMERALD', 'II', 20, DEC, EMERALD_II),
+      snapshot('BRONZE', 'IV', 0, JAN, BRONZE_IV),
+      SEASONS
+    )
+
+    expect(wrote).toBe(false)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toBe(null)
+    expect(db.prepare('SELECT COUNT(*) AS c FROM match_rank').get()).toMatchObject({ c: 0 })
+  })
+
+  it('still attributes normally on either side of the boundary', () => {
+    // The guard must be narrow: two readings inside the same year attribute as
+    // they always did, even in the days right before a reset.
+    insertMatch(db, match('NA1_1', DEC + 500))
+
+    const wrote = attributeInterval(
+      db,
+      ACCOUNT,
+      ME,
+      SOLO,
+      snapshot('EMERALD', 'II', 20, DEC, EMERALD_II),
+      snapshot('EMERALD', 'II', 41, DEC + 1000, EMERALD_II + 21),
+      SEASONS
+    )
+
+    expect(wrote).toBe(true)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toMatchObject({ lpDelta: 21 })
+  })
+
+  it('still attributes across a boundary that carried rank forward', () => {
+    // Into the preseason: a real period boundary, but the ladder was not
+    // emptied, so the game between these two readings earned its LP and must
+    // keep it. Suppressing here would be a silent false negative.
+    const before = new Date(2026, 11, 20, 20).getTime()
+    const after = new Date(2026, 11, 24, 20).getTime()
+    insertMatch(db, match('NA1_1', before + 1000))
+
+    const wrote = attributeInterval(
+      db,
+      ACCOUNT,
+      ME,
+      SOLO,
+      snapshot('EMERALD', 'II', 20, before, EMERALD_II),
+      snapshot('EMERALD', 'II', 41, after, EMERALD_II + 21),
+      SEASONS
+    )
+
+    expect(wrote).toBe(true)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toMatchObject({ lpDelta: 21 })
+  })
+
+  it('survives repeated unbounded replays, which is how the chip used to return', () => {
+    // repairAttribution runs replayAttribution unbounded on every launch, so a
+    // guard that only held on the first pass would be no guard at all.
+    insertRankSnapshot(
+      db,
+      ACCOUNT,
+      { queueType: SOLO, tier: 'EMERALD', rank: 'II', leaguePoints: 20, wins: 90, losses: 70 },
+      'lcu',
+      DEC,
+      true
+    )
+    insertRankSnapshot(
+      db,
+      ACCOUNT,
+      { queueType: SOLO, tier: 'BRONZE', rank: 'IV', leaguePoints: 0, wins: 1, losses: 0 },
+      'lcu',
+      JAN,
+      true
+    )
+    insertMatch(db, match('NA1_1', JAN - 3_600_000))
+
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(0)
+    expect(replayAttribution(db, ACCOUNT, ME)).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) AS c FROM match_rank').get()).toMatchObject({ c: 0 })
   })
 })

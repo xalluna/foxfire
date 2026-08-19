@@ -28,6 +28,10 @@ export function useSyncProgress(): void {
         // imported, so they are stale the moment it finishes. Without this they
         // keep serving pre-sync counts until the query ages out.
         queryClient.invalidateQueries({ queryKey: ['championStats', accountId] })
+        // A sync can reach back into a year the account had no history for,
+        // which adds an entry to both period pickers. Cheap to recheck and
+        // otherwise only noticed after a restart.
+        queryClient.invalidateQueries({ queryKey: ['rankPeriods', accountId] })
       }
     })
   }, [setSyncProgress, queryClient])
@@ -65,6 +69,28 @@ export function useManualRankUpdates(): void {
       queryClient.invalidateQueries({ queryKey: ['rankHistory', accountId] })
       queryClient.invalidateQueries({ queryKey: ['matchList', accountId] })
       queryClient.invalidateQueries({ queryKey: ['dashboard', accountId] })
+    })
+  }, [queryClient])
+}
+
+/**
+ * Refreshes the replay list and the match rows when a recording appears,
+ * binds to its match, or is deleted.
+ *
+ * The match list matters as much as the list of replays: a row's context menu
+ * offers "Watch replay" only when the row carries a replay id, and that id
+ * arrives minutes after the game ends, when the match finally syncs and the
+ * fingerprint matches. Without this the option stays greyed out until something
+ * else happens to refetch.
+ */
+export function useReplayUpdates(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return window.api.replays.onChanged(() => {
+      queryClient.invalidateQueries({ queryKey: ['replays'] })
+      queryClient.invalidateQueries({ queryKey: ['replayUsage'] })
+      queryClient.invalidateQueries({ queryKey: ['matchList'] })
     })
   }, [queryClient])
 }

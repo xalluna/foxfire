@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
 import type { Account, MatchSummary, QueueType } from '@shared/types'
 import { queueFilterLabel, queueTypeForQueueId } from '@shared/queues'
@@ -69,6 +69,30 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
       window.api.rank.clearManual(account.id, queueType, matchId)
   })
 
+  /**
+   * A replay window asking to show its match.
+   *
+   * The window that made the request is a different renderer process with its
+   * own query cache, so it cannot expand a row here itself — it sends a message
+   * and the main process forwards it, the same arrangement the LP editor uses
+   * to focus a row.
+   */
+  useEffect(
+    () =>
+      window.api.replays.onShowMatch((accountId, matchId) => {
+        if (accountId !== account.id) return
+        setExpandedMatchId(matchId)
+        // The row may be several pages down a list that only loaded twenty.
+        // Scrolling to it is best-effort; expanding it is the part that matters.
+        requestAnimationFrame(() => {
+          document
+            .querySelector(`[data-match-id="${CSS.escape(matchId)}"]`)
+            ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        })
+      }),
+    [account.id]
+  )
+
   const openMatchMenu = (event: MouseEvent, match: MatchSummary): void => {
     event.preventDefault()
     const queueType = queueTypeForQueueId(match.queueId)
@@ -84,7 +108,10 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
           if (queueType) clearLp.mutate({ queueType, matchId: match.matchId })
         },
         onCopyId: () => void navigator.clipboard.writeText(match.matchId),
-        onOpenDetails: () => setExpandedMatchId(match.matchId)
+        onOpenDetails: () => setExpandedMatchId(match.matchId),
+        onWatchReplay: () => {
+          if (match.replayId !== null) void window.api.replays.open(match.replayId)
+        }
       })
     })
   }
@@ -171,7 +198,7 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
 
           <ul className="divide-y divide-hairline/60">
             {rows.map((match) => (
-              <li key={match.matchId}>
+              <li key={match.matchId} data-match-id={match.matchId}>
                 <MatchListRow
                   match={match}
                   expanded={expandedMatchId === match.matchId}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { Account } from '@shared/types'
@@ -18,17 +18,46 @@ import { useUiStore } from '../store/uiStore'
  * absolutely positioned inside a fixed-width shell, so opening it draws over
  * the content rather than reflowing the two columns beside it — a layout shift
  * on hover would be intolerable over a list of match rows.
+ *
+ * An open Add Account form pins it open, hover or not. Typing a Riot ID takes
+ * long enough that a wrist brushing the trackpad or a cursor drifting past the
+ * edge would otherwise collapse the rail and throw the half-typed ID away.
+ * Pinned, it closes on Escape or a click outside — the exits ContextMenu offers.
  */
 export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element {
   const assets = useAssets()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
+  const railRef = useRef<HTMLDivElement>(null)
 
   const activeAccountId = useUiStore((s) => s.activeAccountId)
   const setActiveAccount = useUiStore((s) => s.setActiveAccount)
 
   const lcuStatus = useLcuStatus()
   const liveAccountId = lcuStatus.state === 'connected' ? lcuStatus.accountId : null
+
+  // Bound to `adding`, so the click that opens the form cannot also dismiss it:
+  // the listeners are not attached until the render after that click.
+  useEffect(() => {
+    if (!adding) return
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setAdding(false)
+    }
+    // Capture, so a click landing on something behind the rail closes the form
+    // before that something acts on it.
+    const onPointerDown = (event: PointerEvent): void => {
+      if (!railRef.current?.contains(event.target as Node)) setAdding(false)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('pointerdown', onPointerDown, true)
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [adding])
 
   const setHome = useMutation({
     mutationFn: (id: number) => window.api.accounts.setHome(id),
@@ -46,14 +75,18 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
   return (
     <div className="relative w-rail shrink-0">
       <div
-        onMouseLeave={() => setAdding(false)}
+        ref={railRef}
+        // Every `group-hover:` reveal below is paired with a `group-data-[open]:`
+        // one, so a pinned rail looks the same with the pointer away as it does
+        // under it — 224px of names, not 224px of gap.
+        data-open={adding || undefined}
         className={clsx(
           'group absolute inset-y-0 left-0 z-30 flex flex-col border-r border-hairline bg-canvas',
           'transition-[width] duration-150 ease-out hover:w-rail-open hover:shadow-flyout',
           adding ? 'w-rail-open shadow-flyout' : 'w-rail'
         )}
       >
-        <p className="overflow-hidden whitespace-nowrap px-4 pb-1.5 pt-3 text-2xs font-medium uppercase tracking-widest text-text-mute opacity-0 transition-opacity group-hover:opacity-100">
+        <p className="overflow-hidden whitespace-nowrap px-4 pb-1.5 pt-3 text-2xs font-medium uppercase tracking-widest text-text-mute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">
           Accounts
         </p>
 
@@ -95,7 +128,7 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
                   </span>
 
                   {/* Revealed by the rail expanding; kept mounted so the row keeps its height. */}
-                  <span className="min-w-0 flex-1 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="min-w-0 flex-1 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">
                     <span
                       className={clsx(
                         'block truncate text-sm',
@@ -111,7 +144,7 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
                   </span>
                 </button>
 
-                <div className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 gap-0.5 group-hover:flex">
+                <div className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 gap-0.5 group-hover:flex group-data-[open]:flex">
                   {!account.isHomeAccount && (
                     <button
                       title="Set as home account"
@@ -152,7 +185,7 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-gold-dim">
                 <Icon.Plus />
               </span>
-              <span className="whitespace-nowrap text-sm opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="whitespace-nowrap text-sm opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">
                 Add account
               </span>
             </button>

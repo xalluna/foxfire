@@ -1,9 +1,8 @@
 import type React from 'react'
 import clsx from 'clsx'
-import type { AssetManifest, MatchSummary } from '@shared/types'
+import type { MatchSummary } from '@shared/types'
 import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, championName, itemIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
-import { TRINKET_SLOT, itemSlots } from '../lib/items'
+import { championIconUrl, championName, runeIconUrl, spellIconUrl } from '../lib/assets'
 import { positionIcon, positionLabel } from '../lib/positions'
 import { queueName } from '../lib/queues'
 import { runeIds } from '../lib/runes'
@@ -19,40 +18,10 @@ import {
   multiKillLabel
 } from '../lib/matchStats'
 import { Asset } from './Asset'
+import { ItemStrip } from './ItemStrip'
 import { Bar } from './Bar'
 import { LpChip } from './LpChip'
 import * as Icon from './icons'
-
-/**
- * Six inventory slots, then the trinket, then the lane's quest reward.
- *
- * The last two are round because neither was bought. `roleBound` stays a
- * separate argument rather than an eighth array entry so a caller cannot slip
- * it into an inventory position. See itemSlots for why the six are packed and
- * why nothing collapses when a slot is empty.
- */
-function Items({
-  m,
-  items,
-  roleBound
-}: {
-  m: AssetManifest
-  items: number[]
-  roleBound: number
-}): JSX.Element {
-  return (
-    <div className="flex gap-[3px]">
-      {itemSlots(items, roleBound).map((itemId, i) => (
-        <Asset
-          key={i}
-          src={itemIconUrl(m, itemId)}
-          className="h-[21px] w-[21px]"
-          rounded={i >= TRINKET_SLOT ? 'rounded-full' : 'rounded'}
-        />
-      ))}
-    </div>
-  )
-}
 
 /**
  * One collapsed match, at a fixed 72px.
@@ -211,13 +180,37 @@ export function MatchListRow({
 
       {/* Items and badges */}
       <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5">
-        {assets && <Items m={assets} items={match.items} roleBound={match.roleBoundItem} />}
+        {assets && (
+          <ItemStrip
+            m={assets}
+            items={match.items}
+            roleBound={match.roleBoundItem}
+            size="h-[21px] w-[21px]"
+          />
+        )}
         {multiKill && (
           <span className="rounded-full border border-gold-dim bg-gold/10 px-1.5 text-[9px] font-medium uppercase tracking-wide text-gold">
             {multiKill}
           </span>
         )}
       </div>
+
+      {/*
+        Marks a game there is footage of.
+        
+        Not a button: the row itself is one, and nesting is invalid. Watching is
+        a right-click, and this is what tells you the option will be there —
+        without it, the only way to find out which games have a replay is to
+        right-click them one at a time.
+      */}
+      <span
+        className="ml-2 w-3.5 shrink-0"
+        title={match.replayId !== null ? 'Replay available — right-click to watch' : undefined}
+      >
+        {match.replayId !== null && (
+          <Icon.Film width={14} height={14} className="text-gold/60" />
+        )}
+      </span>
 
       {expandable ? (
         <Icon.ChevronDown

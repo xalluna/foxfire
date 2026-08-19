@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey } from '../services/settingsService'
 import {
@@ -11,9 +11,11 @@ import {
 } from '../services/accountService'
 import { readSyncState, startSync } from '../services/syncService'
 import { getAssetManifest } from '../services/ddragonService'
-import { checkLiveGame, getParticipantRank } from '../services/liveGameService'
+import { getRankByRiotId, getScoreboard } from '../services/liveClientService'
 import { getMasteryData } from '../services/masteryService'
-import { getRankHistory } from '../services/rankHistoryService'
+import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
+import { rangeBounds } from '@shared/seasons'
+import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
@@ -35,6 +37,27 @@ import {
 } from '../telemetry/queries'
 import { openTelemetryWindow } from '../telemetryWindow'
 import { openLpEditorWindow } from '../lpEditorWindow'
+import { openReplayWindow } from '../replayWindow'
+import {
+  clearObsPassword,
+  getCaptureSettings,
+  setCaptureSettings,
+  setObsPassword
+} from '../services/captureSettings'
+import { getCaptureStatus, refreshCapture } from '../capture/captureService'
+import {
+  getDiskUsage,
+  getReplayDetail,
+  listReplays,
+  removeOldestReplays,
+  removeReplay,
+  revealReplay
+} from '../services/replayService'
+import { grabSourceScreenshot, readObsConfig } from '../obs/config'
+import { validateObs } from '../obs/validate'
+import { managedPreviewSource } from '../obs/provision'
+import { reconnectObs } from '../obs/client'
+import { getMainWindow } from '../window'
 import {
   clearManualRank,
   getEditableMatches,
@@ -42,10 +65,12 @@ import {
 } from '../services/manualRankService'
 import type {
   BackgroundSettings,
+  CaptureSettings,
   ManualRankEdit,
   QueueType,
   RankRange,
-  RiotIdInput
+  RiotIdInput,
+  SeasonInput
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 
@@ -112,16 +137,22 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
 
-  ipcMain.handle(CH.liveGame.check, (_e, accountId: number) => checkLiveGame(accountId))
-  ipcMain.handle(CH.liveGame.participantRank, (_e, platform: string, puuid: string) =>
-    getParticipantRank(platform, puuid)
+  ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: number) => getScoreboard(accountId))
+  ipcMain.handle(
+    CH.liveClient.playerRank,
+    (_e, platform: string, gameName: string, tagLine: string) =>
+      getRankByRiotId(platform, gameName, tagLine)
   )
 
-  ipcMain.handle(CH.champions.stats, (_e, accountId: number, queueId: number | null) => {
-    const account = getAccountById(getDb(), accountId)
-    if (!account) return []
-    return getChampionStats(getDb(), account.puuid, queueId)
-  })
+  ipcMain.handle(
+    CH.champions.stats,
+    (_e, accountId: number, queueId: number | null, range: RankRange) => {
+      const account = getAccountById(getDb(), accountId)
+      if (!account) return []
+      const { sinceMs, untilMs } = rangeBounds(range, listSeasons(getDb()))
+      return getChampionStats(getDb(), account.puuid, queueId, sinceMs, untilMs)
+    }
+  )
 
   ipcMain.handle(
     CH.mastery.get,
@@ -133,6 +164,13 @@ export function registerIpcHandlers(): void {
     CH.rank.history,
     (_e, accountId: number, queueType: QueueType, range: RankRange) =>
       getRankHistory(accountId, queueType, range)
+  )
+
+  ipcMain.handle(CH.rank.periods, (_e, accountId: number) => getRankPeriods(accountId))
+
+  ipcMain.handle(CH.seasons.list, () => listSeasons(getDb()))
+  ipcMain.handle(CH.seasons.save, (_e, seasons: SeasonInput[]) =>
+    saveSeasons(getDb(), seasons)
   )
 
   ipcMain.handle(
@@ -185,6 +223,87 @@ export function registerIpcHandlers(): void {
     // not reach into, so it is applied here where both are already in scope.
     syncTray()
     return next
+  })
+
+  ipcMain.handle(CH.capture.getSettings, () => getCaptureSettings())
+  ipcMain.handle(CH.capture.setSettings, (_e, patch: Partial<CaptureSettings>) => {
+    const next = setCaptureSettings(patch)
+    // Switching capture on has to start OBS and the websocket client, which the
+    // settings service deliberately knows nothing about.
+    refreshCapture()
+    return next
+  })
+  ipcMain.handle(CH.capture.setObsPassword, (_e, password: string) => {
+    const next = setObsPassword(password)
+    // The old password is what the live connection authenticated with, so it
+    // has to be made again before the new one means anything.
+    reconnectObs()
+    return next
+  })
+  ipcMain.handle(CH.capture.clearObsPassword, () => {
+    const next = clearObsPassword()
+    reconnectObs()
+    return next
+  })
+  ipcMain.handle(CH.capture.chooseFolder, async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Where should recordings go?',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: getCaptureSettings().folder ?? undefined
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+  ipcMain.handle(CH.capture.chooseObsPath, async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Where is OBS installed?',
+      properties: ['openFile'],
+      filters: [{ name: 'OBS Studio', extensions: ['exe'] }]
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+  ipcMain.handle(CH.capture.getStatus, () => getCaptureStatus())
+  ipcMain.handle(CH.capture.validate, async () => {
+    const settings = getCaptureSettings()
+    const managed = settings.mode === 'managed'
+    return validateObs(await readObsConfig(managed ? null : settings.obsScene), {
+      managed,
+      scene: settings.obsScene,
+      folder: settings.folder
+    })
+  })
+  // A frame of what would actually be recorded, so setup can be checked by eye
+  // rather than by playing a game and finding out afterwards. In managed mode
+  // the source only exists once a first recording has provisioned it, and null
+  // is a normal answer the settings screen explains.
+  ipcMain.handle(CH.capture.preview, async () => {
+    const settings = getCaptureSettings()
+    const source = settings.mode === 'managed' ? managedPreviewSource() : settings.obsScene
+    if (!source) return null
+    return grabSourceScreenshot(source)
+  })
+  ipcMain.handle(CH.capture.reconnect, () => {
+    reconnectObs()
+    return getCaptureStatus()
+  })
+
+  ipcMain.handle(CH.replays.list, (_e, accountId: number) => listReplays(accountId))
+  ipcMain.handle(CH.replays.detail, (_e, replayId: number) => getReplayDetail(replayId))
+  ipcMain.handle(CH.replays.usage, () => getDiskUsage())
+  ipcMain.handle(CH.replays.remove, (_e, replayId: number) => removeReplay(replayId))
+  ipcMain.handle(CH.replays.removeOldest, (_e, accountId: number, count: number) =>
+    removeOldestReplays(accountId, count)
+  )
+  ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplayWindow(replayId))
+  ipcMain.handle(CH.replays.reveal, (_e, replayId: number) => revealReplay(replayId))
+  // Sent by a replay window, delivered to the main one: the match list it wants
+  // opened lives in a different renderer process with its own state.
+  ipcMain.handle(CH.replays.showMatch, (_e, accountId: number, matchId: string) => {
+    const main = getMainWindow()
+    if (!main) return
+    if (main.isMinimized()) main.restore()
+    main.show()
+    main.focus()
+    main.webContents.send(CH.replays.showMatch, accountId, matchId)
   })
 
   ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) => searchSummoner(input))

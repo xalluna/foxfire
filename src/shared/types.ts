@@ -1,3 +1,8 @@
+import type { Position } from './positions'
+import type { CaptureQuality } from './captureQuality'
+
+export type { CaptureQuality } from './captureQuality'
+
 export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
 
 export interface Account {
@@ -24,6 +29,7 @@ export interface LeagueEntry {
   losses: number | null
   fetchedAt: string
 }
+
 
 /**
  * One row of match history.
@@ -85,6 +91,13 @@ export interface MatchSummary {
    * produces renders identically to a derived one, so nothing else looks at it.
    */
   hasManualRank: boolean
+  /**
+   * The recording of this game, when one exists.
+   *
+   * Read only to decide whether the row's context menu can offer to watch it,
+   * so it is a bare id rather than the whole replay.
+   */
+  replayId: number | null
 }
 
 /**
@@ -114,6 +127,14 @@ export interface RankSnapshot {
   losses: number | null
   /** Precomputed by shared/ladder.ts so the graph plots without recomputing. */
   ladderPosition: number | null
+  /**
+   * Which season this reading falls in, stamped on the way out.
+   *
+   * Sent rather than derived so the renderer needs no copy of the season table
+   * and cannot paint a chart before one has loaded. Null only when no seasons
+   * are defined at all.
+   */
+  seasonId: number | null
   /**
    * Where the reading came from: the running client, the public API, or the
    * user. A 'manual' row is an assertion rather than a measurement, and is
@@ -195,7 +216,45 @@ export interface RankHistory {
   milestones: RankMilestone[]
 }
 
-export type RankRange = '7d' | '30d' | 'all'
+/**
+ * One hand-entered ranked season.
+ *
+ * Riot exposes no way to ask which season is current, and the calendar is not a
+ * stand-in for one — 2026 opened on 8 January and a preseason can run into
+ * February — so these are edited in Settings. See migration 008.
+ *
+ * A season runs from `startsAt` until the next one starts. The newest reaches
+ * forwards forever and the oldest backwards forever, so no game can fall
+ * outside every season and a boundary nobody has entered yet cannot cut the
+ * current season short.
+ */
+export interface Season {
+  id: number
+  label: string
+  /** Epoch milliseconds, matching game_creation and captured_at. */
+  startsAt: number
+  /** Labelled distinctly, but still catches games — rank carries into it. */
+  isPreseason: boolean
+  /**
+   * Whether the ladder reset when this season opened.
+   *
+   * Distinct from the boundary itself: a season that carries rank forward must
+   * keep attributing LP across its own start, and only a reset may suppress it.
+   */
+  resetsRank: boolean
+}
+
+/** A season on its way back from the editor. No id means a row being added. */
+export type SeasonInput = Omit<Season, 'id'> & { id?: number }
+
+/**
+ * A window over rank history.
+ *
+ * `7d` and `30d` are relative to now; `season:12` names a season by its row id,
+ * whose bounds come from shared/seasons.ts. They share one union because the
+ * Rank screen offers them from a single control — see views/RankHistory.tsx.
+ */
+export type RankRange = '7d' | '30d' | 'all' | `season:${number}`
 
 /**
  * Whether the League client is reachable and whose account is logged into it.
@@ -206,7 +265,20 @@ export type RankRange = '7d' | '30d' | 'all'
  */
 export type LcuStatus =
   | { state: 'disconnected' }
-  | { state: 'connected'; accountId: number; gameName: string; tagLine: string }
+  | {
+      state: 'connected'
+      accountId: number
+      gameName: string
+      tagLine: string
+      /**
+       * Whether a game is actually being played right now.
+       *
+       * The client's own playing phase, so it goes true at the loading screen —
+       * before the game answers on loopback and well before there is a
+       * scoreboard to show. That is the honest answer to "is a game on".
+       */
+      inGame: boolean
+    }
   | { state: 'untracked'; gameName: string; tagLine: string }
 
 export interface BackgroundSettings {
@@ -311,26 +383,52 @@ export interface SyncProgressEvent {
   trigger: SyncTrigger
 }
 
-export interface LiveGameParticipant {
-  /** Position in Riot's participant array. The React key, since an anonymous player has no puuid. */
+/**
+ * One row of the in-game scoreboard, built from the Live Client Data API the
+ * running game serves on loopback.
+ *
+ * Richer than anything the spectator endpoint could offer — it is the game's
+ * own view of itself — but it carries no puuid, so a player is identified by
+ * their Riot ID and nothing else.
+ */
+export interface ScoreboardPlayer {
+  /** Index in the game's own player array. The React key, since two players can share a name. */
   slot: number
-  /** Riot withheld this player's identity — no name, no rank, nothing to look them up by. */
-  anonymous: boolean
-  /** Null on anonymous rows, dropped on purpose so the renderer cannot resolve what Riot withheld. */
-  puuid: string | null
   gameName: string | null
   tagLine: string | null
+  /** The account this window is showing, so the row can be picked out of the ten. */
+  isSelf: boolean
+  isBot: boolean
+  isDead: boolean
+  /** Seconds until respawn; 0 whenever alive. */
+  respawnTimer: number
+  level: number | null
+  position: Position | null
   teamId: number
   championId: number | null
+  /** The name the game sent, so a champion the manifest has not caught up with still reads. */
+  championName: string | null
   spell1Id: number | null
   spell2Id: number | null
+  keystoneId: number | null
+  secondaryTreeId: number | null
+  /** Seven slots, index 6 the trinket — the shape itemSlots() takes. */
+  items: number[]
+  /** Granted by the lane rather than bought, exactly as on a stored match. */
+  roleBoundItem: number
+  kills: number
+  deaths: number
+  assists: number
+  creepScore: number
+  wardScore: number
 }
 
-export interface LiveGameData {
-  gameId: number
+export interface Scoreboard {
   gameMode: string
-  gameLength: number
-  participants: LiveGameParticipant[]
+  mapName: string
+  /** Seconds elapsed. */
+  gameTime: number
+  players: ScoreboardPlayer[]
 }
 
 export interface AdHocSummonerResult {
@@ -369,4 +467,166 @@ export interface AssetManifest {
   championById: Record<number, { id: string; name: string }>
   spellById: Record<number, { id: string; name: string }>
   runeById: Record<number, { icon: string; name: string }>
+}
+
+/**
+ * Which audio OBS is told to record.
+ *
+ * Only honoured in managed mode. A scene the user built is theirs, and muting
+ * inputs inside it would leave their microphone muted if we crashed between
+ * setting and restoring — so in manual mode this is reported rather than applied.
+ */
+export type CaptureAudio = 'none' | 'game' | 'game+mic'
+
+/**
+ * Whether the app owns the OBS scene it records with, or validates one the user
+ * built themselves.
+ *
+ * Managed keeps every setting we care about — container, output folder, audio —
+ * inside a profile and scene collection nothing else touches. Manual exists for
+ * people who already stream and whose OBS is configured the way they want it.
+ */
+export type ObsMode = 'managed' | 'manual'
+
+export interface CaptureSettings {
+  enabled: boolean
+  mode: ObsMode
+  /** Where recordings are written. Capture cannot arm without one. */
+  folder: string | null
+  /** Queue ids that record. */
+  queues: number[]
+  /** Whether a queue outside CAPTURE_QUEUE_OPTIONS records too — customs, rotating modes. */
+  otherQueues: boolean
+  audio: CaptureAudio
+  /**
+   * What managed mode records at. Ignored in manual mode, where the user's own
+   * OBS profile decides — see CaptureQuality.
+   */
+  quality: CaptureQuality
+  /** Advisory ceiling in bytes. Nothing is ever deleted to honour it; 0 means no cap. */
+  softCapBytes: number
+  obsHost: string
+  obsPort: number
+  /** The password itself never crosses IPC, exactly as the Riot key never does. */
+  hasObsPassword: boolean
+  obsInstallPath: string | null
+  /** Manual mode only: the scene to switch to before recording. */
+  obsScene: string | null
+}
+
+/**
+ * What capture is doing right now, broadcast to every window on change.
+ *
+ * 'armed' is its own state rather than folded into 'idle': between the client
+ * reporting a game and the game itself answering on loopback there is a loading
+ * screen lasting minutes, and "we know about your game and are waiting for it"
+ * is a different thing to say than "nothing is happening".
+ */
+export type CaptureStatus =
+  | { state: 'off' }
+  | { state: 'connecting' }
+  | { state: 'idle' }
+  | { state: 'armed'; queueId: number | null }
+  | { state: 'recording'; replayId: number; startedAt: number }
+  | { state: 'error'; message: string }
+
+/** One reason a user-configured OBS cannot be recorded from as it stands. */
+export type ObsProblem =
+  | { kind: 'notConnected' }
+  | { kind: 'noFolder' }
+  /** MKV is OBS's default and Electron's <video> cannot play it at all. */
+  | { kind: 'recordFormat'; found: string }
+  | { kind: 'sceneNotChosen' }
+  | { kind: 'sceneMissing'; scene: string }
+  | { kind: 'noCaptureSource'; scene: string }
+  | { kind: 'recordDirectory'; found: string; expected: string }
+
+export interface ObsAudioInput {
+  name: string
+  muted: boolean
+}
+
+export interface ObsValidation {
+  ok: boolean
+  problems: ObsProblem[]
+  /** Scenes offered in the picker, so manual mode does not need a typed name. */
+  scenes: string[]
+  /** What the chosen scene will actually record. Reported, never changed. */
+  audioInputs: ObsAudioInput[]
+}
+
+/**
+ * Whether a recording has found its match yet.
+ *
+ * 'unmatched' is a resting state, not a failure: a Practice Tool game produces
+ * no match-v5 match at all and never will, and the footage is still worth
+ * keeping. Nothing is deleted for failing to bind.
+ */
+export type ReplayBindState = 'pending' | 'bound' | 'unmatched'
+
+/** The match a bound replay belongs to, denormalised so a list renders in one query. */
+export interface ReplayMatchInfo {
+  matchId: string
+  gameCreation: number
+  gameDuration: number
+  gameMode: string | null
+  queueId: number | null
+  win: boolean
+  championId: number
+  championName: string | null
+  kills: number
+  deaths: number
+  assists: number
+}
+
+export interface Replay {
+  id: number
+  accountId: number
+  matchId: string | null
+  bindState: ReplayBindState
+  fileBytes: number | null
+  /**
+   * False once the file has gone missing behind our back — moved, or deleted
+   * from Explorer. The row is kept so the disappearance is visible rather than
+   * the replay silently vanishing from the list.
+   */
+  fileExists: boolean
+  queueId: number | null
+  /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
+  startedAt: number
+  endedAt: number | null
+  durationSeconds: number | null
+  selfChampionId: number | null
+  match: ReplayMatchInfo | null
+}
+
+/** Which side of an event the tracked player was on. */
+export type ReplayEventRole = 'kill' | 'death' | 'assist' | 'multikill'
+
+export interface ReplayEvent {
+  /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
+  eventId: number
+  name: string
+  /** Seconds on the game clock, as the game reported it. */
+  gameTime: number
+  /** Seconds into the video file — gameTime minus the offset captured at record start. */
+  videoTime: number
+  role: ReplayEventRole
+  /** The other player for a kill or death, the streak size for a multikill. */
+  label: string | null
+}
+
+/** Everything a replay window needs, fetched once when it opens. */
+export interface ReplayDetail {
+  replay: Replay
+  events: ReplayEvent[]
+}
+
+export interface ReplayDiskUsage {
+  totalBytes: number
+  count: number
+  unmatchedCount: number
+  missingCount: number
+  /** Mirrored from settings so the warning can be drawn without a second query. */
+  softCapBytes: number
 }

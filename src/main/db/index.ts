@@ -8,6 +8,8 @@ import rankHistorySql from './migrations/003_rank_history.sql?raw'
 import remakesSql from './migrations/004_remakes.sql?raw'
 import manualRankSql from './migrations/005_manual_rank.sql?raw'
 import roleBoundItemSql from './migrations/006_role_bound_item.sql?raw'
+import replaysSql from './migrations/007_replays.sql?raw'
+import seasonsSql from './migrations/008_seasons.sql?raw'
 
 let db: DatabaseSync | null = null
 
@@ -19,7 +21,9 @@ const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
   { name: '003_rank_history.sql', sql: rankHistorySql },
   { name: '004_remakes.sql', sql: remakesSql },
   { name: '005_manual_rank.sql', sql: manualRankSql },
-  { name: '006_role_bound_item.sql', sql: roleBoundItemSql }
+  { name: '006_role_bound_item.sql', sql: roleBoundItemSql },
+  { name: '007_replays.sql', sql: replaysSql },
+  { name: '008_seasons.sql', sql: seasonsSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

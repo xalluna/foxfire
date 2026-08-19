@@ -4,9 +4,11 @@ import {
   getRankedMatchesBetween,
   upsertMatchRank
 } from '../db/repositories/rankHistory.repo'
+import { listSeasons } from '../db/repositories/seasons.repo'
 import { rankMovement } from '@shared/ladder'
 import { queueIdForQueueType, TRACKED_QUEUES } from '@shared/queues'
-import type { QueueType, RankSnapshot } from '@shared/types'
+import { resetsBetween } from '@shared/seasons'
+import type { QueueType, RankSnapshot, Season } from '@shared/types'
 
 /**
  * Assigns an LP change to a game, but only when it is unambiguous.
@@ -28,9 +30,25 @@ export function attributeInterval(
   puuid: string,
   queueType: QueueType,
   before: RankSnapshot,
-  after: RankSnapshot
+  after: RankSnapshot,
+  seasons: Season[] = []
 ): boolean {
   if (before.ladderPosition === null || after.ladderPosition === null) return false
+
+  // Never attribute across a ladder reset. The interval from a December reading
+  // to the first January one holds the annual reset, and its ladder delta is
+  // the entire height of the player's rank — roughly -1,900 for a Diamond
+  // player. If a single ranked game happens to sit in that interval it would be
+  // handed that number as its LP change, and because replayAttribution reruns
+  // unbounded on every launch, the chip would come back every time it was
+  // cleared. The reset is not a result of any game, so no game gets it.
+  //
+  // Keyed on the reset rather than on the season boundary: a preseason carries
+  // rank forward, and a game either side of a boundary that reset nothing still
+  // earned its LP. With no seasons recorded this guard cannot fire — that is
+  // the cost of the boundaries being hand-entered, and why the editor seeds
+  // one rather than starting empty.
+  if (resetsBetween(seasons, before.capturedAt, after.capturedAt)) return false
 
   const matches = getRankedMatchesBetween(
     db,
@@ -66,9 +84,11 @@ export function attributeInterval(
 /**
  * How far back a routine replay reaches.
  *
- * Matches the widest range the rank view offers, so everything the user can
- * actually look at stays self-healing without walking years of snapshots on
- * every sync. A full repair passes null instead.
+ * A cost control rather than a guarantee: it keeps a sync from walking years of
+ * snapshots while still covering everything recent enough to still be arriving.
+ * The rank view can now ask for a whole ranked year, which is wider than this —
+ * what actually backstops the rest is repairAttribution, which runs unbounded
+ * once per launch. A full repair passes null instead.
  */
 export const ATTRIBUTION_REPLAY_WINDOW_MS = 30 * 86_400_000
 
@@ -100,14 +120,25 @@ export function replayAttribution(
   puuid: string,
   sinceMs: number | null = null
 ): number {
+  // Loaded once rather than per interval: this walks every stored snapshot pair
+  // for both ladders, and the list is a handful of rows that cannot change
+  // mid-replay.
+  const seasons = listSeasons(db)
   let attributed = 0
 
   for (const queueType of TRACKED_QUEUES) {
     const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs)
     for (let i = 1; i < snapshots.length; i++) {
-      if (attributeInterval(db, accountId, puuid, queueType, snapshots[i - 1], snapshots[i])) {
-        attributed++
-      }
+      const wrote = attributeInterval(
+        db,
+        accountId,
+        puuid,
+        queueType,
+        snapshots[i - 1],
+        snapshots[i],
+        seasons
+      )
+      if (wrote) attributed++
     }
   }
 

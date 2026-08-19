@@ -106,10 +106,29 @@ export function Settings(props: IconProps): JSX.Element {
   )
 }
 
-export function Live(props: IconProps): JSX.Element {
+/**
+ * Broadcast mark: a broken ring around a filled dot.
+ *
+ * The dot takes its own optional colour so the two can disagree — a game in
+ * progress rings it in teal, and recording turns the dot red inside that ring,
+ * which reads as "live, and being kept" in one glyph.
+ */
+export function Live({
+  dotClassName,
+  ...props
+}: IconProps & { dotClassName?: string }): JSX.Element {
   return (
     <Icon {...props}>
-      <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
+      <circle
+        cx="12"
+        cy="12"
+        r="3.5"
+        // currentColor resolves per element, so a text-* class here overrides
+        // the colour the ring inherits without touching the ring.
+        fill="currentColor"
+        stroke="none"
+        className={dotClassName}
+      />
       <path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 17.7a8 8 0 0 0 0-11.4" />
     </Icon>
   )
@@ -192,6 +211,121 @@ export function Activity(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>
       <path d="M3 12h3.5l2.5-7 4 14 2.5-7H21" />
+    </Icon>
+  )
+}
+
+/**
+ * A death on the replay timeline.
+ *
+ * Filled rather than stroked, like Coin and for the same reason: these render
+ * at 10px on a seek bar where a 2px stroke on a 24 grid turns to mush.
+ */
+export function Skull(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M12 2a8 8 0 0 0-5 14.3V19a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2.7A8 8 0 0 0 12 2Zm-3 9a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Zm6 0a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Z" />
+    </Icon>
+  )
+}
+
+export function Play(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M7 4.5v15l13-7.5z" />
+    </Icon>
+  )
+}
+
+export function Pause(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" />
+    </Icon>
+  )
+}
+
+export function SkipBack(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M18 5v14L8 12zM6 5h2.2v14H6z" />
+    </Icon>
+  )
+}
+
+export function SkipForward(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M6 5v14l10-7zM15.8 5H18v14h-2.2z" />
+    </Icon>
+  )
+}
+
+/** The recording dot, used on the capture status pill. */
+export function Record(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <circle cx="12" cy="12" r="6" />
+    </Icon>
+  )
+}
+
+export function Film(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 4v16M17 4v16M3 12h18" />
+    </Icon>
+  )
+}
+
+export function Folder(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </Icon>
+  )
+}
+
+export function Trash(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+    </Icon>
+  )
+}
+
+export function Volume(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 9v6h4l5 4V5L8 9z" />
+      <path d="M16.5 8.5a5 5 0 0 1 0 7" />
+    </Icon>
+  )
+}
+
+export function VolumeOff(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 9v6h4l5 4V5L8 9z" />
+      <path d="m17 9 4 6M21 9l-4 6" />
+    </Icon>
+  )
+}
+
+export function Maximize(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />
+    </Icon>
+  )
+}
+
+/** Leave fullscreen. The counterpart to Maximize, arrows pointing inward. */
+export function Minimize(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M9 4v4H5M15 4v4h4M9 20v-4H5M15 20v-4h4" />
     </Icon>
   )
 }

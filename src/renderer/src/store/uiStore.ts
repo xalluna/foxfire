@@ -2,7 +2,14 @@ import { create } from 'zustand'
 import type { SyncProgressEvent } from '@shared/types'
 import { DEFAULT_QUEUE_FILTER } from '@shared/queues'
 
-export type View = 'dashboard' | 'liveGame' | 'mastery' | 'rank' | 'search' | 'settings'
+export type View =
+  | 'dashboard'
+  | 'liveGame'
+  | 'replays'
+  | 'mastery'
+  | 'rank'
+  | 'search'
+  | 'settings'
 
 interface UiState {
   activeAccountId: number | null

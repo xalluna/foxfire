@@ -1,16 +1,21 @@
 import type {
   Account,
+  ChampionStats,
   LeagueEntry,
-  LiveGameData,
   MasteryEntry,
   MatchDetail,
   MatchRankInfo,
   MatchSummary,
   QueueType,
+  RankRange,
   RankSnapshot,
-  ChampionStats
+  Replay,
+  ReplayEvent,
+  Scoreboard
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
+import { rangeBounds } from '@shared/seasons'
+import { devSeasonIdAt } from './seasons'
 import {
   C,
   DAY,
@@ -19,6 +24,7 @@ import {
   ITEMS_AP,
   ITEMS_SUPPORT,
   ITEMS_TANK,
+  K,
   NOW,
   ROLE_ITEM,
   S,
@@ -31,7 +37,10 @@ import {
   CLIMB_ENTRY,
   CLIMB_MASTERY,
   CLIMB_MATCHES,
-  CLIMB_SNAPSHOTS
+  CLIMB_SNAPSHOTS,
+  PRIOR_DETAILS,
+  PRIOR_MATCHES,
+  PRIOR_SNAPSHOTS
 } from './climb'
 
 /**
@@ -342,7 +351,8 @@ function buildSoloRankHistory(): {
       losses,
       ladderPosition: position,
       source: 'lcu',
-      capturedAt: at
+      capturedAt: at,
+      seasonId: devSeasonIdAt(at)
     }
   }
 
@@ -417,7 +427,8 @@ const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
     losses: 7,
     ladderPosition: ladderPosition(r),
     source: 'league_v4' as const,
-    capturedAt: NOW - (6 - i * 2) * DAY
+    capturedAt: NOW - (6 - i * 2) * DAY,
+    seasonId: devSeasonIdAt(NOW - (6 - i * 2) * DAY)
   }))
 }
 
@@ -431,7 +442,10 @@ const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
 export const RANK_SNAPSHOTS: Record<number, Record<QueueType, RankSnapshot[]>> = {
   1: ALLUNA_SNAPSHOTS,
   2: {
-    RANKED_SOLO_5x5: CLIMB_SNAPSHOTS,
+    // Two ranked years, oldest first. The gap between them is January's reset:
+    // the all-time chart has to break the line there rather than draw a
+    // thousand-point cliff, and no milestone may be reported across it.
+    RANKED_SOLO_5x5: [...PRIOR_SNAPSHOTS, ...CLIMB_SNAPSHOTS],
     // The climb account's flex ladder was never played, so the queue toggle has
     // a genuinely empty series to render.
     RANKED_FLEX_SR: []
@@ -465,7 +479,10 @@ const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   teamDamage: s.teamDamage,
   isRemake: s.remake ?? false,
   rank: soloHistory.byMatchId.get(matchIdAt(i)) ?? null,
-  hasManualRank: false
+  hasManualRank: false,
+  // The first three games were recorded; the rest were not, so the context menu
+  // is exercised both enabled and disabled without switching scenario.
+  replayId: i < 3 ? i + 1 : null
 }))
 
 const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
@@ -479,13 +496,16 @@ const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
  */
 export const MATCHES: Record<number, MatchSummary[]> = {
   1: ALLUNA_MATCHES,
-  2: CLIMB_MATCHES
+  // Newest first across both seasons: each block is already reversed, and the
+  // prior one is wholly older, so concatenating keeps the list ordered.
+  2: [...CLIMB_MATCHES, ...PRIOR_MATCHES]
 }
 
 /** Keyed by match id across both accounts, which is how the detail view looks them up. */
 export const MATCH_DETAILS: Record<string, MatchDetail> = {
   ...Object.fromEntries(ALLUNA_MATCHES.map((m, i) => [m.matchId, detailFor(m, i, ALLUNA)])),
-  ...CLIMB_DETAILS
+  ...CLIMB_DETAILS,
+  ...PRIOR_DETAILS
 }
 
 const ALLUNA_MASTERY: MasteryEntry[] = [
@@ -518,7 +538,11 @@ export const MASTERY: Record<number, MasteryEntry[]> = {
  * totals and per-game-meaned shares. Diverging here would make the web harness
  * quietly lie about arithmetic the real app gets right.
  */
-export function championStatsFor(accountId: number, queueId: number | null): ChampionStats[] {
+export function championStatsFor(
+  accountId: number,
+  queueId: number | null,
+  range: RankRange = 'all'
+): ChampionStats[] {
   // Per-game shares are accumulated separately from the totals: they are meaned
   // over the games that had a share to give, not over every game played.
   const shares = new Map<number, { damage: number[]; kp: number[] }>()
@@ -526,9 +550,15 @@ export function championStatsFor(accountId: number, queueId: number | null): Cha
   const mean = (xs: number[]): number | null =>
     xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length
 
+  const { sinceMs, untilMs } = rangeBounds(range)
+
   const stats = (MATCHES[accountId] ?? []).filter(
-    // Mirrors getChampionStats, which excludes remakes.
-    (m) => !m.isRemake && (queueId === null || m.queueId === queueId)
+    // Mirrors getChampionStats, which excludes remakes and scopes to a period.
+    (m) =>
+      !m.isRemake &&
+      (queueId === null || m.queueId === queueId) &&
+      (sinceMs === null || m.gameCreation >= sinceMs) &&
+      (untilMs === null || m.gameCreation < untilMs)
   ).reduce<Record<number, ChampionStats>>((acc, m) => {
     const entry = acc[m.championId] ?? {
       championId: m.championId,
@@ -574,24 +604,113 @@ export function championStatsFor(accountId: number, queueId: number | null): Cha
 }
 
 /**
- * Ten slots covering all three row states: eight players Riot named, one whose
- * identity it withheld (slot 4 — champion only, no rank), and one it returned
- * nothing usable for (slot 9 — a blank row holding its place).
+ * A board mid-game, already in lane order the way the mapper hands it over.
+ *
+ * Covers the states the row has to survive: the tracked account (slot 4), a
+ * player who is dead and counting down (slot 3), a bot (slot 9), and a champion
+ * the manifest has never heard of (slot 8), which is what a brand-new release
+ * looks like on the day it ships.
  */
-export const LIVE_GAME: LiveGameData = {
-  gameId: 5_100_200_300,
+export const SCOREBOARD: Scoreboard = {
   gameMode: 'CLASSIC',
-  gameLength: 847,
-  participants: [
-    { slot: 0, anonymous: false, puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1', teamId: 100, championId: C.Viktor, spell1Id: S.Teleport, spell2Id: S.Flash },
-    { slot: 1, anonymous: false, puuid: 'p-b1', gameName: 'Runnit Downy Jr', tagLine: 'NA1', teamId: 100, championId: C.Sett, spell1Id: S.Flash, spell2Id: S.Teleport },
-    { slot: 2, anonymous: false, puuid: 'p-b2', gameName: 'phantomduval', tagLine: 'NA1', teamId: 100, championId: C.Vi, spell1Id: S.Smite, spell2Id: S.Flash },
-    { slot: 3, anonymous: false, puuid: 'p-b3', gameName: 'Killua', tagLine: 'NA1', teamId: 100, championId: C.Kaisa, spell1Id: S.Flash, spell2Id: S.Heal },
-    { slot: 4, anonymous: true, puuid: null, gameName: null, tagLine: null, teamId: 100, championId: C.Thresh, spell1Id: S.Flash, spell2Id: S.Ignite },
-    { slot: 5, anonymous: false, puuid: 'p-r0', gameName: 'cpdd Ontario', tagLine: 'NA1', teamId: 200, championId: C.Aatrox, spell1Id: S.Teleport, spell2Id: S.Flash },
-    { slot: 6, anonymous: false, puuid: 'p-r1', gameName: 'jg TTVritchhi', tagLine: 'NA1', teamId: 200, championId: C.LeeSin, spell1Id: S.Smite, spell2Id: S.Flash },
-    { slot: 7, anonymous: false, puuid: 'p-r2', gameName: 'StayyKawaii', tagLine: 'NA1', teamId: 200, championId: C.Ahri, spell1Id: S.Flash, spell2Id: S.Ignite },
-    { slot: 8, anonymous: false, puuid: 'p-r3', gameName: 'Harrowhold', tagLine: 'NA1', teamId: 200, championId: C.Jhin, spell1Id: S.Flash, spell2Id: S.Heal },
-    { slot: 9, anonymous: true, puuid: null, gameName: null, tagLine: null, teamId: 200, championId: null, spell1Id: null, spell2Id: null }
+  mapName: 'Map11',
+  gameTime: 847.5,
+  players: [
+    { slot: 1, gameName: 'Runnit Downy Jr', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'TOP', teamId: 100, championId: C.Sett, championName: 'Sett', spell1Id: S.Flash, spell2Id: S.Teleport, keystoneId: K.Conqueror[0], secondaryTreeId: K.Conqueror[1], items: ITEMS_TANK, roleBoundItem: ROLE_ITEM.TOP, kills: 3, deaths: 2, assists: 4, creepScore: 121, wardScore: 9.4 },
+    { slot: 2, gameName: 'phantomduval', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 10, position: 'JUNGLE', teamId: 100, championId: C.Vi, championName: 'Vi', spell1Id: S.Smite, spell2Id: S.Flash, keystoneId: K.Electrocute[0], secondaryTreeId: K.Electrocute[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.JUNGLE, kills: 5, deaths: 4, assists: 8, creepScore: 96, wardScore: 14.2 },
+    { slot: 0, gameName: 'Alluna', tagLine: 'NA1', isSelf: true, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'MIDDLE', teamId: 100, championId: C.Viktor, championName: 'Viktor', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.ArcaneComet[0], secondaryTreeId: K.ArcaneComet[1], items: ITEMS_AP, roleBoundItem: ROLE_ITEM.MIDDLE, kills: 7, deaths: 1, assists: 5, creepScore: 154, wardScore: 11.8 },
+    { slot: 3, gameName: 'Killua', tagLine: 'NA1', isSelf: false, isBot: false, isDead: true, respawnTimer: 18.4, level: 11, position: 'BOTTOM', teamId: 100, championId: C.Kaisa, championName: "Kai'Sa", spell1Id: S.Flash, spell2Id: S.Heal, keystoneId: K.PressTheAttack[0], secondaryTreeId: K.PressTheAttack[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.BOTTOM, kills: 4, deaths: 6, assists: 3, creepScore: 143, wardScore: 8.1 },
+    { slot: 4, gameName: 'ward andersen', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 9, position: 'UTILITY', teamId: 100, championId: C.Thresh, championName: 'Thresh', spell1Id: S.Flash, spell2Id: S.Ignite, keystoneId: K.Grasp[0], secondaryTreeId: K.Grasp[1], items: ITEMS_SUPPORT, roleBoundItem: ROLE_ITEM.UTILITY, kills: 1, deaths: 5, assists: 12, creepScore: 24, wardScore: 41.6 },
+    { slot: 5, gameName: 'cpdd Ontario', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'TOP', teamId: 200, championId: C.Aatrox, championName: 'Aatrox', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.Conqueror[0], secondaryTreeId: K.Conqueror[1], items: ITEMS_TANK, roleBoundItem: ROLE_ITEM.TOP, kills: 6, deaths: 3, assists: 2, creepScore: 138, wardScore: 7.2 },
+    { slot: 6, gameName: 'jg TTVritchhi', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 10, position: 'JUNGLE', teamId: 200, championId: C.LeeSin, championName: 'Lee Sin', spell1Id: S.Smite, spell2Id: S.Flash, keystoneId: K.LethalTempo[0], secondaryTreeId: K.LethalTempo[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.JUNGLE, kills: 2, deaths: 5, assists: 9, creepScore: 88, wardScore: 12.9 },
+    { slot: 7, gameName: 'StayyKawaii', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'MIDDLE', teamId: 200, championId: C.Ahri, championName: 'Ahri', spell1Id: S.Flash, spell2Id: S.Ignite, keystoneId: K.Electrocute[0], secondaryTreeId: K.Electrocute[1], items: ITEMS_AP, roleBoundItem: ROLE_ITEM.MIDDLE, kills: 5, deaths: 4, assists: 6, creepScore: 147, wardScore: 10.5 },
+    { slot: 8, gameName: 'Harrowhold', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'BOTTOM', teamId: 200, championId: null, championName: 'Someone New', spell1Id: S.Flash, spell2Id: S.Heal, keystoneId: K.FirstStrike[0], secondaryTreeId: K.FirstStrike[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.BOTTOM, kills: 8, deaths: 2, assists: 4, creepScore: 161, wardScore: 6.8 },
+    { slot: 9, gameName: 'Nami Bot', tagLine: 'BOT', isSelf: false, isBot: true, isDead: false, respawnTimer: 0, level: 9, position: 'UTILITY', teamId: 200, championId: C.Nami, championName: 'Nami', spell1Id: S.Flash, spell2Id: S.Exhaust, keystoneId: K.Grasp[0], secondaryTreeId: K.Grasp[1], items: ITEMS_SUPPORT, roleBoundItem: ROLE_ITEM.UTILITY, kills: 0, deaths: 7, assists: 10, creepScore: 18, wardScore: 33.1 }
   ]
 }
+
+/**
+ * Recordings, covering the three states the Replays view has to draw.
+ *
+ * A bound replay, one still hunting for its match, and one that never found a
+ * game — the Practice Tool case, which is the normal reason a recording stays
+ * unmatched and is exactly the row most likely to be got wrong.
+ */
+export const REPLAYS: Record<number, Replay[]> = {
+  1: [
+    {
+      id: 1,
+      accountId: 1,
+      matchId: matchIdAt(0),
+      bindState: 'bound',
+      fileBytes: 1_820_000_000,
+      fileExists: true,
+      queueId: 420,
+      startedAt: NOW - 42 * 60_000,
+      endedAt: NOW - 12 * 60_000,
+      durationSeconds: 1_802,
+      selfChampionId: C.Viktor,
+      match: {
+        matchId: matchIdAt(0),
+        gameCreation: NOW - 45 * 60_000,
+        gameDuration: 1_802,
+        gameMode: 'CLASSIC',
+        queueId: 420,
+        win: true,
+        championId: C.Viktor,
+        championName: 'Viktor',
+        kills: 11,
+        deaths: 3,
+        assists: 8
+      }
+    },
+    {
+      id: 2,
+      accountId: 1,
+      matchId: null,
+      bindState: 'pending',
+      fileBytes: 1_100_000_000,
+      fileExists: true,
+      queueId: 440,
+      startedAt: NOW - 8 * 60_000,
+      endedAt: NOW - 60_000,
+      durationSeconds: 1_412,
+      selfChampionId: C.Ahri,
+      match: null
+    },
+    {
+      id: 3,
+      accountId: 1,
+      matchId: null,
+      bindState: 'unmatched',
+      fileBytes: 260_000_000,
+      // Deleted from Explorer behind the app's back, which is the state the
+      // "file missing" badge and the disabled Watch button exist for.
+      fileExists: false,
+      queueId: 0,
+      startedAt: NOW - 3 * 60 * 60_000,
+      endedAt: NOW - 3 * 60 * 60_000 + 420_000,
+      durationSeconds: 420,
+      selfChampionId: C.LeeSin,
+      match: null
+    }
+  ],
+  2: []
+}
+
+/**
+ * A timeline dense enough to exercise clustering.
+ *
+ * Two kills seconds apart plus the multikill they add up to land on top of each
+ * other on the bar, which is the case the marker clustering exists for.
+ */
+export const REPLAY_EVENTS: ReplayEvent[] = [
+  { eventId: 1, name: 'ChampionKill', gameTime: 214, videoTime: 174, role: 'kill', label: 'Ahri' },
+  { eventId: 2, name: 'ChampionKill', gameTime: 402, videoTime: 362, role: 'death', label: 'LeeSin' },
+  { eventId: 3, name: 'ChampionKill', gameTime: 640, videoTime: 600, role: 'assist', label: 'Aatrox' },
+  { eventId: 4, name: 'ChampionKill', gameTime: 902, videoTime: 862, role: 'kill', label: 'Aatrox' },
+  { eventId: 5, name: 'ChampionKill', gameTime: 906, videoTime: 866, role: 'kill', label: 'LeeSin' },
+  { eventId: 6, name: 'Multikill', gameTime: 907, videoTime: 867, role: 'multikill', label: '2' },
+  { eventId: 7, name: 'ChampionKill', gameTime: 1_240, videoTime: 1_200, role: 'death', label: 'Ahri' },
+  { eventId: 8, name: 'ChampionKill', gameTime: 1_690, videoTime: 1_650, role: 'kill', label: 'Nami' }
+]

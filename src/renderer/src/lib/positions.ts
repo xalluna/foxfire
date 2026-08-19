@@ -1,3 +1,4 @@
+import { isPosition, type Position } from '@shared/positions'
 import top from '../assets/positions/top.svg'
 import jungle from '../assets/positions/jungle.svg'
 import middle from '../assets/positions/middle.svg'
@@ -12,21 +13,15 @@ import utility from '../assets/positions/utility.svg'
  * teamPosition is an empty string for modes without lanes (ARAM, Arena), which
  * is why every lookup here can return null.
  */
-const POSITIONS = {
+const POSITIONS: Record<Position, { icon: string; label: string }> = {
   TOP: { icon: top, label: 'Top' },
   JUNGLE: { icon: jungle, label: 'Jungle' },
   MIDDLE: { icon: middle, label: 'Mid' },
   BOTTOM: { icon: bottom, label: 'Bot' },
   UTILITY: { icon: utility, label: 'Support' }
-} as const
-
-export type Position = keyof typeof POSITIONS
-
-export const POSITION_ORDER: Position[] = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY']
-
-export function isPosition(value: string | null): value is Position {
-  return value !== null && value in POSITIONS
 }
+
+export { isPosition, POSITION_ORDER, type Position } from '@shared/positions'
 
 export function positionIcon(position: string | null): string | null {
   return isPosition(position) ? POSITIONS[position].icon : null
