@@ -246,7 +246,7 @@ export function deleteReplay(db: DatabaseSync, replayId: number): string | null 
   return path
 }
 
-export interface PendingReplay {
+export interface BindableReplay {
   id: number
   accountId: number
   startedAt: number
@@ -255,16 +255,35 @@ export interface PendingReplay {
   selfChampionId: number | null
 }
 
-/** Finished recordings still waiting for their match to sync. */
-export function getPendingReplays(db: DatabaseSync, accountId: number): PendingReplay[] {
+/**
+ * Finished recordings worth trying to bind.
+ *
+ * Not only the pending ones. Giving up is a conclusion drawn from a single pass,
+ * and that pass can be wrong: a key that expired overnight means the match was
+ * simply not in SQLite yet, not that it does not exist. So recordings already
+ * written off are reconsidered too, back as far as `retryUnmatchedSince`.
+ *
+ * That cutoff is what keeps the reconsidering bounded. A Practice Tool game
+ * produces no match and never will, and without a cutoff it would be rescanned
+ * on every sync for the life of the library — dragging the caller's candidate
+ * window back to the day it was recorded along with it.
+ */
+export function getBindableReplays(
+  db: DatabaseSync,
+  accountId: number,
+  retryUnmatchedSince: number
+): BindableReplay[] {
   const rows = db
     .prepare(
       `SELECT id, account_id, started_at, ended_at, roster_json, self_champion_id
          FROM replays
-        WHERE account_id = ? AND bind_state = 'pending' AND ended_at IS NOT NULL
+        WHERE account_id = ?
+          AND ended_at IS NOT NULL
+          AND (bind_state = 'pending'
+               OR (bind_state = 'unmatched' AND started_at >= ?))
         ORDER BY started_at DESC`
     )
-    .all(accountId) as unknown as Array<{
+    .all(accountId, retryUnmatchedSince) as unknown as Array<{
     id: number
     account_id: number
     started_at: number

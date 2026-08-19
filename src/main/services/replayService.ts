@@ -8,8 +8,8 @@ import {
   bindReplay,
   countMissingFiles,
   deleteReplay,
+  getBindableReplays,
   getOldestReplayIds,
-  getPendingReplays,
   getReplay,
   getReplayEvents,
   getReplayFilePath,
@@ -18,6 +18,7 @@ import {
   markReplayUnmatched
 } from '../db/repositories/replays.repo'
 import {
+  BIND_RETRY_HORIZON_MS,
   findMatchForReplay,
   shouldGiveUpBinding,
   type MatchCandidate
@@ -129,20 +130,37 @@ function candidatesFor(accountId: number, since: number, until: number): MatchCa
 /** Widened either side of the recording so clock differences cannot exclude the game. */
 const CANDIDATE_WINDOW_MS = 6 * 60 * 60 * 1000
 
+export interface BindOptions {
+  /**
+   * Whether a recording that still found nothing may be written off.
+   *
+   * Off by default, so a caller that cannot vouch for the state of the sync can
+   * only ever bind. Writing off is the one irreversible-feeling thing this pass
+   * does, and it is only honest when the candidates it searched were complete.
+   */
+  allowGiveUp?: boolean
+}
+
 /**
  * Tries to give every finished recording its match.
  *
- * Called after each post-game sync, because that is when a new match can first
- * appear. Recordings that have waited past the whole retry schedule are marked
+ * Called whenever a sync finishes, because that is when a new match can first
+ * appear — and, just as importantly, because a sync that imported nothing new
+ * may still be the first one to run since the matches arrived.
+ *
+ * Recordings that have waited past the whole retry schedule are marked
  * unmatched — a resting state, not a deletion: a Practice Tool game has no
- * match-v5 match and never will, and the footage is still worth keeping.
+ * match-v5 match and never will, and the footage is still worth keeping. That
+ * only happens when the caller passes `allowGiveUp`, which it should do only
+ * for a sync that landed everything it went looking for.
  */
-export function bindPendingReplays(accountId: number): number {
+export function bindPendingReplays(accountId: number, options: BindOptions = {}): number {
+  const { allowGiveUp = false } = options
   const db = getDb()
-  const pending = getPendingReplays(db, accountId)
+  const now = Date.now()
+  const pending = getBindableReplays(db, accountId, now - BIND_RETRY_HORIZON_MS)
   if (pending.length === 0) return 0
 
-  const now = Date.now()
   const oldest = Math.min(...pending.map((replay) => replay.startedAt))
   const candidates = candidatesFor(
     accountId,
@@ -171,7 +189,7 @@ export function bindPendingReplays(accountId: number): number {
         matchId: result.matchId,
         confidence: result.confidence
       })
-    } else if (shouldGiveUpBinding(replay, now)) {
+    } else if (allowGiveUp && shouldGiveUpBinding(replay, now)) {
       markReplayUnmatched(db, replay.id)
       log.info('Replay left unmatched; keeping the footage', { replayId: replay.id })
     }

@@ -17,6 +17,7 @@ import { createLogger } from '../telemetry/logger'
 import { withSpan } from '../telemetry/spans'
 import { BACKFILL_TARGET, refreshRank } from './accountService'
 import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttribution'
+import { bindPendingReplays } from './replayService'
 import { selectNewMatchIds } from './syncPlanning'
 import type { SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
 
@@ -74,6 +75,32 @@ function replayRecentAttribution(db: DatabaseSync, accountId: number, puuid: str
     if (attributed > 0) log.debug('Attributed LP to games', { accountId, attributed })
   } catch (err) {
     log.debug('LP attribution replay failed', { accountId, error: String(err) })
+  }
+}
+
+/**
+ * Gives any finished recording the match it has been waiting for.
+ *
+ * Runs on every completed sync, not only on one that imported something. A sync
+ * that stores nothing is exactly the shape of the run that follows an expired
+ * key: the matches arrived on the sync before it, and this is the first pass
+ * with a full library to search. Binding only on `stored > 0` left recordings
+ * reading "Matching…" forever, because the moment that would have bound them
+ * had already gone by.
+ *
+ * `cleanSweep` says whether the run landed everything it went looking for. Only
+ * then may a recording be written off: a run that skipped a failed fetch may
+ * have skipped precisely the match one was waiting for, and unmatched is not a
+ * state to enter on a guess.
+ *
+ * Best-effort for the same reason as the two passes below — the matches are
+ * already committed, so nothing here may fail the import.
+ */
+function bindFinishedRecordings(accountId: number, cleanSweep: boolean): void {
+  try {
+    bindPendingReplays(accountId, { allowGiveUp: cleanSweep })
+  } catch (err) {
+    log.debug('Replay binding failed after sync', { accountId, error: String(err) })
   }
 }
 
@@ -225,8 +252,11 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
     else markDeltaSynced(db, accountId, allIds[0] ?? null)
     await snapshotRank(accountId)
     // Still worth a pass even though nothing arrived: an interval left open by
-    // an earlier run — a snapshot that landed before its match — closes here.
+    // an earlier run — a snapshot that landed before its match — closes here,
+    // and so does a recording whose match was imported by an earlier sync that
+    // never got to look for it.
     replayRecentAttribution(db, accountId, account.puuid)
+    bindFinishedRecordings(accountId, true)
     emit({ accountId, phase: 'complete', current: 0, total: 0, trigger })
     return { stored: 0, failed: 0 }
   }
@@ -239,6 +269,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
   // empty interval and leave the games that just arrived unattributed.
   await snapshotRank(accountId)
   replayRecentAttribution(db, accountId, account.puuid)
+  bindFinishedRecordings(accountId, failed === 0)
 
   // Only advance the sync marker when everything landed. Leaving it alone on
   // partial failure means the next run retries just the missing matches —
