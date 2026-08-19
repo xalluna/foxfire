@@ -36,7 +36,7 @@ export function RankTrackingSettings(): JSX.Element {
 
   return (
     <SettingsSection
-      icon={<Icon.TrendingUp className="shrink-0 text-gold" />}
+      icon={<Icon.TrendingUp className="shrink-0 text-accent" />}
       title="Rank tracking"
       summary={
         status.state === 'connected' ? (
@@ -114,7 +114,7 @@ export function RankTrackingSettings(): JSX.Element {
             onChange={(e) => setPathDraft(e.target.value)}
             placeholder="C:\Riot Games\League of Legends"
             spellCheck={false}
-            className="min-w-0 flex-1 rounded-md border border-hairline bg-canvas px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-gold-dim focus:outline-none"
+            className="min-w-0 flex-1 rounded-md border border-hairline bg-canvas px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
           />
           <button
             onClick={() => {
@@ -122,7 +122,7 @@ export function RankTrackingSettings(): JSX.Element {
               setPathDraft(null)
             }}
             disabled={update.isPending || path === storedPath}
-            className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-gold-dim hover:text-gold disabled:opacity-40"
+            className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-40"
           >
             Save
           </button>

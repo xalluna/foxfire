@@ -12,7 +12,7 @@ export function Skeleton({ className }: { className?: string }): JSX.Element {
       className={clsx(
         'relative overflow-hidden rounded bg-surface-2',
         'after:absolute after:inset-0 after:-translate-x-full after:animate-shimmer',
-        'after:bg-gradient-to-r after:from-transparent after:via-gold/[0.07] after:to-transparent',
+        'after:bg-gradient-to-r after:from-transparent after:via-accent/[0.07] after:to-transparent',
         className
       )}
     />

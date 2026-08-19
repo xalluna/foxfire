@@ -54,7 +54,7 @@ export function openLpEditorWindow(
     minWidth: 780,
     minHeight: 520,
     show: false,
-    title: 'LoL Stats — Edit LP',
+    title: 'Foxfire — Edit LP',
     autoHideMenuBar: true,
     backgroundColor: '#010A13',
     webPreferences: {

@@ -8,7 +8,7 @@
 export function Disclaimer(): JSX.Element {
   return (
     <p className="text-sm leading-relaxed text-text-mute">
-      This app isn&apos;t endorsed by Riot Games and doesn&apos;t reflect the views or opinions of
+      Foxfire isn&apos;t endorsed by Riot Games and doesn&apos;t reflect the views or opinions of
       Riot Games or anyone officially involved in producing or managing League of Legends. League of
       Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.
     </p>

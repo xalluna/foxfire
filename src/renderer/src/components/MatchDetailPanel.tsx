@@ -57,7 +57,7 @@ function ParticipantRow({
     <div
       className={clsx(
         'flex items-center gap-2 rounded px-2 py-1',
-        isTracked && 'bg-gold/10 ring-1 ring-inset ring-gold/25'
+        isTracked && 'bg-accent/10 ring-1 ring-inset ring-accent/25'
       )}
     >
       {position ? (
@@ -125,7 +125,7 @@ function ParticipantRow({
           read as a kilogram. A glyph can't be misread as a unit prefix. */}
       <span className="flex w-14 shrink-0 items-center gap-0.5 text-2xs tabular-nums text-text-mute">
         {compactNumber(p.goldEarned)}
-        <Icon.Coin width={9} height={9} className="shrink-0 text-gold" />
+        <Icon.Coin width={9} height={9} className="shrink-0 text-accent" />
       </span>
 
       <div className="w-16 shrink-0">
@@ -204,7 +204,7 @@ export function MatchDetailPanel({
           <span className="ml-auto flex items-center gap-0.5 text-2xs tabular-nums text-text-mute">
             {sum(team.map((p) => p.kills))} kills ·{' '}
             {compactNumber(sum(team.map((p) => p.goldEarned)))}
-            <Icon.Coin width={9} height={9} className="shrink-0 text-gold" />
+            <Icon.Coin width={9} height={9} className="shrink-0 text-accent" />
           </span>
         </div>
         <div className="space-y-0.5">

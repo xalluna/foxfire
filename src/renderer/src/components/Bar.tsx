@@ -23,10 +23,10 @@ const TRACK: Record<BarTone, string> = {
 }
 
 const FILL: Record<BarTone, string> = {
-  accent: 'bg-gold/70',
+  accent: 'bg-accent/70',
   // Full-strength gold plus easing — this one reports live progress, so it is
   // meant to draw the eye and to animate between readings.
-  'accent-solid': 'bg-gold transition-all duration-300',
+  'accent-solid': 'bg-accent transition-all duration-300',
   taken: 'bg-red/50',
   winrate: 'bg-teal'
 }

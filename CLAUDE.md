@@ -1,4 +1,4 @@
-# LoL Stats
+# Foxfire
 
 ## Patch notes
 
@@ -46,7 +46,7 @@ Pre-1.0, so nothing bumps major yet.
 The PR already carries the version bump and the changelog section, so releasing is just:
 
 ```bash
-git tag -a v0.5.0 -m "LoL Stats 0.5.0" && git push --tags
+git tag -a v0.5.0 -m "Foxfire 0.5.0" && git push --tags
 ```
 
 The workflow verifies the tag matches `package.json`, extracts that section, and publishes the

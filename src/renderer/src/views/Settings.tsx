@@ -8,6 +8,7 @@ import { SeasonSettings } from '../components/SeasonSettings'
 import { SectionSummary, SettingsSection } from '../components/SettingsSection'
 import { TelemetrySettings } from '../components/TelemetrySettings'
 import * as Icon from '../components/icons'
+import { Logo } from '../components/Logo'
 
 export function Settings(): JSX.Element {
   const queryClient = useQueryClient()
@@ -51,7 +52,7 @@ export function Settings(): JSX.Element {
       <h1 className="font-display text-xl text-text">Settings</h1>
 
       <SettingsSection
-        icon={<Icon.Key className="shrink-0 text-gold" />}
+        icon={<Icon.Key className="shrink-0 text-accent" />}
         title="Riot API key"
         // Flagged rather than opened when missing: nothing else in the app
         // works without it, and a fold that quietly hides that is a trap.
@@ -97,12 +98,12 @@ export function Settings(): JSX.Element {
             placeholder="RGAPI-..."
             autoComplete="off"
             spellCheck={false}
-            className="flex-1 rounded-md border border-hairline bg-canvas px-3 py-2 font-mono text-sm text-text outline-none transition placeholder:text-text-mute focus:border-gold-dim"
+            className="flex-1 rounded-md border border-hairline bg-canvas px-3 py-2 font-mono text-sm text-text outline-none transition placeholder:text-text-mute focus:border-accent-dim"
           />
           <button
             type="submit"
             disabled={!key.trim() || save.isPending}
-            className="rounded-md border border-gold-dim bg-gold/10 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+            className="rounded-md border border-accent-dim bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
           >
             {save.isPending ? 'Checking…' : 'Save'}
           </button>
@@ -136,10 +137,13 @@ export function Settings(): JSX.Element {
         summary={version.data && <SectionSummary>Version {version.data}</SectionSummary>}
         blurb="What this is, and the Riot disclaimer."
       >
-        <p className="mt-2 text-sm leading-relaxed text-text-dim">
-          A personal League of Legends stats tracker. Match history is stored locally in SQLite and
-          served from disk — the Riot API is only called when syncing.
-        </p>
+        <div className="mt-2 flex items-start gap-3">
+          <Logo width={28} height={28} className="mt-0.5 shrink-0 text-accent" />
+          <p className="text-sm leading-relaxed text-text-dim">
+            Foxfire is a personal League of Legends stats tracker. Match history is stored locally
+            in SQLite and served from disk — the Riot API is only called when syncing.
+          </p>
+        </div>
         <div className="mt-4 border-t border-hairline pt-4">
           <Disclaimer />
         </div>

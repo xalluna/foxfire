@@ -51,12 +51,12 @@ export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Eleme
           placeholder={example}
           spellCheck={false}
           autoFocus
-          className="w-full rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-sm text-text outline-none transition placeholder:text-text-mute focus:border-gold-dim"
+          className="w-full rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-sm text-text outline-none transition placeholder:text-text-mute focus:border-accent-dim"
         />
         <button
           type="submit"
           disabled={!value.trim() || add.isPending}
-          className="w-full rounded-md border border-gold-dim bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+          className="w-full rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
           {add.isPending ? 'Adding…' : 'Add account'}
         </button>

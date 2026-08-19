@@ -16,7 +16,7 @@ function tierLabel(tier: string): string {
 
 const SELECT_CLASS =
   'h-7 rounded-md border border-hairline bg-canvas px-2 text-2xs text-text ' +
-  'focus:border-gold-dim focus:outline-none disabled:cursor-not-allowed disabled:text-text-mute'
+  'focus:border-accent-dim focus:outline-none disabled:cursor-not-allowed disabled:text-text-mute'
 
 /**
  * Tier, division and LP as three controls.
@@ -120,7 +120,7 @@ export function RankInput({
         }}
         className={clsx(
           'h-7 w-[62px] rounded-md border border-hairline bg-canvas px-2 text-2xs tabular-nums text-text',
-          'placeholder:text-text-mute focus:border-gold-dim focus:outline-none',
+          'placeholder:text-text-mute focus:border-accent-dim focus:outline-none',
           'disabled:cursor-not-allowed disabled:text-text-mute'
         )}
       />

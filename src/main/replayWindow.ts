@@ -31,7 +31,7 @@ export function openReplayWindow(replayId: number): void {
     minWidth: 780,
     minHeight: 520,
     show: false,
-    title: 'LoL Stats — Replay',
+    title: 'Foxfire — Replay',
     autoHideMenuBar: true,
     backgroundColor: '#010A13',
     webPreferences: {

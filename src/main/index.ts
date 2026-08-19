@@ -20,7 +20,9 @@ import { startResourceSampling, stopResourceSampling } from './telemetry/resourc
 import { startRetention, stopRetention } from './telemetry/retention'
 import { openTelemetryWindow } from './telemetryWindow'
 import { registerReplayProtocol, registerReplayScheme } from './replayProtocol'
+import { migrateUserData, verifyMigration } from './migrateUserData'
 import { initCapture, stopCapture } from './capture/captureService'
+import { pinLegacyCaptureFolder } from './services/captureSettings'
 import { quitLaunchedObs } from './obs/launch'
 
 /**
@@ -34,7 +36,11 @@ const log = createLogger('app')
 // Pin the data directory so the dev build and the packaged build (whose
 // productName would otherwise point at a different folder) share one database
 // and one stored API key. Must run before the app is ready.
-app.setPath('userData', join(app.getPath('appData'), 'my-op-gg'))
+app.setPath('userData', join(app.getPath('appData'), 'Foxfire'))
+
+// Immediately after the pin and before anything opens a file beneath it: the
+// app was called LoL Stats until 0.8.0 and kept its data one directory over.
+migrateUserData()
 
 // Before anything else can throw. Warn and error always reach the log file
 // regardless of the telemetry setting, so a crash leaves a trace even with
@@ -89,6 +95,14 @@ function bootstrap(): void {
   // After the database, since the enabled flag lives in app_settings, and
   // before anything that might record.
   initTelemetry()
+  // Needs safeStorage, which is only usable once the app is ready — so the
+  // half of the migration check that reads the key lands here rather than
+  // beside the move itself.
+  verifyMigration()
+  // Before initCapture, and before anything can read the folder back: the
+  // default this replaces was never stored, so it has to be written down
+  // before the constant behind it changes meaning.
+  pinLegacyCaptureFolder()
   observeRateLimiter()
   // Started unconditionally and self-gating: with telemetry off this is a timer
   // that wakes every ten seconds and returns immediately, which is cheaper than

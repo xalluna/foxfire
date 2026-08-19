@@ -26,7 +26,7 @@ export function QueueFilter({
       onChange={(e) => onChange(e.target.value === 'all' ? null : Number(e.target.value))}
       // h-8 matches the segmented toggles and buttons it sits beside; without
       // it a <select> sizes to the OS default and breaks the row's alignment.
-      className="h-8 cursor-pointer appearance-none rounded-md border border-hairline bg-surface bg-[length:10px] bg-[right_0.6rem_center] bg-no-repeat pl-3 pr-8 text-sm text-text-dim transition hover:border-gold-dim hover:text-gold focus:text-gold"
+      className="h-8 cursor-pointer appearance-none rounded-md border border-hairline bg-surface bg-[length:10px] bg-[right_0.6rem_center] bg-no-repeat pl-3 pr-8 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent focus:text-accent"
       style={{
         backgroundImage:
           "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C8AA6E' stroke-width='1.5'/%3E%3C/svg%3E\")"

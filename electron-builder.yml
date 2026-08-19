@@ -1,5 +1,5 @@
-appId: com.brandonbarr.my-op-gg
-productName: LoL Stats
+appId: com.brandonbarr.foxfire
+productName: Foxfire
 directories:
   buildResources: resources
   output: release

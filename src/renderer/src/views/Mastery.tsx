@@ -88,7 +88,7 @@ function SortHeader({
       className={clsx(
         'flex items-center justify-end gap-1 transition hover:text-text-dim',
         width,
-        active && 'text-gold'
+        active && 'text-accent'
       )}
     >
       {label}

@@ -199,7 +199,7 @@ function ReplayRow({
           disabled={!playable}
           onClick={() => void window.api.replays.open(replay.id)}
           title={playable ? 'Watch' : 'The video file is missing'}
-          className="rounded-md border border-gold-dim bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Watch
         </button>
@@ -281,7 +281,7 @@ function IconButton({
       onClick={onClick}
       className={clsx(
         'flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-text-mute transition disabled:opacity-40',
-        danger ? 'hover:border-red/40 hover:text-red' : 'hover:border-gold-dim hover:text-gold'
+        danger ? 'hover:border-red/40 hover:text-red' : 'hover:border-accent-dim hover:text-accent'
       )}
     >
       {children}

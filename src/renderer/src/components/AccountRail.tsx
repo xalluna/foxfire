@@ -100,7 +100,7 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
                   title={`${account.gameName}#${account.tagLine}`}
                   className={clsx(
                     'flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition',
-                    isActive ? 'bg-gold/10' : 'hover:bg-surface'
+                    isActive ? 'bg-accent/10' : 'hover:bg-surface'
                   )}
                 >
                   {/* Presence, in the Slack/Discord position: a dot on the
@@ -113,7 +113,7 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
                       src={assets ? profileIconUrl(assets, account.profileIconId) : null}
                       className={clsx(
                         'h-9 w-9 border',
-                        isActive ? 'border-gold' : 'border-hairline'
+                        isActive ? 'border-accent' : 'border-hairline'
                       )}
                       rounded="rounded-md"
                     />
@@ -149,7 +149,7 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
                     <button
                       title="Set as home account"
                       onClick={() => setHome.mutate(account.id)}
-                      className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-gold"
+                      className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-accent"
                     >
                       <Icon.Star width={13} height={13} />
                     </button>
@@ -180,9 +180,9 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
             <button
               onClick={() => setAdding(true)}
               title="Add account"
-              className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-text-dim transition hover:bg-surface hover:text-gold"
+              className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-text-dim transition hover:bg-surface hover:text-accent"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-gold-dim">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-accent-dim">
                 <Icon.Plus />
               </span>
               <span className="whitespace-nowrap text-sm opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">

@@ -81,7 +81,7 @@ function PlayerRow({ p, platform }: { p: ScoreboardPlayer; platform: string }): 
     <div
       className={clsx(
         'flex items-center gap-2 rounded px-2 py-1',
-        p.isSelf && 'bg-gold/10 ring-1 ring-inset ring-gold/25',
+        p.isSelf && 'bg-accent/10 ring-1 ring-inset ring-accent/25',
         p.isDead && 'opacity-60'
       )}
     >
@@ -268,7 +268,7 @@ export function LiveGame({ account }: { account: Account }): JSX.Element {
             </span>
             <span className="flex items-center gap-1.5 tabular-nums text-text-mute">
               <Icon.Live
-                className={clsx(stalled ? 'text-amber' : 'animate-pulse text-gold')}
+                className={clsx(stalled ? 'text-amber' : 'animate-pulse text-accent')}
               />
               {formatClock(Math.floor(data.gameTime))}
             </span>

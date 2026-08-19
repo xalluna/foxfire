@@ -1,10 +1,55 @@
 # Changelog
 
-Patch notes for LoL Stats, newest first.
+Patch notes for Foxfire, newest first. Releases before 0.8.0 shipped under the name LoL
+Stats, and their entries are left as they were written.
 
 Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and the format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
+
+## [0.8.0] — 2026-08-19
+
+LoL Stats is now Foxfire. The old name described the app but did not belong to it, and it carried a
+competitor's into every identifier the project had — the installer, the registry, the folder your
+data sits in. This release is that change, end to end: a new name, the app's first real logo, and an
+accent colour that is the app's own rather than one borrowed from the game it reports on.
+
+Your data comes with it. On first launch Foxfire moves everything LoL Stats left behind — match
+history, hand-entered LP and seasons, the encrypted Riot key — into its own directory, and nothing
+needs re-entering.
+
+### Added
+
+- A logo, for the first time. Three wisps circling an empty centre: foxfire is the light that hangs
+  over rotting wood in a forest, and the flames Ahri carries. It appears in the title bar, on the
+  About panel, on the taskbar and in the tray.
+
+### Changed
+
+- The app is called Foxfire everywhere it names itself — window titles, the tray, the installer and
+  the Start menu entry.
+- The accent colour is no longer Riot's gold. Riot's own art — the rank crests and the position
+  icons — keeps Riot's palette; the app's own chrome no longer borrows it.
+- Recordings made before this release keep playing. The folder they live in is now recorded
+  explicitly rather than assumed, so renaming the default could not orphan them.
+
+### Under the hood
+
+- The data directory moves from `%APPDATA%/my-op-gg` to `%APPDATA%/Foxfire` on first launch, as one
+  atomic move rather than a copy — there is no half-migrated state to recover from. If the old app
+  is still running the move is refused with an explanation rather than attempted, because copying a
+  database out from under a live connection is the one way this could have lost anything.
+- Installing Foxfire leaves LoL Stats in place. It is a separate application as far as Windows is
+  concerned, so uninstall the old one once you are satisfied the move worked.
+- OBS's managed profile and scene collection are renamed too, which orphans the old ones — OBS
+  keeps them, and your own scenes were never touched either way. The prefix that tells this app's
+  audio inputs from your own is now a named constant shared with them, rather than a string
+  repeated inside a comparator where it could quietly drift.
+- The mark has one definition, in `src/shared/logoMark.json`, which the app, the `.ico` and the tray
+  icon all draw from. The tray icon used to be a base64 blob pasted in by hand next to a comment
+  asking that it be kept in step with the build script.
+- Colour tokens are named `--accent` / `--accent-dim` rather than `--gold`, so the next change of
+  mind does not leave every component claiming a colour it no longer renders.
 
 ## [0.7.2] — 2026-08-19
 
@@ -507,6 +552,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.8.0]: https://github.com/xalluna/foxfire/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/xalluna/my-op-gg/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/xalluna/my-op-gg/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/xalluna/my-op-gg/compare/v0.6.0...v0.7.0

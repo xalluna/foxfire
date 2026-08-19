@@ -29,7 +29,7 @@ export function openTelemetryWindow(): void {
     minWidth: 900,
     minHeight: 560,
     show: false,
-    title: 'LoL Stats — Telemetry',
+    title: 'Foxfire — Telemetry',
     autoHideMenuBar: true,
     backgroundColor: '#010A13',
     webPreferences: {

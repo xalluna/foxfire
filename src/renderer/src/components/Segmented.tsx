@@ -25,7 +25,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(key)}
           className={clsx(
             'whitespace-nowrap px-3 transition',
-            value === key ? 'bg-gold/10 text-gold' : 'text-text-dim hover:bg-surface'
+            value === key ? 'bg-accent/10 text-accent' : 'text-text-dim hover:bg-surface'
           )}
         >
           {label}

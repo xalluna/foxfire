@@ -203,14 +203,14 @@ export function ReplayPlayer({
               setVolume(Number(event.target.value))
               setMuted(false)
             }}
-            className="h-1 w-20 accent-gold"
+            className="h-1 w-20 accent-accent"
           />
 
           <select
             value={speed}
             aria-label="Playback speed"
             onChange={(event) => setSpeed(Number(event.target.value))}
-            className="h-7 rounded-md border border-hairline bg-canvas px-2 text-2xs tabular-nums text-text focus:border-gold-dim focus:outline-none"
+            className="h-7 rounded-md border border-hairline bg-canvas px-2 text-2xs tabular-nums text-text focus:border-accent-dim focus:outline-none"
           >
             {SPEEDS.map((option) => (
               <option key={option} value={option}>
@@ -248,7 +248,7 @@ function ControlButton({
       onClick={onClick}
       className={clsx(
         'flex h-7 w-7 items-center justify-center rounded-md border border-hairline',
-        'text-text-dim transition hover:border-gold-dim hover:text-gold'
+        'text-text-dim transition hover:border-accent-dim hover:text-accent'
       )}
     >
       {children}

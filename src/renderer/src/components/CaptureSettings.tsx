@@ -93,7 +93,7 @@ export function CaptureSettings(): JSX.Element {
 
   return (
     <SettingsSection
-      icon={<Icon.Film className="shrink-0 text-gold" />}
+      icon={<Icon.Film className="shrink-0 text-accent" />}
       title="Game capture"
       summary={
         current?.enabled ? (
@@ -304,12 +304,12 @@ function ModePicker({
           className={clsx(
             'rounded-md border p-3 text-left transition',
             mode === option.value
-              ? 'border-gold-dim bg-gold/10'
-              : 'border-hairline bg-canvas hover:border-gold-dim/50'
+              ? 'border-accent-dim bg-accent/10'
+              : 'border-hairline bg-canvas hover:border-accent-dim/50'
           )}
         >
           <span
-            className={clsx('block text-sm', mode === option.value ? 'text-gold' : 'text-text')}
+            className={clsx('block text-sm', mode === option.value ? 'text-accent' : 'text-text')}
           >
             {option.label}
           </span>
@@ -343,7 +343,7 @@ function ScenePicker({
         value={value ?? ''}
         disabled={disabled || scenes.length === 0}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-gold-dim focus:outline-none"
+        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-accent-dim focus:outline-none"
       >
         <option value="" disabled>
           {scenes.length === 0 ? 'Connect to OBS to list scenes' : 'Choose a scene…'}
@@ -388,7 +388,7 @@ function PathRow({
           type="button"
           disabled={disabled}
           onClick={onBrowse}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-gold-dim bg-gold/10 px-3 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:opacity-50"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
         >
           <Icon.Folder width={13} height={13} />
           Browse
@@ -447,12 +447,12 @@ function ObsPassword({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={hasPassword ? '••••••••  (saved)' : 'Leave blank if authentication is off'}
-          className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-gold-dim focus:outline-none"
+          className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
         />
         <button
           type="submit"
           disabled={disabled || !draft.trim()}
-          className="shrink-0 rounded-md border border-gold-dim bg-gold/10 px-3 text-sm font-medium text-gold transition hover:bg-gold/20 disabled:opacity-50"
+          className="shrink-0 rounded-md border border-accent-dim bg-accent/10 px-3 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
         >
           Save
         </button>
@@ -501,7 +501,7 @@ function QueuePicker({
                     : queues.filter((id) => id !== option.value)
                 })
               }
-              className="h-4 w-4 accent-gold"
+              className="h-4 w-4 accent-accent"
             />
             <span className="text-text-dim">{option.label}</span>
           </label>
@@ -512,7 +512,7 @@ function QueuePicker({
             disabled={disabled}
             checked={otherQueues}
             onChange={(event) => onChange({ otherQueues: event.target.checked })}
-            className="h-4 w-4 accent-gold"
+            className="h-4 w-4 accent-accent"
           />
           <span className="text-text-dim">Other and rotating modes</span>
         </label>
@@ -562,7 +562,7 @@ function QualityPicker({
         value={value}
         disabled={disabled || !managed}
         onChange={(event) => onChange(event.target.value as CaptureQuality)}
-        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-gold-dim focus:outline-none disabled:opacity-50"
+        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-accent-dim focus:outline-none disabled:opacity-50"
       >
         {CAPTURE_QUALITY_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
@@ -606,7 +606,7 @@ function AudioPicker({
         value={value}
         disabled={disabled || !managed}
         onChange={(event) => onChange(event.target.value as CaptureAudio)}
-        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-gold-dim focus:outline-none disabled:opacity-50"
+        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-accent-dim focus:outline-none disabled:opacity-50"
       >
         {(Object.keys(AUDIO_LABELS) as CaptureAudio[]).map((option) => (
           <option key={option} value={option}>
@@ -658,7 +658,7 @@ function SoftCap({
           disabled={disabled}
           value={Math.round(value / GB)}
           onChange={(event) => onChange(Math.max(1, Number(event.target.value)) * GB)}
-          className="w-24 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-gold-dim focus:outline-none"
+          className="w-24 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-accent-dim focus:outline-none"
         />
         <span className="text-sm text-text-dim">GB</span>
       </div>
@@ -689,7 +689,7 @@ function Preview({
         <button
           type="button"
           onClick={onToggle}
-          className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-gold-dim hover:text-gold"
+          className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
         >
           {open ? 'Hide' : 'Show'}
         </button>

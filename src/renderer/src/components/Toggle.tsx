@@ -32,7 +32,7 @@ export function Toggle({
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
+        className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
       />
       <span className="min-w-0">
         <span className="block text-sm text-text">{label}</span>

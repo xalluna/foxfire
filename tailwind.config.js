@@ -1,7 +1,7 @@
 /**
  * Colours are declared as space-separated RGB channels in styles/index.css and
  * wrapped here with <alpha-value>, so every token supports Tailwind's opacity
- * modifier — `bg-surface/60`, `border-gold/30` — instead of needing a separate
+ * modifier — `bg-surface/60`, `border-accent/30` — instead of needing a separate
  * token per transparency level.
  */
 const token = (name) => `rgb(var(--${name}) / <alpha-value>)`
@@ -16,8 +16,8 @@ export default {
         surface: token('surface'),
         'surface-2': token('surface-2'),
         hairline: token('hairline'),
-        gold: token('gold'),
-        'gold-dim': token('gold-dim'),
+        accent: token('accent'),
+        'accent-dim': token('accent-dim'),
         teal: token('teal'),
         red: token('red'),
         amber: token('amber'),
@@ -49,11 +49,11 @@ export default {
         titlebar: 'var(--titlebar-h)'
       },
       boxShadow: {
-        // Hextech surfaces read as lit panels: a gold hairline plus depth.
+        // Hextech surfaces read as lit panels: an accent hairline plus depth.
         panel: '0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(var(--hairline))',
         raised: '0 4px 12px -2px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(var(--hairline))',
-        flyout: '0 12px 32px -4px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(var(--gold-dim) / 0.5)',
-        'gold-glow': '0 0 0 1px rgb(var(--gold) / 0.4), 0 0 12px -2px rgb(var(--gold) / 0.25)'
+        flyout: '0 12px 32px -4px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(var(--accent-dim) / 0.5)',
+        'accent-glow': '0 0 0 1px rgb(var(--accent) / 0.4), 0 0 12px -2px rgb(var(--accent) / 0.25)'
       },
       borderRadius: {
         DEFAULT: '3px',

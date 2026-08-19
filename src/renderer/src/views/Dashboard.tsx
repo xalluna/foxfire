@@ -186,7 +186,7 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
                 !syncing && (
                   <button
                     onClick={() => sync.mutate()}
-                    className="flex items-center gap-1.5 rounded-md border border-gold-dim bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold transition hover:bg-gold/20"
+                    className="flex items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
                   >
                     <Icon.Sync />
                     Sync now
@@ -218,7 +218,7 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
             <button
               onClick={() => matches.fetchNextPage()}
               disabled={matches.isFetchingNextPage}
-              className="w-full border-t border-hairline py-2.5 text-sm text-text-dim transition hover:bg-surface hover:text-gold disabled:opacity-50"
+              className="w-full border-t border-hairline py-2.5 text-sm text-text-dim transition hover:bg-surface hover:text-accent disabled:opacity-50"
             >
               {matches.isFetchingNextPage ? 'Loading…' : 'Show more'}
             </button>

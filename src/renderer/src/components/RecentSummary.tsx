@@ -26,7 +26,7 @@ function WinRateRing({ winRate }: { winRate: number | null }): JSX.Element {
           fill="none"
           strokeWidth="7"
           strokeLinecap="round"
-          className={good ? 'stroke-teal' : 'stroke-gold'}
+          className={good ? 'stroke-teal' : 'stroke-accent'}
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - pct)}
         />

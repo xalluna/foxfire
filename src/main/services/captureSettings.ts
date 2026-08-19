@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { getBoolSetting, getSetting, setBoolSetting, setSetting } from '../db/repositories/appSettings.repo'
 import { getDb } from '../db'
@@ -48,7 +49,37 @@ const DEFAULT_SOFT_CAP = 50 * 1024 * 1024 * 1024
  * hundred gigabytes of gameplay footage to accumulate.
  */
 function defaultFolder(): string {
+  return join(app.getPath('videos'), 'Foxfire')
+}
+
+/** What defaultFolder() returned while the app was called LoL Stats. */
+function legacyDefaultFolder(): string {
   return join(app.getPath('videos'), 'LoL Stats')
+}
+
+/**
+ * Pins the old default so the rename does not orphan existing recordings.
+ *
+ * This default is resolved on every read and never stored, so changing the
+ * constant silently repoints the app at a new directory — while
+ * replayProtocol.ts refuses to serve any file outside the *current* folder and
+ * the replays table goes on holding absolute paths into the old one. The result
+ * would be a Replays screen where every existing recording claims to have been
+ * moved or deleted.
+ *
+ * Writing the resolved old path into the setting makes the previous default
+ * explicit, which is what it should have been all along. Anyone who picked a
+ * folder by hand already has the row and is untouched; a genuinely new install
+ * has no such directory and gets Videos/Foxfire.
+ */
+export function pinLegacyCaptureFolder(): void {
+  const db = getDb()
+  if (text(getSetting(db, KEY.folder)) !== null) return
+
+  const legacy = legacyDefaultFolder()
+  if (!existsSync(legacy)) return
+
+  setSetting(db, KEY.folder, legacy)
 }
 
 /**

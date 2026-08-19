@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Logo } from './Logo'
 
 /**
  * Catches render errors that would otherwise blank the window.
@@ -34,7 +35,10 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas p-8">
         <div className="max-w-md rounded-lg border border-red/40 bg-surface p-6">
-          <h1 className="font-display text-lg text-red">Something broke</h1>
+          <div className="flex items-center gap-2.5">
+            <Logo width={18} height={18} className="shrink-0 text-red" />
+            <h1 className="font-display text-lg text-red">Something broke</h1>
+          </div>
           <p className="mt-2 text-sm leading-relaxed text-text-dim">
             The interface hit an error it could not recover from. Reloading usually clears it; the
             details are below and in the app log.
@@ -44,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </pre>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 rounded-md border border-gold-dim bg-gold/10 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/20"
+            className="mt-4 rounded-md border border-accent-dim bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20"
           >
             Reload
           </button>

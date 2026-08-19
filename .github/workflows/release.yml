@@ -50,5 +50,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            --title "LoL Stats $VERSION" \
+            --title "Foxfire $VERSION" \
             --notes-file notes.md

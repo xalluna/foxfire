@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { getBackgroundSettings } from './services/backgroundService'
 import { createMainWindow, getMainWindow } from './window'
 import { openTelemetryWindow } from './telemetryWindow'
+import { TRAY_ICON_PNG } from './trayIcon'
 
 /**
  * Keeps the app alive after the window closes, which is what makes per-game LP
@@ -43,16 +44,16 @@ export function showWindow(): void {
 }
 
 /**
- * A 16x16 gold trend mark, inlined as base64.
+ * The 16x16 mark, inlined as base64 by scripts/make-icon.mjs.
  *
  * Embedded rather than loaded from disk because the tray is created in the
  * main process, whose bundle has no asset pipeline — a file path would resolve
  * differently in dev and inside the packaged asar, and an icon that fails to
  * load leaves an invisible tray item the user cannot find.
+ *
+ * Generated rather than pasted, so it cannot fall out of step with the .ico and
+ * the in-app logo the way the old hand-maintained blob could.
  */
-const TRAY_ICON_PNG =
-  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPElEQVR42mM4sSqPgRLMMKQM+I+GKXLBwBpAkRdQNJMbiETFArpirJpxGfAfByaYDv6TYjM+A4ZxXsCKAYcp/POndVzqAAAAAElFTkSuQmCC'
-
 function trayIcon(): Electron.NativeImage {
   return nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_PNG}`)
 }
@@ -61,10 +62,10 @@ export function ensureTray(): void {
   if (tray) return
 
   tray = new Tray(trayIcon())
-  tray.setToolTip('LoL Stats — tracking rank')
+  tray.setToolTip('Foxfire — tracking rank')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open LoL Stats', click: showWindow },
+      { label: 'Open Foxfire', click: showWindow },
       // Reachable while the main window is hidden, which is exactly when a
       // background-mode app misbehaves unobserved.
       { label: 'Telemetry', accelerator: 'Ctrl+Shift+T', click: openTelemetryWindow },

@@ -7,8 +7,9 @@ import utility from '../assets/positions/utility.svg'
 
 /**
  * Riot's own champ-select position icons, keyed by the `teamPosition` values
- * match-v5 returns. They ship pre-filled with #785a28 and #c8aa6e — the same
- * two golds as the --gold-dim and --gold tokens — so they need no recolouring.
+ * match-v5 returns. They ship pre-filled with Riot's #785a28 and #c8aa6e and
+ * are left that way — as the rank crests are — rather than being pulled onto
+ * the app's own accent. Riot's art keeps Riot's palette.
  *
  * teamPosition is an empty string for modes without lanes (ARAM, Arena), which
  * is why every lookup here can return null.

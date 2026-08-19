@@ -22,7 +22,7 @@ const ROLE_STYLE: Record<ReplayEvent['role'], string> = {
   kill: 'text-teal',
   death: 'text-red',
   assist: 'text-text-dim',
-  multikill: 'text-gold'
+  multikill: 'text-accent'
 }
 
 function RoleGlyph({ role }: { role: ReplayEvent['role'] }): JSX.Element {
@@ -149,11 +149,11 @@ export function EventTimeline({
         }}
       >
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-gold/70"
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-accent/70"
           style={{ width: `${progress}%` }}
         />
         <div
-          className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-canvas bg-gold"
+          className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-canvas bg-accent"
           style={{ left: `${progress}%` }}
         />
 
