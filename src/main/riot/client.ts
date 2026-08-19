@@ -20,6 +20,27 @@ export function hasApiKey(): boolean {
 export const PASSTHROUGH = { parse: (data: unknown): unknown => data }
 
 /**
+ * Reads a 400 body far enough to tell "this puuid was encrypted under a key you
+ * no longer hold" from every other bad request. Riot says `Exception decrypting
+ * <puuid>`.
+ *
+ * The body is deliberately *classified and dropped*, never returned or stored:
+ * the message it carries embeds the puuid, and redact.ts scrubs API keys rather
+ * than identifiers. A boolean is the whole of what the app needs.
+ *
+ * Its own try/catch because a body that cannot be read is not a reason to
+ * replace the caller's HTTP error with a parse one — the 400 is the finding,
+ * this only labels it.
+ */
+async function isDecryptFailure(response: Response): Promise<boolean> {
+  try {
+    return /decrypt/i.test(await response.text())
+  } catch {
+    return false
+  }
+}
+
+/**
  * Every Riot API call in the app. Always goes through the shared rate limiter,
  * and throws RiotApiError on non-2xx so the limiter can decide whether to retry
  * (429/5xx) or surface a key problem (401/403).
@@ -81,7 +102,8 @@ export async function riotRequest<T>(
           const err = new RiotApiError(
             `Riot API error ${response.status} for ${path}`,
             response.status,
-            retryAfterMs
+            retryAfterMs,
+            response.status === 400 && (await isDecryptFailure(response))
           )
           const outcome =
             response.status === 401 || response.status === 403 ? 'key_invalid' : 'http_error'
@@ -113,4 +135,13 @@ export async function riotRequest<T>(
 /** Distinguishes "confirmed not found" from other failures, since callers often treat 404 as a valid empty result. */
 export function isNotFound(err: unknown): boolean {
   return err instanceof RiotApiError && err.status === 404
+}
+
+/**
+ * "The puuid you sent was encrypted under a key you no longer hold" — the one
+ * failure the app can fix without the user, by re-resolving the account from
+ * its Riot ID. See services/identityService.ts.
+ */
+export function isStaleIdentity(err: unknown): boolean {
+  return err instanceof RiotApiError && err.staleIdentity
 }

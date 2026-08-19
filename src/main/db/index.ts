@@ -11,6 +11,7 @@ import roleBoundItemSql from './migrations/006_role_bound_item.sql?raw'
 import replaysSql from './migrations/007_replays.sql?raw'
 import seasonsSql from './migrations/008_seasons.sql?raw'
 import replayRebindSql from './migrations/009_replay_rebind.sql?raw'
+import accountPuuidsSql from './migrations/010_account_puuids.sql?raw'
 
 let db: DatabaseSync | null = null
 
@@ -25,7 +26,8 @@ const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
   { name: '006_role_bound_item.sql', sql: roleBoundItemSql },
   { name: '007_replays.sql', sql: replaysSql },
   { name: '008_seasons.sql', sql: seasonsSql },
-  { name: '009_replay_rebind.sql', sql: replayRebindSql }
+  { name: '009_replay_rebind.sql', sql: replayRebindSql },
+  { name: '010_account_puuids.sql', sql: accountPuuidsSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

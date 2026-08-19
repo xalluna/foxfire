@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planMatchIdPages, selectNewMatchIds } from './syncPlanning'
+import { afterIdentityRepair, planMatchIdPages, selectNewMatchIds } from './syncPlanning'
 
 // Riot returns match IDs newest-first.
 const page = ['NA1_5', 'NA1_4', 'NA1_3', 'NA1_2', 'NA1_1']
@@ -48,5 +48,30 @@ describe('planMatchIdPages', () => {
 
   it('returns no pages for a zero target', () => {
     expect(planMatchIdPages(0, 100)).toEqual([])
+  })
+})
+
+describe('afterIdentityRepair', () => {
+  const RIOT_ID = 'Alluna#NA1'
+
+  it('retries once the account has moved onto a new puuid', () => {
+    expect(afterIdentityRepair('repaired', RIOT_ID)).toEqual({ retry: true })
+  })
+
+  it('does not retry a rename, and says whose', () => {
+    const next = afterIdentityRepair('unresolved', RIOT_ID)
+
+    expect(next.retry).toBe(false)
+    expect(next.retry === false && next.message).toContain(RIOT_ID)
+  })
+
+  it('does not retry when Riot could not be asked', () => {
+    expect(afterIdentityRepair('failed', RIOT_ID).retry).toBe(false)
+  })
+
+  // The request would fail identically the second time, so retrying it would
+  // only spend a request to reach the same error.
+  it('does not retry a puuid Riot rejects but reissues unchanged', () => {
+    expect(afterIdentityRepair('unchanged', RIOT_ID).retry).toBe(false)
   })
 })

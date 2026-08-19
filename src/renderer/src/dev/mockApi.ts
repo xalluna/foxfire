@@ -19,6 +19,8 @@ import type {
   Replay,
   ReplayDetail,
   ReplayDiskUsage,
+  RiotKeyLimits,
+  RiotKeyType,
   Scoreboard,
   Season,
   SeasonInput,
@@ -205,6 +207,12 @@ function runFakeSync(accountId: number): void {
   }, 220)
 }
 
+// Held in module state so the settings screen behaves like the real one: the
+// control moves, the numbers stick, and nothing reaches a rate limiter that
+// does not exist in the browser harness.
+let keyType: RiotKeyType = 'personal'
+let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+
 export const mockApi: Api = {
   app: {
     // The harness has no main process to ask, so this is the browser-only
@@ -218,7 +226,9 @@ export const mockApi: Api = {
         {
           hasApiKey: scenario !== 'no-key',
           homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired'
+          keyRejected: scenario === 'key-expired',
+          keyType,
+          applicationLimits
         },
         180,
         false
@@ -231,7 +241,21 @@ export const mockApi: Api = {
         600
       ),
     clearApiKey: (): Promise<AppSettingsPublic> =>
-      delay({ hasApiKey: false, homeAccountId: 1, keyRejected: false }),
+      delay({ hasApiKey: false, homeAccountId: 1, keyRejected: false, keyType, applicationLimits }),
+    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits): Promise<AppSettingsPublic> => {
+      keyType = next
+      if (limits) applicationLimits = limits
+      return delay(
+        {
+          hasApiKey: scenario !== 'no-key',
+          homeAccountId: scenario === 'no-accounts' ? null : 1,
+          keyRejected: scenario === 'key-expired',
+          keyType,
+          applicationLimits
+        },
+        180
+      )
+    },
     onKeyInvalid: (cb: () => void) => {
       keyInvalidListeners.add(cb)
       // Fire once on load so the expired-key banner can be inspected.

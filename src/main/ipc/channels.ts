@@ -8,6 +8,7 @@ export const CH = {
     get: 'settings:get',
     setApiKey: 'settings:setApiKey',
     clearApiKey: 'settings:clearApiKey',
+    setKeyType: 'settings:setKeyType',
     keyInvalid: 'settings:keyInvalid'
   },
   accounts: {

@@ -7,6 +7,47 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.9.0] — 2026-08-19
+
+Survives a change of Riot API key. Riot encrypts player IDs against the key that asked for them, so
+swapping a key — an expired personal one, or an approved application key finally arriving —
+invalidated every ID this app had stored and stopped syncing outright, with nothing on screen but a
+raw `400`. Foxfire now re-links each account from its Riot ID, the one handle a key change cannot
+touch, and brings its match history across with it.
+
+### Added
+
+- A key type setting. An approved application key is allowed far more requests than a personal one,
+  and telling Foxfire which you hold lets a backfill run at the speed your key was actually granted
+  — the per-10-seconds and per-10-minutes allowances are yours to enter, since Riot sets them per
+  application.
+
+### Fixed
+
+- Syncing after the API key changes. The first sync that meets a rejected player ID re-resolves the
+  account and carries straight on, so an install whose key was replaced repairs itself without
+  anything being re-downloaded or re-entered.
+- Saving a new key re-links every tracked account there and then, and says how many it moved. An
+  account it could not re-link — one whose Riot ID has since been renamed — is named, rather than
+  left to fail quietly on the next sync.
+- Adding an account you already track no longer creates a second, empty copy of it. It was matched
+  on the stored player ID, which is exactly the thing a new key invalidates; it is matched on the
+  Riot ID now, and re-adding an account repairs it.
+- The expiry warning on the settings screen is gone when the saved key is an application key, which
+  does not expire.
+
+### Under the hood
+
+- Re-linking rewrites the account's participant rows *and* the stored match payloads onto the new
+  player ID, in one transaction. The payloads matter: several past migrations backfilled new columns
+  by matching a participant row against the payload it came from, and leaving the two disagreeing
+  would have broken that for every game played before the key changed — silently, and only when
+  whichever migration came next filled a column with nulls.
+- The identities an account used to have are kept in `account_puuids`. Nothing reads them; they are
+  there so a player ID found in a log or a backup can still be traced to the account it belonged to.
+- A 400 whose body says Riot could not decrypt the ID is now told apart from every other bad
+  request. The body is classified and dropped rather than logged, since it quotes the ID back.
+
 ## [0.8.0] — 2026-08-19
 
 LoL Stats is now Foxfire. The old name described the app but did not belong to it, and it carried a
@@ -552,6 +593,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.9.0]: https://github.com/xalluna/foxfire/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/xalluna/foxfire/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/xalluna/my-op-gg/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/xalluna/my-op-gg/compare/v0.7.0...v0.7.1

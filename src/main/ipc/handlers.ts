@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { CH } from './channels'
-import { getSettings, removeApiKey, setAndValidateApiKey } from '../services/settingsService'
+import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
 import {
   addAccount,
   getAccounts,
@@ -70,6 +70,8 @@ import type {
   QueueType,
   RankRange,
   RiotIdInput,
+  RiotKeyLimits,
+  RiotKeyType,
   SeasonInput
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
@@ -94,6 +96,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CH.settings.get, () => getSettings())
   ipcMain.handle(CH.settings.setApiKey, (_e, key: string) => setAndValidateApiKey(key))
+  ipcMain.handle(CH.settings.setKeyType, (_e, keyType: RiotKeyType, limits?: RiotKeyLimits) =>
+    setKeyType(keyType, limits)
+  )
   ipcMain.handle(CH.settings.clearApiKey, () => {
     removeApiKey()
     return getSettings()

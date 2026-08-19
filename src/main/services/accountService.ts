@@ -3,11 +3,13 @@ import {
   deleteAccount,
   getAccountById,
   getAccountByPuuid,
+  getAccountByRiotId as findStoredAccountByRiotId,
   getHomeAccount,
   getLeagueEntries,
   insertAccount,
   listAccounts,
   countAccounts,
+  rekeyAccountPuuid,
   setHomeAccount,
   updateAccountProfile,
   upsertLeagueEntries
@@ -42,11 +44,22 @@ export async function addAccount(input: RiotIdInput): Promise<Account> {
 
   const riotAccount = await getAccountByRiotId(regional, input.gameName, input.tagLine)
 
-  const existing = getAccountByPuuid(db, riotAccount.puuid)
+  // Riot ID first, puuid second. After an API key change every stored puuid is
+  // a value the new key cannot resolve, so dedupe on it alone would miss and
+  // hand the user a second copy of an account they already track — with an
+  // empty history, because the first copy still owns all of it.
+  const existing =
+    findStoredAccountByRiotId(db, riotAccount.gameName, riotAccount.tagLine) ??
+    getAccountByPuuid(db, riotAccount.puuid)
   const summoner = await getSummonerByPuuid(platform, riotAccount.puuid)
 
   let accountId: number
   if (existing) {
+    // Which makes re-adding an account the manual way to repair one, alongside
+    // the automatic passes in identityService.
+    if (existing.puuid !== riotAccount.puuid) {
+      rekeyAccountPuuid(db, existing.id, existing.puuid, riotAccount.puuid)
+    }
     updateAccountProfile(db, existing.id, {
       gameName: riotAccount.gameName,
       tagLine: riotAccount.tagLine,
