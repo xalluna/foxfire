@@ -16,6 +16,10 @@ This release also teaches the app what a ranked season is — you tell it when e
 Settings — so that when January resets everyone's rank the climb you spent a year on stays readable
 instead of turning into one long cliff.
 
+The Live game screen is also rebuilt. It now reads the game running on this PC instead of asking
+Riot about it, which is what lets it show lane order, items, runes and a running score — and what
+costs it the ability to look at a game running anywhere else.
+
 ### Added
 
 - Game capture, driven through OBS. Turn it on in Settings, pick the queues worth recording, and
@@ -66,6 +70,10 @@ instead of turning into one long cliff.
 - The Rank screen's "All" now draws each season as its own line. January empties the ladder rather
   than demoting anybody, so a line drawn straight through the reset would show a fall that never
   happened, and the net LP figure is left off entirely on a view that spans one.
+- The Live game screen is a recreation of the in-game scoreboard: both teams in lane order — top,
+  jungle, mid, bot, support — with each player's level, items, runes, K/D/A, CS, ward score, rank
+  and respawn timer, updated as the game plays. Lane order was the original ask, and it was
+  impossible from where the screen used to get its data.
 
 ### Changed
 
@@ -76,6 +84,25 @@ instead of turning into one long cliff.
   knowing while it is shut — whether a key is saved, whether recording is on, how many seasons are
   set — so the page is a list of what exists rather than a scroll through all of it. The Riot key
   says so in amber when it is missing, since nothing else works without one.
+- The Live game screen reads the game running on this PC rather than asking Riot. The game serves
+  its own view of itself on loopback, with no key and no rate limit, and that one carries a
+  position for each player — which is what makes lane order, and everything beside it, possible.
+  Riot's spectator endpoint sent a champion, a team and two summoner spells per player and no
+  position at all, so the rows had been sitting in Riot's array order because there was nothing to
+  sort by.
+- The Riot ID examples on the Add account form and on Search no longer name the app's author. They
+  are drawn from a pool of pros each time either form opens, with region-accurate tags — Faker#KR1,
+  Caps#EUW, Uzi#CN. A pool rather than one replacement name, because whoever got picked would
+  become the account the app implicitly points at; and accurate tags because someone who has only
+  ever seen #NA1 tends to assume that is the shape of every tag.
+
+### Removed
+
+- Checking a live game from another PC, and seeing the lobby during champion select. Both came from
+  Riot's spectator endpoint, which nothing now calls: it carried none of what the new scoreboard
+  shows, and keeping it alongside would have meant two Live game screens that agree on nothing.
+  Nothing answers on loopback until the game process itself starts, so there is nothing to show
+  before then.
 
 ### Fixed
 
@@ -87,6 +114,10 @@ instead of turning into one long cliff.
   are now never compared.
 - A reset no longer appears in the milestone list as a demotion — "Demoted to Bronze IV" every
   January, for the rest of the account's life.
+- The account rail no longer closes the Add account form when the pointer slips out of it. Typing a
+  Riot ID takes long enough that a wrist brushing the trackpad, or a nudge past the edge of a strip
+  224px wide, was enough to unmount the form — and it took the half-typed ID and any error message
+  with it. An open form now holds the rail open, and Escape or a click outside dismisses it.
 
 ### Under the hood
 
@@ -138,6 +169,19 @@ instead of turning into one long cliff.
   all-time chart has a boundary to break at, the reset has a game beside it to wrongly attribute,
   and the preseason proves a carry-over boundary still attributes normally. It is additive — the
   existing 301-game climb and the three exact invariants it rests on are untouched.
+- Rank is the only thing on the live scoreboard that still reaches Riot. The game names players
+  without identifying them, so each Riot ID is resolved to a puuid before a ladder can be asked
+  about it — fetched per row so the board paints without waiting, and cached well past the poll.
+- The loopback port refuses connections and then 404s for about three seconds while the game
+  process starts. That is an ordinary state rather than a fault; reporting it as one put an error
+  on screen every time somebody queued.
+- Behaviour was confirmed against a live payload rather than assumed, and a real ARAM corrected two
+  guesses: a mode without lanes reports `"NONE"` rather than the empty string match-v5 uses, and a
+  player the game has no identity for arrives named with empty strings — which `??` does not catch,
+  and which sent a blank Riot ID off to be looked up.
+- The example Riot ID pool is asserted to survive `parseRiotId`. That is the failure worth
+  guarding: a typo'd entry would ship a placeholder the app itself rejects, and nothing else would
+  catch it.
 
 ## [0.6.0] — 2026-08-17
 
