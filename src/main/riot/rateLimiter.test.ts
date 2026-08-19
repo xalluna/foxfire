@@ -10,6 +10,21 @@ const fastConfig = {
 }
 
 describe('RiotRateLimiter', () => {
+  it('paces against the config it was given last', async () => {
+    // What the key-type setting is for: an application key is allowed to go
+    // faster, and saying so has to actually change the pacing rather than only
+    // the stored value.
+    const limiter = new RiotRateLimiter(fastConfig)
+    limiter.updateConfig({ ...fastConfig, burstLimit: 10, sustainedLimit: 10 })
+
+    const start = Date.now()
+    await Promise.all(Array.from({ length: 6 }, () => limiter.schedule(async () => Date.now())))
+
+    // Six requests would have crossed both of fastConfig's limits and cost the
+    // 400ms sustained window; under the raised one they are a single burst.
+    expect(Date.now() - start).toBeLessThan(90)
+  })
+
   it('runs jobs and returns their results in order', async () => {
     const limiter = new RiotRateLimiter(fastConfig)
     const results = await Promise.all([1, 2, 3].map((n) => limiter.schedule(async () => n)))

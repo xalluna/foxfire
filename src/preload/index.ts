@@ -13,6 +13,7 @@ const api: Api = {
     get: () => ipcRenderer.invoke(CH.settings.get),
     setApiKey: (key) => ipcRenderer.invoke(CH.settings.setApiKey, key),
     clearApiKey: () => ipcRenderer.invoke(CH.settings.clearApiKey),
+    setKeyType: (keyType, limits) => ipcRenderer.invoke(CH.settings.setKeyType, keyType, limits),
     onKeyInvalid: (cb) => {
       const listener = (): void => cb()
       ipcRenderer.on(CH.settings.keyInvalid, listener)

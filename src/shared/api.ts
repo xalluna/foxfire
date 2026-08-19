@@ -8,6 +8,7 @@ import type {
   CaptureStatus,
   ChampionStats,
   EditableMatch,
+  IdentityReport,
   LcuStatus,
   LeagueEntry,
   ManualRankEdit,
@@ -22,6 +23,8 @@ import type {
   ReplayDetail,
   ReplayDiskUsage,
   RiotIdInput,
+  RiotKeyLimits,
+  RiotKeyType,
   Scoreboard,
   Season,
   SeasonInput,
@@ -41,6 +44,12 @@ import type {
 export interface ValidateResult {
   ok: boolean
   message?: string
+  /**
+   * How each tracked account fared when it was re-resolved under the new key.
+   * Riot encrypts puuids per key, so saving a different one re-links every
+   * account. Absent when the key did not change.
+   */
+  identities?: IdentityReport[]
 }
 
 export interface DashboardData {
@@ -62,6 +71,8 @@ export interface Api {
     get: () => Promise<AppSettingsPublic>
     setApiKey: (key: string) => Promise<ValidateResult>
     clearApiKey: () => Promise<AppSettingsPublic>
+    /** Personal or application, and for the latter the allowance it was granted. */
+    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits) => Promise<AppSettingsPublic>
     /** Fires when Riot rejects the stored key (personal keys expire every 24h). */
     onKeyInvalid: (cb: () => void) => () => void
   }

@@ -19,6 +19,23 @@ export const PERSONAL_KEY_LIMITS: RateLimiterConfig = {
   retryBackoffMs: 1_000
 }
 
+/**
+ * Riot's standard limits for an approved application key — two orders of
+ * magnitude above a personal one, which is what turns a 200-match backfill from
+ * minutes into seconds.
+ *
+ * A default rather than a truth: limits are granted per product, and an
+ * approved key can carry different ones. The settings screen lets the numbers
+ * be edited for that reason, and this is what it starts from.
+ */
+export const APPLICATION_KEY_LIMITS: RateLimiterConfig = {
+  burstLimit: 500,
+  burstWindowMs: 10_000,
+  sustainedLimit: 30_000,
+  sustainedWindowMs: 600_000,
+  retryBackoffMs: 1_000
+}
+
 interface QueuedJob<T> {
   run: () => Promise<T>
   resolve: (value: T) => void
@@ -30,7 +47,13 @@ export class RiotApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly retryAfterMs?: number
+    public readonly retryAfterMs?: number,
+    /**
+     * Riot could not decrypt a puuid we sent, because it was encrypted under a
+     * previous API key. Distinguished from every other 400 because it is the
+     * one that the app can repair by itself — see services/identityService.ts.
+     */
+    public readonly staleIdentity = false
   ) {
     super(message)
     this.name = 'RiotApiError'

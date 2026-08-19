@@ -448,6 +448,25 @@ export interface RiotIdInput {
   tagLine: string
 }
 
+/**
+ * Which kind of Riot key is saved. It decides how fast the app is allowed to
+ * ask for things, and whether it should keep warning about a 24-hour expiry —
+ * an application key does not have one.
+ */
+export type RiotKeyType = 'personal' | 'application'
+
+/**
+ * The allowance of an approved application key, in Riot's own units. Editable
+ * because Riot grants these per product rather than handing every approved key
+ * the same pair of numbers.
+ */
+export interface RiotKeyLimits {
+  /** Requests per 10 seconds. */
+  burstLimit: number
+  /** Requests per 10 minutes. */
+  sustainedLimit: number
+}
+
 export interface AppSettingsPublic {
   hasApiKey: boolean
   homeAccountId: number | null
@@ -457,9 +476,34 @@ export interface AppSettingsPublic {
    * before the window is listening still reaches the user.
    */
   keyRejected: boolean
+  keyType: RiotKeyType
+  /** Ignored while `keyType` is personal, whose limits are Riot's fixed ones. */
+  applicationLimits: RiotKeyLimits
 }
 
 export type ApiKeyStatus = 'valid' | 'missing' | 'expired' | 'invalid'
+
+/**
+ * What happened when an account was re-resolved from its Riot ID after the API
+ * key changed. Riot encrypts puuids per key, so a new key invalidates every one
+ * the app has stored and each account has to be introduced again.
+ */
+export type IdentityOutcome =
+  /** The stored puuid is the one this key resolves to. Nothing to do. */
+  | 'unchanged'
+  /** A new puuid, and the account's history has been moved onto it. */
+  | 'repaired'
+  /** Riot no longer knows this Riot ID — almost always a rename. */
+  | 'unresolved'
+  /** Riot could not be asked at all. */
+  | 'failed'
+
+export interface IdentityReport {
+  accountId: number
+  /** `gameName#tagLine`, so a message about it can name the account. */
+  riotId: string
+  outcome: IdentityOutcome
+}
 
 export interface AssetManifest {
   version: string

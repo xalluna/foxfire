@@ -9,6 +9,7 @@ import {
   markBackfillComplete,
   markDeltaSynced
 } from '../db/repositories/syncState.repo'
+import { isStaleIdentity } from '../riot/client'
 import { getMatchById, getMatchIdsByPuuid, MATCH_IDS_PAGE_SIZE } from '../riot/endpoints/match'
 import { RiotApiError } from '../riot/rateLimiter'
 import type { RegionalRoute } from '../riot/regions'
@@ -16,10 +17,11 @@ import { CH } from '../ipc/channels'
 import { createLogger } from '../telemetry/logger'
 import { withSpan } from '../telemetry/spans'
 import { BACKFILL_TARGET, refreshRank } from './accountService'
+import { repairAccountIdentity } from './identityService'
 import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttribution'
 import { bindPendingReplays } from './replayService'
-import { selectNewMatchIds } from './syncPlanning'
-import type { SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
+import { afterIdentityRepair, selectNewMatchIds } from './syncPlanning'
+import type { Account, SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
 
 const log = createLogger('sync')
 
@@ -139,6 +141,47 @@ async function fetchMatchIds(
 }
 
 /**
+ * The match list, together with the puuid that fetched it.
+ *
+ * A key rotation looks like exactly one thing from in here: Riot answers 400
+ * for a puuid it cannot decrypt, because that puuid was encrypted under the key
+ * this app used to hold. Nothing is wrong with the account and nothing is wrong
+ * with the history — the identity has simply expired with the key — so the sync
+ * re-resolves it from the Riot ID and asks again rather than failing in front
+ * of the user with a bare 400.
+ *
+ * Once. A second failure is not the same failure, and a repair that reports
+ * anything but a moved puuid says the retry would fail identically; both end
+ * the run with something the user can act on. This is also the path that
+ * repairs an install whose key was replaced before this code existed, since by
+ * then the key is already saved and the settings hook has been and gone.
+ *
+ * Returns the puuid because the rest of the run needs the *current* one: LP
+ * attribution reads it back out of the same rows this repair just rewrote.
+ */
+async function fetchMatchIdsRepairingIdentity(
+  account: Account,
+  target: number
+): Promise<{ matchIds: string[]; puuid: string }> {
+  const region = account.regionalRoute as RegionalRoute
+  try {
+    return { matchIds: await fetchMatchIds(region, account.puuid, target), puuid: account.puuid }
+  } catch (err) {
+    if (!isStaleIdentity(err)) throw err
+
+    log.info('Riot rejected the stored puuid; re-resolving from the Riot ID', {
+      accountId: account.id
+    })
+    const outcome = await repairAccountIdentity(account.id)
+    const next = afterIdentityRepair(outcome, `${account.gameName}#${account.tagLine}`)
+    if (!next.retry) throw new Error(next.message)
+
+    const repaired = getAccountById(getDb(), account.id)!
+    return { matchIds: await fetchMatchIds(region, repaired.puuid, target), puuid: repaired.puuid }
+  }
+}
+
+/**
  * Fetches match details one at a time through the shared rate limiter and
  * persists each immediately, so an interrupted run resumes where it left off
  * (already-stored IDs are skipped on the next pass).
@@ -241,7 +284,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
   emit({ accountId, phase, current: 0, total: 0, message: 'Fetching match list…', trigger })
 
   const target = isBackfill ? state.backfillTarget : MATCH_IDS_PAGE_SIZE
-  const allIds = await fetchMatchIds(region, account.puuid, target)
+  const { matchIds: allIds, puuid } = await fetchMatchIdsRepairingIdentity(account, target)
 
   // Delta sync only needs matches newer than the last one we stored.
   const candidates = isBackfill ? allIds : selectNewMatchIds(allIds, state.mostRecentMatchId)
@@ -255,7 +298,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
     // an earlier run — a snapshot that landed before its match — closes here,
     // and so does a recording whose match was imported by an earlier sync that
     // never got to look for it.
-    replayRecentAttribution(db, accountId, account.puuid)
+    replayRecentAttribution(db, accountId, puuid)
     bindFinishedRecordings(accountId, true)
     emit({ accountId, phase: 'complete', current: 0, total: 0, trigger })
     return { stored: 0, failed: 0 }
@@ -268,7 +311,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
   // falling between two snapshots, so a snapshot taken first would find an
   // empty interval and leave the games that just arrived unattributed.
   await snapshotRank(accountId)
-  replayRecentAttribution(db, accountId, account.puuid)
+  replayRecentAttribution(db, accountId, puuid)
   bindFinishedRecordings(accountId, failed === 0)
 
   // Only advance the sync marker when everything landed. Leaving it alone on

@@ -143,6 +143,109 @@ export function updateAccountProfile(
   )
 }
 
+export interface RekeyResult {
+  /** Stored match payloads that carried the old puuid. */
+  matches: number
+  /** Participant rows moved onto the new puuid. */
+  participants: number
+}
+
+/**
+ * Moves an account, and every row of history keyed by its puuid, onto the puuid
+ * a new API key resolves it to.
+ *
+ * Riot encrypts puuids per key, so a key change invalidates every one this app
+ * has stored — see 010_account_puuids.sql. Rewriting the stored value is what
+ * repairs the reads: every local query reaches our rows through the account's
+ * *current* puuid, either as a bound parameter or as the correlated subquery in
+ * replays.repo, so there is no join site that can be missed here and no query
+ * that needs to learn about the old value.
+ *
+ * `matches.raw_json` is rewritten alongside. Migrations 002, 004 and 006 all
+ * backfill new columns by correlating a participant row back to its entry in
+ * the payload on puuid; leaving the payloads alone would break that correlation
+ * for precisely our own rows, and the failure would not show up until whichever
+ * migration is written next quietly filled a column with nulls. A literal
+ * replace covers both places the payload carries it — the participant objects
+ * under $.info and the id list under $.metadata.
+ *
+ * Both collisions below are impossible through the app as it stands — a stored
+ * match is never re-fetched, and an account is resolved before it is inserted —
+ * which is exactly why they throw rather than being absorbed by an OR IGNORE.
+ * If one ever happens the database is not what this function assumes, and
+ * finding that out from an error beats finding it out from a silently halved
+ * match history.
+ */
+export function rekeyAccountPuuid(
+  db: DatabaseSync,
+  accountId: number,
+  oldPuuid: string,
+  newPuuid: string
+): RekeyResult {
+  if (oldPuuid === newPuuid) return { matches: 0, participants: 0 }
+
+  const taken = db
+    .prepare('SELECT id FROM accounts WHERE puuid = ? AND id != ?')
+    .get(newPuuid, accountId) as unknown as { id: number } | undefined
+  if (taken) {
+    throw new Error(`Cannot rekey account ${accountId}: account ${taken.id} already holds that puuid`)
+  }
+
+  const collision = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM match_participants mine
+         JOIN match_participants theirs
+           ON theirs.match_id = mine.match_id AND theirs.puuid = ?
+        WHERE mine.puuid = ?`
+    )
+    .get(newPuuid, oldPuuid) as unknown as { n: number }
+  if (collision.n > 0) {
+    throw new Error(
+      `Cannot rekey account ${accountId}: ${collision.n} match(es) already hold a row for the new puuid`
+    )
+  }
+
+  db.exec('BEGIN')
+  try {
+    // Before the participant rows move, while the old puuid still selects them.
+    const matches = db
+      .prepare(
+        `UPDATE matches
+            SET raw_json = replace(raw_json, ?, ?)
+          WHERE match_id IN (SELECT match_id FROM match_participants WHERE puuid = ?)`
+      )
+      .run(oldPuuid, newPuuid, oldPuuid)
+
+    const participants = db
+      .prepare('UPDATE match_participants SET puuid = ? WHERE puuid = ?')
+      .run(newPuuid, oldPuuid)
+
+    db.prepare(`UPDATE accounts SET puuid = ?, updated_at = datetime('now') WHERE id = ?`).run(
+      newPuuid,
+      accountId
+    )
+    db.prepare('INSERT OR IGNORE INTO account_puuids (account_id, puuid) VALUES (?, ?)').run(
+      accountId,
+      oldPuuid
+    )
+
+    db.exec('COMMIT')
+    return { matches: Number(matches.changes), participants: Number(participants.changes) }
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+}
+
+/** The puuids this account held under earlier API keys, oldest first. */
+export function listRetiredPuuids(db: DatabaseSync, accountId: number): string[] {
+  const rows = db
+    .prepare('SELECT puuid FROM account_puuids WHERE account_id = ? ORDER BY retired_at, puuid')
+    .all(accountId) as unknown as Array<{ puuid: string }>
+  return rows.map((row) => row.puuid)
+}
+
 export function setHomeAccount(db: DatabaseSync, id: number): void {
   db.exec('BEGIN')
   try {
