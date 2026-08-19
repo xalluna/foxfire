@@ -6,6 +6,27 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.7.1] — 2026-08-19
+
+Fixes ranked games showing 0 LP. The League client keeps reporting the rank you went into a game
+with for a few seconds after that game ends, and LoL Stats was writing that stale number down as
+the result — so the game looked like it had been worth nothing, and the LP it was actually worth
+was thrown away.
+
+### Fixed
+
+- Ranked games no longer register as 0 LP when the client is slow to update. The post-game reading
+  is now given a minute to settle before an unchanged one is believed, so the real number is the
+  one that lands on the match row.
+- A finished solo game no longer writes a rank reading for flex as well. It could close an
+  unresolved flex interval at a value nothing had measured, costing a flex game its LP.
+
+### Under the hood
+
+- The wait is a small state machine of its own, kept out of the LCU watcher so it can be tested
+  without playing a ranked game and losing it. Two tests replay the incident that prompted this,
+  one showing the 0 LP it produced and one the -7 and +21 it should have.
+
 ## [0.7.0] — 2026-08-18
 
 Games can now record themselves. With OBS installed, LoL Stats captures each game as you play it
@@ -455,6 +476,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.7.1]: https://github.com/xalluna/my-op-gg/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/xalluna/my-op-gg/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/xalluna/my-op-gg/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/xalluna/my-op-gg/compare/v0.4.1...v0.5.0
