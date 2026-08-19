@@ -256,6 +256,9 @@ async function onRecordingStarted(): Promise<void> {
 
 function finalizeRecording(replayId: number, eventPath: string | null): void {
   const db = getDb()
+  // Read before the dispatch below, which resets the session to idle
+  // synchronously and takes the account id with it.
+  const accountId = state.accountId
   const endedAt = Date.now()
   const path = resolveOutputPath(eventPath, stopReplyPath)
   stopReplyPath = null
@@ -279,8 +282,9 @@ function finalizeRecording(replayId: number, eventPath: string | null): void {
 
   // The match will not exist for minutes yet; postGameSync's retries are what
   // eventually make this succeed. Trying once now costs one query and catches
-  // the case where the match was already synced.
-  if (state.accountId !== null) bindPendingReplays(state.accountId)
+  // the case where the match was already synced. Never allowed to give up: a
+  // recording that stopped a second ago has had no chance to be found yet.
+  if (accountId !== null) bindPendingReplays(accountId)
 }
 
 async function readScoreboard(accountId: number): Promise<Scoreboard | null> {

@@ -8,7 +8,7 @@ import {
   deleteReplay,
   finishReplay,
   getOldestReplayIds,
-  getPendingReplays,
+  getBindableReplays,
   getReplay,
   getReplayEvents,
   getReplayFilePath,
@@ -31,6 +31,11 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 
 const ME = 'puuid-me'
 const T0 = 1_700_000_000_000
+
+/** A retry cutoff old enough to reconsider every written-off recording here. */
+const WITHIN_HORIZON = T0 - 1
+/** A cutoff recent enough that a recording made at T0 has aged out of it. */
+const PAST_HORIZON = T0 + 1
 
 /** Nothing in these tests writes a file, so every path is a missing one. */
 const FILE = 'C:\\Videos\\LoL Stats\\2026-08-18 20-14-03.mp4'
@@ -203,19 +208,40 @@ describe('replays.repo', () => {
     insertMatch(db, match('NA1_1', T0))
     bindReplay(db, already, 'NA1_1')
 
-    const pending = getPendingReplays(db, 1)
+    const pending = getBindableReplays(db, 1, WITHIN_HORIZON)
     expect(pending.map((p) => p.id)).toEqual([finished])
     expect(pending.map((p) => p.id)).not.toContain(running)
     expect(pending[0]?.roster).toHaveLength(10)
   })
 
-  it('stops offering a recording once it has given up finding a match', () => {
+  it('offers a recording it gave up on again, in case the match was only missing', () => {
+    // Giving up says a match could not be found, which is not the same as one
+    // not existing: an expired API key means nothing was there to find yet.
     const id = newReplay()
     finishReplay(db, id, T0 + 1_000, FILE, 1)
     markReplayUnmatched(db, id)
 
-    expect(getPendingReplays(db, 1)).toHaveLength(0)
+    expect(getBindableReplays(db, 1, WITHIN_HORIZON).map((p) => p.id)).toEqual([id])
     expect(getReplay(db, id)?.bindState).toBe('unmatched')
+  })
+
+  it('stops offering a written-off recording once it has aged past the horizon', () => {
+    // A Practice Tool game has no match and never will. Without this cutoff it
+    // would be rescanned on every sync for the life of the library.
+    const id = newReplay()
+    finishReplay(db, id, T0 + 1_000, FILE, 1)
+    markReplayUnmatched(db, id)
+
+    expect(getBindableReplays(db, 1, PAST_HORIZON)).toHaveLength(0)
+  })
+
+  it('never re-offers a bound recording, however recent it is', () => {
+    insertMatch(db, match('NA1_1', T0))
+    const id = newReplay()
+    finishReplay(db, id, T0 + 1_000, FILE, 1)
+    bindReplay(db, id, 'NA1_1')
+
+    expect(getBindableReplays(db, 1, WITHIN_HORIZON)).toHaveLength(0)
   })
 
   it('knows a match is spoken for, so two recordings cannot claim one game', () => {

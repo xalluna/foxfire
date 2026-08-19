@@ -6,6 +6,37 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.7.2] — 2026-08-19
+
+Fixes recordings that never find their game. If your API key expired while you played, the games
+were recorded fine and the matches turned up on the next sync — but the two were never introduced,
+so the recordings sat reading "Matching…" forever with no way to nudge them.
+
+### Fixed
+
+- Recordings now find their game after any sync, not just the automatic one that runs when a game
+  ends. Pressing Sync now is enough — including when it brings in nothing new, which is exactly
+  what happens once a fresh key has already collected the missing matches.
+- Opening the app pairs any waiting recording with what is already stored, before it talks to Riot
+  at all. An expired key is usually why a recording is still waiting, so it should not also be what
+  stops it being matched.
+- A recording is no longer written off as having no match while syncing is broken. Giving up used
+  to depend only on how long ago you played, so an expired key was enough to make the app conclude
+  a game did not exist — permanently, with nothing that could change its mind. It now gives up only
+  after a sync that actually worked, and a recording already written off is looked at again for a
+  week in case its match was simply missing.
+- A recording that stops while the match is already synced is matched immediately instead of
+  waiting for the next sync. The attempt had been running against a session the app had just
+  cleared, so it never actually looked.
+
+### Under the hood
+
+- Migration 009 widens the replay index to cover both states the binding pass now reads.
+- Writing a recording off is behind an explicit `allowGiveUp`, off by default, so only a caller
+  that can vouch for the sync being complete is able to reach that decision.
+- A new `replayService` test suite covers the pass end to end against real SQLite, including the
+  expired-key sequence that prompted all of this.
+
 ## [0.7.1] — 2026-08-19
 
 Fixes ranked games showing 0 LP. The League client keeps reporting the rank you went into a game
@@ -476,6 +507,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.7.2]: https://github.com/xalluna/my-op-gg/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/xalluna/my-op-gg/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/xalluna/my-op-gg/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/xalluna/my-op-gg/compare/v0.5.0...v0.6.0

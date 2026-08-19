@@ -8,6 +8,7 @@ import { initSettings } from './services/settingsService'
 import { getBackgroundSettings, initBackground } from './services/backgroundService'
 import { cancelAllPostGameSyncs } from './services/postGameSync'
 import { repairAttribution } from './services/rankHistoryService'
+import { bindPendingReplays } from './services/replayService'
 import { startSync } from './services/syncService'
 import { stopLcuWatcher } from './lcu/watcher'
 import { attachTrayBehaviour, beginQuit, showWindow, syncTray } from './tray'
@@ -124,12 +125,15 @@ function bootstrap(): void {
  * one per genuinely new match, so the cost is proportional to what was actually
  * missed.
  *
- * The attribution repair runs first and separately: it touches only SQLite, so
- * it must not sit behind a Riot call that an expired key would fail.
+ * The attribution repair and the replay binding run first and separately: both
+ * touch only SQLite, so neither may sit behind a Riot call that an expired key
+ * would fail. Binding especially — an expired key is the reason a recording is
+ * still waiting, so making the pairing wait on a working one is backwards.
  */
 function catchUpOnLaunch(): void {
   repairAttribution()
   for (const account of listAccounts(getDb())) {
+    bindPendingReplays(account.id)
     startSync(account.id, 'auto')
   }
 }

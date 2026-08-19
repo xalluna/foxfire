@@ -149,3 +149,17 @@ export const BIND_GIVE_UP_MS = 30 * 60 * 1000
 export function shouldGiveUpBinding(replay: ReplayFingerprint, now: number): boolean {
   return now - replayEnd(replay) > BIND_GIVE_UP_MS
 }
+
+/**
+ * How long a recording already given up on stays worth reconsidering.
+ *
+ * Because the give-up above answers "has enough time passed", not "did we ever
+ * actually get to look". A key that expired overnight fails every sync until a
+ * new one is pasted, by which point every recording made in the meantime is
+ * hours past the deadline — and the match it was waiting for lands seconds
+ * later. Written off is therefore a state to revisit, not a verdict.
+ *
+ * A week covers being away from the app that long and still bounds how far back
+ * a sync has to look for candidates.
+ */
+export const BIND_RETRY_HORIZON_MS = 7 * 24 * 60 * 60 * 1000
