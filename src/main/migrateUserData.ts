@@ -25,13 +25,20 @@ import { createLogger } from './telemetry/logger'
 const LEGACY_DIR = 'my-op-gg'
 
 /**
- * Subdirectories carried across, in order of how much it hurts to lose them.
+ * What is carried across, in order of how much it hurts to lose it.
  *
- * Moved one at a time rather than renaming the parent, because the new
+ * Moved one entry at a time rather than renaming the parent, because the new
  * directory may already exist — a crash after the log sink opened is enough to
  * create it — and a rename onto an existing directory fails on Windows.
+ *
+ * `Local State` is Chromium's, not ours, and it is on this list for one
+ * specific reason: on Windows safeStorage encrypts with a key kept inside it.
+ * Carrying secure/ without it moves the ciphertext and leaves the key behind,
+ * so the Riot key and the OBS password both become undecryptable — which
+ * surfaces as a silent "enter your API key" rather than as an error. The rest
+ * of what Chromium keeps up there is disposable cache and is deliberately left.
  */
-const CARRIED = ['data', 'secure', 'logs'] as const
+const CARRIED = ['Local State', 'data', 'secure', 'logs'] as const
 
 interface Outcome {
   /** True when this launch moved the legacy directory into place. */
@@ -63,12 +70,20 @@ export function migrateUserData(): void {
 
   mkdirSync(current, { recursive: true })
 
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')
+
   for (const name of CARRIED) {
     const from = join(legacy, name)
+    if (!existsSync(from)) continue
     const to = join(current, name)
-    if (!existsSync(from) || existsSync(to)) continue
 
     try {
+      // Something already at the destination is from an earlier life under the
+      // new name — a build that ran before the data came across. It is set
+      // aside whole rather than merged into: a stale stats.db-wal left sitting
+      // beside an incoming stats.db would be replayed against a database it
+      // never belonged to, which is a far worse outcome than a spare folder.
+      if (existsSync(to)) renameSync(to, `${to}.superseded-${stamp}`)
       renameSync(from, to)
     } catch (err) {
       // `data` is the only one worth stopping for. Losing `logs` costs nothing,
@@ -80,8 +95,19 @@ export function migrateUserData(): void {
     }
   }
 
-  // Only when it is genuinely empty. Anything left behind is something this
-  // function did not expect, and deleting it unread would be the wrong call.
+  // Never report a move that did not happen. An earlier version skipped any
+  // directory that already existed at the destination and then said it had
+  // migrated anyway, which read as success while the database sat untouched in
+  // the old location and the app quietly built an empty one beside it.
+  if (!existsSync(join(current, 'data', 'stats.db'))) {
+    refuse(new Error('the database is not at the new location after the move'))
+    return
+  }
+
+  // Only when it is genuinely empty, which for a real install it will not be:
+  // Electron keeps its own Cache, GPUCache, Local Storage and friends up there
+  // too, and none of that is ours to move or to delete. So the old folder
+  // normally survives, holding nothing but disposable Chromium state.
   try {
     if (readdirSync(legacy).length === 0) rmSync(legacy, { recursive: true })
   } catch {
@@ -102,10 +128,11 @@ export function migrateUserData(): void {
 function refuse(err: unknown): void {
   dialog.showErrorBox(
     'Foxfire could not move your data',
-    'Foxfire found data from LoL Stats but could not move it, which usually means ' +
-      'LoL Stats is still running.\n\n' +
-      'Quit LoL Stats — check the system tray as well as the taskbar — and start ' +
-      'Foxfire again.\n\n' +
+    'Foxfire found data from LoL Stats but could not move it. The usual cause is ' +
+      'LoL Stats still running — check the system tray as well as the taskbar, ' +
+      'quit it, and start Foxfire again.\n\n' +
+      'Nothing has been deleted: your data is where it always was, and Foxfire ' +
+      'will try again next time it starts.\n\n' +
       `Details: ${err instanceof Error ? err.message : String(err)}`
   )
   app.exit(1)

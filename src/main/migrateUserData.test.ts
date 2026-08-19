@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -54,6 +62,7 @@ function seedLegacy(): void {
   writeFileSync(join(legacy, 'secure', 'riot-api-key.enc'), 'KEY')
   mkdirSync(join(legacy, 'logs'), { recursive: true })
   writeFileSync(join(legacy, 'logs', 'app.log'), 'LOG')
+  writeFileSync(join(legacy, 'Local State'), '{"os_crypt":{"encrypted_key":"OLD"}}')
 }
 
 describe('migrateUserData', () => {
@@ -111,16 +120,82 @@ describe('migrateUserData', () => {
     expect(readFileSync(join(current, 'data', 'stats.db'), 'utf8')).toBe('STATS')
   })
 
-  it('does not overwrite a directory that already exists at the destination', () => {
+  /**
+   * The bug this suite exists for.
+   *
+   * A build that ran under the new name before the data came across leaves
+   * every destination directory already present. Skipping those and reporting a
+   * successful migration anyway is what happened in practice: the database sat
+   * untouched in the old location while the app built an empty one beside it
+   * and the log claimed the move had worked.
+   */
+  it('migrates even when every destination directory already exists', () => {
     seedLegacy()
-    mkdirSync(join(current, 'logs'), { recursive: true })
-    writeFileSync(join(current, 'logs', 'app.log'), 'CRASHED')
+    for (const name of ['data', 'secure', 'logs']) {
+      mkdirSync(join(current, name), { recursive: true })
+    }
+    writeFileSync(join(current, 'data', 'stats.db.bak-old'), 'STALE')
 
     migrateUserData()
 
-    // The data came across; the log the failed launch wrote is the one kept,
-    // and the legacy logs directory stays behind rather than being merged.
-    expect(readFileSync(join(current, 'logs', 'app.log'), 'utf8')).toBe('CRASHED')
-    expect(existsSync(join(legacy, 'logs'))).toBe(true)
+    expect(readFileSync(join(current, 'data', 'stats.db'), 'utf8')).toBe('STATS')
+    expect(readFileSync(join(current, 'secure', 'riot-api-key.enc'), 'utf8')).toBe('KEY')
+  })
+
+  /**
+   * A stale write-ahead log replayed against a database it never belonged to is
+   * worse than any amount of leftover disk, so the pre-existing directory is
+   * set aside whole rather than merged into.
+   */
+  it('sets a pre-existing destination directory aside instead of merging into it', () => {
+    seedLegacy()
+    mkdirSync(join(current, 'data'), { recursive: true })
+    writeFileSync(join(current, 'data', 'stats.db-wal'), 'STALE-WAL')
+
+    migrateUserData()
+
+    // The incoming database is not sharing a directory with the old WAL.
+    expect(existsSync(join(current, 'data', 'stats.db-wal'))).toBe(false)
+    expect(readFileSync(join(current, 'data', 'stats.db'), 'utf8')).toBe('STATS')
+
+    // And the old one is kept, not deleted.
+    const setAside = readdirSync(current).find((n) => n.startsWith('data.superseded-'))
+    expect(setAside).toBeDefined()
+    expect(readFileSync(join(current, setAside!, 'stats.db-wal'), 'utf8')).toBe('STALE-WAL')
+  })
+
+  /**
+   * The second half of the same bug. safeStorage on Windows encrypts with a key
+   * kept in Local State, so moving secure/ without it strands both secrets —
+   * and loadApiKey turns a failed decrypt into a null, which reads as "no key
+   * has ever been entered" rather than as an error.
+   */
+  it('carries Local State, without which the moved secrets cannot be decrypted', () => {
+    seedLegacy()
+
+    migrateUserData()
+
+    expect(readFileSync(join(current, 'Local State'), 'utf8')).toContain('OLD')
+  })
+
+  it('does not let a freshly generated Local State win over the one that owns the secrets', () => {
+    seedLegacy()
+    mkdirSync(current, { recursive: true })
+    writeFileSync(join(current, 'Local State'), '{"os_crypt":{"encrypted_key":"FRESH"}}')
+
+    migrateUserData()
+
+    expect(readFileSync(join(current, 'Local State'), 'utf8')).toContain('OLD')
+  })
+
+  it('leaves the legacy directory in place when it still holds Chromium state', () => {
+    seedLegacy()
+    mkdirSync(join(legacy, 'GPUCache'), { recursive: true })
+    writeFileSync(join(legacy, 'GPUCache', 'data_0'), 'CACHE')
+
+    migrateUserData()
+
+    expect(existsSync(join(legacy, 'GPUCache'))).toBe(true)
+    expect(existsSync(join(legacy, 'data'))).toBe(false)
   })
 })
