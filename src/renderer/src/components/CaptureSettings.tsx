@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { CAPTURE_QUEUE_OPTIONS } from '@shared/queues'
 import { CAPTURE_QUALITY_OPTIONS } from '@shared/captureQuality'
 import { Toggle } from './Toggle'
+import { SectionSummary, SettingsSection } from './SettingsSection'
 import * as Icon from './icons'
 import type {
   CaptureAudio,
@@ -91,11 +92,18 @@ export function CaptureSettings(): JSX.Element {
   const disabled = !current || update.isPending
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface p-5">
-      <div className="flex items-center gap-2">
-        <Icon.Film className="text-gold" />
-        <h2 className="font-display text-lg text-text">Game capture</h2>
-      </div>
+    <SettingsSection
+      icon={<Icon.Film className="shrink-0 text-gold" />}
+      title="Game capture"
+      summary={
+        current?.enabled ? (
+          <SectionSummary tone="good">On</SectionSummary>
+        ) : (
+          <SectionSummary>Off</SectionSummary>
+        )
+      }
+      blurb="Records your games through OBS and marks the timeline with your kills and deaths."
+    >
       <p className="mt-2 text-sm leading-relaxed text-text-dim">
         Records your games through OBS while you play, and marks the timeline with your kills,
         deaths and multikills so you can jump straight to the fight. OBS has to be installed —
@@ -212,7 +220,7 @@ export function CaptureSettings(): JSX.Element {
           softCapBytes={current?.softCapBytes ?? 0}
         />
       )}
-    </section>
+    </SettingsSection>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TelemetryState } from '@shared/telemetry'
 import { Toggle } from './Toggle'
+import { SectionSummary, SettingsSection } from './SettingsSection'
 import * as Icon from './icons'
 
 /**
@@ -40,11 +41,18 @@ export function TelemetrySettings(): JSX.Element {
   const enabled = data?.enabled ?? false
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface p-5">
-      <div className="flex items-center gap-2">
-        <Icon.Activity className="text-gold" />
-        <h2 className="font-display text-lg text-text">Developer telemetry</h2>
-      </div>
+    <SettingsSection
+      icon={<Icon.Activity className="shrink-0 text-gold" />}
+      title="Developer telemetry"
+      summary={
+        enabled ? (
+          <SectionSummary tone="good">On</SectionSummary>
+        ) : (
+          <SectionSummary>Off</SectionSummary>
+        )
+      }
+      blurb="Records what the app is doing and consuming, locally and never sent anywhere."
+    >
 
       <p className="mt-2 text-sm leading-relaxed text-text-dim">
         Records what the app is doing and consuming — every Riot API call with its queue wait and
@@ -95,7 +103,7 @@ export function TelemetrySettings(): JSX.Element {
           {clear.isPending ? 'Clearing…' : 'Clear collected telemetry'}
         </button>
       )}
-    </section>
+    </SettingsSection>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Season, SeasonInput } from '@shared/types'
+import { SectionSummary, SettingsSection } from './SettingsSection'
 import * as Icon from './icons'
 
 /**
@@ -115,16 +116,27 @@ export function SeasonSettings(): JSX.Element {
     ])
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface p-5">
-      <div className="flex items-center gap-2">
-        <Icon.Trophy className="text-gold" />
-        <h2 className="font-display text-lg text-text">Ranked seasons</h2>
-      </div>
-
+    <SettingsSection
+      icon={<Icon.Trophy className="shrink-0 text-gold" />}
+      title="Ranked seasons"
+      // Folded, the summary is all that is left of this section, so it carries
+      // the count — and flags edits that would otherwise sit forgotten behind
+      // a fold with nothing on screen to suggest they exist.
+      summary={
+        seasons.data && (
+          <SectionSummary tone={unchanged ? 'mute' : 'warn'}>
+            {unchanged
+              ? `${draft.length} ${draft.length === 1 ? 'season' : 'seasons'}`
+              : 'Unsaved changes'}
+          </SectionSummary>
+        )
+      }
+      blurb="When each ranked season started. Riot offers no way to ask, so the dates are set here."
+    >
       <p className="mt-2 text-sm leading-relaxed text-text-dim">
-        Riot offers no way to ask when a season started, so the dates live here. Each season runs
-        until the next one begins and the newest never ends, so nothing breaks if you add January
-        late — add the next one once Riot announces the date.
+        Riot offers no way to ask when a season started, so the dates live here. Each season
+        runs until the next one begins and the newest never ends, so nothing breaks if you add
+        January late — add the next one once Riot announces the date.
       </p>
 
       <div className="mt-4 space-y-2">
@@ -210,6 +222,6 @@ export function SeasonSettings(): JSX.Element {
 
       {problem && !unchanged && <p className="mt-3 text-sm text-red">{problem}</p>}
       {save.isError && <p className="mt-3 text-sm text-red">Could not save the seasons.</p>}
-    </section>
+    </SettingsSection>
   )
 }

@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import type { BackgroundSettings } from '@shared/types'
 import { useLcuStatus } from '../hooks/useLcuStatus'
 import { Toggle } from './Toggle'
+import { SectionSummary, SettingsSection } from './SettingsSection'
 import * as Icon from './icons'
 
 /**
@@ -34,11 +35,18 @@ export function RankTrackingSettings(): JSX.Element {
   const path = pathDraft ?? storedPath
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface p-5">
-      <div className="flex items-center gap-2">
-        <Icon.TrendingUp className="text-gold" />
-        <h2 className="font-display text-lg text-text">Rank tracking</h2>
-      </div>
+    <SettingsSection
+      icon={<Icon.TrendingUp className="shrink-0 text-gold" />}
+      title="Rank tracking"
+      summary={
+        status.state === 'connected' ? (
+          <SectionSummary tone="good">Client connected</SectionSummary>
+        ) : (
+          <SectionSummary>Client not detected</SectionSummary>
+        )
+      }
+      blurb="Per-game LP is measured from the running League client, so it needs this app open while you play."
+    >
 
       <p className="mt-2 text-sm leading-relaxed text-text-dim">
         Riot publishes no per-game LP, so it has to be measured by watching your rank change around
@@ -120,7 +128,7 @@ export function RankTrackingSettings(): JSX.Element {
           </button>
         </div>
       </div>
-    </section>
+    </SettingsSection>
   )
 }
 

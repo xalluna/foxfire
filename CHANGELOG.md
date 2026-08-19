@@ -72,6 +72,10 @@ instead of turning into one long cliff.
 - Recording starts when the game itself comes up rather than when the client says a game began.
   The client reports a game at the loading screen, minutes early, and starting there records a
   black screen OBS has no window to capture yet.
+- Settings folds. Every section is collapsed by default and each one reports the fact worth
+  knowing while it is shut — whether a key is saved, whether recording is on, how many seasons are
+  set — so the page is a list of what exists rather than a scroll through all of it. The Riot key
+  says so in amber when it is missing, since nothing else works without one.
 
 ### Fixed
 
