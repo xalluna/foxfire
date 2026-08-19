@@ -50,7 +50,12 @@ const api: Api = {
       ipcRenderer.invoke(CH.liveClient.playerRank, platform, gameName, tagLine)
   },
   champions: {
-    stats: (accountId, queueId) => ipcRenderer.invoke(CH.champions.stats, accountId, queueId)
+    stats: (accountId, queueId, range) =>
+      ipcRenderer.invoke(CH.champions.stats, accountId, queueId, range)
+  },
+  seasons: {
+    list: () => ipcRenderer.invoke(CH.seasons.list),
+    save: (seasons) => ipcRenderer.invoke(CH.seasons.save, seasons)
   },
   mastery: {
     get: (accountId, refresh, queueId) =>
@@ -59,6 +64,7 @@ const api: Api = {
   rank: {
     history: (accountId, queueType, range) =>
       ipcRenderer.invoke(CH.rank.history, accountId, queueType, range),
+    periods: (accountId) => ipcRenderer.invoke(CH.rank.periods, accountId),
     editable: (accountId, queueType) =>
       ipcRenderer.invoke(CH.rank.editable, accountId, queueType),
     saveManual: (accountId, queueType, edits) =>

@@ -8,7 +8,12 @@ import { SyncProgressBar } from './SyncProgressBar'
 import * as Icon from './icons'
 
 /**
- * The identity rail: who this account is and where it stands this season.
+ * The identity rail: who this account is and where it stands right now.
+ *
+ * Offers no period picker on purpose. This is the "now" screen — the tier, LP
+ * and record on the cards are all Riot's current reading, and pairing a live
+ * rank with a record from some other window would describe nobody's account.
+ * Past seasons are reachable on the Rank screen.
  *
  * Deliberately holds nothing about recent form — that belongs to the summary
  * block above the match list, so the two never show the same champion with two
@@ -31,6 +36,7 @@ export function ProfileHeader({
     leagueEntries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? emptyEntry('RANKED_SOLO_5x5')
   const flex =
     leagueEntries.find((e) => e.queueType === 'RANKED_FLEX_SR') ?? emptyEntry('RANKED_FLEX_SR')
+
 
   return (
     <div className="space-y-3">

@@ -28,6 +28,10 @@ export function useSyncProgress(): void {
         // imported, so they are stale the moment it finishes. Without this they
         // keep serving pre-sync counts until the query ages out.
         queryClient.invalidateQueries({ queryKey: ['championStats', accountId] })
+        // A sync can reach back into a year the account had no history for,
+        // which adds an entry to both period pickers. Cheap to recheck and
+        // otherwise only noticed after a restart.
+        queryClient.invalidateQueries({ queryKey: ['rankPeriods', accountId] })
       }
     })
   }, [setSyncProgress, queryClient])

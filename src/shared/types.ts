@@ -30,6 +30,7 @@ export interface LeagueEntry {
   fetchedAt: string
 }
 
+
 /**
  * One row of match history.
  *
@@ -127,6 +128,14 @@ export interface RankSnapshot {
   /** Precomputed by shared/ladder.ts so the graph plots without recomputing. */
   ladderPosition: number | null
   /**
+   * Which season this reading falls in, stamped on the way out.
+   *
+   * Sent rather than derived so the renderer needs no copy of the season table
+   * and cannot paint a chart before one has loaded. Null only when no seasons
+   * are defined at all.
+   */
+  seasonId: number | null
+  /**
    * Where the reading came from: the running client, the public API, or the
    * user. A 'manual' row is an assertion rather than a measurement, and is
    * dropped as soon as a real reading measures the same interval — see
@@ -207,7 +216,45 @@ export interface RankHistory {
   milestones: RankMilestone[]
 }
 
-export type RankRange = '7d' | '30d' | 'all'
+/**
+ * One hand-entered ranked season.
+ *
+ * Riot exposes no way to ask which season is current, and the calendar is not a
+ * stand-in for one — 2026 opened on 8 January and a preseason can run into
+ * February — so these are edited in Settings. See migration 008.
+ *
+ * A season runs from `startsAt` until the next one starts. The newest reaches
+ * forwards forever and the oldest backwards forever, so no game can fall
+ * outside every season and a boundary nobody has entered yet cannot cut the
+ * current season short.
+ */
+export interface Season {
+  id: number
+  label: string
+  /** Epoch milliseconds, matching game_creation and captured_at. */
+  startsAt: number
+  /** Labelled distinctly, but still catches games — rank carries into it. */
+  isPreseason: boolean
+  /**
+   * Whether the ladder reset when this season opened.
+   *
+   * Distinct from the boundary itself: a season that carries rank forward must
+   * keep attributing LP across its own start, and only a reset may suppress it.
+   */
+  resetsRank: boolean
+}
+
+/** A season on its way back from the editor. No id means a row being added. */
+export type SeasonInput = Omit<Season, 'id'> & { id?: number }
+
+/**
+ * A window over rank history.
+ *
+ * `7d` and `30d` are relative to now; `season:12` names a season by its row id,
+ * whose bounds come from shared/seasons.ts. They share one union because the
+ * Rank screen offers them from a single control — see views/RankHistory.tsx.
+ */
+export type RankRange = '7d' | '30d' | 'all' | `season:${number}`
 
 /**
  * Whether the League client is reachable and whose account is logged into it.

@@ -2,6 +2,7 @@ import { getDb } from '../db'
 import { getAccountById, listAccounts } from '../db/repositories/accounts.repo'
 import {
   deleteSupersededManualSnapshots,
+  getHistorySpan,
   getLatestSnapshot,
   getRankMilestones,
   getRankSnapshots,
@@ -10,18 +11,13 @@ import {
 } from '../db/repositories/rankHistory.repo'
 import { attributeInterval, replayAttribution } from './rankAttribution'
 import { rebuildAttribution } from './manualRankService'
+import { listSeasons } from '../db/repositories/seasons.repo'
 import { queueIdForQueueType } from '@shared/queues'
+import { rangeBounds, seasonsSpanning } from '@shared/seasons'
 import { createLogger } from '../telemetry/logger'
-import type { QueueType, RankHistory, RankRange } from '@shared/types'
+import type { QueueType, RankHistory, RankRange, Season } from '@shared/types'
 
 const log = createLogger('rank')
-
-const DAY_MS = 86_400_000
-
-function windowStart(range: RankRange): number | null {
-  if (range === 'all') return null
-  return Date.now() - (range === '7d' ? 7 : 30) * DAY_MS
-}
 
 export function getRankHistory(
   accountId: number,
@@ -29,12 +25,39 @@ export function getRankHistory(
   range: RankRange
 ): RankHistory {
   const db = getDb()
-  const since = windowStart(range)
+  const seasons = listSeasons(db)
+  const { sinceMs, untilMs } = rangeBounds(range, seasons)
 
   return {
-    snapshots: getRankSnapshots(db, accountId, queueType, since),
-    milestones: getRankMilestones(db, accountId, queueType, since)
+    snapshots: getRankSnapshots(db, accountId, queueType, sinceMs, untilMs, seasons),
+    milestones: getRankMilestones(db, accountId, queueType, sinceMs, untilMs, seasons)
   }
+}
+
+/**
+ * The seasons this account has history in, newest first.
+ *
+ * Drives the picker on the Rank and Champions screens, and its first entry is
+ * what both default to — which is why an account that has not played since last
+ * season keeps showing that one rather than opening on an empty January.
+ *
+ * An account with no history at all reports the season it is currently in, so
+ * the picker is never empty. Seasons are returned whole rather than as ids so
+ * the renderer can label them without a copy of the table.
+ */
+export function getRankPeriods(accountId: number): Season[] {
+  const db = getDb()
+  const account = getAccountById(db, accountId)
+  if (!account) return []
+
+  const seasons = listSeasons(db)
+  const span = getHistorySpan(db, accountId, account.puuid)
+  if (!span) {
+    const current = seasons[seasons.length - 1]
+    return current ? [current] : []
+  }
+
+  return seasonsSpanning(seasons, span.oldestMs, span.newestMs)
 }
 
 /**
@@ -117,7 +140,15 @@ export function recordRankSnapshot(
 
   const current = getLatestSnapshot(db, accountId, input.queueType)
   if (previous && current) {
-    attributeInterval(db, accountId, account.puuid, input.queueType, previous, current)
+    attributeInterval(
+      db,
+      accountId,
+      account.puuid,
+      input.queueType,
+      previous,
+      current,
+      listSeasons(db)
+    )
   }
 
   return true

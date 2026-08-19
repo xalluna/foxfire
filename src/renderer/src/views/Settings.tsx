@@ -4,6 +4,8 @@ import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
+import { SeasonSettings } from '../components/SeasonSettings'
+import { SectionSummary, SettingsSection } from '../components/SettingsSection'
 import { TelemetrySettings } from '../components/TelemetrySettings'
 import * as Icon from '../components/icons'
 
@@ -48,11 +50,20 @@ export function Settings(): JSX.Element {
     <div className="mx-auto w-full max-w-2xl space-y-4 p-6">
       <h1 className="font-display text-xl text-text">Settings</h1>
 
-      <section className="rounded-lg border border-hairline bg-surface p-5">
-        <div className="flex items-center gap-2">
-          <Icon.Key className="text-gold" />
-          <h2 className="font-display text-lg text-text">Riot API key</h2>
-        </div>
+      <SettingsSection
+        icon={<Icon.Key className="shrink-0 text-gold" />}
+        title="Riot API key"
+        // Flagged rather than opened when missing: nothing else in the app
+        // works without it, and a fold that quietly hides that is a trap.
+        summary={
+          hasKey ? (
+            <SectionSummary tone="good">Saved</SectionSummary>
+          ) : (
+            <SectionSummary tone="warn">Not set</SectionSummary>
+          )
+        }
+        blurb="Stored encrypted on this machine. Personal keys expire every 24 hours."
+      >
 
         <p className="mt-2 text-sm leading-relaxed text-text-dim">
           Stored encrypted on this machine only. Personal development keys expire every 24 hours —
@@ -110,21 +121,21 @@ export function Settings(): JSX.Element {
             Remove saved key
           </button>
         )}
-      </section>
+      </SettingsSection>
 
       <RankTrackingSettings />
+
+      <SeasonSettings />
 
       <CaptureSettings />
 
       <TelemetrySettings />
 
-      <section className="rounded-lg border border-hairline bg-surface p-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-display text-lg text-text">About</h2>
-          {version.data && (
-            <span className="text-xs tabular-nums text-text-mute">Version {version.data}</span>
-          )}
-        </div>
+      <SettingsSection
+        title="About"
+        summary={version.data && <SectionSummary>Version {version.data}</SectionSummary>}
+        blurb="What this is, and the Riot disclaimer."
+      >
         <p className="mt-2 text-sm leading-relaxed text-text-dim">
           A personal League of Legends stats tracker. Match history is stored locally in SQLite and
           served from disk — the Riot API is only called when syncing.
@@ -132,7 +143,7 @@ export function Settings(): JSX.Element {
         <div className="mt-4 border-t border-hairline pt-4">
           <Disclaimer />
         </div>
-      </section>
+      </SettingsSection>
     </div>
   )
 }

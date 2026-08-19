@@ -4,9 +4,11 @@ import type {
   QueueType,
   RankMilestone,
   RankSnapshot,
+  Season,
   SnapshotSource
 } from '@shared/types'
 import { ladderPosition, rankMovement } from '@shared/ladder'
+import { resetsBetween, seasonAt } from '@shared/seasons'
 
 interface SnapshotRow {
   queue_type: string
@@ -20,7 +22,7 @@ interface SnapshotRow {
   captured_at: number
 }
 
-function toSnapshot(row: SnapshotRow): RankSnapshot {
+function toSnapshot(row: SnapshotRow, seasons: Season[] = []): RankSnapshot {
   return {
     queueType: row.queue_type as QueueType,
     tier: row.tier,
@@ -30,7 +32,10 @@ function toSnapshot(row: SnapshotRow): RankSnapshot {
     losses: row.losses,
     ladderPosition: row.ladder_position,
     source: row.source as SnapshotSource,
-    capturedAt: row.captured_at
+    capturedAt: row.captured_at,
+    // Stamped here so the renderer never needs the season table to know where
+    // one climb ends and the next begins.
+    seasonId: seasonAt(seasons, row.captured_at)?.id ?? null
   }
 }
 
@@ -121,12 +126,21 @@ export function insertRankSnapshot(
   return Number(result.lastInsertRowid)
 }
 
-/** Readings for one ladder, oldest first, optionally limited to a time window. */
+/**
+ * Readings for one ladder, oldest first, optionally limited to a time window.
+ *
+ * `untilMs` is exclusive, so two adjacent ranked years tile without both
+ * claiming a snapshot that lands on the instant of the boundary. Both bounds
+ * default to unbounded, which leaves every existing caller — replayAttribution
+ * among them — reading the whole series.
+ */
 export function getRankSnapshots(
   db: DatabaseSync,
   accountId: number,
   queueType: QueueType,
-  sinceMs: number | null = null
+  sinceMs: number | null = null,
+  untilMs: number | null = null,
+  seasons: Season[] = []
 ): RankSnapshot[] {
   const rows = db
     .prepare(
@@ -135,11 +149,12 @@ export function getRankSnapshots(
          FROM rank_snapshots
         WHERE account_id = ? AND queue_type = ?
           AND (? IS NULL OR captured_at >= ?)
+          AND (? IS NULL OR captured_at < ?)
         ORDER BY captured_at ASC, id ASC`
     )
-    .all(accountId, queueType, sinceMs, sinceMs) as unknown as SnapshotRow[]
+    .all(accountId, queueType, sinceMs, sinceMs, untilMs, untilMs) as unknown as SnapshotRow[]
 
-  return rows.map(toSnapshot)
+  return rows.map((row) => toSnapshot(row, seasons))
 }
 
 /**
@@ -148,17 +163,29 @@ export function getRankSnapshots(
  * Derived on read rather than stored: a milestone is entirely a function of two
  * adjacent snapshots, so recomputing it keeps one source of truth and means a
  * fix to the movement rules applies retroactively.
+ *
+ * A pair spanning a ladder reset is skipped. January's reset drops a Diamond
+ * player to Bronze, which rankMovement can only read as a demotion — but the
+ * user was not demoted, the ladder was emptied, and listing it as a milestone
+ * would be a lie the all-time range tells every year forever.
+ *
+ * Only a boundary that actually reset is skipped, not every season boundary: a
+ * preseason carries rank forward, and a genuine promotion across its start is
+ * still a promotion.
  */
 export function getRankMilestones(
   db: DatabaseSync,
   accountId: number,
   queueType: QueueType,
-  sinceMs: number | null = null
+  sinceMs: number | null = null,
+  untilMs: number | null = null,
+  seasons: Season[] = []
 ): RankMilestone[] {
-  const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs)
+  const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs, untilMs, seasons)
   const milestones: RankMilestone[] = []
 
   for (let i = 1; i < snapshots.length; i++) {
+    if (resetsBetween(seasons, snapshots[i - 1].capturedAt, snapshots[i].capturedAt)) continue
     const movement = rankMovement(snapshots[i - 1], snapshots[i])
     if (movement === 'none') continue
     milestones.push({
@@ -171,6 +198,55 @@ export function getRankMilestones(
   }
 
   return milestones.reverse()
+}
+
+/**
+ * The oldest and newest moment this account has any history for, or null when
+ * it has none at all.
+ *
+ * Feeds the period picker. Deliberately a span rather than a DISTINCT over
+ * years: a year the user did not play still sits between two they did, and a
+ * picker with a hole in it reads as data loss rather than as a quiet year.
+ *
+ * Matches are counted for every queue, not just the ranked ones, because the
+ * Champions screen uses the same list and carries its own queue filter.
+ *
+ * One list serves both screens, which is a deliberate trade rather than an
+ * oversight: a year with non-ranked games and no rank readings at all still
+ * offers a button on the Rank screen, and it lands on the empty state. Filtering
+ * to the tracked queues would fix that and cost the Champions screen the years
+ * it legitimately has data for, so the dead button stays.
+ */
+export function getHistorySpan(
+  db: DatabaseSync,
+  accountId: number,
+  puuid: string
+): { oldestMs: number; newestMs: number } | null {
+  const row = db
+    .prepare(
+      `SELECT (SELECT MIN(captured_at) FROM rank_snapshots WHERE account_id = ?) AS snap_min,
+              (SELECT MAX(captured_at) FROM rank_snapshots WHERE account_id = ?) AS snap_max,
+              (SELECT MIN(m.game_creation)
+                 FROM matches m
+                 JOIN match_participants p ON p.match_id = m.match_id
+                WHERE p.puuid = ?)                                              AS match_min,
+              (SELECT MAX(m.game_creation)
+                 FROM matches m
+                 JOIN match_participants p ON p.match_id = m.match_id
+                WHERE p.puuid = ?)                                              AS match_max`
+    )
+    .get(accountId, accountId, puuid, puuid) as unknown as {
+    snap_min: number | null
+    snap_max: number | null
+    match_min: number | null
+    match_max: number | null
+  }
+
+  const lows = [row.snap_min, row.match_min].filter((v): v is number => v !== null)
+  const highs = [row.snap_max, row.match_max].filter((v): v is number => v !== null)
+  if (lows.length === 0 || highs.length === 0) return null
+
+  return { oldestMs: Math.min(...lows), newestMs: Math.max(...highs) }
 }
 
 export interface MatchRankInput {

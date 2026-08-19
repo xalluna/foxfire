@@ -12,6 +12,10 @@ Games can now record themselves. With OBS installed, LoL Stats captures each gam
 and marks the seek bar with your kills, deaths and multikills — so finding the fight you threw is
 two clicks rather than a scrub hunt through half an hour of footage.
 
+This release also teaches the app what a ranked season is — you tell it when each one started, in
+Settings — so that when January resets everyone's rank the climb you spent a year on stays readable
+instead of turning into one long cliff.
+
 ### Added
 
 - Game capture, driven through OBS. Turn it on in Settings, pick the queues worth recording, and
@@ -47,12 +51,42 @@ two clicks rather than a scrub hunt through half an hour of footage.
   see while playing.
 - An advisory disk warning you set yourself. Nothing is ever deleted automatically; crossing the
   number shows a warning with a one-click clear-out of the oldest games.
+- A season picker on the Rank and Champions screens. Rank sits it beside the 7- and 30-day ranges,
+  Champions beside the queue filter, and both open on the most recent season you have games in.
+  Champion win rates have until now blended every season you have ever played into one figure, so
+  a champion you gave up on two seasons ago was still dragging on the number.
+- Ranked seasons are set in Settings, because Riot offers no way to ask when one started. Each
+  season is a name and a start date, runs until the next one begins, and the newest never ends — so
+  nothing breaks if you add January a few weeks late, and a preseason that drags into February is a
+  row you add rather than a date the app got wrong. It ships knowing when the 2026 season opened.
+- A **Rank was reset** tick on each season, for the seasons where the ladder was actually emptied
+  and you played placements. That is what keeps the reset from being recorded as a game that cost
+  you two thousand LP, and it is separate from the season boundary on purpose: rank carries into a
+  preseason, so a game either side of one still earned its LP.
+- The Rank screen's "All" now draws each season as its own line. January empties the ladder rather
+  than demoting anybody, so a line drawn straight through the reset would show a fall that never
+  happened, and the net LP figure is left off entirely on a view that spans one.
 
 ### Changed
 
 - Recording starts when the game itself comes up rather than when the client says a game began.
   The client reports a game at the loading screen, minutes early, and starting there records a
   black screen OBS has no window to capture yet.
+- Settings folds. Every section is collapsed by default and each one reports the fact worth
+  knowing while it is shut — whether a key is saved, whether recording is on, how many seasons are
+  set — so the page is a list of what exists rather than a scroll through all of it. The Riot key
+  says so in amber when it is missing, since nothing else works without one.
+
+### Fixed
+
+- January's rank reset can no longer be recorded as a game that lost you two thousand LP. LP is
+  worked out from the gap between two rank readings, and the gap spanning New Year holds the whole
+  height of your rank; if a single ranked game happened to sit in it, that game was handed the lot.
+  It would also have come back on every launch, because the repair pass that rebuilds LP runs over
+  all of history each time. Two readings either side of a season marked as having reset the ladder
+  are now never compared.
+- A reset no longer appears in the milestone list as a demotion — "Demoted to Bronze IV" every
+  January, for the rest of the account's life.
 
 ### Under the hood
 
@@ -83,6 +117,27 @@ two clicks rather than a scrub hunt through half an hour of footage.
   and the timeline's marker clustering are all pure modules with tests. None of their interesting
   cases — a dodge, a loading screen that never ends, a game that crashes mid-recording, two games
   finishing minutes apart — can be produced on demand by playing League.
+- Season boundaries are hand-entered rather than derived. Riot publishes no way to ask which season
+  is current — the static season list stopped updating in 2019, ranked entries carry no season
+  field, and the match API dropped the one it used to send. Deriving one from the calendar was
+  tried first and is wrong: 2026 opened on 8 January, so a hard 1 January cut misfiles a week of
+  games every year with nothing anyone can do about it. Migration 008 adds the table and seeds the
+  one date that could be verified.
+- Each reading is stamped with the season it falls in as it is read, so the chart knows where one
+  climb ends without holding a copy of the table and cannot draw before that table has loaded.
+- Season bounds are computed once in TypeScript and passed to SQL as parameters, never as a SQL
+  year expression. SQLite would resolve one in UTC while the app decides in local time, which would
+  put a New Year's Eve game in different seasons on the rank graph and the champions table.
+- The season pickers span an account's oldest and newest record rather than listing only the
+  seasons it has games in, so a season off from the game still appears between two played ones
+  rather than leaving a hole that reads as lost data. The oldest season reaches backwards forever
+  and the newest forwards, so no game can fall outside every season and a boundary nobody has
+  entered yet cannot cut the current one short.
+- The dev harness gains an earlier season ending the December before, plus a preseason between the
+  two, which is what makes any of this checkable before January: the picker has three entries, the
+  all-time chart has a boundary to break at, the reset has a game beside it to wrongly attribute,
+  and the preseason proves a carry-over boundary still attributes normally. It is additive — the
+  existing 301-game climb and the three exact invariants it rests on are untouched.
 
 ## [0.6.0] — 2026-08-17
 
