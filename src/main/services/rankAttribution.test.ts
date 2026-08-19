@@ -340,6 +340,62 @@ describe('replayAttribution', () => {
     expect(replayAttribution(db, ACCOUNT, ME, T0 + 5000)).toBe(0)
     expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toBe(null)
   })
+
+  /**
+   * The shape of a real incident: two ranked games in a row, each recorded as
+   * worth 0 LP when they were in fact worth -7 and +21.
+   *
+   * The cause was upstream of attribution — the watcher forced a snapshot the
+   * moment the game ended, and the client was still serving the pre-game rank —
+   * but these two tests are where the cost is visible, and they are why
+   * rankSettling exists. Positions are Platinum IV at 7, 0 and 21 LP.
+   */
+  describe('a reading taken before the client caught up', () => {
+    const LOSS = T0 + 1000
+    const WIN = T0 + 4000
+
+    function deltas(): Record<string, number | null | undefined> {
+      return Object.fromEntries(
+        getMatchSummaries(db, ME, 20, 0).map((m) => [m.matchId, m.rank?.lpDelta ?? null])
+      )
+    }
+
+    it('costs both games their LP when the stale reading is stored', () => {
+      insertMatch(db, match('NA1_LOSS', LOSS))
+      insertMatch(db, match('NA1_WIN', WIN))
+
+      storeSnapshot(7, T0, 1607)
+      // Forced as the loss ended, still reporting the rank it started with.
+      storeSnapshot(7, T0 + 2000, 1607)
+      storeSnapshot(0, T0 + 3000, 1600)
+      // And again as the win ended.
+      storeSnapshot(0, T0 + 5000, 1600)
+      storeSnapshot(21, T0 + 6000, 1621)
+
+      replayAttribution(db, ACCOUNT, ME)
+
+      // Each game is bracketed by two identical readings, so it measures as 0.
+      // The real movement lands in the interval that follows, which holds no
+      // game at all and is therefore thrown away — and because attribution is
+      // replayed from the snapshots on every launch, the 0 comes back however
+      // often it is cleared.
+      expect(deltas()).toEqual({ NA1_LOSS: 0, NA1_WIN: 0 })
+    })
+
+    it('attributes both games once the reading is left to settle', () => {
+      insertMatch(db, match('NA1_LOSS', LOSS))
+      insertMatch(db, match('NA1_WIN', WIN))
+
+      // The same polls, minus the two the watcher no longer forces early.
+      storeSnapshot(7, T0, 1607)
+      storeSnapshot(0, T0 + 3000, 1600)
+      storeSnapshot(21, T0 + 6000, 1621)
+
+      replayAttribution(db, ACCOUNT, ME)
+
+      expect(deltas()).toEqual({ NA1_LOSS: -7, NA1_WIN: 21 })
+    })
+  })
 })
 
 describe('the ladder reset', () => {

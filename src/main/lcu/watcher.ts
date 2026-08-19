@@ -9,10 +9,11 @@ import { schedulePostGameSync } from '../services/postGameSync'
 import { onGamePhase } from '../capture/captureService'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
-import { isRankedQueue, TRACKED_QUEUES } from '@shared/queues'
+import { queueTypeForQueueId, TRACKED_QUEUES } from '@shared/queues'
 import type { LcuStatus, QueueType } from '@shared/types'
 import { discoverLcu, type LcuCredentials } from './discovery'
 import { isGameEndTransition, isPlayingPhase } from './gameflow'
+import { isSettled, pendingReadingFor, type PendingRankReading } from './rankSettling'
 import { lcuGet } from './client'
 
 export const LCU_PATH_SETTING = 'lcu.installPath'
@@ -66,6 +67,14 @@ let currentQueueId: number | null = null
  * and is cleared the moment a game ends. This follows the phase itself.
  */
 let inGame = false
+
+/**
+ * The ladder a just-finished ranked game was played on, held until its LP
+ * reading stops moving. See rankSettling: the client serves the pre-game rank
+ * for a few seconds after a game ends, so the reading is given a window to
+ * settle before an unchanged one is taken at its word.
+ */
+let pendingReading: PendingRankReading | null = null
 
 interface CurrentSummoner {
   /**
@@ -209,24 +218,31 @@ async function tick(): Promise<void> {
     // Again with the fresh phase. setStatus ignores an unchanged value, so the
     // repeat costs nothing on the many ticks where nothing moved.
     setStatus({ ...connected, inGame })
-    const endedRanked = gameEnded && isRankedQueue(currentQueueId)
+    // Read before currentQueueId is cleared, and kept as the queue type rather
+    // than a bare "was ranked" flag: only the ladder that was actually played on
+    // is waited on, and forcing the other one writes a duplicate row that closes
+    // an interval nothing measured.
+    const endedQueueType = gameEnded ? queueTypeForQueueId(currentQueueId) : null
     if (gameEnded) currentQueueId = null
+    if (endedQueueType) pendingReading = pendingReadingFor(endedQueueType, Date.now())
 
     const stats = await lcuGet<RankedStats>(creds, '/lol-ranked/v1/current-ranked-stats')
     let moved = false
 
     for (const queue of stats.queues ?? []) {
-      if (!TRACKED_QUEUES.includes(queue.queueType as QueueType)) continue
+      const queueType = queue.queueType as QueueType
+      if (!TRACKED_QUEUES.includes(queueType)) continue
 
       const tier = normaliseRankField(queue.tier)
       // An unranked queue has no ladder position, so a snapshot of it would be
       // an unplottable row saying nothing. Recording starts at placement.
       if (!tier) continue
 
+      const now = Date.now()
       const recorded = recordRankSnapshot(
         account.id,
         {
-          queueType: queue.queueType as QueueType,
+          queueType,
           tier,
           rank: normaliseRankField(queue.division),
           leaguePoints: queue.leaguePoints,
@@ -234,12 +250,18 @@ async function tick(): Promise<void> {
           losses: queue.losses
         },
         'lcu',
-        Date.now(),
+        now,
         // A ranked game that moved no LP — a loss at 0 LP with demotion
         // protection — still has to close its interval, or the open one runs on
-        // and swallows the next game too, costing both their LP figure.
-        endedRanked
+        // and swallows the next game too, costing both their LP figure. Only
+        // once the reading has had time to settle, though; before that
+        // "unchanged" more often means the client has not caught up yet.
+        isSettled(pendingReading, queueType, now)
       )
+
+      // Whether the reading moved on its own or was forced once settled, the
+      // finished game's interval is now closed and nothing is left to wait for.
+      if (recorded && pendingReading?.queueType === queueType) pendingReading = null
       moved ||= recorded
     }
 
@@ -308,4 +330,5 @@ export function stopLcuWatcher(): void {
   lastPhase = null
   currentQueueId = null
   inGame = false
+  pendingReading = null
 }
