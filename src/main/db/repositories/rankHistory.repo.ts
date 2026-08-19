@@ -4,10 +4,11 @@ import type {
   QueueType,
   RankMilestone,
   RankSnapshot,
+  Season,
   SnapshotSource
 } from '@shared/types'
 import { ladderPosition, rankMovement } from '@shared/ladder'
-import { sameSeason } from '@shared/seasons'
+import { resetsBetween, seasonAt } from '@shared/seasons'
 
 interface SnapshotRow {
   queue_type: string
@@ -21,7 +22,7 @@ interface SnapshotRow {
   captured_at: number
 }
 
-function toSnapshot(row: SnapshotRow): RankSnapshot {
+function toSnapshot(row: SnapshotRow, seasons: Season[] = []): RankSnapshot {
   return {
     queueType: row.queue_type as QueueType,
     tier: row.tier,
@@ -31,7 +32,10 @@ function toSnapshot(row: SnapshotRow): RankSnapshot {
     losses: row.losses,
     ladderPosition: row.ladder_position,
     source: row.source as SnapshotSource,
-    capturedAt: row.captured_at
+    capturedAt: row.captured_at,
+    // Stamped here so the renderer never needs the season table to know where
+    // one climb ends and the next begins.
+    seasonId: seasonAt(seasons, row.captured_at)?.id ?? null
   }
 }
 
@@ -135,7 +139,8 @@ export function getRankSnapshots(
   accountId: number,
   queueType: QueueType,
   sinceMs: number | null = null,
-  untilMs: number | null = null
+  untilMs: number | null = null,
+  seasons: Season[] = []
 ): RankSnapshot[] {
   const rows = db
     .prepare(
@@ -149,7 +154,7 @@ export function getRankSnapshots(
     )
     .all(accountId, queueType, sinceMs, sinceMs, untilMs, untilMs) as unknown as SnapshotRow[]
 
-  return rows.map(toSnapshot)
+  return rows.map((row) => toSnapshot(row, seasons))
 }
 
 /**
@@ -159,23 +164,28 @@ export function getRankSnapshots(
  * adjacent snapshots, so recomputing it keeps one source of truth and means a
  * fix to the movement rules applies retroactively.
  *
- * A pair spanning a ranked year is skipped. January's reset drops a Diamond
+ * A pair spanning a ladder reset is skipped. January's reset drops a Diamond
  * player to Bronze, which rankMovement can only read as a demotion — but the
  * user was not demoted, the ladder was emptied, and listing it as a milestone
  * would be a lie the all-time range tells every year forever.
+ *
+ * Only a boundary that actually reset is skipped, not every season boundary: a
+ * preseason carries rank forward, and a genuine promotion across its start is
+ * still a promotion.
  */
 export function getRankMilestones(
   db: DatabaseSync,
   accountId: number,
   queueType: QueueType,
   sinceMs: number | null = null,
-  untilMs: number | null = null
+  untilMs: number | null = null,
+  seasons: Season[] = []
 ): RankMilestone[] {
-  const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs, untilMs)
+  const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs, untilMs, seasons)
   const milestones: RankMilestone[] = []
 
   for (let i = 1; i < snapshots.length; i++) {
-    if (!sameSeason(snapshots[i - 1].capturedAt, snapshots[i].capturedAt)) continue
+    if (resetsBetween(seasons, snapshots[i - 1].capturedAt, snapshots[i].capturedAt)) continue
     const movement = rankMovement(snapshots[i - 1], snapshots[i])
     if (movement === 'none') continue
     milestones.push({

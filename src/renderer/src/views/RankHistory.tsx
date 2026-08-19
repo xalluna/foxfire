@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { format } from 'date-fns'
 import type { Account, QueueType, RankRange } from '@shared/types'
-import { parseSeasonRange, sameSeason, seasonLabel, seasonOf, seasonRange } from '@shared/seasons'
+import { parseSeasonRange, seasonRange } from '@shared/seasons'
 import { EmptyState } from '../components/EmptyState'
 import { LcuIndicator } from '../components/LcuIndicator'
 import { RankChart } from '../components/RankChart'
@@ -50,29 +50,31 @@ export function RankHistory({ account }: { account: Account }): JSX.Element {
 
   const ranges: Array<[RankRange, string]> = [
     ...RELATIVE_RANGES,
-    ...(periods ?? []).map((year): [RankRange, string] => [seasonRange(year), seasonLabel(year)]),
+    ...(periods ?? []).map((s): [RankRange, string] => [seasonRange(s.id), s.label]),
     ['all', 'All']
   ]
 
   // Null for the relative windows and for All, which is what separates "the
-  // last 30 days happen to be empty" from "this ranked year has nothing in it".
-  const selectedSeason = parseSeasonRange(range)
-  const pastSeason = selectedSeason !== null && selectedSeason < seasonOf(Date.now())
+  // last 30 days happen to be empty" from "this season has nothing in it".
+  const selectedSeasonId = parseSeasonRange(range)
+  const selected = (periods ?? []).find((s) => s.id === selectedSeasonId) ?? null
+  // periods comes back newest first, so anything past the head has ended.
+  const pastSeason = selected !== null && (periods ?? [])[0]?.id !== selected.id
 
   const snapshots = data?.snapshots ?? []
   const milestones = data?.milestones ?? []
   const latest = snapshots[snapshots.length - 1]
   const first = snapshots[0]
 
-  // Only meaningful inside a single ranked year. Across a reset the gap between
-  // the two ends is not LP anyone won or lost — it is the reset itself — and
+  // Only meaningful inside a single season. Across a reset the gap between the
+  // two ends is not LP anyone won or lost — it is the reset itself — and
   // reporting it would be the same lie the chart avoids by breaking its line.
   const netLp =
     first &&
     latest &&
     first.ladderPosition !== null &&
     latest.ladderPosition !== null &&
-    sameSeason(first.capturedAt, latest.capturedAt)
+    first.seasonId === latest.seasonId
       ? latest.ladderPosition - first.ladderPosition
       : null
 
@@ -106,18 +108,18 @@ export function RankHistory({ account }: { account: Account }): JSX.Element {
           <EmptyState
             icon={<Icon.TrendingUp />}
             title={
-              selectedSeason === null
+              selected === null
                 ? 'Rank tracking starts now'
-                : `Nothing recorded in ${seasonLabel(selectedSeason)}`
+                : `Nothing recorded in ${selected.label}`
             }
             description={
               // Deliberately explicit about the limitation rather than looking
               // like a loading state that never resolves. A named year gets its
               // own wording: the general explanation reads as though the app is
               // broken when the user has simply picked a year it predates.
-              selectedSeason === null
+              selected === null
                 ? 'Riot does not publish past rank or per-game LP, so there is nothing to backfill. Play a ranked game with the League client open, or hit Sync, and points will start appearing here.'
-                : 'Rank history only covers the time this app has been tracking. Pick a more recent year to see the climb it did record.'
+                : 'Rank history only covers the time this app has been tracking. Pick a more recent season to see the climb it did record.'
             }
           />
         </div>

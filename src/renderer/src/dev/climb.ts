@@ -6,7 +6,7 @@ import type {
   RankSnapshot
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
-import { seasonOf } from '@shared/seasons'
+import { devSeasonIdAt } from './seasons'
 import {
   C,
   DAY,
@@ -362,7 +362,8 @@ function buildClimb(): {
       losses,
       ladderPosition: position,
       source: 'lcu',
-      capturedAt: at
+      capturedAt: at,
+      seasonId: devSeasonIdAt(at)
     }
   }
 
@@ -487,7 +488,7 @@ const PRIOR_POOL = shuffled(
  * around New Year when ranked queues are closed and nothing could be recorded.
  */
 function priorLastSession(): number {
-  const day = new Date(seasonOf(NOW) - 1, 11, 20)
+  const day = new Date(new Date(NOW).getFullYear() - 1, 11, 20)
   day.setHours(SESSION_START_HOUR, 0, 0, 0)
   return day.getTime()
 }
@@ -538,7 +539,8 @@ function buildPrior(): { matches: MatchSummary[]; snapshots: RankSnapshot[] } {
       losses,
       ladderPosition: position,
       source: 'lcu',
-      capturedAt: at
+      capturedAt: at,
+      seasonId: devSeasonIdAt(at)
     }
   }
 
@@ -588,6 +590,9 @@ if (priorFinish <= START) {
     `climb fixture: prior season finished at ${priorFinish}, which is not above the current season's start of ${START} — the reset would be invisible`
   )
 }
-if (seasonOf(prior.snapshots[prior.snapshots.length - 1].capturedAt) === seasonOf(NOW)) {
-  throw new Error('climb fixture: the prior season must land in an earlier ranked year')
+// Both halves must land in different seasons of DEV_SEASONS, or the picker has
+// one entry, the chart has nothing to break at, and the reset guard is never
+// exercised — which is the entire reason the earlier block exists.
+if (devSeasonIdAt(prior.snapshots[prior.snapshots.length - 1].capturedAt) === devSeasonIdAt(NOW)) {
+  throw new Error('climb fixture: the prior season must land in an earlier season than the current')
 }

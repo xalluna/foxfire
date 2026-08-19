@@ -20,6 +20,8 @@ import type {
   ReplayDetail,
   ReplayDiskUsage,
   Scoreboard,
+  Season,
+  SeasonInput,
   SyncProgressEvent,
   SyncState
 } from '@shared/types'
@@ -32,7 +34,8 @@ import type {
   TelemetrySummary
 } from '@shared/telemetry'
 import { rankMovement } from '@shared/ladder'
-import { rangeBounds, sameSeason, seasonOf, seasonsBetween } from '@shared/seasons'
+import { rangeBounds, resetsBetween, seasonsSpanning } from '@shared/seasons'
+import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
   REPLAYS,
@@ -318,6 +321,19 @@ export const mockApi: Api = {
     ): Promise<ChampionStats[]> => delay(championStatsFor(accountId, queueId, range), 300)
   },
 
+  // Editable in the harness so the Settings form can be designed against it,
+  // but held in memory: DEV_SEASONS is what every other mock reads, and
+  // rewriting it at runtime would desync the already-stamped fixture
+  // snapshots from the list the pickers are built from.
+  seasons: {
+    list: (): Promise<Season[]> => delay(DEV_SEASONS, 120),
+    save: (seasons: SeasonInput[]): Promise<Season[]> =>
+      delay(
+        seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i })),
+        200
+      )
+  },
+
   mastery: {
     get: (accountId: number, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
       delay(
@@ -332,7 +348,7 @@ export const mockApi: Api = {
 
   rank: {
     history: (accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
-      const { sinceMs, untilMs } = rangeBounds(range)
+      const { sinceMs, untilMs } = rangeBounds(range, DEV_SEASONS)
       const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
         (s) =>
           (sinceMs === null || s.capturedAt >= sinceMs) &&
@@ -342,9 +358,12 @@ export const mockApi: Api = {
       const milestones = snapshots
         .flatMap((snapshot, i) => {
           if (i === 0) return []
-          // Mirrors getRankMilestones: January's reset is not a demotion, so a
-          // pair spanning two ranked years yields nothing.
-          if (!sameSeason(snapshots[i - 1].capturedAt, snapshot.capturedAt)) return []
+          // Mirrors getRankMilestones: a reset is not a demotion. Keyed on the
+          // reset rather than the season boundary, so a promotion across a
+          // preseason — which carries rank forward — still counts.
+          if (resetsBetween(DEV_SEASONS, snapshots[i - 1].capturedAt, snapshot.capturedAt)) {
+            return []
+          }
           const movement = rankMovement(snapshots[i - 1], snapshot)
           if (movement === 'none') return []
           return [
@@ -362,15 +381,15 @@ export const mockApi: Api = {
       return delay({ snapshots, milestones }, 280)
     },
 
-    periods: (accountId: number): Promise<number[]> => {
+    periods: (accountId: number): Promise<Season[]> => {
       const times = [
         ...Object.values(RANK_SNAPSHOTS[accountId] ?? {}).flatMap((series) =>
           series.map((s) => s.capturedAt)
         ),
         ...(MATCHES[accountId] ?? []).map((m) => m.gameCreation)
       ]
-      if (times.length === 0) return delay([seasonOf(Date.now())], 120)
-      return delay(seasonsBetween(Math.min(...times), Math.max(...times)), 120)
+      if (times.length === 0) return delay(DEV_SEASONS.slice(-1), 120)
+      return delay(seasonsSpanning(DEV_SEASONS, Math.min(...times), Math.max(...times)), 120)
     },
 
     editable: (accountId: number, queueType: QueueType) =>

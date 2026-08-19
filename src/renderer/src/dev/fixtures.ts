@@ -15,6 +15,7 @@ import type {
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
 import { rangeBounds } from '@shared/seasons'
+import { devSeasonIdAt } from './seasons'
 import {
   C,
   DAY,
@@ -350,7 +351,8 @@ function buildSoloRankHistory(): {
       losses,
       ladderPosition: position,
       source: 'lcu',
-      capturedAt: at
+      capturedAt: at,
+      seasonId: devSeasonIdAt(at)
     }
   }
 
@@ -425,7 +427,8 @@ const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
     losses: 7,
     ladderPosition: ladderPosition(r),
     source: 'league_v4' as const,
-    capturedAt: NOW - (6 - i * 2) * DAY
+    capturedAt: NOW - (6 - i * 2) * DAY,
+    seasonId: devSeasonIdAt(NOW - (6 - i * 2) * DAY)
   }))
 }
 

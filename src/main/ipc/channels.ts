@@ -42,9 +42,15 @@ export const CH = {
   mastery: {
     get: 'mastery:get'
   },
+  // Hand-entered, because Riot exposes no way to ask which season is current
+  // and the calendar is not a stand-in for one. See migration 008.
+  seasons: {
+    list: 'seasons:list',
+    save: 'seasons:save'
+  },
   rank: {
     history: 'rank:history',
-    /** The ranked years this account has data for, for the period pickers. */
+    /** The seasons this account has data in, for the period pickers. */
     periods: 'rank:periods',
     // Hand-entered LP, for the games attribution cannot resolve on its own.
     editable: 'rank:editable',

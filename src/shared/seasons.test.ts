@@ -1,66 +1,122 @@
 import { describe, expect, it } from 'vitest'
+import type { Season } from './types'
 import {
   parseSeasonRange,
   rangeBounds,
-  sameSeason,
-  seasonBounds,
-  seasonLabel,
-  seasonOf,
+  resetsBetween,
+  seasonAt,
+  seasonBoundsOf,
   seasonRange,
-  seasonsBetween
+  seasonsSpanning
 } from './seasons'
 
-/** Local time throughout, matching how seasonBounds decides a boundary. */
+/** Local time throughout, matching how a hand-entered boundary is stored. */
 const at = (y: number, m: number, d: number, h = 12): number => new Date(y, m, d, h).getTime()
 
-describe('seasonOf', () => {
-  it('reports the calendar year a moment falls in', () => {
-    expect(seasonOf(at(2026, 7, 18))).toBe(2026)
-    expect(seasonOf(at(2025, 11, 31, 23))).toBe(2025)
+// The shape the whole feature turns on: two seasons that reset with a preseason
+// between them that does not.
+const S2025: Season = {
+  id: 1,
+  label: 'Season 2025',
+  startsAt: at(2025, 0, 9),
+  isPreseason: false,
+  resetsRank: true
+}
+const PRE2026: Season = {
+  id: 2,
+  label: 'Preseason 2026',
+  startsAt: at(2025, 11, 22),
+  isPreseason: true,
+  resetsRank: false
+}
+const S2026: Season = {
+  id: 3,
+  label: 'Season 2026',
+  startsAt: at(2026, 0, 8),
+  isPreseason: false,
+  resetsRank: true
+}
+const SEASONS = [S2025, PRE2026, S2026]
+
+describe('seasonAt', () => {
+  it('finds the season a moment falls inside', () => {
+    expect(seasonAt(SEASONS, at(2025, 5, 1))?.id).toBe(S2025.id)
+    expect(seasonAt(SEASONS, at(2025, 11, 28))?.id).toBe(PRE2026.id)
+    expect(seasonAt(SEASONS, at(2026, 7, 18))?.id).toBe(S2026.id)
   })
 
-  it('turns over exactly at local midnight on January 1', () => {
-    const boundary = new Date(2027, 0, 1).getTime()
-    expect(seasonOf(boundary - 1)).toBe(2026)
-    expect(seasonOf(boundary)).toBe(2027)
+  it('takes effect exactly at the boundary instant', () => {
+    expect(seasonAt(SEASONS, S2026.startsAt)?.id).toBe(S2026.id)
+    expect(seasonAt(SEASONS, S2026.startsAt - 1)?.id).toBe(PRE2026.id)
+  })
+
+  it('reaches backwards forever, so nothing older is stranded', () => {
+    // Predates every recorded boundary. Returning null would drop the game out
+    // of every period view, which reads as a sync bug rather than as history.
+    expect(seasonAt(SEASONS, at(2019, 3, 1))?.id).toBe(S2025.id)
+  })
+
+  it('reaches forwards forever, so a boundary nobody has entered cannot cut the season short', () => {
+    expect(seasonAt(SEASONS, at(2031, 5, 1))?.id).toBe(S2026.id)
+  })
+
+  it('has no answer when nothing is recorded', () => {
+    expect(seasonAt([], at(2026, 5, 1))).toBeNull()
   })
 })
 
-describe('seasonBounds', () => {
-  it('is half-open, so adjacent years tile without overlapping', () => {
-    const y2026 = seasonBounds(2026)
-    const y2027 = seasonBounds(2027)
-    expect(y2026.endMs).toBe(y2027.startMs)
+describe('seasonBoundsOf', () => {
+  it('leaves the oldest season open below and the newest open above', () => {
+    expect(seasonBoundsOf(SEASONS, S2025.id)).toEqual({ startMs: null, endMs: PRE2026.startsAt })
+    expect(seasonBoundsOf(SEASONS, S2026.id)).toEqual({ startMs: S2026.startsAt, endMs: null })
   })
 
-  it('places the instant of the boundary in the later year', () => {
-    const { startMs, endMs } = seasonBounds(2026)
-    expect(seasonOf(startMs)).toBe(2026)
-    expect(seasonOf(endMs)).toBe(2027)
-    expect(seasonOf(endMs - 1)).toBe(2026)
+  it('bounds a middle season at both ends, tiling with its neighbours', () => {
+    expect(seasonBoundsOf(SEASONS, PRE2026.id)).toEqual({
+      startMs: PRE2026.startsAt,
+      endMs: S2026.startsAt
+    })
+  })
+
+  it('returns null for a season that is not in the list', () => {
+    expect(seasonBoundsOf(SEASONS, 999)).toBeNull()
   })
 })
 
-describe('sameSeason', () => {
-  it('separates December from the January after it', () => {
-    expect(sameSeason(at(2026, 11, 31), at(2027, 0, 8))).toBe(false)
+describe('resetsBetween', () => {
+  it('fires across a boundary that reset the ladder', () => {
+    expect(resetsBetween(SEASONS, at(2025, 11, 30), at(2026, 0, 12))).toBe(true)
   })
 
-  it('holds across the whole of one year, including Riot split boundaries', () => {
-    // Riot's own Season 2 to Season 3 change lands in July and resets nothing,
-    // so it must not read as a period boundary here.
-    expect(sameSeason(at(2026, 6, 28), at(2026, 6, 29))).toBe(true)
-    expect(sameSeason(at(2026, 0, 1), at(2026, 11, 31))).toBe(true)
+  it('does not fire across a boundary that carried rank forward', () => {
+    // Season 2025 into its preseason. This is the whole reason the flag exists
+    // separately from the boundary: a game here still earned its LP.
+    expect(resetsBetween(SEASONS, at(2025, 11, 20), at(2025, 11, 24))).toBe(false)
+  })
+
+  it('does not fire inside one season', () => {
+    expect(resetsBetween(SEASONS, at(2026, 2, 1), at(2026, 2, 2))).toBe(false)
+  })
+
+  it('is exclusive below and inclusive above, matching how snapshot pairs are read', () => {
+    expect(resetsBetween(SEASONS, S2026.startsAt, S2026.startsAt + 1000)).toBe(false)
+    expect(resetsBetween(SEASONS, S2026.startsAt - 1000, S2026.startsAt)).toBe(true)
+  })
+
+  it('cannot fire with nothing recorded', () => {
+    // The cost of hand-entered boundaries: with no seasons there is no reset to
+    // know about, so the guard cannot protect anything.
+    expect(resetsBetween([], at(2025, 11, 30), at(2026, 0, 12))).toBe(false)
   })
 })
 
 describe('season range encoding', () => {
-  it('round-trips a year', () => {
-    expect(parseSeasonRange(seasonRange(2026))).toBe(2026)
+  it('round-trips an id', () => {
+    expect(parseSeasonRange(seasonRange(12))).toBe(12)
   })
 
-  it('encodes with a prefix so it cannot collide with a relative range', () => {
-    expect(seasonRange(2026)).toBe('season:2026')
+  it('prefixes, so it cannot collide with a relative range', () => {
+    expect(seasonRange(12)).toBe('season:12')
   })
 
   it('returns null for the relative ranges', () => {
@@ -69,12 +125,9 @@ describe('season range encoding', () => {
     expect(parseSeasonRange('all')).toBeNull()
   })
 
-  it('rejects a malformed period rather than reading it as year zero', () => {
-    // Number('') is 0 and Number.isInteger(0) is true, so a bare prefix would
-    // parse as a real year under a looser check.
+  it('rejects a malformed period rather than reading it as id zero', () => {
     expect(parseSeasonRange('season:' as never)).toBeNull()
     expect(parseSeasonRange('season:abc' as never)).toBeNull()
-    expect(parseSeasonRange('season:20260' as never)).toBeNull()
   })
 })
 
@@ -82,41 +135,51 @@ describe('rangeBounds', () => {
   const NOW = at(2026, 7, 18)
 
   it('leaves both ends open for all-time', () => {
-    expect(rangeBounds('all', NOW)).toEqual({ sinceMs: null, untilMs: null })
+    expect(rangeBounds('all', SEASONS, NOW)).toEqual({ sinceMs: null, untilMs: null })
   })
 
   it('gives the relative ranges a start but no end', () => {
-    expect(rangeBounds('7d', NOW)).toEqual({ sinceMs: NOW - 7 * 86_400_000, untilMs: null })
-    expect(rangeBounds('30d', NOW)).toEqual({ sinceMs: NOW - 30 * 86_400_000, untilMs: null })
+    expect(rangeBounds('7d', SEASONS, NOW)).toEqual({
+      sinceMs: NOW - 7 * 86_400_000,
+      untilMs: null
+    })
   })
 
-  it('bounds a period at both ends', () => {
-    const { startMs, endMs } = seasonBounds(2025)
-    expect(rangeBounds(seasonRange(2025), NOW)).toEqual({ sinceMs: startMs, untilMs: endMs })
+  it('bounds a middle season at both ends', () => {
+    expect(rangeBounds(seasonRange(PRE2026.id), SEASONS, NOW)).toEqual({
+      sinceMs: PRE2026.startsAt,
+      untilMs: S2026.startsAt
+    })
   })
 
-  it('falls back to all-time on an unparseable range rather than showing nothing', () => {
-    expect(rangeBounds('season:oops' as never, NOW)).toEqual({ sinceMs: null, untilMs: null })
+  it('shows everything for a season since deleted, rather than an empty screen', () => {
+    expect(rangeBounds(seasonRange(999), SEASONS, NOW)).toEqual({ sinceMs: null, untilMs: null })
   })
 })
 
-describe('seasonsBetween', () => {
+describe('seasonsSpanning', () => {
   it('lists newest first', () => {
-    expect(seasonsBetween(at(2024, 2, 1), at(2026, 7, 1))).toEqual([2026, 2025, 2024])
+    expect(seasonsSpanning(SEASONS, at(2025, 5, 1), at(2026, 5, 1)).map((s) => s.id)).toEqual([
+      S2026.id,
+      PRE2026.id,
+      S2025.id
+    ])
   })
 
-  it('returns the single year a span sits inside', () => {
-    expect(seasonsBetween(at(2026, 0, 2), at(2026, 11, 30))).toEqual([2026])
+  it('keeps a season with no games rather than leaving a hole in the picker', () => {
+    // Nothing was played during the preseason, but omitting it would read as
+    // lost data between two seasons that do have games.
+    const span = seasonsSpanning(SEASONS, at(2025, 5, 1), at(2026, 5, 1))
+    expect(span.map((s) => s.label)).toContain('Preseason 2026')
   })
 
-  it('keeps a year with no games rather than leaving a hole in the picker', () => {
-    // 2025 has nothing in it, but omitting it would read as data loss.
-    expect(seasonsBetween(at(2024, 5, 1), at(2026, 5, 1))).toEqual([2026, 2025, 2024])
+  it('returns the single season a short span sits inside', () => {
+    expect(seasonsSpanning(SEASONS, at(2026, 2, 1), at(2026, 6, 1)).map((s) => s.id)).toEqual([
+      S2026.id
+    ])
   })
-})
 
-describe('seasonLabel', () => {
-  it('names the year the way the picker shows it', () => {
-    expect(seasonLabel(2026)).toBe('Season 2026')
+  it('is empty when nothing is recorded', () => {
+    expect(seasonsSpanning([], at(2026, 2, 1), at(2026, 6, 1))).toEqual([])
   })
 })

@@ -9,6 +9,7 @@ import type {
   RankSnapshot
 } from '@shared/types'
 import { MATCHES, RANK_SNAPSHOTS } from './fixtures'
+import { devSeasonIdAt } from './seasons'
 
 /**
  * A working LP editor for the browser harness.
@@ -115,7 +116,8 @@ function toSnapshot(queueType: QueueType, rank: ManualRank, capturedAt: number):
     losses: null,
     ladderPosition: ladderPosition(rank),
     source: 'manual',
-    capturedAt
+    capturedAt,
+    seasonId: devSeasonIdAt(capturedAt)
   }
 }
 

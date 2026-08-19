@@ -13,8 +13,8 @@ import {
 import { getMatchSummaries, insertMatch } from './matches.repo'
 import { getAccountByRiotId } from './accounts.repo'
 import { applyAllMigrations } from '../testMigrations'
-import { seasonBounds } from '@shared/seasons'
 import type { MatchDto } from '../../riot/types'
+import type { Season } from '@shared/types'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -25,6 +25,29 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 const ME = 'puuid-me'
 const SOLO = 'RANKED_SOLO_5x5' as const
 const T0 = 1_700_000_000_000
+
+// Two hand-entered boundaries as local instants. Only the second resets, so a
+// pair spanning the first must still report its promotion.
+const PRESEASON_2027 = new Date(2026, 11, 22).getTime()
+const SEASON_2027 = new Date(2027, 0, 8).getTime()
+
+const SEASONS: Season[] = [
+  {
+    id: 1,
+    label: 'Season 2026',
+    startsAt: new Date(2026, 0, 8).getTime(),
+    isPreseason: false,
+    resetsRank: true
+  },
+  {
+    id: 2,
+    label: 'Preseason 2027',
+    startsAt: PRESEASON_2027,
+    isPreseason: true,
+    resetsRank: false
+  },
+  { id: 3, label: 'Season 2027', startsAt: SEASON_2027, isPreseason: false, resetsRank: true }
+]
 
 function gold(division: string, lp: number) {
   return { queueType: SOLO, tier: 'GOLD', rank: division, leaguePoints: lp, wins: 10, losses: 8 }
@@ -212,11 +235,11 @@ describe('getRankMilestones', () => {
     expect(getRankMilestones(db, accountId, SOLO)).toEqual([])
   })
 
-  // Local time, matching how seasonBounds decides which year a moment is in.
+  // Local time, matching how a hand-entered boundary is stored.
   const DEC = new Date(2026, 11, 28, 20).getTime()
   const JAN = new Date(2027, 0, 8, 14).getTime()
 
-  it('does not report the annual reset as a demotion', () => {
+  it('does not report a ladder reset as a demotion', () => {
     insertRankSnapshot(
       db,
       accountId,
@@ -234,14 +257,27 @@ describe('getRankMilestones', () => {
 
     // Unguarded this is a five-tier fall and the all-time view would announce
     // "Demoted to Bronze IV" every January for the rest of the account's life.
-    expect(getRankMilestones(db, accountId, SOLO)).toEqual([])
+    expect(getRankMilestones(db, accountId, SOLO, null, null, SEASONS)).toEqual([])
   })
 
-  it('still reports a real demotion inside one ranked year', () => {
+  it('still reports a real demotion inside one season', () => {
     insertRankSnapshot(db, accountId, gold('II', 8), 'lcu', DEC)
     insertRankSnapshot(db, accountId, gold('III', 88), 'lcu', DEC + 1000)
 
-    expect(getRankMilestones(db, accountId, SOLO).map((m) => m.movement)).toEqual(['demotion'])
+    expect(
+      getRankMilestones(db, accountId, SOLO, null, null, SEASONS).map((m) => m.movement)
+    ).toEqual(['demotion'])
+  })
+
+  it('still reports a promotion across a boundary that carried rank forward', () => {
+    // Into the preseason. A real period boundary, but nothing was reset, so the
+    // promotion over it is a promotion the player earned.
+    insertRankSnapshot(db, accountId, gold('III', 90), 'lcu', PRESEASON_2027 - 1000)
+    insertRankSnapshot(db, accountId, gold('II', 8), 'lcu', PRESEASON_2027 + 1000)
+
+    expect(
+      getRankMilestones(db, accountId, SOLO, null, null, SEASONS).map((m) => m.movement)
+    ).toEqual(['promotion'])
   })
 
   it('bounds a period above as well as below', () => {
@@ -250,11 +286,13 @@ describe('getRankMilestones', () => {
     insertRankSnapshot(db, accountId, gold('I', 12), 'lcu', JAN + 1000)
     insertRankSnapshot(db, accountId, gold('I', 90), 'lcu', JAN + 2000)
 
-    const y2026 = seasonBounds(2026)
+    // Everything up to the 2027 season: the two December readings, not the two
+    // January ones on the far side of the reset.
+    const y2026 = { startMs: null, endMs: SEASON_2027 }
     expect(getRankSnapshots(db, accountId, SOLO, y2026.startMs, y2026.endMs)).toHaveLength(2)
     // The promotion into Gold I happened in 2027 and must not leak backwards.
     expect(
-      getRankMilestones(db, accountId, SOLO, y2026.startMs, y2026.endMs).map((m) => m.rank)
+      getRankMilestones(db, accountId, SOLO, y2026.startMs, y2026.endMs, SEASONS).map((m) => m.rank)
     ).toEqual(['II'])
   })
 })

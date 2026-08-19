@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
+import { SeasonSettings } from '../components/SeasonSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
 import * as Icon from '../components/icons'
 
@@ -113,6 +114,8 @@ export function Settings(): JSX.Element {
       </section>
 
       <RankTrackingSettings />
+
+      <SeasonSettings />
 
       <CaptureSettings />
 

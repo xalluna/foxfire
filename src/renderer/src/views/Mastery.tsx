@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { Account, ChampionStats, RankRange } from '@shared/types'
 import { queueFilterLabel } from '@shared/queues'
-import { parseSeasonRange, seasonLabel, seasonRange } from '@shared/seasons'
+import { parseSeasonRange, seasonRange } from '@shared/seasons'
 import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName } from '../lib/assets'
 import { formatPercent, kdaRatio, perMinute } from '../lib/matchStats'
@@ -149,11 +149,12 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
   // January, before the first game of the new one, last year is the only thing
   // worth opening on — and it is not known until the periods query lands.
   const [picked, setPicked] = useState<RankRange | null>(null)
-  const range: RankRange = picked ?? (periods?.[0] !== undefined ? seasonRange(periods[0]) : 'all')
-  const selectedSeason = parseSeasonRange(range)
+  const range: RankRange =
+    picked ?? (periods?.[0] !== undefined ? seasonRange(periods[0].id) : 'all')
+  const selectedSeason = (periods ?? []).find((s) => s.id === parseSeasonRange(range)) ?? null
 
   const rangeOptions: Array<[RankRange, string]> = [
-    ...(periods ?? []).map((year): [RankRange, string] => [seasonRange(year), seasonLabel(year)]),
+    ...(periods ?? []).map((s): [RankRange, string] => [seasonRange(s.id), s.label]),
     ['all', 'All time']
   ]
 
@@ -227,7 +228,7 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
           <p className="mt-0.5 text-sm text-text-mute">
             From your {totalGames} synced {queueId === null ? '' : `${queueName} `}
             {totalGames === 1 ? 'game' : 'games'}
-            {selectedSeason === null ? ' across all time' : ` in ${seasonLabel(selectedSeason)}`}.
+            {selectedSeason === null ? ' across all time' : ` in ${selectedSeason.label}`}.
             Remakes excluded.
           </p>
         </div>
@@ -267,7 +268,7 @@ export function Mastery({ account }: { account: Account }): JSX.Element {
             title={queueId === null ? 'No champions yet' : `No ${queueName} games found`}
             description={
               selectedSeason !== null
-                ? 'Nothing stored for this year. Pick another, or sync more of your match history.'
+                ? 'Nothing stored for this season. Pick another, or sync more of your match history.'
                 : queueId === null
                   ? 'Sync your match history to see which champions you play and how they do.'
                   : 'Try a different queue, or sync more of your match history.'

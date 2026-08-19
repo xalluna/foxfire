@@ -53,6 +53,10 @@ const api: Api = {
     stats: (accountId, queueId, range) =>
       ipcRenderer.invoke(CH.champions.stats, accountId, queueId, range)
   },
+  seasons: {
+    list: () => ipcRenderer.invoke(CH.seasons.list),
+    save: (seasons) => ipcRenderer.invoke(CH.seasons.save, seasons)
+  },
   mastery: {
     get: (accountId, refresh, queueId) =>
       ipcRenderer.invoke(CH.mastery.get, accountId, refresh, queueId)

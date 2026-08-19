@@ -23,6 +23,8 @@ import type {
   ReplayDiskUsage,
   RiotIdInput,
   Scoreboard,
+  Season,
+  SeasonInput,
   SyncProgressEvent,
   SyncState
 } from './types'
@@ -107,14 +109,22 @@ export interface Api {
       range: RankRange
     ) => Promise<ChampionStats[]>
   }
+  /**
+   * Ranked season boundaries, entered by hand — Riot exposes none, and the
+   * calendar is not a stand-in for one. Saving replaces the whole list.
+   */
+  seasons: {
+    list: () => Promise<Season[]>
+    save: (seasons: SeasonInput[]) => Promise<Season[]>
+  }
   mastery: {
     /** Win rates are scoped to `queueId`; Riot mastery is lifetime and never is. */
     get: (accountId: number, refresh: boolean, queueId: number | null) => Promise<MasteryData>
   }
   rank: {
     history: (accountId: number, queueType: QueueType, range: RankRange) => Promise<RankHistory>
-    /** Ranked years with data, newest first. The first is what the pickers open on. */
-    periods: (accountId: number) => Promise<number[]>
+    /** Seasons with data, newest first. The first is what the pickers open on. */
+    periods: (accountId: number) => Promise<Season[]>
     /** Ranked games with no LP figure — everything the editor can offer. */
     editable: (accountId: number, queueType: QueueType) => Promise<EditableMatch[]>
     /**

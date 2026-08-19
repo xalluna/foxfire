@@ -3,7 +3,6 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getChampionStats, getMatchSummaries, insertMatch } from './matches.repo'
 import { applyAllMigrations, migrationNames, migrationSql } from '../testMigrations'
-import { seasonBounds } from '@shared/seasons'
 import type { MatchDto } from '../../riot/types'
 
 // Loaded through require rather than a static import: Vite strips the `node:`
@@ -15,6 +14,11 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 }
 
 const ME = 'puuid-me'
+
+// Two hand-entered boundaries, as local instants — the units getChampionStats
+// takes. Riot opened 2026 on 8 January; 2027 is a stand-in for the next one.
+const SEASON_2026 = new Date(2026, 0, 8).getTime()
+const SEASON_2027 = new Date(2027, 0, 8).getTime()
 
 function participant(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -349,11 +353,13 @@ describe('getChampionStats', () => {
     expect(getChampionStats(db, ME, 420)).toEqual([])
   })
 
-  it('scopes the aggregate to a ranked year', () => {
+  it('scopes the aggregate to a season', () => {
     // The same champion across a January reset. Unfiltered this blends both
-    // years into one win rate, which is what made the number untrustworthy.
-    const y2026 = seasonBounds(2026)
-    const y2027 = seasonBounds(2027)
+    // seasons into one win rate, which is what made the number untrustworthy.
+    // Plain instants rather than a season lookup: this function only ever sees
+    // the bounds, never the table they came from.
+    const y2026 = { startMs: SEASON_2026, endMs: SEASON_2027 }
+    const y2027 = { startMs: SEASON_2027, endMs: null }
     const dec = new Date(2026, 11, 28).getTime()
     const jan = new Date(2027, 0, 12).getTime()
 
@@ -381,17 +387,13 @@ describe('getChampionStats', () => {
     })
   })
 
-  it('excludes a game landing exactly on the year boundary from the year ending there', () => {
-    // The bound is half-open, so midnight belongs to the year it opens.
-    const y2027 = seasonBounds(2027)
-    insertMatch(
-      db,
-      match('NA1_1', [participant({ puuid: ME })], 420, 1669, y2027.startMs)
-    )
+  it('excludes a game landing exactly on the boundary from the season ending there', () => {
+    // The bound is half-open, so the boundary instant belongs to the season it
+    // opens rather than the one it closes.
+    insertMatch(db, match('NA1_1', [participant({ puuid: ME })], 420, 1669, SEASON_2027))
 
-    const y2026 = seasonBounds(2026)
-    expect(getChampionStats(db, ME, null, y2026.startMs, y2026.endMs)).toEqual([])
-    expect(getChampionStats(db, ME, null, y2027.startMs, y2027.endMs)).toHaveLength(1)
+    expect(getChampionStats(db, ME, null, SEASON_2026, SEASON_2027)).toEqual([])
+    expect(getChampionStats(db, ME, null, SEASON_2027, null)).toHaveLength(1)
   })
 
   it('excludes remakes from every column, not just games and wins', () => {

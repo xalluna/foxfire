@@ -6,7 +6,7 @@ import { getMatchSummaries, insertMatch } from '../db/repositories/matches.repo'
 import { insertRankSnapshot } from '../db/repositories/rankHistory.repo'
 import { applyAllMigrations } from '../db/testMigrations'
 import type { MatchDto } from '../riot/types'
-import type { RankSnapshot } from '@shared/types'
+import type { RankSnapshot, Season } from '@shared/types'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -18,6 +18,35 @@ const ME = 'puuid-me'
 const SOLO = 'RANKED_SOLO_5x5' as const
 const T0 = 1_700_000_000_000
 const ACCOUNT = 1
+
+/**
+ * Season 2026 as migration 008 seeds it, then a preseason that carries rank
+ * forward and a 2027 season that resets. The middle row is the one that proves
+ * the guard keys on the reset and not on the boundary.
+ */
+const SEASONS: Season[] = [
+  {
+    id: 1,
+    label: 'Season 2026',
+    startsAt: new Date(2026, 0, 8).getTime(),
+    isPreseason: false,
+    resetsRank: true
+  },
+  {
+    id: 2,
+    label: 'Preseason 2027',
+    startsAt: new Date(2026, 11, 22).getTime(),
+    isPreseason: true,
+    resetsRank: false
+  },
+  {
+    id: 3,
+    label: 'Season 2027',
+    startsAt: new Date(2027, 0, 8).getTime(),
+    isPreseason: false,
+    resetsRank: true
+  }
+]
 
 function snapshot(
   tier: string,
@@ -35,7 +64,8 @@ function snapshot(
     losses: 8,
     ladderPosition,
     source: 'lcu',
-    capturedAt
+    capturedAt,
+    seasonId: null
   }
 }
 
@@ -312,7 +342,7 @@ describe('replayAttribution', () => {
   })
 })
 
-describe('the ranked-year boundary', () => {
+describe('the ladder reset', () => {
   let db: DatabaseSyncType
 
   beforeEach(() => {
@@ -323,10 +353,16 @@ describe('the ranked-year boundary', () => {
       'Alluna',
       'NA1'
     )
+    // Migration 008 seeds Season 2026 only; the boundary under test is the one
+    // after it. replayAttribution reads these back out of the database.
+    for (const s of SEASONS.slice(1)) {
+      db.prepare(
+        'INSERT INTO seasons (id, label, starts_at, is_preseason, resets_rank) VALUES (?, ?, ?, ?, ?)'
+      ).run(s.id, s.label, s.startsAt, s.isPreseason ? 1 : 0, s.resetsRank ? 1 : 0)
+    }
   })
 
-  // Local time, because that is how seasonBounds decides which year a moment
-  // belongs to — a UTC literal would land on the wrong side west of Greenwich.
+  // Local time, matching how a hand-entered boundary is stored.
   const DEC = new Date(2026, 11, 28, 20).getTime()
   const JAN = new Date(2027, 0, 8, 14).getTime()
 
@@ -347,7 +383,8 @@ describe('the ranked-year boundary', () => {
       ME,
       SOLO,
       snapshot('EMERALD', 'II', 20, DEC, EMERALD_II),
-      snapshot('BRONZE', 'IV', 0, JAN, BRONZE_IV)
+      snapshot('BRONZE', 'IV', 0, JAN, BRONZE_IV),
+      SEASONS
     )
 
     expect(wrote).toBe(false)
@@ -366,7 +403,30 @@ describe('the ranked-year boundary', () => {
       ME,
       SOLO,
       snapshot('EMERALD', 'II', 20, DEC, EMERALD_II),
-      snapshot('EMERALD', 'II', 41, DEC + 1000, EMERALD_II + 21)
+      snapshot('EMERALD', 'II', 41, DEC + 1000, EMERALD_II + 21),
+      SEASONS
+    )
+
+    expect(wrote).toBe(true)
+    expect(getMatchSummaries(db, ME, 20, 0)[0].rank).toMatchObject({ lpDelta: 21 })
+  })
+
+  it('still attributes across a boundary that carried rank forward', () => {
+    // Into the preseason: a real period boundary, but the ladder was not
+    // emptied, so the game between these two readings earned its LP and must
+    // keep it. Suppressing here would be a silent false negative.
+    const before = new Date(2026, 11, 20, 20).getTime()
+    const after = new Date(2026, 11, 24, 20).getTime()
+    insertMatch(db, match('NA1_1', before + 1000))
+
+    const wrote = attributeInterval(
+      db,
+      ACCOUNT,
+      ME,
+      SOLO,
+      snapshot('EMERALD', 'II', 20, before, EMERALD_II),
+      snapshot('EMERALD', 'II', 41, after, EMERALD_II + 21),
+      SEASONS
     )
 
     expect(wrote).toBe(true)

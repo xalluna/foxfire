@@ -2,7 +2,6 @@ import { useId, useState } from 'react'
 import { format } from 'date-fns'
 import type { RankSnapshot } from '@shared/types'
 import { tierBandBoundaries } from '@shared/ladder'
-import { sameSeason } from '@shared/seasons'
 import { roundedPath } from '../lib/curve'
 import { tierColor, tierLabel } from '../lib/rank'
 
@@ -56,15 +55,21 @@ export function RankChart({ snapshots }: { snapshots: RankSnapshot[] }): JSX.Ele
   const x = (t: number): number => PAD.left + ((t - tMin) / tSpan) * PLOT_W
   const y = (p: number): number => PAD.top + (1 - (p - yMin) / (yMax - yMin || 1)) * PLOT_H
 
-  // One path per ranked year rather than one for the whole series. Drawn
-  // straight through, January's reset puts a two-thousand-point vertical drop
-  // across the middle of the chart and reads as a collapse the player never
-  // suffered — the ladder was emptied, not lost. Breaking the line says the
-  // true thing: these are separate climbs that cannot be compared by eye.
+  // One path per season rather than one for the whole series. Drawn straight
+  // through, an annual reset puts a two-thousand-point vertical drop across the
+  // middle of the chart and reads as a collapse the player never suffered — the
+  // ladder was emptied, not lost. Breaking the line says the true thing: these
+  // are separate climbs that cannot be compared by eye.
+  //
+  // Split on the stamped seasonId, so the renderer needs no copy of the season
+  // table and cannot draw before one has loaded. A boundary that carried rank
+  // forward — a preseason — breaks the line too, but its two ends sit at nearly
+  // the same height, so it reads as the hairline gap between two periods rather
+  // than as a fall.
   const segments: RankSnapshot[][] = []
   for (const point of points) {
     const open = segments[segments.length - 1]
-    if (open && sameSeason(open[open.length - 1].capturedAt, point.capturedAt)) open.push(point)
+    if (open && open[open.length - 1].seasonId === point.seasonId) open.push(point)
     else segments.push([point])
   }
 
