@@ -1,10 +1,10 @@
 import { createRequire } from 'node:module'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createReplay, finishReplay, getReplay, markReplayUnmatched } from '../db/repositories/replays.repo'
-import { insertMatch } from '../db/repositories/matches.repo'
 import { applyAllMigrations } from '../db/testMigrations'
-import type { MatchDto } from '../riot/types'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -12,192 +12,181 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
   DatabaseSync: new (path: string) => DatabaseSyncType
 }
 
-// A real in-memory database behind getDb, so the binding pass runs against the
-// SQL that ships rather than a stubbed repository.
-const live = vi.hoisted(() => ({ db: null as unknown }))
-vi.mock('../db', () => ({ getDb: () => live.db }))
-
-vi.mock('../telemetry/logger', () => ({
-  createLogger: () => ({ info: () => {}, debug: () => {}, error: () => {} })
+// A real in-memory database behind getDb, so the ingest and the tombstone run
+// against the SQL that ships rather than a stubbed repository.
+const live = vi.hoisted(() => ({
+  db: null as unknown,
+  sourceFolder: '' as string,
+  destFolder: '' as string
 }))
 
-// Broadcasting a change and reading the replay folder are both beside the point
-// here, and both would pull Electron in.
+vi.mock('../db', () => ({ getDb: () => live.db }))
+vi.mock('../telemetry/logger', () => ({
+  createLogger: () => ({ info: () => {}, debug: () => {}, warn: () => {}, error: () => {} })
+}))
 vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
   shell: { showItemInFolder: () => {} }
 }))
-vi.mock('./captureSettings', () => ({ getCaptureSettings: () => ({ softCapBytes: 0 }) }))
+vi.mock('./roflSettings', () => ({
+  getRoflSettings: () => ({
+    enabled: true,
+    sourceFolder: live.sourceFolder,
+    resolvedSourceFolder: live.sourceFolder,
+    autoRecordEnabled: true,
+    folder: live.destFolder,
+    softCapBytes: 0
+  }),
+  defaultSourceFolder: () => live.sourceFolder
+}))
+// The live-client lookup shells out to PowerShell; none of that is the point here.
+vi.mock('./clientArchiveService', () => ({
+  resolveSourceFolder: (override: string | null) => Promise.resolve(override ?? live.sourceFolder),
+  resolveLiveClient: () => Promise.resolve({ path: 'C:\\live', patch: '16.16' })
+}))
 
-const { bindPendingReplays } = await import('./replayService')
+const { removeReplay, scanReplayFolder, listReplays } = await import('./replayService')
 
-const ME = 'puuid-me'
-const ACCOUNT = 1
-const T0 = 1_700_000_000_000
-const MINUTE = 60_000
-/** Seconds, as the schema stores it — 25 minutes. */
-const DURATION = 1500
-/** The ten champions on the scoreboard, in the order the live client listed them. */
-const ROSTER = [112, 64, 51, 412, 875, 1, 2, 3, 4, 5]
-/** Long enough after the recording that the give-up deadline has passed. */
-const LATER = T0 + DURATION * 1000 + 2 * 60 * MINUTE
-
-let db: DatabaseSyncType
-
-function participant(championId: number, index: number): unknown {
-  return {
-    puuid: index === 0 ? ME : `puuid-other-${index}`,
-    riotIdGameName: index === 0 ? 'Alluna' : `Other${index}`,
-    riotIdTagline: 'NA1',
-    teamId: index < 5 ? 100 : 200,
-    win: index < 5,
-    championId,
-    championName: `Champion${championId}`,
-    champLevel: 15,
-    kills: 7,
-    deaths: 2,
-    assists: 9,
-    goldEarned: 11_000,
-    totalMinionsKilled: 200,
-    neutralMinionsKilled: 43,
-    totalDamageDealtToChampions: 18_900,
-    totalDamageTaken: 20_100,
-    item0: 1056,
-    item1: 3157,
-    item2: 3100,
-    item3: 2503,
-    item4: 3067,
-    item5: 3363,
-    item6: 3009,
-    summoner1Id: 12,
-    summoner2Id: 4,
-    teamPosition: 'MIDDLE',
-    largestMultiKill: 2,
-    perks: { statPerks: {}, styles: [] }
-  }
+/**
+ * A .rofl the parser will accept: the magic, the offset table, and a metadata
+ * blob. Built rather than committed so the bytes under test are visible — see
+ * rofl/header.test.ts, which owns the parsing itself.
+ */
+function writeRofl(path: string, gameVersion = '16.16.804.9184'): void {
+  const blob = Buffer.from(
+    JSON.stringify({ gameLength: 1_834_000, gameVersion, statsJson: '[]' }),
+    'utf8'
+  )
+  const head = Buffer.alloc(288)
+  head.write('RIOT', 0, 'latin1')
+  head.writeUInt16LE(288, 262)
+  head.writeUInt32LE(288 + blob.length, 264)
+  head.writeUInt32LE(288, 268)
+  head.writeUInt32LE(blob.length, 272)
+  writeFileSync(path, Buffer.concat([head, blob]))
 }
 
-/** The match the recording above is of — same ten champions, same finish time. */
-function match(matchId: string, gameCreation = T0): MatchDto {
-  return {
-    metadata: { matchId, participants: [ME] },
-    info: {
-      gameCreation,
-      gameDuration: DURATION,
-      gameMode: 'CLASSIC',
-      gameType: 'MATCHED_GAME',
-      queueId: 420,
-      platformId: 'NA1',
-      participants: ROSTER.map(participant)
-    }
-  } as unknown as MatchDto
-}
-
-/** A recording that has stopped, which is what makes it a candidate for binding. */
-function finishedReplay(name = 'game'): number {
-  // Nothing here writes a file, so the path only has to be unique.
-  const path = `replay-${name}.mp4`
-  const id = createReplay(db, {
-    accountId: ACCOUNT,
-    filePath: path,
-    queueId: 420,
-    startedAt: T0,
-    gameTimeOffset: 42.5,
-    selfChampionId: ROSTER[0],
-    roster: ROSTER
-  })
-  finishReplay(db, id, T0 + DURATION * 1000, path, 1)
-  return id
-}
+let root: string
 
 beforeEach(() => {
-  db = new DatabaseSync(':memory:')
-  db.exec('PRAGMA foreign_keys = ON')
+  const db = new DatabaseSync(':memory:')
   applyAllMigrations(db)
-  db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
-    ME,
-    'Alluna',
-    'NA1'
-  )
   live.db = db
-  vi.useFakeTimers()
-  vi.setSystemTime(LATER)
+
+  root = mkdtempSync(join(tmpdir(), 'foxfire-rofl-'))
+  live.sourceFolder = join(root, 'riot')
+  live.destFolder = join(root, 'foxfire')
+  mkdirSync(live.sourceFolder, { recursive: true })
 })
 
 afterEach(() => {
-  vi.useRealTimers()
+  const db = live.db as DatabaseSyncType
+  db.close()
+  rmSync(root, { recursive: true, force: true })
 })
 
-describe('bindPendingReplays', () => {
-  it('gives a recording the match that arrived after it', () => {
-    const id = finishedReplay()
-    insertMatch(db, match('NA1_1'))
+describe('replay ingest', () => {
+  it('copies a replay and links it by filename alone', async () => {
+    writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'))
 
-    expect(bindPendingReplays(ACCOUNT)).toBe(1)
-    expect(getReplay(db, id)?.bindState).toBe('bound')
-    expect(getReplay(db, id)?.matchId).toBe('NA1_1')
+    expect(await scanReplayFolder()).toBe(1)
+
+    const replays = await listReplays(1)
+    expect(replays).toHaveLength(1)
+    expect(replays[0]?.matchId).toBe('NA1_5312345678')
+    // The patch is what decides which client can play it back.
+    expect(replays[0]?.patch).toBe('16.16')
+    // Riot's original is ours to read, never to move.
+    expect(existsSync(join(live.sourceFolder, 'NA1-5312345678.rofl'))).toBe(true)
+    expect(readdirSync(live.destFolder)).toEqual(['NA1-5312345678.rofl'])
   })
 
-  it('will not write a recording off on a pass that cannot vouch for the sync', () => {
-    // The stale-key case. The match is missing because nothing could be fetched,
-    // not because the game does not exist, and the recording is already hours
-    // past the give-up deadline by the time a new key is pasted in.
-    const id = finishedReplay()
+  it('does not import the same file twice', async () => {
+    writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'))
 
-    expect(bindPendingReplays(ACCOUNT)).toBe(0)
-    expect(getReplay(db, id)?.bindState).toBe('pending')
-
-    expect(bindPendingReplays(ACCOUNT, { allowGiveUp: false })).toBe(0)
-    expect(getReplay(db, id)?.bindState).toBe('pending')
+    expect(await scanReplayFolder()).toBe(1)
+    expect(await scanReplayFolder()).toBe(0)
+    expect(await listReplays(1)).toHaveLength(1)
   })
 
-  it('writes a recording off once a clean sync has looked and found nothing', () => {
-    const id = finishedReplay()
+  it('ingests a replay whose header cannot be read, keeping the name link', async () => {
+    // A format change must cost the patch, never the replay.
+    writeFileSync(join(live.sourceFolder, 'NA1-5312345679.rofl'), Buffer.from('RIOT garbage'))
 
-    expect(bindPendingReplays(ACCOUNT, { allowGiveUp: true })).toBe(0)
-    expect(getReplay(db, id)?.bindState).toBe('unmatched')
+    expect(await scanReplayFolder()).toBe(1)
+
+    const replays = await listReplays(1)
+    expect(replays[0]?.matchId).toBe('NA1_5312345679')
+    expect(replays[0]?.patch).toBeNull()
+    expect(replays[0]?.blockedReason).toMatch(/could not read/i)
   })
 
-  it('does not write off a recording that has not waited long enough yet', () => {
-    const id = finishedReplay()
-    vi.setSystemTime(T0 + DURATION * 1000 + MINUTE)
+  it('skips a file that is neither readable nor Riot-named', async () => {
+    // Stands in for a part-downloaded file: no header yet, no usable name.
+    writeFileSync(join(live.sourceFolder, 'half-written.rofl'), Buffer.from('RIOT'))
 
-    expect(bindPendingReplays(ACCOUNT, { allowGiveUp: true })).toBe(0)
-    expect(getReplay(db, id)?.bindState).toBe('pending')
+    expect(await scanReplayFolder()).toBe(0)
+    expect(await listReplays(1)).toHaveLength(0)
   })
 
-  it('picks a written-off recording back up when its match finally appears', () => {
-    // The recovery that used to be impossible: nothing ever read a row again
-    // once it had been marked unmatched.
-    const id = finishedReplay()
-    markReplayUnmatched(db, id)
+  it('ignores files that are not replays', async () => {
+    writeFileSync(join(live.sourceFolder, 'notes.txt'), 'nothing to see')
 
-    insertMatch(db, match('NA1_1'))
+    expect(await scanReplayFolder()).toBe(0)
+  })
+})
 
-    expect(bindPendingReplays(ACCOUNT)).toBe(1)
-    expect(getReplay(db, id)?.bindState).toBe('bound')
-    expect(getReplay(db, id)?.matchId).toBe('NA1_1')
+describe('replay deletion', () => {
+  it('deletes our copy and never Riot\u2019s', async () => {
+    const source = join(live.sourceFolder, 'NA1-5312345678.rofl')
+    writeRofl(source)
+    await scanReplayFolder()
+
+    const [replay] = await listReplays(1)
+    removeReplay(replay!.id)
+
+    expect(await listReplays(1)).toHaveLength(0)
+    expect(readdirSync(live.destFolder)).toEqual([])
+    expect(existsSync(source)).toBe(true)
   })
 
-  it('leaves a written-off recording alone once it has aged past the retry horizon', () => {
-    const id = finishedReplay()
-    markReplayUnmatched(db, id)
-    insertMatch(db, match('NA1_1'))
+  it('stays deleted when the folder is scanned again', async () => {
+    // The reason the row is a tombstone rather than a DELETE. Riot's original is
+    // still sitting there, so without it the next scan would import the file
+    // straight back and the delete button would undo itself.
+    writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'))
+    await scanReplayFolder()
 
-    // Two weeks on, a recording nothing has ever matched is a Practice Tool game.
-    vi.setSystemTime(T0 + 14 * 24 * 60 * MINUTE)
+    const [replay] = await listReplays(1)
+    removeReplay(replay!.id)
 
-    expect(bindPendingReplays(ACCOUNT)).toBe(0)
-    expect(getReplay(db, id)?.bindState).toBe('unmatched')
+    expect(await scanReplayFolder()).toBe(0)
+    expect(await listReplays(1)).toHaveLength(0)
+  })
+})
+
+describe('playability', () => {
+  it('is watchable on the live patch without any archive', async () => {
+    writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'), '16.16.804.9184')
+    await scanReplayFolder()
+
+    expect((await listReplays(1))[0]?.blockedReason).toBeNull()
   })
 
-  it('does not let two recordings claim the same game', () => {
-    const first = finishedReplay('first')
-    const second = finishedReplay('second')
-    insertMatch(db, match('NA1_1'))
+  it('names the patch it needs when nothing can play it', async () => {
+    writeRofl(join(live.sourceFolder, 'NA1-5312345600.rofl'), '15.14.600.4410')
+    await scanReplayFolder()
 
-    expect(bindPendingReplays(ACCOUNT)).toBe(1)
-    const states = [first, second].map((id) => getReplay(db, id)?.bindState)
-    expect(states.filter((state) => state === 'bound')).toHaveLength(1)
+    expect((await listReplays(1))[0]?.blockedReason).toBe('Needs a League client for patch 15.14')
+  })
+
+  it('becomes watchable once a matching archive is registered', async () => {
+    writeRofl(join(live.sourceFolder, 'NA1-5312345600.rofl'), '15.14.600.4410')
+    await scanReplayFolder()
+    ;(live.db as DatabaseSyncType)
+      .prepare("INSERT INTO client_archives (path, patch, patch_source) VALUES (?, '15.14', 'detected')")
+      .run('D:\\archives\\15.14')
+
+    expect((await listReplays(1))[0]?.blockedReason).toBeNull()
   })
 })

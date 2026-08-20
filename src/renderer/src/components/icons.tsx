@@ -216,7 +216,7 @@ export function Activity(props: IconProps): JSX.Element {
 }
 
 /**
- * A death on the replay timeline.
+ * A death on the recording timeline.
  *
  * Filled rather than stroked, like Coin and for the same reason: these render
  * at 10px on a seek bar where a 2px stroke on a 24 grid turns to mush.

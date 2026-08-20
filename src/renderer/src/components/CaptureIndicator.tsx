@@ -9,7 +9,7 @@ import type { CaptureStatus } from '@shared/types'
  *
  * The failure this exists for is silent: OBS closed, or the password changed,
  * or the scene got renamed — and the first you would know is going looking for
- * the replay of a game you wanted to keep and finding nothing. A pill that is
+ * the recording of a game you wanted to keep and finding nothing. A pill that is
  * visible while you are queueing costs a glance and makes that discoverable
  * beforehand.
  *

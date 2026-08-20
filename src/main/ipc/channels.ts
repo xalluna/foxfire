@@ -91,19 +91,58 @@ export const CH = {
     preview: 'capture:preview',
     reconnect: 'capture:reconnect'
   },
+  recordings: {
+    list: 'recordings:list',
+    detail: 'recordings:detail',
+    usage: 'recordings:usage',
+    remove: 'recordings:remove',
+    removeOldest: 'recordings:removeOldest',
+    /** Opens a window that owns one recording. Repeat calls open more windows. */
+    open: 'recordings:open',
+    reveal: 'recordings:reveal',
+    /** Broadcast when a recording is added, bound or deleted, so lists refetch. */
+    changed: 'recordings:changed',
+    /** A recording window asking the main window to show its match. */
+    showMatch: 'recordings:showMatch'
+  },
+  // Riot's own replays. Separate from `recordings` throughout: the two are
+  // different artefacts with different lifecycles, and one shared domain would
+  // mean every call growing a discriminator it could forget to pass.
   replays: {
     list: 'replays:list',
-    detail: 'replays:detail',
     usage: 'replays:usage',
-    remove: 'replays:remove',
-    removeOldest: 'replays:removeOldest',
-    /** Opens a window that owns one replay. Repeat calls open more windows. */
+    /** Hands the .rofl to the League client. Foxfire never plays one itself. */
     open: 'replays:open',
     reveal: 'replays:reveal',
-    /** Broadcast when a replay is added, bound or deleted, so lists refetch. */
+    remove: 'replays:remove',
+    /** Adds a file the user picked or dropped. */
+    add: 'replays:add',
+    /** Links a replay to a match the user chose by hand. */
+    link: 'replays:link',
+    /** Re-reads Riot's folder now, rather than waiting for the next scan. */
+    rescan: 'replays:rescan',
+    settings: 'replays:settings',
+    setSettings: 'replays:setSettings',
+    chooseSourceFolder: 'replays:chooseSourceFolder',
+    /** Broadcast when a replay is added, linked or removed, so lists refetch. */
     changed: 'replays:changed',
-    /** A replay window asking the main window to show its match. */
-    showMatch: 'replays:showMatch'
+    /** Progress of the folder import, so the tab can say what is happening. */
+    importProgress: 'replays:importProgress'
+  },
+  // League installs kept around to play replays from older patches.
+  archives: {
+    list: 'archives:list',
+    add: 'archives:add',
+    remove: 'archives:remove',
+    setPatch: 'archives:setPatch',
+    /** Where League is now and which patch it is on, read fresh each time. */
+    live: 'archives:live',
+    choosePath: 'archives:choosePath',
+    /** Copies the live install so this patch stays playable after Riot moves on. */
+    archiveLive: 'archives:archiveLive',
+    cancelCopy: 'archives:cancelCopy',
+    copyProgress: 'archives:copyProgress',
+    openWindow: 'archives:openWindow'
   },
   search: {
     summoner: 'search:summoner'

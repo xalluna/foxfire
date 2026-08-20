@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { selfNameSet, toReplayEvent, toReplayEvents, type LiveEventDto } from './eventMapping'
+import { selfNameSet, toRecordingEvent, toRecordingEvents, type LiveEventDto } from './eventMapping'
 
 const SELF = selfNameSet(['Alluna#NA1', 'Alluna'])
 
@@ -34,9 +34,9 @@ describe('selfNameSet', () => {
   })
 })
 
-describe('toReplayEvent', () => {
+describe('toRecordingEvent', () => {
   it('measures video time from the frame recording actually started on', () => {
-    const mapped = toReplayEvent(event({ EventTime: 140 }), SELF, OFFSET)
+    const mapped = toRecordingEvent(event({ EventTime: 140 }), SELF, OFFSET)
 
     // 140s into the game, 40s of which happened before the first frame.
     expect(mapped?.videoTime).toBe(100)
@@ -45,18 +45,18 @@ describe('toReplayEvent', () => {
 
   it('drops an event the footage does not contain', () => {
     // First blood at 0:35, recording began at 0:40 — seeking there shows nothing.
-    expect(toReplayEvent(event({ EventTime: 35 }), SELF, OFFSET)).toBeNull()
+    expect(toRecordingEvent(event({ EventTime: 35 }), SELF, OFFSET)).toBeNull()
   })
 
   it('reads a kill, and names who died', () => {
-    const mapped = toReplayEvent(event(), SELF, OFFSET)
+    const mapped = toRecordingEvent(event(), SELF, OFFSET)
 
     expect(mapped?.role).toBe('kill')
     expect(mapped?.label).toBe('Enemy')
   })
 
   it('reads a death, and names who did it', () => {
-    const mapped = toReplayEvent(
+    const mapped = toRecordingEvent(
       event({ KillerName: 'Enemy', VictimName: 'Alluna' }),
       SELF,
       OFFSET
@@ -67,7 +67,7 @@ describe('toReplayEvent', () => {
   })
 
   it('counts an assist', () => {
-    const mapped = toReplayEvent(
+    const mapped = toRecordingEvent(
       event({ KillerName: 'Teammate', Assisters: ['Someone', 'Alluna'] }),
       SELF,
       OFFSET
@@ -78,7 +78,7 @@ describe('toReplayEvent', () => {
   })
 
   it('drops a fight the player was not in', () => {
-    const mapped = toReplayEvent(
+    const mapped = toRecordingEvent(
       event({ KillerName: 'Teammate', VictimName: 'Enemy', Assisters: ['Other'] }),
       SELF,
       OFFSET
@@ -88,7 +88,7 @@ describe('toReplayEvent', () => {
   })
 
   it('keeps a multikill alongside the kills it is made of', () => {
-    const mapped = toReplayEvent(
+    const mapped = toRecordingEvent(
       event({ EventID: 20, EventName: 'Multikill', KillStreak: 3 }),
       SELF,
       OFFSET
@@ -99,7 +99,7 @@ describe('toReplayEvent', () => {
   })
 
   it('ignores somebody else running away with the game', () => {
-    const mapped = toReplayEvent(
+    const mapped = toRecordingEvent(
       event({ EventName: 'Multikill', KillerName: 'Enemy', KillStreak: 5 }),
       SELF,
       OFFSET
@@ -111,26 +111,26 @@ describe('toReplayEvent', () => {
   it.each(['FirstBlood', 'Ace', 'TurretKilled', 'DragonKill', 'BaronKill', 'GameEnd'])(
     'leaves %s off the bar, which is about the player and not the game',
     (EventName) => {
-      expect(toReplayEvent(event({ EventName }), SELF, OFFSET)).toBeNull()
+      expect(toRecordingEvent(event({ EventName }), SELF, OFFSET)).toBeNull()
     }
   )
 
   it('survives a malformed entry rather than failing the whole poll', () => {
-    expect(toReplayEvent({ EventName: 'ChampionKill' }, SELF, OFFSET)).toBeNull()
-    expect(toReplayEvent({ EventID: 1, EventTime: 90 }, SELF, OFFSET)).toBeNull()
-    expect(toReplayEvent({ EventID: null, EventName: null, EventTime: null }, SELF, OFFSET)).toBeNull()
+    expect(toRecordingEvent({ EventName: 'ChampionKill' }, SELF, OFFSET)).toBeNull()
+    expect(toRecordingEvent({ EventID: 1, EventTime: 90 }, SELF, OFFSET)).toBeNull()
+    expect(toRecordingEvent({ EventID: null, EventName: null, EventTime: null }, SELF, OFFSET)).toBeNull()
   })
 
   it('ignores case and stray whitespace in a name', () => {
-    const mapped = toReplayEvent(event({ KillerName: '  alluna ' }), SELF, OFFSET)
+    const mapped = toRecordingEvent(event({ KillerName: '  alluna ' }), SELF, OFFSET)
 
     expect(mapped?.role).toBe('kill')
   })
 })
 
-describe('toReplayEvents', () => {
+describe('toRecordingEvents', () => {
   it('returns markers in video order, so the timeline never has to sort', () => {
-    const mapped = toReplayEvents(
+    const mapped = toRecordingEvents(
       [
         event({ EventID: 3, EventTime: 600 }),
         event({ EventID: 1, EventTime: 140 }),
@@ -146,15 +146,15 @@ describe('toReplayEvents', () => {
   it('keeps ids stable across polls, since the feed resends everything each time', () => {
     const feed = [event({ EventID: 1, EventTime: 140 }), event({ EventID: 2, EventTime: 200 })]
 
-    const first = toReplayEvents(feed, SELF, OFFSET)
-    const second = toReplayEvents([...feed, event({ EventID: 3, EventTime: 260 })], SELF, OFFSET)
+    const first = toRecordingEvents(feed, SELF, OFFSET)
+    const second = toRecordingEvents([...feed, event({ EventID: 3, EventTime: 260 })], SELF, OFFSET)
 
     expect(first.map((e) => e.eventId)).toEqual([1, 2])
     expect(second.map((e) => e.eventId)).toEqual([1, 2, 3])
   })
 
   it('yields nothing for a game the player spent uninvolved', () => {
-    const mapped = toReplayEvents(
+    const mapped = toRecordingEvents(
       [event({ KillerName: 'A', VictimName: 'B', Assisters: ['C'] })],
       SELF,
       OFFSET

@@ -28,6 +28,10 @@ const PAGE_SIZE = 20
 export function Dashboard({ account }: { account: Account }): JSX.Element {
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  // Why a Riot replay refused to open. Held here rather than on the row because
+  // the answer arrives after the menu has closed, and it is about the patch the
+  // machine has installed rather than about the match.
+  const [replayError, setReplayError] = useState<string | null>(null)
   const queueId = useUiStore((s) => s.matchQueueFilter)
   const setQueueId = useUiStore((s) => s.setMatchQueueFilter)
 
@@ -70,7 +74,7 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
   })
 
   /**
-   * A replay window asking to show its match.
+   * A recording window asking to show its match.
    *
    * The window that made the request is a different renderer process with its
    * own query cache, so it cannot expand a row here itself — it sends a message
@@ -79,7 +83,7 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
    */
   useEffect(
     () =>
-      window.api.replays.onShowMatch((accountId, matchId) => {
+      window.api.recordings.onShowMatch((accountId, matchId) => {
         if (accountId !== account.id) return
         setExpandedMatchId(matchId)
         // The row may be several pages down a list that only loaded twenty.
@@ -109,8 +113,18 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
         },
         onCopyId: () => void navigator.clipboard.writeText(match.matchId),
         onOpenDetails: () => setExpandedMatchId(match.matchId),
+        onWatchRecording: () => {
+          if (match.recordingId !== null) void window.api.recordings.open(match.recordingId)
+        },
         onWatchReplay: () => {
-          if (match.replayId !== null) void window.api.replays.open(match.replayId)
+          // Unlike a recording, opening this can fail for a reason the user can
+          // act on — no installed client still plays that patch. The menu is
+          // gone by then, so the answer is surfaced here.
+          if (match.replayId !== null) {
+            void window.api.replays.open(match.replayId).then((result) => {
+              if (!result.ok && result.reason !== undefined) setReplayError(result.reason)
+            })
+          }
         }
       })
     })
@@ -225,6 +239,19 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
           )}
         </section>
       </div>
+
+      {replayError !== null && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber/30 bg-surface px-4 py-3 shadow-flyout">
+          <p className="max-w-md text-2xs leading-relaxed text-amber">{replayError}</p>
+          <button
+            type="button"
+            onClick={() => setReplayError(null)}
+            className="mt-2 text-2xs text-text-mute underline-offset-2 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
     </div>

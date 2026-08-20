@@ -4,7 +4,7 @@ import * as Icon from '../components/icons'
 import { formatClock } from '../lib/matchStats'
 import { EventTimeline } from './EventTimeline'
 import { adjacentEvent, seekTargetFor } from './timelineMarkers'
-import type { ReplayEvent } from '@shared/types'
+import type { RecordingEvent } from '@shared/types'
 
 /**
  * The video and its controls.
@@ -22,12 +22,12 @@ const SPEEDS = [0.25, 0.5, 1, 1.5, 2] as const
 /** Arrow-key jump. Long enough to cover ground, short enough to stay oriented. */
 const NUDGE_SECONDS = 5
 
-export function ReplayPlayer({
+export function RecordingPlayer({
   src,
   events
 }: {
   src: string
-  events: readonly ReplayEvent[]
+  events: readonly RecordingEvent[]
 }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -97,7 +97,7 @@ export function ReplayPlayer({
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
       // Never steal a key from a form control; the header has a button and the
-      // Replays view has inputs.
+      // Recordings view has inputs.
       const target = event.target as HTMLElement | null
       if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return
 
@@ -153,7 +153,7 @@ export function ReplayPlayer({
           // than the window — which fullscreen always is — sat at its intrinsic
           // resolution in the middle of a black field instead of scaling up.
           // Cropping is not an option: the minimap and the HUD live in the
-          // corners, and they are half of what a replay is read for.
+          // corners, and they are half of what a recording is read for.
           className="h-full w-full object-contain"
           onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
           onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}

@@ -1,32 +1,44 @@
 import { BrowserWindow, shell } from 'electron'
-import { rmSync } from 'node:fs'
+import { copyFileSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs'
+import { readdir } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { createLogger } from '../telemetry/logger'
-import { getAccountById } from '../db/repositories/accounts.repo'
+import { HEAD_READ_BYTES, TAIL_READ_BYTES, parseRoflHeader, type RoflHeader } from '../rofl/header'
+import { copyFileName, gameIdFromMatchId, matchIdFromRoflName } from '../rofl/filename'
+import { findMatchForReplay, type FingerprintCandidate } from '../rofl/fingerprint'
+import { patchFromGameVersion, replayBlockedReason, runnerFor } from '../rofl/patch'
+import { launchReplay as launchRoflReplay, type LaunchOutcome } from '../rofl/launch'
+import { getArchivePatches } from '../db/repositories/clientArchives.repo'
 import {
-  bindReplay,
-  countMissingFiles,
-  deleteReplay,
-  getBindableReplays,
-  getOldestReplayIds,
+  createReplay,
+  getClaimedMatchIds,
+  getKnownSourcePaths,
   getReplay,
-  getReplayEvents,
   getReplayFilePath,
-  getReplayUsage,
   getReplays,
-  markReplayUnmatched
+  getUnownedReplays,
+  getUsage,
+  setReplayAccount,
+  setReplayMatch,
+  softDeleteReplay
 } from '../db/repositories/replays.repo'
-import {
-  BIND_RETRY_HORIZON_MS,
-  findMatchForReplay,
-  shouldGiveUpBinding,
-  type MatchCandidate
-} from '../capture/matchBinding'
-import { getCaptureSettings } from './captureSettings'
-import type { Replay, ReplayDetail, ReplayDiskUsage } from '@shared/types'
+import { getRoflSettings } from './roflSettings'
+import { resolveLiveClient, resolveSourceFolder } from './clientArchiveService'
+import type { Replay, ReplayDiskUsage, ReplayImportProgress } from '@shared/types'
 
-const log = createLogger('replays')
+/**
+ * Riot's replays, from the folder they land in to the client that plays them.
+ *
+ * The shape of this file is much simpler than its recording counterpart, and
+ * deliberately so. A recording has to work out which match it belongs to from a
+ * roster and a clock; a replay is named after its match, so ingest reads a
+ * filename and the link is done. What is left is copying, remembering, and
+ * knowing which client can still play what.
+ */
+
+const log = createLogger('rofl')
 
 export function broadcastReplaysChanged(): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -34,167 +46,489 @@ export function broadcastReplaysChanged(): void {
   }
 }
 
-export function listReplays(accountId: number): Replay[] {
-  return getReplays(getDb(), accountId)
-}
-
-export function getReplayDetail(replayId: number): ReplayDetail | null {
-  const db = getDb()
-  const replay = getReplay(db, replayId)
-  if (!replay) return null
-  return { replay, events: getReplayEvents(db, replayId) }
-}
-
-export function getDiskUsage(): ReplayDiskUsage {
-  const db = getDb()
-  const usage = getReplayUsage(db)
-  return {
-    ...usage,
-    missingCount: countMissingFiles(db),
-    softCapBytes: getCaptureSettings().softCapBytes
+function broadcastImportProgress(progress: ReplayImportProgress): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(CH.replays.importProgress, progress)
   }
 }
 
-/** Deletes the row and the file it points at. */
-export function removeReplay(replayId: number): void {
-  const path = deleteReplay(getDb(), replayId)
-  if (path) {
-    try {
-      rmSync(path, { force: true })
-    } catch (err) {
-      // The row is already gone, so the replay has left the app either way.
-      // A file locked by a player still open on it is the usual cause.
-      log.debug('Could not delete replay file', { path, error: String(err) })
-    }
-  }
-  broadcastReplaysChanged()
-}
-
-/** The one-click cleanup offered when the advisory cap is crossed. */
-export function removeOldestReplays(accountId: number, count: number): number {
-  const ids = getOldestReplayIds(getDb(), accountId, count)
-  for (const id of ids) removeReplay(id)
-  return ids.length
-}
-
-export function revealReplay(replayId: number): void {
-  const path = getReplayFilePath(getDb(), replayId)
-  if (path) shell.showItemInFolder(path)
-}
-
-interface CandidateRow {
-  match_id: string
-  game_creation: number
-  game_duration: number
-  champion_ids: string
-  self_champion_id: number | null
-  taken: number
-}
+/* -------------------------------------------------------------------------- */
+/* Reading                                                                    */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Matches finished around the same time as any pending recording.
+ * Every replay for one account, each told whether it can actually be watched.
  *
- * Scoped by time in SQL rather than loading the account's whole history: a
- * long-standing library is thousands of matches and the fingerprint only ever
- * looks at the last few hours.
+ * The playability check happens here rather than in the repository because it
+ * depends on which clients are installed at this moment, which is not something
+ * the database knows or should be told.
  */
-function candidatesFor(accountId: number, since: number, until: number): MatchCandidate[] {
-  const account = getAccountById(getDb(), accountId)
-  if (!account) return []
+export async function listReplays(accountId: number): Promise<Replay[]> {
+  const db = getDb()
+  const replays = getReplays(db, accountId)
+  if (replays.length === 0) return replays
 
-  const rows = getDb()
-    .prepare(
-      `SELECT m.match_id, m.game_creation, m.game_duration,
-              (SELECT group_concat(p2.champion_id)
-                 FROM match_participants p2 WHERE p2.match_id = m.match_id) AS champion_ids,
-              p.champion_id AS self_champion_id,
-              EXISTS (SELECT 1 FROM replays r WHERE r.match_id = m.match_id) AS taken
-         FROM matches m
-         JOIN match_participants p ON p.match_id = m.match_id AND p.puuid = ?
-        WHERE m.game_creation BETWEEN ? AND ?`
-    )
-    .all(account.puuid, since, until) as unknown as CandidateRow[]
+  const archives = getArchivePatches(db)
+  const live = await resolveLiveClient()
 
-  return rows.map((row) => ({
-    matchId: row.match_id,
-    gameCreation: row.game_creation,
-    gameDuration: row.game_duration,
-    championIds: row.champion_ids
-      ? row.champion_ids.split(',').map((id) => Number(id))
-      : [],
-    selfChampionId: row.self_champion_id,
-    taken: row.taken === 1
+  return replays.map((replay) => ({
+    ...replay,
+    blockedReason: replay.fileExists
+      ? replayBlockedReason(replay.patch, runnerFor(replay.patch, archives, live.patch, live.path))
+      : 'Foxfire can no longer find this file'
   }))
 }
 
-/** Widened either side of the recording so clock differences cannot exclude the game. */
-const CANDIDATE_WINDOW_MS = 6 * 60 * 60 * 1000
+export async function getReplayUsage(accountId: number): Promise<ReplayDiskUsage> {
+  const usage = getUsage(getDb(), accountId)
+  // Reuses the list rather than re-deriving playability: both answers come from
+  // the same per-row check, and the live client's patch is cached behind it.
+  const replays = await listReplays(accountId)
 
-export interface BindOptions {
-  /**
-   * Whether a recording that still found nothing may be written off.
-   *
-   * Off by default, so a caller that cannot vouch for the state of the sync can
-   * only ever bind. Writing off is the one irreversible-feeling thing this pass
-   * does, and it is only honest when the candidates it searched were complete.
-   */
-  allowGiveUp?: boolean
+  return {
+    ...usage,
+    missingCount: replays.filter((replay) => !replay.fileExists).length,
+    unplayableCount: replays.filter((replay) => replay.fileExists && replay.blockedReason !== null)
+      .length,
+    softCapBytes: getRoflSettings().softCapBytes
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Watching                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Opens a replay in the League client.
+ *
+ * Foxfire's own copy is the one handed over, never Riot's original — ours is
+ * the file we know still exists.
+ */
+export async function openReplay(replayId: number): Promise<LaunchOutcome> {
+  const db = getDb()
+  const replay = getReplay(db, replayId)
+  const filePath = getReplayFilePath(db, replayId)
+
+  if (replay === null || filePath === null) {
+    return { ok: false, reason: 'That replay is no longer listed.', attemptedCommand: null }
+  }
+  if (!replay.fileExists) {
+    return { ok: false, reason: 'Foxfire can no longer find this file.', attemptedCommand: null }
+  }
+
+  const live = await resolveLiveClient()
+  const runner = runnerFor(replay.patch, getArchivePatches(db), live.patch, live.path)
+  const blocked = replayBlockedReason(replay.patch, runner)
+
+  if (runner === null) {
+    return { ok: false, reason: blocked ?? 'This replay cannot be played.', attemptedCommand: null }
+  }
+
+  return launchRoflReplay({
+    filePath,
+    // The filename is the fallback because an unlinked replay still has Riot's
+    // name on it, which carries the same id the match would have given us.
+    gameId: gameIdFromMatchId(replay.matchId ?? matchIdFromRoflName(basename(filePath))),
+    runner,
+    restoreToRiotFolder: () => restoreToRiotFolder(filePath, replay.matchId)
+  })
 }
 
 /**
- * Tries to give every finished recording its match.
+ * Puts Foxfire's copy back where the League client looks.
  *
- * Called whenever a sync finishes, because that is when a new match can first
- * appear — and, just as importantly, because a sync that imported nothing new
- * may still be the first one to run since the matches arrived.
- *
- * Recordings that have waited past the whole retry schedule are marked
- * unmatched — a resting state, not a deletion: a Practice Tool game has no
- * match-v5 match and never will, and the footage is still worth keeping. That
- * only happens when the caller passes `allowGiveUp`, which it should do only
- * for a sync that landed everything it went looking for.
+ * The client plays out of its own replay folder and nowhere else, so a replay
+ * it has since cleaned up cannot be watched however carefully we kept it —
+ * unless it goes back. This is the one moment the copies pay for themselves,
+ * and it is a copy rather than a move: Foxfire's own record stays intact.
  */
-export function bindPendingReplays(accountId: number, options: BindOptions = {}): number {
-  const { allowGiveUp = false } = options
+async function restoreToRiotFolder(filePath: string, matchId: string | null): Promise<string | null> {
+  const source = await resolveSourceFolder(getRoflSettings().sourceFolder)
+  if (source === null) return null
+
+  const destination = join(source, copyFileName(matchId, basename(filePath)))
+
+  try {
+    mkdirSync(source, { recursive: true })
+    copyFileSync(filePath, destination)
+    log.info('Restored a replay into the League folder', { destination })
+    return destination
+  } catch (err) {
+    log.warn('Could not restore a replay into the League folder', {
+      destination,
+      error: String(err)
+    })
+    return null
+  }
+}
+
+export function revealReplay(replayId: number): void {
+  const filePath = getReplayFilePath(getDb(), replayId)
+  if (filePath !== null) shell.showItemInFolder(filePath)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Deleting                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Removes Foxfire's copy and remembers that it was removed.
+ *
+ * The row survives as a tombstone. Without it the next folder scan would find
+ * Riot's original still sitting there, conclude it had never been seen, and
+ * import it straight back — a delete button that undoes itself.
+ *
+ * Riot's original is never touched. Foxfire did not put it there.
+ */
+export function removeReplay(replayId: number): void {
   const db = getDb()
-  const now = Date.now()
-  const pending = getBindableReplays(db, accountId, now - BIND_RETRY_HORIZON_MS)
-  if (pending.length === 0) return 0
+  const filePath = getReplayFilePath(db, replayId)
 
-  const oldest = Math.min(...pending.map((replay) => replay.startedAt))
-  const candidates = candidatesFor(
-    accountId,
-    oldest - CANDIDATE_WINDOW_MS,
-    now + CANDIDATE_WINDOW_MS
-  )
-
-  let bound = 0
-  const claimed = new Set<string>()
-
-  for (const replay of pending) {
-    const result = findMatchForReplay(replay,
-      // A match bound earlier in this same pass is off the table too, or two
-      // back-to-back games on the same champion could both take the first one.
-      candidates.map((candidate) =>
-        claimed.has(candidate.matchId) ? { ...candidate, taken: true } : candidate
-      )
-    )
-
-    if (result) {
-      bindReplay(db, replay.id, result.matchId)
-      claimed.add(result.matchId)
-      bound += 1
-      log.info('Bound replay to match', {
-        replayId: replay.id,
-        matchId: result.matchId,
-        confidence: result.confidence
-      })
-    } else if (allowGiveUp && shouldGiveUpBinding(replay, now)) {
-      markReplayUnmatched(db, replay.id)
-      log.info('Replay left unmatched; keeping the footage', { replayId: replay.id })
+  if (filePath !== null) {
+    try {
+      rmSync(filePath, { force: true })
+    } catch (err) {
+      // A file open in the client cannot be removed on Windows. The tombstone
+      // still goes down: the user asked for it gone from the list, and leaving
+      // the row live would only make the button look broken.
+      log.debug('Could not delete a replay copy', { replayId, error: String(err) })
     }
   }
 
-  if (bound > 0) broadcastReplaysChanged()
-  return bound
+  softDeleteReplay(db, replayId, Date.now())
+  broadcastReplaysChanged()
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ingest                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Reads both ends of the file and nothing in between.
+ *
+ * Both ends, because the two containers Riot ships disagree about where the
+ * interesting parts live: the older one puts its metadata near the front, the
+ * current one puts the patch in the first thirty bytes and the metadata in the
+ * last hundred kilobytes. The megabytes between are the compressed replay
+ * itself, which is of no use to us and is most of the file.
+ */
+function readHeader(filePath: string, size: number): RoflHeader | null {
+  let fd: number | null = null
+  try {
+    fd = openSync(filePath, 'r')
+
+    const headWanted = Math.min(HEAD_READ_BYTES, size)
+    const headBuffer = Buffer.alloc(headWanted)
+    const headRead = readSync(fd, headBuffer, 0, headWanted, 0)
+    const head = headBuffer.subarray(0, headRead)
+
+    // A file small enough that the two windows would overlap is read once.
+    if (size <= HEAD_READ_BYTES) return parseRoflHeader(head)
+
+    const tailWanted = Math.min(TAIL_READ_BYTES, size - headRead)
+    const tailBuffer = Buffer.alloc(tailWanted)
+    const tailRead = readSync(fd, tailBuffer, 0, tailWanted, size - tailWanted)
+
+    return parseRoflHeader(head, tailBuffer.subarray(0, tailRead))
+  } catch (err) {
+    log.debug('Could not read a replay header', { filePath, error: String(err) })
+    return null
+  } finally {
+    if (fd !== null) {
+      try {
+        closeSync(fd)
+      } catch {
+        // Nothing useful to do about a failed close.
+      }
+    }
+  }
+}
+
+/**
+ * Takes one .rofl into Foxfire's own storage.
+ *
+ * Returns null when the file is not ready. A .rofl grows on disk while the
+ * client downloads it, and a partial file has no readable header — so the
+ * header parse doubles as the "finished writing" check, and an unready file is
+ * simply picked up by a later scan. This is why there is no settle timer.
+ *
+ * A header that cannot be read at all is not the same thing. That file is
+ * ingested anyway, with an unknown patch, because losing the replay to a format
+ * change would be far worse than losing the ability to say which client plays
+ * it.
+ */
+export function ingestReplay(sourcePath: string, options: { copy?: boolean } = {}): number | null {
+  const db = getDb()
+  const settings = getRoflSettings()
+  const folder = settings.folder
+  if (folder === null) return null
+
+  let stats: ReturnType<typeof statSync>
+  try {
+    stats = statSync(sourcePath)
+  } catch {
+    return null
+  }
+  if (!stats.isFile() || stats.size === 0) return null
+
+  const name = basename(sourcePath)
+  const header = readHeader(sourcePath, stats.size)
+
+  // A file with neither a readable header nor a Riot-shaped name is either
+  // still downloading or not a replay. Either way it is not ours to keep.
+  const matchIdFromName = matchIdFromRoflName(name)
+  if (header === null && matchIdFromName === null) return null
+
+  const matchId = matchIdFromName ?? fingerprintMatch(db, header)
+
+  try {
+    mkdirSync(folder, { recursive: true })
+  } catch (err) {
+    log.warn('Could not create the replay folder', { folder, error: String(err) })
+    return null
+  }
+
+  const destination = uniqueDestination(folder, copyFileName(matchId, name))
+
+  try {
+    if (options.copy === false) {
+      // Manual adds of a file already inside our folder: nothing to copy.
+    } else {
+      copyFileSync(sourcePath, destination)
+    }
+  } catch (err) {
+    log.warn('Could not copy a replay', { sourcePath, error: String(err) })
+    return null
+  }
+
+  const filePath = options.copy === false ? sourcePath : destination
+
+  // The header is the only source that works for a replay whose match has not
+  // synced, so it is tried first. Riot's stored match carries the same number
+  // in info.gameVersion, though, which makes it a free second opinion — and the
+  // thing that keeps this feature working the next time the container changes.
+  const patch = (header === null ? null : patchOf(header)) ?? patchFromMatch(db, matchId)
+
+  const id = createReplay(db, {
+    matchId,
+    accountId: matchId === null ? null : accountForMatch(db, matchId),
+    filePath,
+    sourcePath,
+    fileBytes: stats.size,
+    gameVersion: header?.gameVersion ?? null,
+    patch,
+    durationSeconds: header?.durationSeconds ?? null,
+    // The file's own timestamp, which for a client-written replay is when the
+    // game ended. Only ever a display and sort key — the match, once linked,
+    // carries the authoritative time.
+    recordedAt: stats.mtimeMs
+  })
+
+  log.info('Ingested a replay', { id, matchId, patch })
+  return id
+}
+
+function patchOf(header: RoflHeader): string | null {
+  return patchFromGameVersion(header.gameVersion)
+}
+
+/**
+ * The patch according to the match this replay belongs to.
+ *
+ * `info.gameVersion` is not a column — it survives inside the stored payload,
+ * which is passthrough-parsed — so it is dug out with json_extract, the same
+ * way several migrations already mine that column.
+ */
+function patchFromMatch(db: ReturnType<typeof getDb>, matchId: string | null): string | null {
+  if (matchId === null) return null
+
+  const row = db
+    .prepare("SELECT json_extract(raw_json, '$.info.gameVersion') AS version FROM matches WHERE match_id = ?")
+    .get(matchId) as { version: string | null } | undefined
+
+  return patchFromGameVersion(row?.version ?? null)
+}
+
+/** Never overwrite: two games can produce the same stem once a file is renamed. */
+function uniqueDestination(folder: string, fileName: string): string {
+  const candidate = join(folder, fileName)
+  try {
+    statSync(candidate)
+  } catch {
+    return candidate
+  }
+  return join(folder, `${fileName.replace(/\.rofl$/i, '')}-${Date.now()}.rofl`)
+}
+
+/**
+ * The fallback for a file whose name tells us nothing.
+ *
+ * Only reached by a manual add of a renamed file — every replay the watcher
+ * finds still carries Riot's name. The header's scoreboard is compared against
+ * stored matches; anything already claimed is skipped so two files cannot take
+ * the same game.
+ */
+function fingerprintMatch(db: ReturnType<typeof getDb>, header: RoflHeader | null): string | null {
+  if (header === null || header.players.length === 0) return null
+
+  const claimed = getClaimedMatchIds(db)
+  const rows = db
+    .prepare(
+      `SELECT m.match_id AS matchId, m.game_duration AS gameDuration,
+              group_concat(p.champion_name) AS champions
+         FROM matches m
+         JOIN match_participants p ON p.match_id = m.match_id
+        GROUP BY m.match_id`
+    )
+    .all() as unknown as Array<{ matchId: string; gameDuration: number; champions: string | null }>
+
+  const candidates: FingerprintCandidate[] = rows.map((row) => ({
+    matchId: row.matchId,
+    gameDuration: row.gameDuration,
+    championNames: row.champions === null ? [] : row.champions.split(','),
+    taken: claimed.has(row.matchId)
+  }))
+
+  const championNames = header.players
+    .map((player) => player.championName)
+    .filter((name): name is string => name !== null)
+
+  const found = findMatchForReplay({ championNames, durationSeconds: header.durationSeconds }, candidates)
+  if (found === null) return null
+
+  log.info('Fingerprinted a renamed replay to a match', {
+    matchId: found.matchId,
+    confidence: found.confidence
+  })
+  return found.matchId
+}
+
+/** Which of our accounts played this match, if any of them did. */
+function accountForMatch(db: ReturnType<typeof getDb>, matchId: string): number | null {
+  const row = db
+    .prepare(
+      `SELECT a.id AS id
+         FROM accounts a
+         JOIN match_participants p ON p.puuid = a.puuid
+        WHERE p.match_id = ?
+        LIMIT 1`
+    )
+    .get(matchId) as { id: number } | undefined
+  return row?.id ?? null
+}
+
+/**
+ * Fills in ownership for replays whose match has since synced.
+ *
+ * Runs after every sync. Cheap — it touches only rows still missing an account,
+ * and there are none of those once things have settled.
+ */
+export function resolveReplayOwners(): number {
+  const db = getDb()
+  let resolved = 0
+
+  for (const replay of getUnownedReplays(db)) {
+    const accountId = accountForMatch(db, replay.matchId)
+    if (accountId !== null) {
+      setReplayAccount(db, replay.id, accountId)
+      resolved++
+    }
+  }
+
+  if (resolved > 0) {
+    log.info('Resolved replay owners after a sync', { resolved })
+    broadcastReplaysChanged()
+  }
+  return resolved
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scanning                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Walks Riot's folder and ingests anything new.
+ *
+ * Safe to run as often as anything cares to: known source paths are skipped,
+ * and tombstones count as known, so a deleted replay stays deleted.
+ */
+export async function scanReplayFolder(options: { announce?: boolean } = {}): Promise<number> {
+  const settings = getRoflSettings()
+  if (!settings.enabled) {
+    log.debug('Replay scan skipped: keeping replays is switched off')
+    return 0
+  }
+
+  const source = await resolveSourceFolder(settings.sourceFolder)
+  if (source === null) {
+    // Worth a warning rather than a shrug. Finding no folder is the one outcome
+    // that makes the whole feature do nothing at all, and it is indistinguishable
+    // from working correctly unless it says so.
+    log.warn('No replay folder found — nothing to watch', {
+      override: settings.sourceFolder
+    })
+    return 0
+  }
+
+  let entries: string[]
+  try {
+    entries = await readdir(source)
+  } catch (err) {
+    log.debug('Could not read the replay folder', { source, error: String(err) })
+    return 0
+  }
+
+  const known = getKnownSourcePaths(getDb())
+  const pending = entries
+    .filter((entry) => entry.toLowerCase().endsWith('.rofl'))
+    .map((entry) => join(source, entry))
+    .filter((path) => !known.has(path.toLowerCase()))
+
+  log.info('Scanned the replay folder', {
+    source,
+    found: entries.length,
+    rofls: entries.filter((entry) => entry.toLowerCase().endsWith('.rofl')).length,
+    pending: pending.length
+  })
+  if (pending.length === 0) return 0
+
+  const announce = options.announce === true
+
+  let imported = 0
+  for (const [index, path] of pending.entries()) {
+    if (announce) {
+      broadcastImportProgress({ current: index + 1, total: pending.length, done: false })
+    }
+    if (ingestReplay(path) !== null) imported++
+  }
+
+  if (announce) broadcastImportProgress({ current: pending.length, total: pending.length, done: true })
+  if (imported > 0) broadcastReplaysChanged()
+
+  return imported
+}
+
+/**
+ * Adds a file the user picked themselves.
+ *
+ * Reported rather than silent, unlike the watcher: the user just chose this
+ * file and deserves to know whether it landed and whether it found its game.
+ */
+export function addReplayByPath(sourcePath: string): { ok: boolean; replay: Replay | null } {
+  const id = ingestReplay(sourcePath)
+  if (id === null) return { ok: false, replay: null }
+
+  broadcastReplaysChanged()
+  return { ok: true, replay: getReplay(getDb(), id) }
+}
+
+/** Re-links a replay the user matched to a game by hand. */
+export function linkReplayToMatch(replayId: number, matchId: string): void {
+  const db = getDb()
+  setReplayMatch(db, replayId, matchId)
+
+  const accountId = accountForMatch(db, matchId)
+  if (accountId !== null) setReplayAccount(db, replayId, accountId)
+
+  broadcastReplaysChanged()
 }

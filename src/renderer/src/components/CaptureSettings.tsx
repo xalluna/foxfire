@@ -65,8 +65,8 @@ export function CaptureSettings(): JSX.Element {
   })
 
   const usage = useQuery({
-    queryKey: ['replayUsage'],
-    queryFn: () => window.api.replays.usage()
+    queryKey: ['recordingUsage'],
+    queryFn: () => window.api.recordings.usage()
   })
 
   const preview = useQuery({
@@ -150,7 +150,7 @@ export function CaptureSettings(): JSX.Element {
             )}
 
             <PathRow
-              label="Replay folder"
+              label="Recording folder"
               hint="Where recordings are written. Pick a drive with room — a 30 minute game is a gigabyte or two."
               value={current.folder}
               disabled={disabled}

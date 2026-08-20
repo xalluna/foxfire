@@ -7,6 +7,67 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.10.0] — 2026-08-20
+
+Riot's own replays. League saves a `.rofl` file for every game you record — the match itself, not a
+video of your screen, so it plays back with a free camera and every player's point of view. Foxfire
+now keeps those files, links each one to the game it came from, and hands them to the League client
+to watch. What used to be called a replay in Foxfire was always an OBS video of your own screen, and
+is now called a recording, which is what it is.
+
+### Added
+
+- A **Replays** tab, alongside **Recordings**, under the renamed **Captures** screen. Replays are
+  picked up from League's own folder and copied somewhere Foxfire controls, so they survive being
+  cleaned up. Each row says which patch it was recorded on.
+- **Watch replay** on the match right-click menu, next to **Watch recording**. Both are always
+  listed; whichever you do not have says so instead of disappearing.
+- Manage archived clients, reached from Settings. A replay only runs on the patch that recorded it
+  and League keeps just one install, so watching an older game needs that patch's game files —
+  point Foxfire at any you have kept, or have it copy the current install before the next patch
+  lands.
+- Adding a replay by hand, by button or by dropping a `.rofl` onto the tab. If League's own name is
+  still on the file it is linked to its game immediately; if the file was renamed, its scoreboard is
+  matched against your match history instead.
+
+### Changed
+
+- Replays are now called **recordings** throughout, and the **Replays** screen is now **Captures**
+  with a tab for each. The two are genuinely different things — one is a video of your screen, the
+  other is Riot's own format — and sharing a name for them had stopped being tenable.
+
+### Under the hood
+
+- Two migrations. The first renames the `replays` table to `recordings` and frees the old name; the
+  second gives it to the new one. They must stay in that order, and neither may ever be renamed —
+  migrations are tracked by filename.
+- A replay carries no bind state and no foreign key to its match. Riot names the file after the game
+  (`NA1-5312345678.rofl` against a match id of `NA1_5312345678`), so the link is known at ingest and
+  a plain join answers whether that game has synced yet. There is no binding pass to run and nothing
+  that a failed sync can leave stale.
+- Deleting a replay leaves a tombstone rather than removing the row. League's original file is never
+  touched, so without one the next folder scan would import it straight back.
+- Both `.rofl` containers are read. The current one keeps its patch as a length-prefixed string in
+  the first thirty bytes and its scoreboard in the *last* hundred kilobytes, where the older one put
+  both near the front — so each end of the file is read and the metadata is looked for in three
+  places. A file that answers none of them is still listed and still opens; it just cannot say which
+  client it needs.
+- The patch is taken from the linked match when the file will not give it up. `info.gameVersion` is
+  the same number from the other end, which keeps replays playable through a future format change.
+- League's replay folder is found even when Documents is redirected to OneDrive, which is the
+  default on a lot of Windows installs. The folder left behind at `%USERPROFILE%\Documents` still
+  exists, so checking only the obvious path finds an empty directory and reports nothing wrong.
+- Replays are played by asking the running League client over its local API, not by handing the file
+  to Windows. The `.rofl` association is registered by the Riot Client only sometimes, and where it
+  is missing the shell offers to open the replay in Notepad. The client route has no such failure
+  mode, and the client has to be running to play a replay regardless.
+- The client plays out of its own replay folder, so a replay it has since cleaned up is copied back
+  there before it is asked to play. That is the moment Foxfire's own copies earn their disk.
+- Launching against an archived install is not something Riot documents. It is attempted, and a
+  failure shows the file in Explorer along with the command that was tried rather than doing nothing.
+- The `replay://` scheme that serves recorded video became `recording://`, including in the content
+  security policy that allows it.
+
 ## [0.9.0] — 2026-08-19
 
 Survives a change of Riot API key. Riot encrypts player IDs against the key that asked for them, so
@@ -593,6 +654,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.10.0]: https://github.com/xalluna/foxfire/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/xalluna/foxfire/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/xalluna/foxfire/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/xalluna/my-op-gg/compare/v0.7.1...v0.7.2

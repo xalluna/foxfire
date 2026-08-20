@@ -1,6 +1,12 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
-import type { CaptureStatus, LcuStatus, SyncProgressEvent } from '@shared/types'
+import type {
+  ArchiveCopyProgress,
+  CaptureStatus,
+  LcuStatus,
+  ReplayImportProgress,
+  SyncProgressEvent
+} from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
 // The renderer never touches the Riot API or SQLite directly — everything
@@ -119,28 +125,77 @@ const api: Api = {
     preview: () => ipcRenderer.invoke(CH.capture.preview),
     reconnect: () => ipcRenderer.invoke(CH.capture.reconnect)
   },
+  recordings: {
+    list: (accountId) => ipcRenderer.invoke(CH.recordings.list, accountId),
+    detail: (recordingId) => ipcRenderer.invoke(CH.recordings.detail, recordingId),
+    usage: () => ipcRenderer.invoke(CH.recordings.usage),
+    remove: (recordingId) => ipcRenderer.invoke(CH.recordings.remove, recordingId),
+    removeOldest: (accountId, count) =>
+      ipcRenderer.invoke(CH.recordings.removeOldest, accountId, count),
+    open: (recordingId) => ipcRenderer.invoke(CH.recordings.open, recordingId),
+    reveal: (recordingId) => ipcRenderer.invoke(CH.recordings.reveal, recordingId),
+    onChanged: (cb) => {
+      const listener = (): void => cb()
+      ipcRenderer.on(CH.recordings.changed, listener)
+      return () => ipcRenderer.removeListener(CH.recordings.changed, listener)
+    },
+    showMatch: (accountId, matchId) =>
+      ipcRenderer.invoke(CH.recordings.showMatch, accountId, matchId),
+    onShowMatch: (cb) => {
+      const listener = (_e: IpcRendererEvent, accountId: number, matchId: string): void =>
+        cb(accountId, matchId)
+      ipcRenderer.on(CH.recordings.showMatch, listener)
+      return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
+    }
+  },
+  // Synchronous and local: webUtils reads the path off a File the user already
+  // handed us, with no main-process round trip.
+  pathForFile: (file) => {
+    try {
+      const path = webUtils.getPathForFile(file)
+      return path === '' ? null : path
+    } catch {
+      return null
+    }
+  },
   replays: {
     list: (accountId) => ipcRenderer.invoke(CH.replays.list, accountId),
-    detail: (replayId) => ipcRenderer.invoke(CH.replays.detail, replayId),
-    usage: () => ipcRenderer.invoke(CH.replays.usage),
-    remove: (replayId) => ipcRenderer.invoke(CH.replays.remove, replayId),
-    removeOldest: (accountId, count) =>
-      ipcRenderer.invoke(CH.replays.removeOldest, accountId, count),
+    usage: (accountId) => ipcRenderer.invoke(CH.replays.usage, accountId),
     open: (replayId) => ipcRenderer.invoke(CH.replays.open, replayId),
     reveal: (replayId) => ipcRenderer.invoke(CH.replays.reveal, replayId),
+    remove: (replayId) => ipcRenderer.invoke(CH.replays.remove, replayId),
+    add: (filePath) => ipcRenderer.invoke(CH.replays.add, filePath),
+    link: (replayId, matchId) => ipcRenderer.invoke(CH.replays.link, replayId, matchId),
+    rescan: () => ipcRenderer.invoke(CH.replays.rescan),
+    settings: () => ipcRenderer.invoke(CH.replays.settings),
+    setSettings: (patch) => ipcRenderer.invoke(CH.replays.setSettings, patch),
+    chooseSourceFolder: () => ipcRenderer.invoke(CH.replays.chooseSourceFolder),
     onChanged: (cb) => {
       const listener = (): void => cb()
       ipcRenderer.on(CH.replays.changed, listener)
       return () => ipcRenderer.removeListener(CH.replays.changed, listener)
     },
-    showMatch: (accountId, matchId) =>
-      ipcRenderer.invoke(CH.replays.showMatch, accountId, matchId),
-    onShowMatch: (cb) => {
-      const listener = (_e: IpcRendererEvent, accountId: number, matchId: string): void =>
-        cb(accountId, matchId)
-      ipcRenderer.on(CH.replays.showMatch, listener)
-      return () => ipcRenderer.removeListener(CH.replays.showMatch, listener)
+    onImportProgress: (cb) => {
+      const listener = (_e: IpcRendererEvent, progress: ReplayImportProgress): void => cb(progress)
+      ipcRenderer.on(CH.replays.importProgress, listener)
+      return () => ipcRenderer.removeListener(CH.replays.importProgress, listener)
     }
+  },
+  archives: {
+    list: () => ipcRenderer.invoke(CH.archives.list),
+    add: (path, label) => ipcRenderer.invoke(CH.archives.add, path, label),
+    remove: (id) => ipcRenderer.invoke(CH.archives.remove, id),
+    setPatch: (id, patch) => ipcRenderer.invoke(CH.archives.setPatch, id, patch),
+    live: () => ipcRenderer.invoke(CH.archives.live),
+    choosePath: () => ipcRenderer.invoke(CH.archives.choosePath),
+    archiveLive: (destination) => ipcRenderer.invoke(CH.archives.archiveLive, destination),
+    cancelCopy: () => ipcRenderer.invoke(CH.archives.cancelCopy),
+    onCopyProgress: (cb) => {
+      const listener = (_e: IpcRendererEvent, progress: ArchiveCopyProgress): void => cb(progress)
+      ipcRenderer.on(CH.archives.copyProgress, listener)
+      return () => ipcRenderer.removeListener(CH.archives.copyProgress, listener)
+    },
+    openWindow: () => ipcRenderer.invoke(CH.archives.openWindow)
   },
   search: {
     summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)

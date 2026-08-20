@@ -74,14 +74,33 @@ export function useManualRankUpdates(): void {
 }
 
 /**
- * Refreshes the replay list and the match rows when a recording appears,
+ * Refreshes the recording list and the match rows when a recording appears,
  * binds to its match, or is deleted.
  *
- * The match list matters as much as the list of replays: a row's context menu
- * offers "Watch replay" only when the row carries a replay id, and that id
+ * The match list matters as much as the list of recordings: a row's context menu
+ * offers "Watch recording" only when the row carries a recording id, and that id
  * arrives minutes after the game ends, when the match finally syncs and the
  * fingerprint matches. Without this the option stays greyed out until something
  * else happens to refetch.
+ */
+export function useRecordingUpdates(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return window.api.recordings.onChanged(() => {
+      queryClient.invalidateQueries({ queryKey: ['recordings'] })
+      queryClient.invalidateQueries({ queryKey: ['recordingUsage'] })
+      queryClient.invalidateQueries({ queryKey: ['matchList'] })
+    })
+  }, [queryClient])
+}
+
+/**
+ * Keeps the Replays tab and the match rows current.
+ *
+ * Separate from useRecordingUpdates because the two broadcast independently:
+ * replays arrive from a folder watcher that knows nothing about capture, and a
+ * sync that links one touches neither OBS nor the recordings table.
  */
 export function useReplayUpdates(): void {
   const queryClient = useQueryClient()
@@ -90,6 +109,7 @@ export function useReplayUpdates(): void {
     return window.api.replays.onChanged(() => {
       queryClient.invalidateQueries({ queryKey: ['replays'] })
       queryClient.invalidateQueries({ queryKey: ['replayUsage'] })
+      // The match rows carry a marker for either artefact, so they go stale too.
       queryClient.invalidateQueries({ queryKey: ['matchList'] })
     })
   }, [queryClient])

@@ -5,7 +5,7 @@ import { DEFAULT_QUEUE_FILTER } from '@shared/queues'
 export type View =
   | 'dashboard'
   | 'liveGame'
-  | 'replays'
+  | 'captures'
   | 'mastery'
   | 'rank'
   | 'search'

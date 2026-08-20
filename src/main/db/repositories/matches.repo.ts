@@ -112,6 +112,7 @@ interface MatchSummaryRow {
   is_promotion: number | null
   is_demotion: number | null
   has_manual_rank: number
+  recording_id: number | null
   replay_id: number | null
 }
 
@@ -156,11 +157,21 @@ export function getMatchSummaries(
                 AS has_manual_rank,
               -- Only the context menu reads this, to decide whether watching
               -- the game is on offer. An ad-hoc search resolves no account, so
-              -- the correlated lookup yields NULL and no row claims a replay.
-              (SELECT rp.id FROM replays rp
+              -- the correlated lookup yields NULL and no row claims a recording.
+              (SELECT rp.id FROM recordings rp
                 WHERE rp.match_id = p.match_id
                   AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
-                ORDER BY rp.id DESC LIMIT 1) AS replay_id
+                ORDER BY rp.id DESC LIMIT 1) AS recording_id,
+              -- The Riot replay, if one was ingested. Deliberately not scoped
+              -- to the account, unlike the recording above: a .rofl is one file
+              -- per game on this machine and serves whoever played it, so a game
+              -- played on a second account still offers its replay from the
+              -- first. Soft-deleted rows are excluded, or a replay the user
+              -- removed would go on advertising itself on the match row.
+              (SELECT rf.id FROM replays rf
+                WHERE rf.match_id = p.match_id
+                  AND rf.deleted_at IS NULL
+                ORDER BY rf.id DESC LIMIT 1) AS replay_id
          FROM match_participants p
          JOIN matches m ON m.match_id = p.match_id
          JOIN (SELECT match_id, team_id,
@@ -221,6 +232,7 @@ export function getMatchSummaries(
             isDemotion: row.is_demotion === 1
           },
     hasManualRank: row.has_manual_rank === 1,
+    recordingId: row.recording_id,
     replayId: row.replay_id
   }))
 }

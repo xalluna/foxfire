@@ -6,13 +6,13 @@ import { createLogger } from '../telemetry/logger'
 import { isNotRunning, liveClientGet } from '../liveClient/client'
 import { getScoreboard } from '../services/liveClientService'
 import { getCaptureSettings } from '../services/captureSettings'
-import { bindPendingReplays, broadcastReplaysChanged } from '../services/replayService'
+import { bindPendingRecordings, broadcastRecordingsChanged } from '../services/recordingService'
 import {
-  createReplay,
-  deleteReplay,
-  finishReplay,
-  insertReplayEvents
-} from '../db/repositories/replays.repo'
+  createRecording,
+  deleteRecording,
+  finishRecording,
+  insertRecordingEvents
+} from '../db/repositories/recordings.repo'
 import {
   getObsConnectionState,
   getObsLastError,
@@ -37,7 +37,7 @@ import {
   type SessionEffect,
   type SessionEvent
 } from './captureState'
-import { selfNameSet, toReplayEvents, type LiveEventDto } from './eventMapping'
+import { selfNameSet, toRecordingEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
 import { containsGameStart, gameReadiness } from './gameClock'
 import type { CaptureStatus, Scoreboard } from '@shared/types'
@@ -109,8 +109,8 @@ export function getCaptureStatus(): CaptureStatus {
     return { state: 'error', message: getObsLastError() ?? 'Not connected to OBS.' }
   }
 
-  if (state.phase === 'recording' && state.replayId !== null && state.startedAt !== null) {
-    return { state: 'recording', replayId: state.replayId, startedAt: state.startedAt }
+  if (state.phase === 'recording' && state.recordingId !== null && state.startedAt !== null) {
+    return { state: 'recording', recordingId: state.recordingId, startedAt: state.startedAt }
   }
   if (state.phase === 'armed') return { state: 'armed', queueId: state.queueId }
   return { state: 'idle' }
@@ -176,18 +176,18 @@ async function runEffect(effect: SessionEffect): Promise<void> {
       } catch (err) {
         log.debug('Could not stop recording cleanly', { error: String(err) })
         // No stop event is coming, so close the row out here on what is known.
-        finalizeRecording(effect.replayId, null)
+        finalizeRecording(effect.recordingId, null)
       }
       return
     }
 
     case 'abandon': {
-      if (effect.replayId !== null) {
+      if (effect.recordingId !== null) {
         // Nothing playable was produced, so the row would only ever render as a
-        // broken replay. The file, if any, is left where OBS put it.
+        // broken recording. The file, if any, is left where OBS put it.
         const db = getDb()
-        deleteReplay(db, effect.replayId)
-        broadcastReplaysChanged()
+        deleteRecording(db, effect.recordingId)
+        broadcastRecordingsChanged()
       }
       await leaveManagedMode().catch(() => undefined)
       log.info('Capture abandoned', { reason: effect.reason })
@@ -198,7 +198,7 @@ async function runEffect(effect: SessionEffect): Promise<void> {
 
 async function beginRecording(): Promise<void> {
   const settings = getCaptureSettings()
-  if (settings.folder === null) throw new Error('No replay folder configured')
+  if (settings.folder === null) throw new Error('No recording folder configured')
 
   // OBS refuses to record into a folder that does not exist, and the default is
   // a folder nobody has created yet.
@@ -238,7 +238,7 @@ async function onRecordingStarted(): Promise<void> {
   )
 
   const settings = getCaptureSettings()
-  const replayId = createReplay(getDb(), {
+  const recordingId = createRecording(getDb(), {
     accountId: pending.accountId,
     // A placeholder: OBS names the file and only reports the name on stop.
     filePath: `${settings.folder}\\pending-${Date.now()}`,
@@ -249,12 +249,12 @@ async function onRecordingStarted(): Promise<void> {
     roster: board?.players.map((player) => player.championId ?? -1) ?? []
   })
 
-  log.info('Recording started', { replayId, gameTimeOffset })
-  dispatch({ type: 'recordingStarted', replayId, at: Date.now() })
-  broadcastReplaysChanged()
+  log.info('Recording started', { recordingId, gameTimeOffset })
+  dispatch({ type: 'recordingStarted', recordingId, at: Date.now() })
+  broadcastRecordingsChanged()
 }
 
-function finalizeRecording(replayId: number, eventPath: string | null): void {
+function finalizeRecording(recordingId: number, eventPath: string | null): void {
   const db = getDb()
   // Read before the dispatch below, which resets the session to idle
   // synchronously and takes the account id with it.
@@ -273,18 +273,18 @@ function finalizeRecording(replayId: number, eventPath: string | null): void {
     }
   }
 
-  finishReplay(db, replayId, endedAt, path ?? `unknown-${replayId}`, bytes)
-  log.info('Recording finished', { replayId, path, bytes })
+  finishRecording(db, recordingId, endedAt, path ?? `unknown-${recordingId}`, bytes)
+  log.info('Recording finished', { recordingId, path, bytes })
 
   void leaveManagedMode().catch(() => undefined)
   dispatch({ type: 'recordingStopped', at: endedAt })
-  broadcastReplaysChanged()
+  broadcastRecordingsChanged()
 
   // The match will not exist for minutes yet; postGameSync's retries are what
   // eventually make this succeed. Trying once now costs one query and catches
   // the case where the match was already synced. Never allowed to give up: a
   // recording that stopped a second ago has had no chance to be found yet.
-  if (accountId !== null) bindPendingReplays(accountId)
+  if (accountId !== null) bindPendingRecordings(accountId)
 }
 
 async function readScoreboard(accountId: number): Promise<Scoreboard | null> {
@@ -313,13 +313,13 @@ async function sawGameStart(): Promise<boolean> {
   }
 }
 
-async function pollEvents(replayId: number): Promise<void> {
+async function pollEvents(recordingId: number): Promise<void> {
   try {
     const raw = await liveClientGet<{ Events?: LiveEventDto[] }>('/liveclientdata/eventdata')
-    const events = toReplayEvents(raw.Events ?? [], selfNames, gameTimeOffset)
+    const events = toRecordingEvents(raw.Events ?? [], selfNames, gameTimeOffset)
     // Every poll returns the whole game, so this is an upsert by design — see
-    // insertReplayEvents. A crash costs one interval, not the timeline.
-    insertReplayEvents(getDb(), replayId, events)
+    // insertRecordingEvents. A crash costs one interval, not the timeline.
+    insertRecordingEvents(getDb(), recordingId, events)
   } catch (err) {
     if (!isNotRunning(err)) log.debug('Event poll failed', { error: String(err) })
   }
@@ -365,11 +365,11 @@ async function tick(): Promise<void> {
     return
   }
 
-  if (state.phase === 'recording' && state.replayId !== null) {
+  if (state.phase === 'recording' && state.recordingId !== null) {
     const board = await readScoreboard(state.accountId ?? 0)
     if (board) {
       gameLastSeen = now
-      await pollEvents(state.replayId)
+      await pollEvents(state.recordingId)
     } else if (now - gameLastSeen > GAME_LOST_MS) {
       // The client's end-of-game phase usually gets here first. This is the
       // other path: a crash or alt-F4, where the client never says the game
@@ -454,8 +454,8 @@ export function initCapture(): void {
     }
     // 'finished' also fires when the user presses Stop in OBS themselves, which
     // is a reasonable thing to do and should still close the row out.
-    if (signal === 'finished' && state.replayId !== null) {
-      finalizeRecording(state.replayId, event.path)
+    if (signal === 'finished' && state.recordingId !== null) {
+      finalizeRecording(state.recordingId, event.path)
     }
   })
 

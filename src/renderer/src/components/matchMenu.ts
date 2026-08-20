@@ -18,14 +18,28 @@ export function lpEditBlockedReason(match: MatchSummary): string | null {
 }
 
 /**
- * Why a game cannot be watched back, or null when it can.
+ * Why a game has no OBS recording, or null when it does.
  *
  * Stated rather than hidden, exactly as the LP reasons are: "why does this game
- * have a replay and that one not?" is a real question, and an item that
- * silently disappears from half the rows cannot answer it.
+ * have footage and that one not?" is a real question, and an item that silently
+ * disappears from half the rows cannot answer it.
+ */
+export function recordingBlockedReason(match: MatchSummary): string | null {
+  if (match.recordingId === null) return 'No recording for this game'
+  return null
+}
+
+/**
+ * Why a game has no Riot replay, or null when it does.
+ *
+ * Only reports whether the file exists. Whether it can actually be *played*
+ * depends on which patch it was recorded on and which clients are installed,
+ * which the match list has not been told and should not have to be — that
+ * answer arrives when the replay is opened, and the Captures tab states it in
+ * full.
  */
 export function replayBlockedReason(match: MatchSummary): string | null {
-  if (match.replayId === null) return 'No recording for this game'
+  if (match.replayId === null) return 'No Riot replay for this game'
   return null
 }
 
@@ -36,14 +50,24 @@ export function matchContextItems(
     onClearLp: () => void
     onCopyId: () => void
     onOpenDetails: () => void
+    onWatchRecording: () => void
     onWatchReplay: () => void
   },
   { expandable = true }: { expandable?: boolean } = {}
 ): ContextMenuItem[] {
   const blocked = lpEditBlockedReason(match)
+  const noRecording = recordingBlockedReason(match)
   const noReplay = replayBlockedReason(match)
 
   return [
+    // Two separate artefacts, so two separate items, both always present. A
+    // recording is this player's own screen; a replay is Riot's, with every
+    // camera. Collapsing them into one "watch" would have to pick for the user.
+    {
+      label: 'Watch recording',
+      onSelect: actions.onWatchRecording,
+      ...(noRecording ? { disabledReason: noRecording } : {})
+    },
     {
       label: 'Watch replay',
       onSelect: actions.onWatchReplay,

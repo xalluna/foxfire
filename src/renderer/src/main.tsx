@@ -21,20 +21,23 @@ async function start(): Promise<void> {
 
   const root = ReactDOM.createRoot(document.getElementById('root')!)
 
-  // The telemetry panel, the LP editor and every replay window are separate
+  // The telemetry panel, the LP editor, the archive manager and every recording
+  // window are separate
   // BrowserWindows loading this same bundle with a hash, so there is no second
   // Vite entry point to keep in step. The dynamic imports mean no window
-  // downloads or parses a panel it is not showing. The editor and replay hashes
+  // downloads or parses a panel it is not showing. The editor and recording hashes
   // carry query parameters after them, so they are matched by prefix — see
-  // lpEditorWindow.ts and replayWindow.ts.
+  // lpEditorWindow.ts and recordingWindow.ts.
   const hash = window.location.hash
   const Root = hash.startsWith('#telemetry')
     ? (await import('./telemetry/TelemetryApp')).TelemetryApp
     : hash.startsWith('#lp-editor')
       ? (await import('./lpEditor/LpEditorApp')).LpEditorApp
-      : hash.startsWith('#replay')
-        ? (await import('./replay/ReplayApp')).ReplayApp
-        : App
+      : hash.startsWith('#recording')
+        ? (await import('./recording/RecordingApp')).RecordingApp
+        : hash.startsWith('#archives')
+          ? (await import('./archives/ArchivesApp')).ArchivesApp
+          : App
 
   root.render(
     <React.StrictMode>

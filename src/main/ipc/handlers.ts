@@ -20,6 +20,29 @@ import { getBackgroundSettings, setBackgroundSettings } from '../services/backgr
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
 import { searchSummoner } from '../services/searchService'
+import {
+  addReplayByPath,
+  getReplayUsage,
+  linkReplayToMatch,
+  listReplays,
+  openReplay,
+  removeReplay,
+  revealReplay,
+  scanReplayFolder
+} from '../services/replayService'
+import { getRoflSettings, setRoflSettings } from '../services/roflSettings'
+import {
+  addArchive,
+  archiveLiveClient,
+  cancelArchiveCopy,
+  forgetLiveClient,
+  getRoflSettingsWithClient,
+  listClientArchives,
+  removeArchive,
+  resolveLiveClient,
+  setArchivePatchByHand
+} from '../services/clientArchiveService'
+import { openArchivesWindow } from '../archivesWindow'
 import { schedulePostGameSync } from '../services/postGameSync'
 import { replayAttribution } from '../services/rankAttribution'
 import { getDb } from '../db'
@@ -37,7 +60,7 @@ import {
 } from '../telemetry/queries'
 import { openTelemetryWindow } from '../telemetryWindow'
 import { openLpEditorWindow } from '../lpEditorWindow'
-import { openReplayWindow } from '../replayWindow'
+import { openRecordingWindow } from '../recordingWindow'
 import {
   clearObsPassword,
   getCaptureSettings,
@@ -47,12 +70,12 @@ import {
 import { getCaptureStatus, refreshCapture } from '../capture/captureService'
 import {
   getDiskUsage,
-  getReplayDetail,
-  listReplays,
-  removeOldestReplays,
-  removeReplay,
-  revealReplay
-} from '../services/replayService'
+  getRecordingDetail,
+  listRecordings,
+  removeOldestRecordings,
+  removeRecording,
+  revealRecording
+} from '../services/recordingService'
 import { grabSourceScreenshot, readObsConfig } from '../obs/config'
 import { validateObs } from '../obs/validate'
 import { managedPreviewSource } from '../obs/provision'
@@ -72,6 +95,7 @@ import type {
   RiotIdInput,
   RiotKeyLimits,
   RiotKeyType,
+  RoflSettings,
   SeasonInput
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
@@ -227,6 +251,10 @@ export function registerIpcHandlers(): void {
     // Tray visibility is a main-process concern the service deliberately does
     // not reach into, so it is applied here where both are already in scope.
     syncTray()
+    // The League install path doubles as the replay runner, and its patch is
+    // cached for a minute — drop that now rather than making the user wait for
+    // it to expire after pointing Foxfire somewhere new.
+    if (patch.lcuInstallPath !== undefined) forgetLiveClient()
     return next
   })
 
@@ -291,24 +319,71 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.replays.list, (_e, accountId: number) => listReplays(accountId))
-  ipcMain.handle(CH.replays.detail, (_e, replayId: number) => getReplayDetail(replayId))
-  ipcMain.handle(CH.replays.usage, () => getDiskUsage())
-  ipcMain.handle(CH.replays.remove, (_e, replayId: number) => removeReplay(replayId))
-  ipcMain.handle(CH.replays.removeOldest, (_e, accountId: number, count: number) =>
-    removeOldestReplays(accountId, count)
+  ipcMain.handle(CH.recordings.list, (_e, accountId: number) => listRecordings(accountId))
+  ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
+  ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
+  ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
+  ipcMain.handle(CH.recordings.removeOldest, (_e, accountId: number, count: number) =>
+    removeOldestRecordings(accountId, count)
   )
-  ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplayWindow(replayId))
+  ipcMain.handle(CH.recordings.open, (_e, recordingId: number) => openRecordingWindow(recordingId))
+  ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
+  /* Riot's own replays. No detail handler and no window: the League client is
+     the player, and Foxfire only ever hands it a path. */
+  ipcMain.handle(CH.replays.list, (_e, accountId: number) => listReplays(accountId))
+  ipcMain.handle(CH.replays.usage, (_e, accountId: number) => getReplayUsage(accountId))
+  ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplay(replayId))
   ipcMain.handle(CH.replays.reveal, (_e, replayId: number) => revealReplay(replayId))
-  // Sent by a replay window, delivered to the main one: the match list it wants
+  ipcMain.handle(CH.replays.remove, (_e, replayId: number) => removeReplay(replayId))
+  ipcMain.handle(CH.replays.add, (_e, filePath: string) => addReplayByPath(filePath))
+  ipcMain.handle(CH.replays.link, (_e, replayId: number, matchId: string) =>
+    linkReplayToMatch(replayId, matchId)
+  )
+  ipcMain.handle(CH.replays.rescan, () => scanReplayFolder({ announce: true }))
+  // The settings read asks the client where its replay folder is, so it is the
+  // async one; the write does not need to and stays synchronous.
+  ipcMain.handle(CH.replays.settings, () => getRoflSettingsWithClient())
+  ipcMain.handle(CH.replays.setSettings, (_e, patch: Partial<RoflSettings>) => {
+    setRoflSettings(patch)
+    return getRoflSettingsWithClient()
+  })
+  ipcMain.handle(CH.replays.chooseSourceFolder, async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Where does League save replays?',
+      properties: ['openDirectory'],
+      defaultPath: getRoflSettings().sourceFolder ?? undefined
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
+  /* League installs kept so older replays stay watchable. */
+  ipcMain.handle(CH.archives.list, () => listClientArchives())
+  ipcMain.handle(CH.archives.add, (_e, path: string, label: string | null) => addArchive(path, label))
+  ipcMain.handle(CH.archives.remove, (_e, id: number) => removeArchive(id))
+  ipcMain.handle(CH.archives.setPatch, (_e, id: number, patch: string) =>
+    setArchivePatchByHand(id, patch)
+  )
+  ipcMain.handle(CH.archives.live, () => resolveLiveClient())
+  ipcMain.handle(CH.archives.choosePath, async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Where is the League install?',
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+  ipcMain.handle(CH.archives.archiveLive, (_e, destination: string) => archiveLiveClient(destination))
+  ipcMain.handle(CH.archives.cancelCopy, () => cancelArchiveCopy())
+  ipcMain.handle(CH.archives.openWindow, () => openArchivesWindow())
+
+  // Sent by a recording window, delivered to the main one: the match list it wants
   // opened lives in a different renderer process with its own state.
-  ipcMain.handle(CH.replays.showMatch, (_e, accountId: number, matchId: string) => {
+  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: number, matchId: string) => {
     const main = getMainWindow()
     if (!main) return
     if (main.isMinimized()) main.restore()
     main.show()
     main.focus()
-    main.webContents.send(CH.replays.showMatch, accountId, matchId)
+    main.webContents.send(CH.recordings.showMatch, accountId, matchId)
   })
 
   ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) => searchSummoner(input))
