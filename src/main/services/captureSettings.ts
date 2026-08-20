@@ -62,9 +62,9 @@ function legacyDefaultFolder(): string {
  *
  * This default is resolved on every read and never stored, so changing the
  * constant silently repoints the app at a new directory — while
- * replayProtocol.ts refuses to serve any file outside the *current* folder and
- * the replays table goes on holding absolute paths into the old one. The result
- * would be a Replays screen where every existing recording claims to have been
+ * recordingProtocol.ts refuses to serve any file outside the *current* folder and
+ * the recordings table goes on holding absolute paths into the old one. The result
+ * would be a Recordings tab where every existing recording claims to have been
  * moved or deleted.
  *
  * Writing the resolved old path into the setting makes the previous default

@@ -2,26 +2,26 @@ import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  bindReplay,
+  bindRecording,
   countMissingFiles,
-  createReplay,
-  deleteReplay,
-  finishReplay,
-  getOldestReplayIds,
-  getBindableReplays,
-  getReplay,
-  getReplayEvents,
-  getReplayFilePath,
-  getReplayUsage,
-  getReplays,
-  insertReplayEvents,
-  markReplayUnmatched,
+  createRecording,
+  deleteRecording,
+  finishRecording,
+  getOldestRecordingIds,
+  getBindableRecordings,
+  getRecording,
+  getRecordingEvents,
+  getRecordingFilePath,
+  getRecordingUsage,
+  getRecordings,
+  insertRecordingEvents,
+  markRecordingUnmatched,
   matchAlreadyBound
-} from './replays.repo'
+} from './recordings.repo'
 import { getMatchSummaries, insertMatch } from './matches.repo'
 import { applyAllMigrations } from '../testMigrations'
 import type { MatchDto } from '../../riot/types'
-import type { ReplayEvent } from '@shared/types'
+import type { RecordingEvent } from '@shared/types'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -97,8 +97,8 @@ function match(matchId: string, gameCreation: number): MatchDto {
   } as unknown as MatchDto
 }
 
-function newReplay(over: Partial<Parameters<typeof createReplay>[1]> = {}): number {
-  return createReplay(db, {
+function newRecording(over: Partial<Parameters<typeof createRecording>[1]> = {}): number {
+  return createRecording(db, {
     accountId: 1,
     filePath: FILE,
     queueId: 420,
@@ -110,7 +110,7 @@ function newReplay(over: Partial<Parameters<typeof createReplay>[1]> = {}): numb
   })
 }
 
-function event(over: Partial<ReplayEvent> = {}): ReplayEvent {
+function event(over: Partial<RecordingEvent> = {}): RecordingEvent {
   return {
     eventId: 1,
     name: 'ChampionKill',
@@ -129,86 +129,86 @@ beforeEach(() => {
   seedAccount()
 })
 
-describe('replays.repo', () => {
+describe('recordings.repo', () => {
   it('starts a recording unbound, because the match does not exist yet', () => {
-    const id = newReplay()
-    const replay = getReplay(db, id)
+    const id = newRecording()
+    const recording = getRecording(db, id)
 
-    expect(replay?.bindState).toBe('pending')
-    expect(replay?.matchId).toBeNull()
-    expect(replay?.match).toBeNull()
+    expect(recording?.bindState).toBe('pending')
+    expect(recording?.matchId).toBeNull()
+    expect(recording?.match).toBeNull()
     // Still in progress — an end time is what makes it a candidate for binding.
-    expect(replay?.endedAt).toBeNull()
-    expect(replay?.durationSeconds).toBeNull()
+    expect(recording?.endedAt).toBeNull()
+    expect(recording?.durationSeconds).toBeNull()
   })
 
-  it('reports a file that is not on disk as missing rather than hiding the replay', () => {
-    const id = newReplay()
+  it('reports a file that is not on disk as missing rather than hiding the recording', () => {
+    const id = newRecording()
 
-    expect(getReplay(db, id)?.fileExists).toBe(false)
+    expect(getRecording(db, id)?.fileExists).toBe(false)
     expect(countMissingFiles(db)).toBe(1)
   })
 
   it('takes the filename from the stop, because OBS chooses it and not us', () => {
-    const id = newReplay({ filePath: 'pending-unknown-name' })
-    finishReplay(db, id, T0 + 1_800_000, FILE, 2_400_000_000)
+    const id = newRecording({ filePath: 'pending-unknown-name' })
+    finishRecording(db, id, T0 + 1_800_000, FILE, 2_400_000_000)
 
-    const replay = getReplay(db, id)
-    expect(getReplayFilePath(db, id)).toBe(FILE)
-    expect(replay?.fileBytes).toBe(2_400_000_000)
-    expect(replay?.durationSeconds).toBe(1800)
+    const recording = getRecording(db, id)
+    expect(getRecordingFilePath(db, id)).toBe(FILE)
+    expect(recording?.fileBytes).toBe(2_400_000_000)
+    expect(recording?.durationSeconds).toBe(1800)
   })
 
   it('ignores events it has already stored, since every poll resends the whole list', () => {
-    const id = newReplay()
+    const id = newRecording()
 
-    insertReplayEvents(db, id, [event({ eventId: 1 }), event({ eventId: 2, videoTime: 210 })])
+    insertRecordingEvents(db, id, [event({ eventId: 1 }), event({ eventId: 2, videoTime: 210 })])
     // The next poll a second later returns both of those again plus a new one.
-    insertReplayEvents(db, id, [
+    insertRecordingEvents(db, id, [
       event({ eventId: 1 }),
       event({ eventId: 2, videoTime: 210 }),
       event({ eventId: 3, videoTime: 260, role: 'death' })
     ])
 
-    const events = getReplayEvents(db, id)
+    const events = getRecordingEvents(db, id)
     expect(events.map((e) => e.eventId)).toEqual([1, 2, 3])
     expect(events[2]?.role).toBe('death')
   })
 
   it('returns events in video order, which is the order the timeline draws them', () => {
-    const id = newReplay()
-    insertReplayEvents(db, id, [
+    const id = newRecording()
+    insertRecordingEvents(db, id, [
       event({ eventId: 9, videoTime: 900 }),
       event({ eventId: 4, videoTime: 120 }),
       event({ eventId: 7, videoTime: 500 })
     ])
 
-    expect(getReplayEvents(db, id).map((e) => e.videoTime)).toEqual([120, 500, 900])
+    expect(getRecordingEvents(db, id).map((e) => e.videoTime)).toEqual([120, 500, 900])
   })
 
-  it('surfaces the bound match on the replay, so the list needs one query', () => {
+  it('surfaces the bound match on the recording, so the list needs one query', () => {
     insertMatch(db, match('NA1_1', T0))
-    const id = newReplay()
-    finishReplay(db, id, T0 + 1_800_000, FILE, 100)
-    bindReplay(db, id, 'NA1_1')
+    const id = newRecording()
+    finishRecording(db, id, T0 + 1_800_000, FILE, 100)
+    bindRecording(db, id, 'NA1_1')
 
-    const replay = getReplay(db, id)
-    expect(replay?.bindState).toBe('bound')
-    expect(replay?.match?.championName).toBe('Viktor')
-    expect(replay?.match?.kills).toBe(7)
-    expect(replay?.match?.win).toBe(true)
+    const recording = getRecording(db, id)
+    expect(recording?.bindState).toBe('bound')
+    expect(recording?.match?.championName).toBe('Viktor')
+    expect(recording?.match?.kills).toBe(7)
+    expect(recording?.match?.win).toBe(true)
   })
 
   it('offers only finished, still-unbound recordings for binding', () => {
-    const running = newReplay()
-    const finished = newReplay({ filePath: 'b.mp4' })
-    const already = newReplay({ filePath: 'c.mp4' })
-    finishReplay(db, finished, T0 + 1_000, 'b.mp4', 1)
-    finishReplay(db, already, T0 + 1_000, 'c.mp4', 1)
+    const running = newRecording()
+    const finished = newRecording({ filePath: 'b.mp4' })
+    const already = newRecording({ filePath: 'c.mp4' })
+    finishRecording(db, finished, T0 + 1_000, 'b.mp4', 1)
+    finishRecording(db, already, T0 + 1_000, 'c.mp4', 1)
     insertMatch(db, match('NA1_1', T0))
-    bindReplay(db, already, 'NA1_1')
+    bindRecording(db, already, 'NA1_1')
 
-    const pending = getBindableReplays(db, 1, WITHIN_HORIZON)
+    const pending = getBindableRecordings(db, 1, WITHIN_HORIZON)
     expect(pending.map((p) => p.id)).toEqual([finished])
     expect(pending.map((p) => p.id)).not.toContain(running)
     expect(pending[0]?.roster).toHaveLength(10)
@@ -217,109 +217,109 @@ describe('replays.repo', () => {
   it('offers a recording it gave up on again, in case the match was only missing', () => {
     // Giving up says a match could not be found, which is not the same as one
     // not existing: an expired API key means nothing was there to find yet.
-    const id = newReplay()
-    finishReplay(db, id, T0 + 1_000, FILE, 1)
-    markReplayUnmatched(db, id)
+    const id = newRecording()
+    finishRecording(db, id, T0 + 1_000, FILE, 1)
+    markRecordingUnmatched(db, id)
 
-    expect(getBindableReplays(db, 1, WITHIN_HORIZON).map((p) => p.id)).toEqual([id])
-    expect(getReplay(db, id)?.bindState).toBe('unmatched')
+    expect(getBindableRecordings(db, 1, WITHIN_HORIZON).map((p) => p.id)).toEqual([id])
+    expect(getRecording(db, id)?.bindState).toBe('unmatched')
   })
 
   it('stops offering a written-off recording once it has aged past the horizon', () => {
     // A Practice Tool game has no match and never will. Without this cutoff it
     // would be rescanned on every sync for the life of the library.
-    const id = newReplay()
-    finishReplay(db, id, T0 + 1_000, FILE, 1)
-    markReplayUnmatched(db, id)
+    const id = newRecording()
+    finishRecording(db, id, T0 + 1_000, FILE, 1)
+    markRecordingUnmatched(db, id)
 
-    expect(getBindableReplays(db, 1, PAST_HORIZON)).toHaveLength(0)
+    expect(getBindableRecordings(db, 1, PAST_HORIZON)).toHaveLength(0)
   })
 
   it('never re-offers a bound recording, however recent it is', () => {
     insertMatch(db, match('NA1_1', T0))
-    const id = newReplay()
-    finishReplay(db, id, T0 + 1_000, FILE, 1)
-    bindReplay(db, id, 'NA1_1')
+    const id = newRecording()
+    finishRecording(db, id, T0 + 1_000, FILE, 1)
+    bindRecording(db, id, 'NA1_1')
 
-    expect(getBindableReplays(db, 1, WITHIN_HORIZON)).toHaveLength(0)
+    expect(getBindableRecordings(db, 1, WITHIN_HORIZON)).toHaveLength(0)
   })
 
   it('knows a match is spoken for, so two recordings cannot claim one game', () => {
     insertMatch(db, match('NA1_1', T0))
-    const id = newReplay()
+    const id = newRecording()
     expect(matchAlreadyBound(db, 'NA1_1')).toBe(false)
 
-    bindReplay(db, id, 'NA1_1')
+    bindRecording(db, id, 'NA1_1')
     expect(matchAlreadyBound(db, 'NA1_1')).toBe(true)
   })
 
   it('keeps the footage when the match is deleted, dropping only the link', () => {
     insertMatch(db, match('NA1_1', T0))
-    const id = newReplay()
-    bindReplay(db, id, 'NA1_1')
+    const id = newRecording()
+    bindRecording(db, id, 'NA1_1')
 
     db.prepare('DELETE FROM matches WHERE match_id = ?').run('NA1_1')
 
     // ON DELETE SET NULL, deliberately not CASCADE — losing a match row must
     // never destroy a recording.
-    const replay = getReplay(db, id)
-    expect(replay).not.toBeNull()
-    expect(replay?.matchId).toBeNull()
+    const recording = getRecording(db, id)
+    expect(recording).not.toBeNull()
+    expect(recording?.matchId).toBeNull()
   })
 
-  it('takes its events with it when a replay is deleted', () => {
-    const id = newReplay()
-    insertReplayEvents(db, id, [event()])
+  it('takes its events with it when a recording is deleted', () => {
+    const id = newRecording()
+    insertRecordingEvents(db, id, [event()])
 
-    expect(deleteReplay(db, id)).toBe(FILE)
-    expect(getReplay(db, id)).toBeNull()
+    expect(deleteRecording(db, id)).toBe(FILE)
+    expect(getRecording(db, id)).toBeNull()
     const rows = db
-      .prepare('SELECT COUNT(*) AS n FROM replay_events WHERE replay_id = ?')
+      .prepare('SELECT COUNT(*) AS n FROM recording_events WHERE recording_id = ?')
       .get(id) as unknown as { n: number }
     expect(rows.n).toBe(0)
   })
 
-  it('hands the match list a replay id, which is all its context menu needs', () => {
+  it('hands the match list a recording id, which is all its context menu needs', () => {
     insertMatch(db, match('NA1_1', T0))
-    const id = newReplay()
-    bindReplay(db, id, 'NA1_1')
+    const id = newRecording()
+    bindRecording(db, id, 'NA1_1')
 
     const [summary] = getMatchSummaries(db, ME, 10, 0)
-    expect(summary?.replayId).toBe(id)
+    expect(summary?.recordingId).toBe(id)
   })
 
-  it('leaves replayId null on a match nothing recorded', () => {
+  it('leaves recordingId null on a match nothing recorded', () => {
     insertMatch(db, match('NA1_1', T0))
 
     const [summary] = getMatchSummaries(db, ME, 10, 0)
-    expect(summary?.replayId).toBeNull()
+    expect(summary?.recordingId).toBeNull()
   })
 
   it('totals disk use and counts what never found a match', () => {
-    const a = newReplay({ filePath: 'a.mp4' })
-    const b = newReplay({ filePath: 'b.mp4' })
-    finishReplay(db, a, T0 + 1_000, 'a.mp4', 1_000_000)
-    finishReplay(db, b, T0 + 1_000, 'b.mp4', 3_000_000)
-    markReplayUnmatched(db, b)
+    const a = newRecording({ filePath: 'a.mp4' })
+    const b = newRecording({ filePath: 'b.mp4' })
+    finishRecording(db, a, T0 + 1_000, 'a.mp4', 1_000_000)
+    finishRecording(db, b, T0 + 1_000, 'b.mp4', 3_000_000)
+    markRecordingUnmatched(db, b)
 
-    const usage = getReplayUsage(db)
+    const usage = getRecordingUsage(db)
     expect(usage.totalBytes).toBe(4_000_000)
     expect(usage.count).toBe(2)
     expect(usage.unmatchedCount).toBe(1)
   })
 
   it('deletes oldest first, so cleanup keeps the games you just played', () => {
-    const oldest = newReplay({ filePath: 'a.mp4', startedAt: T0 })
-    const middle = newReplay({ filePath: 'b.mp4', startedAt: T0 + 10_000 })
-    newReplay({ filePath: 'c.mp4', startedAt: T0 + 20_000 })
+    const oldest = newRecording({ filePath: 'a.mp4', startedAt: T0 })
+    const middle = newRecording({ filePath: 'b.mp4', startedAt: T0 + 10_000 })
+    newRecording({ filePath: 'c.mp4', startedAt: T0 + 20_000 })
 
-    expect(getOldestReplayIds(db, 1, 2)).toEqual([oldest, middle])
+    expect(getOldestRecordingIds(db, 1, 2)).toEqual([oldest, middle])
   })
 
   it('lists newest first, matching how match history reads', () => {
-    newReplay({ filePath: 'a.mp4', startedAt: T0 })
-    const newest = newReplay({ filePath: 'b.mp4', startedAt: T0 + 60_000 })
+    newRecording({ filePath: 'a.mp4', startedAt: T0 })
+    const newest = newRecording({ filePath: 'b.mp4', startedAt: T0 + 60_000 })
 
-    expect(getReplays(db, 1)[0]?.id).toBe(newest)
+    expect(getRecordings(db, 1)[0]?.id).toBe(newest)
   })
 })

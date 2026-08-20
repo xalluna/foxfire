@@ -4,13 +4,13 @@ import { BrowserWindow, shell } from 'electron'
 import { is } from './lib/env'
 
 /**
- * Replay windows, one per open replay — and more than one per replay if asked.
+ * Recording windows, one per open recording — and more than one per recording if asked.
  *
  * Deliberately not the module-singleton shape telemetryWindow.ts and
- * lpEditorWindow.ts use. A window owns a replay here, so several can be open at
+ * lpEditorWindow.ts use. A window owns a recording here, so several can be open at
  * once: two monitors showing two games, or the same game at two timestamps to
  * compare a botched fight against how it should have gone. Opening the same
- * replay twice is allowed rather than focusing the existing window, because
+ * recording twice is allowed rather than focusing the existing window, because
  * that comparison is a real thing to want.
  *
  * The registry exists so the main window can close them all — leaving one open
@@ -19,11 +19,11 @@ import { is } from './lib/env'
  */
 const windows = new Set<BrowserWindow>()
 
-function replayHash(replayId: number): string {
-  return `#replay?id=${replayId}`
+function recordingHash(recordingId: number): string {
+  return `#recording?id=${recordingId}`
 }
 
-export function openReplayWindow(replayId: number): void {
+export function openRecordingWindow(recordingId: number): void {
   const window = new BrowserWindow({
     // 16:9 plus room for the header strip and the timeline beneath the video.
     width: 1180,
@@ -31,7 +31,7 @@ export function openReplayWindow(replayId: number): void {
     minWidth: 780,
     minHeight: 520,
     show: false,
-    title: 'Foxfire — Replay',
+    title: 'Foxfire — Recording',
     autoHideMenuBar: true,
     backgroundColor: '#010A13',
     webPreferences: {
@@ -49,7 +49,7 @@ export function openReplayWindow(replayId: number): void {
     return { action: 'deny' }
   })
 
-  const hash = replayHash(replayId)
+  const hash = recordingHash(recordingId)
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}${hash}`)
   } else {
@@ -62,7 +62,7 @@ export function openReplayWindow(replayId: number): void {
   windows.add(window)
 }
 
-export function closeReplayWindows(): void {
+export function closeRecordingWindows(): void {
   for (const window of [...windows]) {
     if (!window.isDestroyed()) window.close()
   }

@@ -6,6 +6,7 @@ import { CH } from '../ipc/channels'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
+import { rescanReplays } from '../rofl/watcher'
 import { onGamePhase } from '../capture/captureService'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
@@ -269,6 +270,11 @@ async function tick(): Promise<void> {
       // Every queue, not just ranked: a normal or ARAM game moves no LP but
       // still needs fetching, which is the whole point of the refresh.
       schedulePostGameSync(account.id)
+
+      // The client writes the .rofl around now, if the player has replays
+      // switched on. The folder watcher will usually see it first; this is the
+      // backstop for the case where it did not, and it costs one directory read.
+      void rescanReplays()
     }
 
     if (moved) {

@@ -67,7 +67,7 @@ export interface ObsExpectation {
   managed: boolean
   /** The scene the user picked in settings, or null if they have not yet. */
   scene: string | null
-  /** The replay folder. OBS must be writing into it for us to find the file. */
+  /** The recording folder. OBS must be writing into it for us to find the file. */
   folder: string | null
 }
 

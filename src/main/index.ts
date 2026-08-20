@@ -8,7 +8,8 @@ import { initSettings } from './services/settingsService'
 import { getBackgroundSettings, initBackground } from './services/backgroundService'
 import { cancelAllPostGameSyncs } from './services/postGameSync'
 import { repairAttribution } from './services/rankHistoryService'
-import { bindPendingReplays } from './services/replayService'
+import { bindPendingRecordings } from './services/recordingService'
+import { rescanReplays, startReplayWatcher, stopReplayWatcher } from './rofl/watcher'
 import { startSync } from './services/syncService'
 import { stopLcuWatcher } from './lcu/watcher'
 import { attachTrayBehaviour, beginQuit, showWindow, syncTray } from './tray'
@@ -19,7 +20,7 @@ import { observeRateLimiter } from './telemetry/limiter'
 import { startResourceSampling, stopResourceSampling } from './telemetry/resources'
 import { startRetention, stopRetention } from './telemetry/retention'
 import { openTelemetryWindow } from './telemetryWindow'
-import { registerReplayProtocol, registerReplayScheme } from './replayProtocol'
+import { registerRecordingProtocol, registerRecordingScheme } from './recordingProtocol'
 import { migrateUserData, verifyMigration } from './migrateUserData'
 import { initCapture, stopCapture } from './capture/captureService'
 import { pinLegacyCaptureFolder } from './services/captureSettings'
@@ -48,9 +49,9 @@ migrateUserData()
 installCrashHandlers()
 
 // Must run before the app is ready — Electron will not accept a privileged
-// scheme afterwards. See replayProtocol.ts for why the replay window cannot
+// scheme afterwards. See recordingProtocol.ts for why the recording window cannot
 // simply point a <video> at a file:// URL.
-registerReplayScheme()
+registerRecordingScheme()
 
 /**
  * One process at a time.
@@ -110,7 +111,7 @@ function bootstrap(): void {
   startResourceSampling()
   startRetention(() => peekTelemetryDb())
   initSettings()
-  registerReplayProtocol()
+  registerRecordingProtocol()
   registerIpcHandlers()
   globalShortcut.register(TELEMETRY_ACCELERATOR, openTelemetryWindow)
   // After the window exists, so the watcher's status events have somewhere to
@@ -139,7 +140,7 @@ function bootstrap(): void {
  * one per genuinely new match, so the cost is proportional to what was actually
  * missed.
  *
- * The attribution repair and the replay binding run first and separately: both
+ * The attribution repair and the recording binding run first and separately: both
  * touch only SQLite, so neither may sit behind a Riot call that an expired key
  * would fail. Binding especially — an expired key is the reason a recording is
  * still waiting, so making the pairing wait on a working one is backwards.
@@ -147,9 +148,16 @@ function bootstrap(): void {
 function catchUpOnLaunch(): void {
   repairAttribution()
   for (const account of listAccounts(getDb())) {
-    bindPendingReplays(account.id)
+    bindPendingRecordings(account.id)
     startSync(account.id, 'auto')
   }
+
+  // Replays are picked up the same way and for the same reason: the folder
+  // watcher only sees files written while the app is running, so a session
+  // played with it closed would otherwise leave its replays sitting on disk and
+  // invisible. Announced, because on a first run this is the import of an
+  // entire replay history and the tab should say so rather than appear to hang.
+  void rescanReplays({ announce: true }).then(() => startReplayWatcher())
 }
 
 app.on('window-all-closed', () => {
@@ -178,6 +186,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopLcuWatcher()
+  stopReplayWatcher()
   stopCapture()
   // Only quits an OBS this app started; one the user was already running,
   // possibly mid-stream, is left alone.

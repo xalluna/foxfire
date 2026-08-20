@@ -12,6 +12,8 @@ import replaysSql from './migrations/007_replays.sql?raw'
 import seasonsSql from './migrations/008_seasons.sql?raw'
 import replayRebindSql from './migrations/009_replay_rebind.sql?raw'
 import accountPuuidsSql from './migrations/010_account_puuids.sql?raw'
+import recordingsRenameSql from './migrations/011_recordings_rename.sql?raw'
+import roflReplaysSql from './migrations/012_rofl_replays.sql?raw'
 
 let db: DatabaseSync | null = null
 
@@ -27,7 +29,9 @@ const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
   { name: '007_replays.sql', sql: replaysSql },
   { name: '008_seasons.sql', sql: seasonsSql },
   { name: '009_replay_rebind.sql', sql: replayRebindSql },
-  { name: '010_account_puuids.sql', sql: accountPuuidsSql }
+  { name: '010_account_puuids.sql', sql: accountPuuidsSql },
+  { name: '011_recordings_rename.sql', sql: recordingsRenameSql },
+  { name: '012_rofl_replays.sql', sql: roflReplaysSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

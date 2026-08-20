@@ -2,15 +2,19 @@ import type {
   Account,
   AdHocSummonerResult,
   AppSettingsPublic,
+  ArchiveCopyProgress,
+  ArchiveResult,
   AssetManifest,
   BackgroundSettings,
   CaptureSettings,
   CaptureStatus,
   ChampionStats,
+  ClientArchive,
   EditableMatch,
   IdentityReport,
   LcuStatus,
   LeagueEntry,
+  LiveClient,
   ManualRankEdit,
   MasteryEntry,
   MatchDetail,
@@ -19,12 +23,17 @@ import type {
   QueueType,
   RankHistory,
   RankRange,
+  Recording,
+  RecordingDetail,
+  RecordingDiskUsage,
   Replay,
-  ReplayDetail,
   ReplayDiskUsage,
+  ReplayImportProgress,
+  ReplayLaunchResult,
   RiotIdInput,
   RiotKeyLimits,
   RiotKeyType,
+  RoflSettings,
   Scoreboard,
   Season,
   SeasonInput,
@@ -187,22 +196,64 @@ export interface Api {
     preview: () => Promise<string | null>
     reconnect: () => Promise<CaptureStatus>
   }
-  replays: {
+  recordings: {
     /** Every recording for an account, newest first, bound or not. */
-    list: (accountId: number) => Promise<Replay[]>
-    detail: (replayId: number) => Promise<ReplayDetail | null>
-    usage: () => Promise<ReplayDiskUsage>
-    remove: (replayId: number) => Promise<void>
+    list: (accountId: number) => Promise<Recording[]>
+    detail: (recordingId: number) => Promise<RecordingDetail | null>
+    usage: () => Promise<RecordingDiskUsage>
+    remove: (recordingId: number) => Promise<void>
     /** Deletes the N oldest recordings, for the one-click cleanup on the cap warning. */
     removeOldest: (accountId: number, count: number) => Promise<number>
-    /** Opens a window owning this replay. Called again, it opens another one. */
-    open: (replayId: number) => Promise<void>
-    reveal: (replayId: number) => Promise<void>
-    /** Fires when a replay is added, bound or deleted. */
+    /** Opens a window owning this recording. Called again, it opens another one. */
+    open: (recordingId: number) => Promise<void>
+    reveal: (recordingId: number) => Promise<void>
+    /** Fires when a recording is added, bound or deleted. */
     onChanged: (cb: () => void) => () => void
-    /** Sent by a replay window; the main window focuses and expands that match. */
+    /** Sent by a recording window; the main window focuses and expands that match. */
     showMatch: (accountId: number, matchId: string) => Promise<void>
     onShowMatch: (cb: (accountId: number, matchId: string) => void) => () => void
+  }
+  /**
+   * Riot's own replays. No detail call and no player: a .rofl is handed to the
+   * League client, which already plays it better than Foxfire could.
+   */
+  /**
+   * The real path of a File the user dropped or picked.
+   *
+   * Electron stopped exposing File.path in 32, so this has to come from the
+   * preload. It is the whole reason drag-and-drop is worth having here: the main
+   * process copies straight from the original, and the renderer never reads a
+   * byte of a 30 MB replay.
+   */
+  pathForFile: (file: File) => string | null
+  replays: {
+    list: (accountId: number) => Promise<Replay[]>
+    usage: (accountId: number) => Promise<ReplayDiskUsage>
+    /** Resolves with why it could not be opened, or null when it opened. */
+    open: (replayId: number) => Promise<ReplayLaunchResult>
+    reveal: (replayId: number) => Promise<void>
+    remove: (replayId: number) => Promise<void>
+    add: (filePath: string) => Promise<{ ok: boolean; replay: Replay | null }>
+    link: (replayId: number, matchId: string) => Promise<void>
+    rescan: () => Promise<number>
+    settings: () => Promise<RoflSettings>
+    setSettings: (patch: Partial<RoflSettings>) => Promise<RoflSettings>
+    chooseSourceFolder: () => Promise<string | null>
+    onChanged: (cb: () => void) => () => void
+    onImportProgress: (cb: (progress: ReplayImportProgress) => void) => () => void
+  }
+  /** League installs kept so replays from older patches stay watchable. */
+  archives: {
+    list: () => Promise<ClientArchive[]>
+    add: (path: string, label: string | null) => Promise<ArchiveResult>
+    remove: (id: number) => Promise<void>
+    setPatch: (id: number, patch: string) => Promise<{ ok: boolean; error?: string }>
+    live: () => Promise<LiveClient>
+    choosePath: () => Promise<string | null>
+    archiveLive: (destination: string) => Promise<ArchiveResult>
+    cancelCopy: () => Promise<void>
+    onCopyProgress: (cb: (progress: ArchiveCopyProgress) => void) => () => void
+    openWindow: () => Promise<void>
   }
   search: {
     summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>

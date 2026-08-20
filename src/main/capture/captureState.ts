@@ -22,7 +22,7 @@ export interface CaptureSessionState {
   phase: CapturePhase
   accountId: number | null
   queueId: number | null
-  replayId: number | null
+  recordingId: number | null
   /** When the client said a game was on, so a loading screen that never ends can be given up on. */
   armedAt: number | null
   startedAt: number | null
@@ -34,7 +34,7 @@ export const INITIAL_STATE: CaptureSessionState = {
   phase: 'idle',
   accountId: null,
   queueId: null,
-  replayId: null,
+  recordingId: null,
   armedAt: null,
   startedAt: null,
   gameTimeOffset: 0
@@ -45,7 +45,7 @@ export type SessionEvent =
   | { type: 'gameStarted'; accountId: number; queueId: number | null; at: number }
   /** The game answered on loopback, so there is finally something to capture. */
   | { type: 'gameReady'; gameTime: number; at: number }
-  | { type: 'recordingStarted'; replayId: number; at: number }
+  | { type: 'recordingStarted'; recordingId: number; at: number }
   /** The client left the playing phase — the ordinary end of a game. */
   | { type: 'gameEnded'; at: number }
   /** The game stopped answering while recording: a crash, or alt-F4. */
@@ -64,9 +64,9 @@ export type SessionEffect =
       gameTime: number
       at: number
     }
-  | { type: 'endRecording'; replayId: number }
-  /** Give up without a usable recording. `replayId` is null if none was ever created. */
-  | { type: 'abandon'; replayId: number | null; reason: string }
+  | { type: 'endRecording'; recordingId: number }
+  /** Give up without a usable recording. `recordingId` is null if none was ever created. */
+  | { type: 'abandon'; recordingId: number | null; reason: string }
 
 export interface CaptureConfig {
   enabled: boolean
@@ -144,7 +144,7 @@ export function reduce(
       return stay({
         ...state,
         phase: 'recording',
-        replayId: event.replayId,
+        recordingId: event.recordingId,
         startedAt: event.at
       })
     }
@@ -155,10 +155,10 @@ export function reduce(
       // backed out. Nothing was recorded, so there is nothing to clean up.
       if (state.phase === 'armed') return { state: idle(), effect: { type: 'none' } }
 
-      if (state.phase === 'recording' && state.replayId !== null) {
+      if (state.phase === 'recording' && state.recordingId !== null) {
         return {
           state: { ...state, phase: 'stopping' },
-          effect: { type: 'endRecording', replayId: state.replayId }
+          effect: { type: 'endRecording', recordingId: state.recordingId }
         }
       }
       return stay(state)
@@ -173,7 +173,7 @@ export function reduce(
       if (state.phase === 'idle') return stay(state)
       return {
         state: idle(),
-        effect: { type: 'abandon', replayId: state.replayId, reason: event.reason }
+        effect: { type: 'abandon', recordingId: state.recordingId, reason: event.reason }
       }
     }
 
@@ -182,7 +182,7 @@ export function reduce(
       if (event.at - state.armedAt < ARM_TIMEOUT_MS) return stay(state)
       return {
         state: idle(),
-        effect: { type: 'abandon', replayId: null, reason: 'The game never started.' }
+        effect: { type: 'abandon', recordingId: null, reason: 'The game never started.' }
       }
     }
   }

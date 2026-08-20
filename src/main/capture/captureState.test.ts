@@ -28,7 +28,7 @@ function run(events: SessionEvent[], config = CONFIG): CaptureSessionState {
 
 const started: SessionEvent = { type: 'gameStarted', accountId: 1, queueId: 420, at: T0 }
 const ready: SessionEvent = { type: 'gameReady', gameTime: 42.5, at: T0 + 120_000 }
-const recording: SessionEvent = { type: 'recordingStarted', replayId: 7, at: T0 + 121_000 }
+const recording: SessionEvent = { type: 'recordingStarted', recordingId: 7, at: T0 + 121_000 }
 
 describe('capture state machine', () => {
   it('arms on a queue the user switched on', () => {
@@ -77,7 +77,7 @@ describe('capture state machine', () => {
     const armed = run([started])
 
     expect(armed.phase).toBe('armed')
-    expect(armed.replayId).toBeNull()
+    expect(armed.recordingId).toBeNull()
     expect(needsGamePolling(armed)).toBe(true)
   })
 
@@ -108,7 +108,7 @@ describe('capture state machine', () => {
     expect(late.state.phase).toBe('idle')
     expect(late.effect).toEqual({
       type: 'abandon',
-      replayId: null,
+      recordingId: null,
       reason: 'The game never started.'
     })
   })
@@ -133,7 +133,7 @@ describe('capture state machine', () => {
     const live = run([started, ready, recording])
     const ended = reduce(live, { type: 'gameEnded', at: T0 + 1_800_000 }, CONFIG)
 
-    expect(ended.effect).toEqual({ type: 'endRecording', replayId: 7 })
+    expect(ended.effect).toEqual({ type: 'endRecording', recordingId: 7 })
     expect(ended.state.phase).toBe('stopping')
   })
 
@@ -143,7 +143,7 @@ describe('capture state machine', () => {
 
     // A crash still produced footage worth keeping, so it closes out normally
     // rather than being abandoned.
-    expect(gone.effect).toEqual({ type: 'endRecording', replayId: 7 })
+    expect(gone.effect).toEqual({ type: 'endRecording', recordingId: 7 })
   })
 
   it('returns to idle once the recording is closed', () => {
@@ -159,12 +159,12 @@ describe('capture state machine', () => {
     expect(needsGamePolling(stopped)).toBe(false)
   })
 
-  it('hands back the replay to clean up when OBS disappears mid-game', () => {
+  it('hands back the recording to clean up when OBS disappears mid-game', () => {
     const live = run([started, ready, recording])
     const lost = reduce(live, { type: 'aborted', reason: 'OBS closed' }, CONFIG)
 
     expect(lost.state.phase).toBe('idle')
-    expect(lost.effect).toEqual({ type: 'abandon', replayId: 7, reason: 'OBS closed' })
+    expect(lost.effect).toEqual({ type: 'abandon', recordingId: 7, reason: 'OBS closed' })
   })
 
   it('ignores an abort when nothing is happening', () => {
@@ -178,7 +178,7 @@ describe('capture state machine', () => {
     const again = reduce(live, { type: 'gameStarted', accountId: 1, queueId: 420, at: T0 }, CONFIG)
 
     expect(again.state.phase).toBe('recording')
-    expect(again.state.replayId).toBe(7)
+    expect(again.state.recordingId).toBe(7)
   })
 
   it('polls loopback only while it has a game to follow', () => {

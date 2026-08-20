@@ -1,4 +1,4 @@
-import type { ReplayEvent } from '@shared/types'
+import type { RecordingEvent } from '@shared/types'
 
 /**
  * The game's own event feed, turned into timeline markers.
@@ -9,7 +9,7 @@ import type { ReplayEvent } from '@shared/types'
  *
  * Only events involving the tracked player are kept. A forty-minute game
  * produces a hundred-odd events and a bar carrying all of them is a smear; the
- * question a replay answers is "what happened to me at fourteen minutes", and
+ * question a recording answers is "what happened to me at fourteen minutes", and
  * every marker that is not about you makes that harder to answer.
  */
 
@@ -59,11 +59,11 @@ function isSelf(name: string | null | undefined, selfNames: ReadonlySet<string>)
  * simply does not contain it, and a marker that seeks nowhere is worse than no
  * marker.
  */
-export function toReplayEvent(
+export function toRecordingEvent(
   dto: LiveEventDto,
   selfNames: ReadonlySet<string>,
   offset: number
-): ReplayEvent | null {
+): RecordingEvent | null {
   const eventId = dto.EventID
   const name = dto.EventName
   const gameTime = dto.EventTime
@@ -113,13 +113,13 @@ export function toReplayEvent(
  * overlapping input by design and the caller stores the result with
  * INSERT OR IGNORE. Sorting by video time here means the timeline never has to.
  */
-export function toReplayEvents(
+export function toRecordingEvents(
   events: readonly LiveEventDto[],
   selfNames: ReadonlySet<string>,
   offset: number
-): ReplayEvent[] {
+): RecordingEvent[] {
   return events
-    .map((event) => toReplayEvent(event, selfNames, offset))
-    .filter((event): event is ReplayEvent => event !== null)
+    .map((event) => toRecordingEvent(event, selfNames, offset))
+    .filter((event): event is RecordingEvent => event !== null)
     .sort((a, b) => a.videoTime - b.videoTime)
 }

@@ -200,14 +200,17 @@ export function MatchListRow({
         
         Not a button: the row itself is one, and nesting is invalid. Watching is
         a right-click, and this is what tells you the option will be there —
-        without it, the only way to find out which games have a replay is to
+        without it, the only way to find out which games have a recording is to
         right-click them one at a time.
       */}
-      <span
-        className="ml-2 w-3.5 shrink-0"
-        title={match.replayId !== null ? 'Replay available — right-click to watch' : undefined}
-      >
-        {match.replayId !== null && (
+      {/*
+        One marker for either artefact, not two.
+        At 72px a row has no room to distinguish a recording from a Riot replay
+        and no need to: the marker's job is "there is something to watch here",
+        and the menu is where the two are told apart.
+      */}
+      <span className="ml-2 w-3.5 shrink-0" title={watchableTitle(match)}>
+        {(match.recordingId !== null || match.replayId !== null) && (
           <Icon.Film width={14} height={14} className="text-accent/60" />
         )}
       </span>
@@ -224,4 +227,15 @@ export function MatchListRow({
       )}
     </button>
   )
+}
+
+/** What the row marker promises, which depends on which artefacts exist. */
+function watchableTitle(match: MatchSummary): string | undefined {
+  const hasRecording = match.recordingId !== null
+  const hasReplay = match.replayId !== null
+
+  if (hasRecording && hasReplay) return 'Recording and Riot replay — right-click to watch'
+  if (hasRecording) return 'Recording available — right-click to watch'
+  if (hasReplay) return 'Riot replay available — right-click to watch'
+  return undefined
 }

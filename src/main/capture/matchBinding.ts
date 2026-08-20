@@ -29,7 +29,7 @@ export interface MatchCandidate {
   taken: boolean
 }
 
-export interface ReplayFingerprint {
+export interface RecordingFingerprint {
   /** Epoch milliseconds when recording began. */
   startedAt: number
   /** Epoch milliseconds when recording stopped, if it did. */
@@ -76,8 +76,8 @@ function overlap(a: readonly number[], b: readonly number[]): number {
 }
 
 /** Roughly when the game the recording covers finished, on the local clock. */
-function replayEnd(replay: ReplayFingerprint): number {
-  return replay.endedAt ?? replay.startedAt
+function recordingEnd(recording: RecordingFingerprint): number {
+  return recording.endedAt ?? recording.startedAt
 }
 
 /** Roughly when a stored match finished, on Riot's clock. */
@@ -97,13 +97,13 @@ export interface BindingResult {
  * Returning null is a perfectly normal outcome: a Practice Tool game produces
  * no match-v5 match at all, so no candidate can ever exist for it.
  */
-export function findMatchForReplay(
-  replay: ReplayFingerprint,
+export function findMatchForRecording(
+  recording: RecordingFingerprint,
   candidates: readonly MatchCandidate[]
 ): BindingResult | null {
-  if (replay.roster.length === 0) return null
+  if (recording.roster.length === 0) return null
 
-  const end = replayEnd(replay)
+  const end = recordingEnd(recording)
   let best: BindingResult | null = null
   let bestDistance = Number.POSITIVE_INFINITY
 
@@ -113,9 +113,9 @@ export function findMatchForReplay(
     // The champion you played is the cheapest and strongest single check: it
     // rules out the other games in the same lobby window immediately.
     if (
-      replay.selfChampionId !== null &&
+      recording.selfChampionId !== null &&
       candidate.selfChampionId !== null &&
-      replay.selfChampionId !== candidate.selfChampionId
+      recording.selfChampionId !== candidate.selfChampionId
     ) {
       continue
     }
@@ -123,8 +123,8 @@ export function findMatchForReplay(
     const distance = Math.abs(candidateEnd(candidate) - end)
     if (distance > MAX_CLOCK_SKEW_MS) continue
 
-    const shared = overlap(replay.roster, candidate.championIds)
-    const ratio = shared / Math.max(replay.roster.length, candidate.championIds.length)
+    const shared = overlap(recording.roster, candidate.championIds)
+    const ratio = shared / Math.max(recording.roster.length, candidate.championIds.length)
     if (ratio < MIN_ROSTER_RATIO) continue
 
     // Ranked by how well the rosters agree, and only then by which finished
@@ -146,8 +146,8 @@ export function findMatchForReplay(
  */
 export const BIND_GIVE_UP_MS = 30 * 60 * 1000
 
-export function shouldGiveUpBinding(replay: ReplayFingerprint, now: number): boolean {
-  return now - replayEnd(replay) > BIND_GIVE_UP_MS
+export function shouldGiveUpBinding(recording: RecordingFingerprint, now: number): boolean {
+  return now - recordingEnd(recording) > BIND_GIVE_UP_MS
 }
 
 /**

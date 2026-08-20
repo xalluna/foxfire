@@ -19,7 +19,8 @@ import { withSpan } from '../telemetry/spans'
 import { BACKFILL_TARGET, refreshRank } from './accountService'
 import { repairAccountIdentity } from './identityService'
 import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttribution'
-import { bindPendingReplays } from './replayService'
+import { resolveReplayOwners } from './replayService'
+import { bindPendingRecordings } from './recordingService'
 import { afterIdentityRepair, selectNewMatchIds } from './syncPlanning'
 import type { Account, SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
 
@@ -100,9 +101,28 @@ function replayRecentAttribution(db: DatabaseSync, accountId: number, puuid: str
  */
 function bindFinishedRecordings(accountId: number, cleanSweep: boolean): void {
   try {
-    bindPendingReplays(accountId, { allowGiveUp: cleanSweep })
+    bindPendingRecordings(accountId, { allowGiveUp: cleanSweep })
   } catch (err) {
-    log.debug('Replay binding failed after sync', { accountId, error: String(err) })
+    log.debug('Recording binding failed after sync', { accountId, error: String(err) })
+  }
+}
+
+/**
+ * Gives newly synced matches to the replays that were waiting for them.
+ *
+ * A replay knows its match id from the moment the file lands, but only the
+ * match says which account played it — so ownership is the one thing a replay
+ * genuinely has to wait for a sync to learn. Cheap: it touches only rows still
+ * missing an account, of which there are none once things have settled.
+ *
+ * Best-effort, like the passes around it. The matches are already committed and
+ * nothing here may fail the import.
+ */
+function resolveFinishedReplays(): void {
+  try {
+    resolveReplayOwners()
+  } catch (err) {
+    log.debug('Replay owner resolution failed after sync', { error: String(err) })
   }
 }
 
@@ -300,6 +320,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
     // never got to look for it.
     replayRecentAttribution(db, accountId, puuid)
     bindFinishedRecordings(accountId, true)
+    resolveFinishedReplays()
     emit({ accountId, phase: 'complete', current: 0, total: 0, trigger })
     return { stored: 0, failed: 0 }
   }
@@ -313,6 +334,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
   await snapshotRank(accountId)
   replayRecentAttribution(db, accountId, puuid)
   bindFinishedRecordings(accountId, failed === 0)
+  resolveFinishedReplays()
 
   // Only advance the sync marker when everything landed. Leaving it alone on
   // partial failure means the next run retries just the missing matches —

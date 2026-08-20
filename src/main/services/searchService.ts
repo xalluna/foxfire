@@ -66,6 +66,9 @@ export async function searchSummoner(input: RiotIdInput): Promise<AdHocSummonerR
         rank: null,
         hasManualRank: false,
         // Ad-hoc results are somebody else's games played on another machine.
+        recordingId: null,
+        // Ad-hoc results are never stored, so neither artefact can be looked up
+        // for them — the same reason recordingId above is null.
         replayId: null
       }
     ]

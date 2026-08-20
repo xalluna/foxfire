@@ -16,9 +16,16 @@ import type {
   ObsValidation,
   RankHistory,
   RankRange,
+  Recording,
+  RecordingDetail,
+  RecordingDiskUsage,
   Replay,
-  ReplayDetail,
   ReplayDiskUsage,
+  ReplayLaunchResult,
+  RoflSettings,
+  ClientArchive,
+  LiveClient,
+  ArchiveResult,
   RiotKeyLimits,
   RiotKeyType,
   Scoreboard,
@@ -40,8 +47,11 @@ import { rangeBounds, resetsBetween, seasonsSpanning } from '@shared/seasons'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
-  REPLAYS,
-  REPLAY_EVENTS,
+  RECORDINGS,
+  RECORDING_EVENTS,
+  MOCK_REPLAYS,
+  MOCK_ROFL_SETTINGS,
+  MOCK_ARCHIVES,
   ACCOUNTS,
   LEAGUE_ENTRIES,
   MASTERY,
@@ -108,7 +118,7 @@ const scenario = currentScenario()
 const CAPTURE_SETTINGS: CaptureSettings = {
   enabled: true,
   mode: 'managed',
-  folder: 'D:\\Replays',
+  folder: 'D:\\Recordings',
   queues: [420, 440],
   otherQueues: false,
   audio: 'game',
@@ -214,6 +224,8 @@ let keyType: RiotKeyType = 'personal'
 let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
 
 export const mockApi: Api = {
+  // The browser harness has no Electron and so no real path for a File.
+  pathForFile: () => null,
   app: {
     // The harness has no main process to ask, so this is the browser-only
     // stand-in; the packaged app reads it from app.getVersion().
@@ -528,7 +540,7 @@ export const mockApi: Api = {
       CAPTURE_SETTINGS.hasObsPassword = false
       return delay({ ...CAPTURE_SETTINGS }, 100, false)
     },
-    chooseFolder: (): Promise<string | null> => delay('D:\\Replays', 200, false),
+    chooseFolder: (): Promise<string | null> => delay('D:\\Recordings', 200, false),
     chooseObsPath: (): Promise<string | null> =>
       delay('C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe', 200, false),
     getStatus: (): Promise<CaptureStatus> =>
@@ -537,7 +549,7 @@ export const mockApi: Api = {
           ? { state: 'error', message: 'No OBS listening — is it running?' }
           : scenario === 'not-live'
             ? { state: 'idle' }
-            : { state: 'recording', replayId: 1, startedAt: Date.now() - 640_000 },
+            : { state: 'recording', recordingId: 1, startedAt: Date.now() - 640_000 },
         120,
         false
       ),
@@ -566,13 +578,13 @@ export const mockApi: Api = {
     preview: (): Promise<string | null> => delay(null, 200, false),
     reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
   },
-  replays: {
-    list: (accountId: number): Promise<Replay[]> => delay(REPLAYS[accountId] ?? [], 220),
-    detail: (replayId: number): Promise<ReplayDetail | null> => {
-      const replay = (REPLAYS[1] ?? []).find((item) => item.id === replayId)
-      return delay(replay ? { replay, events: REPLAY_EVENTS } : null, 220)
+  recordings: {
+    list: (accountId: number): Promise<Recording[]> => delay(RECORDINGS[accountId] ?? [], 220),
+    detail: (recordingId: number): Promise<RecordingDetail | null> => {
+      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
+      return delay(recording ? { recording, events: RECORDING_EVENTS } : null, 220)
     },
-    usage: (): Promise<ReplayDiskUsage> =>
+    usage: (): Promise<RecordingDiskUsage> =>
       delay(
         {
           totalBytes: 3_180_000_000,
@@ -591,6 +603,60 @@ export const mockApi: Api = {
     onChanged: () => () => undefined,
     showMatch: (): Promise<void> => delay(undefined, 0, false),
     onShowMatch: () => () => undefined
+  },
+  // Riot replays. The fixtures deliberately cover the three states the tab has
+  // to draw: linked and playable, linked but on a patch nothing can play, and
+  // ingested with no match yet.
+  replays: {
+    list: (): Promise<Replay[]> => delay(MOCK_REPLAYS, 220),
+    usage: (): Promise<ReplayDiskUsage> =>
+      delay(
+        {
+          totalBytes: 96_000_000,
+          count: 3,
+          unlinkedCount: 1,
+          missingCount: 0,
+          unplayableCount: 1,
+          softCapBytes: 5 * 1024 * 1024 * 1024
+        },
+        180,
+        false
+      ),
+    open: (replayId: number): Promise<ReplayLaunchResult> => {
+      const replay = MOCK_REPLAYS.find((item) => item.id === replayId)
+      return delay(
+        replay?.blockedReason == null
+          ? { ok: true }
+          : { ok: false, reason: replay.blockedReason, attemptedCommand: null },
+        200,
+        false
+      )
+    },
+    reveal: (): Promise<void> => delay(undefined, 0, false),
+    remove: (): Promise<void> => delay(undefined, 120, false),
+    add: (): Promise<{ ok: boolean; replay: Replay | null }> =>
+      delay({ ok: true, replay: MOCK_REPLAYS[0] ?? null }, 300, false),
+    link: (): Promise<void> => delay(undefined, 120, false),
+    rescan: (): Promise<number> => delay(0, 600, false),
+    settings: (): Promise<RoflSettings> => delay(MOCK_ROFL_SETTINGS, 160),
+    setSettings: (patch): Promise<RoflSettings> =>
+      delay({ ...MOCK_ROFL_SETTINGS, ...patch }, 120, false),
+    chooseSourceFolder: (): Promise<string | null> => delay(null, 0, false),
+    onChanged: () => () => undefined,
+    onImportProgress: () => () => undefined
+  },
+  archives: {
+    list: (): Promise<ClientArchive[]> => delay(MOCK_ARCHIVES, 200),
+    add: (): Promise<ArchiveResult> => delay({ ok: true }, 300, false),
+    remove: (): Promise<void> => delay(undefined, 120, false),
+    setPatch: (): Promise<{ ok: boolean; error?: string }> => delay({ ok: true }, 120, false),
+    live: (): Promise<LiveClient> =>
+      delay({ path: 'C:\\Riot Games\\League of Legends', patch: '16.16' }, 200),
+    choosePath: (): Promise<string | null> => delay(null, 0, false),
+    archiveLive: (): Promise<ArchiveResult> => delay({ ok: true }, 600, false),
+    cancelCopy: (): Promise<void> => delay(undefined, 0, false),
+    onCopyProgress: () => () => undefined,
+    openWindow: (): Promise<void> => delay(undefined, 0, false)
   },
   telemetry: {
     getState: () => delay(MOCK_TELEMETRY_STATE, 0),

@@ -442,7 +442,7 @@ describe('getChampionStats', () => {
 })
 
 describe('backfills from raw_json', () => {
-  /** Replays a pre-upgrade install: 001 schema, then the later migrations. */
+  /** Recordings a pre-upgrade install: 001 schema, then the later migrations. */
   function upgradeFrom001(participants: Array<Record<string, unknown>>): DatabaseSyncType {
     const db = new DatabaseSync(':memory:')
     db.exec(migrationSql('001_init.sql'))
@@ -502,7 +502,7 @@ describe('backfills from raw_json', () => {
   })
 })
 
-/** Replays the 001-era insert so the backfill has genuinely null columns to fill. */
+/** Recordings the 001-era insert so the backfill has genuinely null columns to fill. */
 function insertMatchWithoutMultiKill(db: DatabaseSyncType, dto: MatchDto): void {
   db.prepare(
     `INSERT INTO matches (match_id, game_creation, game_duration, game_mode, game_type, queue_id, platform_id, raw_json)

@@ -95,7 +95,14 @@ export interface MatchSummary {
    * The recording of this game, when one exists.
    *
    * Read only to decide whether the row's context menu can offer to watch it,
-   * so it is a bare id rather than the whole replay.
+   * so it is a bare id rather than the whole recording.
+   */
+  recordingId: number | null
+  /**
+   * Riot's own replay for this game, when Foxfire has a copy.
+   *
+   * Unlike recordingId this is not scoped to the account: a .rofl is one file
+   * per game on this machine, and the same file serves whoever played it.
    */
   replayId: number | null
 }
@@ -571,7 +578,7 @@ export type CaptureStatus =
   | { state: 'connecting' }
   | { state: 'idle' }
   | { state: 'armed'; queueId: number | null }
-  | { state: 'recording'; replayId: number; startedAt: number }
+  | { state: 'recording'; recordingId: number; startedAt: number }
   | { state: 'error'; message: string }
 
 /** One reason a user-configured OBS cannot be recorded from as it stands. */
@@ -606,10 +613,13 @@ export interface ObsValidation {
  * no match-v5 match at all and never will, and the footage is still worth
  * keeping. Nothing is deleted for failing to bind.
  */
-export type ReplayBindState = 'pending' | 'bound' | 'unmatched'
+export type RecordingBindState = 'pending' | 'bound' | 'unmatched'
 
-/** The match a bound replay belongs to, denormalised so a list renders in one query. */
-export interface ReplayMatchInfo {
+/**
+ * The match an artifact — a recording or a Riot replay — belongs to,
+ * denormalised so a list renders in one query.
+ */
+export interface LinkedMatchInfo {
   matchId: string
   gameCreation: number
   gameDuration: number
@@ -623,16 +633,16 @@ export interface ReplayMatchInfo {
   assists: number
 }
 
-export interface Replay {
+export interface Recording {
   id: number
   accountId: number
   matchId: string | null
-  bindState: ReplayBindState
+  bindState: RecordingBindState
   fileBytes: number | null
   /**
    * False once the file has gone missing behind our back — moved, or deleted
    * from Explorer. The row is kept so the disappearance is visible rather than
-   * the replay silently vanishing from the list.
+   * the recording silently vanishing from the list.
    */
   fileExists: boolean
   queueId: number | null
@@ -641,13 +651,13 @@ export interface Replay {
   endedAt: number | null
   durationSeconds: number | null
   selfChampionId: number | null
-  match: ReplayMatchInfo | null
+  match: LinkedMatchInfo | null
 }
 
 /** Which side of an event the tracked player was on. */
-export type ReplayEventRole = 'kill' | 'death' | 'assist' | 'multikill'
+export type RecordingEventRole = 'kill' | 'death' | 'assist' | 'multikill'
 
-export interface ReplayEvent {
+export interface RecordingEvent {
   /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
   eventId: number
   name: string
@@ -655,22 +665,149 @@ export interface ReplayEvent {
   gameTime: number
   /** Seconds into the video file — gameTime minus the offset captured at record start. */
   videoTime: number
-  role: ReplayEventRole
+  role: RecordingEventRole
   /** The other player for a kill or death, the streak size for a multikill. */
   label: string | null
 }
 
-/** Everything a replay window needs, fetched once when it opens. */
-export interface ReplayDetail {
-  replay: Replay
-  events: ReplayEvent[]
+/** Everything a recording window needs, fetched once when it opens. */
+export interface RecordingDetail {
+  recording: Recording
+  events: RecordingEvent[]
 }
 
-export interface ReplayDiskUsage {
+export interface RecordingDiskUsage {
   totalBytes: number
   count: number
   unmatchedCount: number
   missingCount: number
   /** Mirrored from settings so the warning can be drawn without a second query. */
   softCapBytes: number
+}
+
+/**
+ * One of Riot's own replays: a .rofl file, played back by the League client.
+ *
+ * Deliberately without a bind state, unlike a recording. Riot names the file
+ * after the game it came from, so `matchId` is known the moment the file
+ * appears and `match` simply fills in later, by itself, once that game syncs.
+ */
+export interface Replay {
+  id: number
+  /** Resolved from the match's participants. Null until the match is known. */
+  accountId: number | null
+  matchId: string | null
+  /**
+   * False once Foxfire's copy has gone missing behind our back. The row is kept
+   * so the disappearance is visible rather than the replay quietly vanishing.
+   */
+  fileExists: boolean
+  fileBytes: number | null
+  /** e.g. "15.16.700.1234". Null when the .rofl header could not be read. */
+  gameVersion: string | null
+  /** major.minor, the key that finds a client able to play this file. */
+  patch: string | null
+  durationSeconds: number | null
+  /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
+  recordedAt: number
+  match: LinkedMatchInfo | null
+  /**
+   * Why this replay cannot be watched right now, or null when it can — most
+   * often that no installed client still plays its patch. Stated rather than
+   * hidden, exactly as the match menu states its own reasons.
+   */
+  blockedReason: string | null
+}
+
+export interface ReplayDiskUsage {
+  totalBytes: number
+  count: number
+  /** Replays whose match has not synced, so the row cannot say what game it was. */
+  unlinkedCount: number
+  missingCount: number
+  /** Replays whose patch no installed client can play. */
+  unplayableCount: number
+  /** Mirrored from settings so the warning can be drawn without a second query. */
+  softCapBytes: number
+}
+
+/** Where a patch's game version came from, so a hand-typed one is not overwritten. */
+export type ArchivePatchSource = 'detected' | 'manual'
+
+/** A League install kept around to play replays from an older patch. */
+export interface ClientArchive {
+  id: number
+  path: string
+  /** major.minor, e.g. "15.14". */
+  patch: string
+  patchSource: ArchivePatchSource
+  label: string | null
+  /** False once the folder has gone missing, so a dead entry is visible rather than silent. */
+  pathExists: boolean
+}
+
+/** The live install, which is never stored: it is always there and its patch moves. */
+export interface LiveClient {
+  path: string | null
+  /** major.minor, read from the game executable. Null when it could not be read. */
+  patch: string | null
+}
+
+export interface RoflSettings {
+  enabled: boolean
+  /**
+   * Where Riot writes replays. Null means "use whatever the client reports",
+   * which is the normal case — the folder is configurable inside League.
+   */
+  sourceFolder: string | null
+  /** What sourceFolder actually resolved to, after asking the client. */
+  resolvedSourceFolder: string | null
+  /**
+   * Whether the League client is set to keep replays. Foxfire can only ingest
+   * files the client actually wrote, so this being off is the one thing that
+   * makes the whole feature silently do nothing. Null when the client was not
+   * running to ask.
+   */
+  autoRecordEnabled: boolean | null
+  /** Where Foxfire keeps its own copies. A subfolder of the recordings folder. */
+  folder: string | null
+  /** Advisory ceiling in bytes. Nothing is deleted to honour it; 0 means no cap. */
+  softCapBytes: number
+}
+
+/** Progress of the folder import, broadcast so the tab can say what is happening. */
+export interface ReplayImportProgress {
+  current: number
+  total: number
+  done: boolean
+}
+
+/** Progress of an install copy, broadcast so the archive window can draw a bar. */
+export interface ArchiveCopyProgress {
+  copiedBytes: number
+  totalBytes: number
+  /** Relative to the install root, so the path stays readable. Null when finished. */
+  currentFile: string | null
+  done: boolean
+  cancelled: boolean
+}
+
+/**
+ * What came of asking the League client to open a replay.
+ *
+ * A failure carries the command that was attempted so an archived client that
+ * refuses to start leaves the user something to act on rather than a button
+ * that appears to do nothing.
+ */
+export interface ReplayLaunchResult {
+  ok: boolean
+  reason?: string
+  attemptedCommand?: string | null
+}
+
+/** The result of adding or copying a client archive. */
+export interface ArchiveResult {
+  ok: boolean
+  error?: string
+  archive?: ClientArchive
 }

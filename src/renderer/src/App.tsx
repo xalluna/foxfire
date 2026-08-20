@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { AccountRail } from './components/AccountRail'
 import { Dashboard } from './views/Dashboard'
 import { LiveGame } from './views/LiveGame'
-import { Replays } from './views/Replays'
+import { Captures } from './views/Captures'
 import { Mastery } from './views/Mastery'
 import { RankHistory } from './views/RankHistory'
 import { Search } from './views/Search'
@@ -17,6 +17,7 @@ import * as Icon from './components/icons'
 import {
   useLcuRankUpdates,
   useManualRankUpdates,
+  useRecordingUpdates,
   useReplayUpdates,
   useSyncProgress
 } from './hooks/useSyncProgress'
@@ -27,7 +28,7 @@ const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
   { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
   // Coloured by whether a game is on and whether it is being recorded.
   { id: 'liveGame', label: 'Live game', icon: <LiveNavIcon /> },
-  { id: 'replays', label: 'Replays', icon: <Icon.Film /> },
+  { id: 'captures', label: 'Captures', icon: <Icon.Film /> },
   { id: 'mastery', label: 'Champions', icon: <Icon.Trophy /> },
   { id: 'rank', label: 'Rank', icon: <Icon.TrendingUp /> },
   { id: 'search', label: 'Search', icon: <Icon.Search /> },
@@ -35,7 +36,7 @@ const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
 ]
 
 /** Views that operate on the selected account and need the rail alongside them. */
-const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'replays', 'mastery', 'rank']
+const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'captures', 'mastery', 'rank']
 
 /**
  * A full-width strip under the title bar. Used for the two Riot key states,
@@ -70,6 +71,7 @@ function App(): JSX.Element {
   useSyncProgress()
   useLcuRankUpdates()
   useManualRankUpdates()
+  useRecordingUpdates()
   useReplayUpdates()
   const [keyRejected, clearRejected] = useKeyRejected()
 
@@ -174,7 +176,7 @@ function App(): JSX.Element {
               <>
                 {view === 'dashboard' && <Dashboard key={activeAccount.id} account={activeAccount} />}
                 {view === 'liveGame' && <LiveGame key={activeAccount.id} account={activeAccount} />}
-                {view === 'replays' && <Replays key={activeAccount.id} account={activeAccount} />}
+                {view === 'captures' && <Captures key={activeAccount.id} account={activeAccount} />}
                 {view === 'mastery' && <Mastery key={activeAccount.id} account={activeAccount} />}
                 {view === 'rank' && <RankHistory key={activeAccount.id} account={activeAccount} />}
               </>

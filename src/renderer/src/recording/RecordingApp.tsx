@@ -8,44 +8,44 @@ import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName } from '../lib/assets'
 import { formatAge, formatClock, kdaRatio } from '../lib/matchStats'
 import { queueName } from '../lib/queues'
-import { ReplayPlayer } from './ReplayPlayer'
-import type { Replay } from '@shared/types'
+import { RecordingPlayer } from './RecordingPlayer'
+import type { Recording } from '@shared/types'
 
 /**
- * A window that owns one replay.
+ * A window that owns one recording.
  *
  * Several can be open at once — the same game at two timestamps on two
  * monitors is a real way to compare a botched fight against how it should have
  * gone — so unlike the telemetry panel and the LP editor this is not a
- * singleton on the main side. See replayWindow.ts.
+ * singleton on the main side. See recordingWindow.ts.
  *
  * Loads the same renderer bundle as everything else, selected by the URL hash.
  */
-function replayIdFromHash(): number | null {
+function recordingIdFromHash(): number | null {
   const query = window.location.hash.split('?')[1] ?? ''
   const id = Number(new URLSearchParams(query).get('id'))
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
-export function ReplayApp(): JSX.Element {
-  const replayId = replayIdFromHash()
+export function RecordingApp(): JSX.Element {
+  const recordingId = recordingIdFromHash()
 
   const detail = useQuery({
-    queryKey: ['replayDetail', replayId],
-    queryFn: () => window.api.replays.detail(replayId!),
-    enabled: replayId !== null,
+    queryKey: ['recordingDetail', recordingId],
+    queryFn: () => window.api.recordings.detail(recordingId!),
+    enabled: recordingId !== null,
     // The recording never changes once it has stopped, so there is nothing to
     // refetch and a window left open overnight costs nothing.
     staleTime: Infinity
   })
 
-  if (replayId === null) {
+  if (recordingId === null) {
     return (
       <Shell>
         <EmptyState
           icon={<Icon.Warning />}
-          title="No replay was named"
-          description="This window was opened without a replay to show."
+          title="No recording was named"
+          description="This window was opened without a recording to show."
           tone="error"
         />
       </Shell>
@@ -67,7 +67,7 @@ export function ReplayApp(): JSX.Element {
       <Shell>
         <EmptyState
           icon={<Icon.Warning />}
-          title="That replay is gone"
+          title="That recording is gone"
           description="It was deleted, or the database no longer knows about it."
           tone="error"
         />
@@ -75,13 +75,13 @@ export function ReplayApp(): JSX.Element {
     )
   }
 
-  const { replay, events } = detail.data
+  const { recording, events } = detail.data
 
   return (
     <Shell>
-      <ReplayHeader replay={replay} />
-      {replay.fileExists ? (
-        <ReplayPlayer src={`replay://media/${replay.id}`} events={events} />
+      <RecordingHeader recording={recording} />
+      {recording.fileExists ? (
+        <RecordingPlayer src={`recording://media/${recording.id}`} events={events} />
       ) : (
         <EmptyState
           icon={<Icon.Film />}
@@ -101,16 +101,16 @@ function Shell({ children }: { children: React.ReactNode }): JSX.Element {
 /**
  * Champion, KDA, result and a way back to the match.
  *
- * The link is why a replay is not a dead end: the video shows what happened and
+ * The link is why a recording is not a dead end: the video shows what happened and
  * the match row shows the numbers, and reading one against the other is most of
  * the value. It focuses the main window rather than duplicating the detail
  * panel here, which would be a second copy of a component built for a 320px
  * column inside a window shaped for video.
  */
-function ReplayHeader({ replay }: { replay: Replay }): JSX.Element {
+function RecordingHeader({ recording }: { recording: Recording }): JSX.Element {
   const assets = useAssets()
-  const match = replay.match
-  const championId = match?.championId ?? replay.selfChampionId
+  const match = recording.match
+  const championId = match?.championId ?? recording.selfChampionId
 
   return (
     <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
@@ -127,11 +127,11 @@ function ReplayHeader({ replay }: { replay: Replay }): JSX.Element {
             : (match?.championName ?? 'Recording')}
         </p>
         <p className="text-2xs text-text-mute">
-          {match ? queueName(match.queueId, match.gameMode) : queueName(replay.queueId, null)}
+          {match ? queueName(match.queueId, match.gameMode) : queueName(recording.queueId, null)}
           {' · '}
-          {replay.durationSeconds !== null ? formatClock(replay.durationSeconds) : '—'}
+          {recording.durationSeconds !== null ? formatClock(recording.durationSeconds) : '—'}
           {' · '}
-          {formatAge(replay.startedAt)}
+          {formatAge(recording.startedAt)}
         </p>
       </div>
 
@@ -155,16 +155,16 @@ function ReplayHeader({ replay }: { replay: Replay }): JSX.Element {
       )}
 
       <div className="ml-auto flex items-center gap-2">
-        {replay.bindState === 'pending' && (
+        {recording.bindState === 'pending' && (
           <span className="text-2xs text-text-mute">Still looking for this game…</span>
         )}
-        {replay.bindState === 'unmatched' && (
+        {recording.bindState === 'unmatched' && (
           <span className="text-2xs text-text-mute">No match history entry</span>
         )}
         {match && (
           <button
             type="button"
-            onClick={() => void window.api.replays.showMatch(replay.accountId, match.matchId)}
+            onClick={() => void window.api.recordings.showMatch(recording.accountId, match.matchId)}
             className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
           >
             View match history

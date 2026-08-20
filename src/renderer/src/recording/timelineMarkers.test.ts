@@ -7,13 +7,13 @@ import {
   leadEvent,
   seekTargetFor
 } from './timelineMarkers'
-import type { ReplayEvent } from '@shared/types'
+import type { RecordingEvent } from '@shared/types'
 
 /** A 30-minute game on a 900px bar: one pixel is two seconds. */
 const DURATION = 1_800
 const WIDTH = 900
 
-function event(over: Partial<ReplayEvent> = {}): ReplayEvent {
+function event(over: Partial<RecordingEvent> = {}): RecordingEvent {
   return {
     eventId: 1,
     name: 'ChampionKill',

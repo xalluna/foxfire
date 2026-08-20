@@ -1,4 +1,4 @@
-import type { ReplayEvent } from '@shared/types'
+import type { RecordingEvent } from '@shared/types'
 
 /**
  * Turning a game's worth of events into marks on a seek bar.
@@ -17,7 +17,7 @@ export const CLUSTER_PX = 14
 export interface MarkerCluster {
   /** Seconds. Where clicking the marker seeks to, and its position on the bar. */
   videoTime: number
-  events: ReplayEvent[]
+  events: RecordingEvent[]
 }
 
 /**
@@ -28,9 +28,9 @@ export interface MarkerCluster {
  * worth reviewing, and if both happened in the same second the death is the
  * reason you are looking.
  */
-const ROLE_PRIORITY: ReadonlyArray<ReplayEvent['role']> = ['multikill', 'death', 'kill', 'assist']
+const ROLE_PRIORITY: ReadonlyArray<RecordingEvent['role']> = ['multikill', 'death', 'kill', 'assist']
 
-export function leadEvent(events: readonly ReplayEvent[]): ReplayEvent {
+export function leadEvent(events: readonly RecordingEvent[]): RecordingEvent {
   for (const role of ROLE_PRIORITY) {
     const found = events.find((event) => event.role === role)
     if (found) return found
@@ -46,7 +46,7 @@ export function leadEvent(events: readonly ReplayEvent[]): ReplayEvent {
  * precise as its pixels.
  */
 export function clusterEvents(
-  events: readonly ReplayEvent[],
+  events: readonly RecordingEvent[],
   duration: number,
   width: number
 ): MarkerCluster[] {
@@ -78,11 +78,11 @@ function clock(seconds: number): string {
 }
 
 /** The hover text for a marker. */
-export function describeCluster(events: readonly ReplayEvent[]): string {
+export function describeCluster(events: readonly RecordingEvent[]): string {
   const at = clock(events[0]?.videoTime ?? 0)
   if (events.length !== 1) return `${at} — ${events.length} events`
 
-  const [event] = events as [ReplayEvent]
+  const [event] = events as [RecordingEvent]
   const who = event.label ?? 'someone'
   switch (event.role) {
     case 'multikill':
@@ -118,10 +118,10 @@ export function seekTargetFor(videoTime: number): number {
  * the button appears dead.
  */
 export function adjacentEvent(
-  events: readonly ReplayEvent[],
+  events: readonly RecordingEvent[],
   currentTime: number,
   direction: -1 | 1
-): ReplayEvent | null {
+): RecordingEvent | null {
   const ordered = [...events].sort((a, b) => a.videoTime - b.videoTime)
 
   if (direction === 1) {

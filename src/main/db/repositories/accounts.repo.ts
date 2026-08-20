@@ -158,7 +158,7 @@ export interface RekeyResult {
  * has stored — see 010_account_puuids.sql. Rewriting the stored value is what
  * repairs the reads: every local query reaches our rows through the account's
  * *current* puuid, either as a bound parameter or as the correlated subquery in
- * replays.repo, so there is no join site that can be missed here and no query
+ * recordings.repo, so there is no join site that can be missed here and no query
  * that needs to learn about the old value.
  *
  * `matches.raw_json` is rewritten alongside. Migrations 002, 004 and 006 all

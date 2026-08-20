@@ -1,6 +1,7 @@
 import type {
   Account,
   ChampionStats,
+  ClientArchive,
   LeagueEntry,
   MasteryEntry,
   MatchDetail,
@@ -9,8 +10,10 @@ import type {
   QueueType,
   RankRange,
   RankSnapshot,
+  Recording,
+  RecordingEvent,
   Replay,
-  ReplayEvent,
+  RoflSettings,
   Scoreboard
 } from '@shared/types'
 import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
@@ -482,7 +485,10 @@ const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   hasManualRank: false,
   // The first three games were recorded; the rest were not, so the context menu
   // is exercised both enabled and disabled without switching scenario.
-  replayId: i < 3 ? i + 1 : null
+  recordingId: i < 3 ? i + 1 : null,
+  // Overlaps the recordings deliberately: the mock has to exercise a row with
+  // both artefacts, one with each, and one with neither.
+  replayId: i < 5 && i !== 1 ? i + 1 : null
 }))
 
 const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
@@ -630,13 +636,13 @@ export const SCOREBOARD: Scoreboard = {
 }
 
 /**
- * Recordings, covering the three states the Replays view has to draw.
+ * Recordings, covering the three states the Recordings view has to draw.
  *
- * A bound replay, one still hunting for its match, and one that never found a
+ * A bound recording, one still hunting for its match, and one that never found a
  * game — the Practice Tool case, which is the normal reason a recording stays
  * unmatched and is exactly the row most likely to be got wrong.
  */
-export const REPLAYS: Record<number, Replay[]> = {
+export const RECORDINGS: Record<number, Recording[]> = {
   1: [
     {
       id: 1,
@@ -704,7 +710,7 @@ export const REPLAYS: Record<number, Replay[]> = {
  * Two kills seconds apart plus the multikill they add up to land on top of each
  * other on the bar, which is the case the marker clustering exists for.
  */
-export const REPLAY_EVENTS: ReplayEvent[] = [
+export const RECORDING_EVENTS: RecordingEvent[] = [
   { eventId: 1, name: 'ChampionKill', gameTime: 214, videoTime: 174, role: 'kill', label: 'Ahri' },
   { eventId: 2, name: 'ChampionKill', gameTime: 402, videoTime: 362, role: 'death', label: 'LeeSin' },
   { eventId: 3, name: 'ChampionKill', gameTime: 640, videoTime: 600, role: 'assist', label: 'Aatrox' },
@@ -713,4 +719,107 @@ export const REPLAY_EVENTS: ReplayEvent[] = [
   { eventId: 6, name: 'Multikill', gameTime: 907, videoTime: 867, role: 'multikill', label: '2' },
   { eventId: 7, name: 'ChampionKill', gameTime: 1_240, videoTime: 1_200, role: 'death', label: 'Ahri' },
   { eventId: 8, name: 'ChampionKill', gameTime: 1_690, videoTime: 1_650, role: 'kill', label: 'Nami' }
+]
+
+/**
+ * Riot replays for the browser harness.
+ *
+ * Three rows, chosen to cover the three states the tab has to draw: one linked
+ * and playable, one linked but recorded on a patch no installed client can run,
+ * and one whose match has not synced so the row must fall back to the plain
+ * form with no champion and no KDA.
+ */
+export const MOCK_REPLAYS: Replay[] = [
+  {
+    id: 1,
+    accountId: 1,
+    matchId: 'NA1_5312345678',
+    fileExists: true,
+    fileBytes: 31_400_000,
+    gameVersion: '16.16.804.9184',
+    patch: '16.16',
+    durationSeconds: 1834,
+    recordedAt: Date.now() - 2 * 3_600_000,
+    match: {
+      matchId: 'NA1_5312345678',
+      gameCreation: Date.now() - 2 * 3_600_000,
+      gameDuration: 1834,
+      gameMode: 'CLASSIC',
+      queueId: 420,
+      win: true,
+      championId: 103,
+      championName: 'Ahri',
+      kills: 11,
+      deaths: 3,
+      assists: 8
+    },
+    blockedReason: null
+  },
+  {
+    id: 2,
+    accountId: 1,
+    matchId: 'NA1_5312345600',
+    fileExists: true,
+    fileBytes: 29_900_000,
+    gameVersion: '15.14.600.4410',
+    patch: '15.14',
+    durationSeconds: 1502,
+    recordedAt: Date.now() - 40 * 86_400_000,
+    match: {
+      matchId: 'NA1_5312345600',
+      gameCreation: Date.now() - 40 * 86_400_000,
+      gameDuration: 1502,
+      gameMode: 'CLASSIC',
+      queueId: 440,
+      win: false,
+      championId: 64,
+      championName: 'LeeSin',
+      kills: 4,
+      deaths: 9,
+      assists: 6
+    },
+    blockedReason: 'Needs a League client for patch 15.14'
+  },
+  {
+    id: 3,
+    accountId: null,
+    matchId: 'NA1_5312399999',
+    fileExists: true,
+    fileBytes: 34_700_000,
+    gameVersion: '16.16.804.9184',
+    patch: '16.16',
+    durationSeconds: 2140,
+    recordedAt: Date.now() - 20 * 60_000,
+    match: null,
+    blockedReason: null
+  }
+]
+
+export const MOCK_ROFL_SETTINGS: RoflSettings = {
+  enabled: true,
+  sourceFolder: null,
+  resolvedSourceFolder: 'C:\\Users\\you\\Documents\\League of Legends\\Replays',
+  // False so the harness can be used to design the one warning that matters.
+  autoRecordEnabled: true,
+  folder: 'C:\\Users\\you\\Videos\\Foxfire\\Replays',
+  softCapBytes: 5 * 1024 * 1024 * 1024
+}
+
+export const MOCK_ARCHIVES: ClientArchive[] = [
+  {
+    id: 1,
+    path: 'D:\\League archives\\League of Legends 15.14',
+    patch: '15.14',
+    patchSource: 'detected',
+    label: 'Archived 2026-07-02',
+    pathExists: true
+  },
+  {
+    id: 2,
+    path: 'E:\\old\\lol-15-10',
+    patch: '15.10',
+    patchSource: 'manual',
+    label: null,
+    pathExists: false
+  }
 ]

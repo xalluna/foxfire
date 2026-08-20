@@ -1,23 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Asset } from '../components/Asset'
-import { EmptyState } from '../components/EmptyState'
-import * as Icon from '../components/icons'
-import { MatchListSkeleton } from '../components/Skeleton'
-import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, championName } from '../lib/assets'
-import { formatAge, formatClock, kdaRatio } from '../lib/matchStats'
-import { queueName } from '../lib/queues'
-import type { Account, Replay } from '@shared/types'
+import { Asset } from '../../components/Asset'
+import { EmptyState } from '../../components/EmptyState'
+import * as Icon from '../../components/icons'
+import { MatchListSkeleton } from '../../components/Skeleton'
+import { useAssets } from '../../hooks/useAssets'
+import { championIconUrl, championName } from '../../lib/assets'
+import { formatAge, formatClock, kdaRatio } from '../../lib/matchStats'
+import { queueName } from '../../lib/queues'
+import type { Account, Recording } from '@shared/types'
 
 /**
  * Every recording, bound to a match or not.
  *
- * The right-click on a match row is the main way into a replay, but it can only
- * ever reach recordings that found their match. A Practice Tool game produces
- * no match-v5 entry and never will, and a sync that never landed leaves one
- * stranded — without this screen that footage would exist on disk and be
- * unreachable from inside the app.
+ * The right-click on a match row is the main way into a recording, but it can
+ * only ever reach recordings that found their match. A Practice Tool game
+ * produces no match-v5 entry and never will, and a sync that never landed
+ * leaves one stranded — without this tab that footage would exist on disk and
+ * be unreachable from inside the app.
  *
  * It is also where the disk actually gets managed: nothing is ever deleted
  * automatically, so there has to be somewhere to see the total and do something
@@ -31,43 +31,42 @@ function formatBytes(bytes: number | null): string {
   return `${Math.round(bytes / (1024 * 1024))} MB`
 }
 
-export function Replays({ account }: { account: Account }): JSX.Element {
+export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   const queryClient = useQueryClient()
 
-  const replays = useQuery({
-    queryKey: ['replays', account.id],
-    queryFn: () => window.api.replays.list(account.id)
+  const recordings = useQuery({
+    queryKey: ['recordings', account.id],
+    queryFn: () => window.api.recordings.list(account.id)
   })
 
   const usage = useQuery({
-    queryKey: ['replayUsage'],
-    queryFn: () => window.api.replays.usage()
+    queryKey: ['recordingUsage'],
+    queryFn: () => window.api.recordings.usage()
   })
 
   const refresh = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['replays', account.id] })
-    void queryClient.invalidateQueries({ queryKey: ['replayUsage'] })
+    void queryClient.invalidateQueries({ queryKey: ['recordings', account.id] })
+    void queryClient.invalidateQueries({ queryKey: ['recordingUsage'] })
     void queryClient.invalidateQueries({ queryKey: ['matchList', account.id] })
   }
 
   const remove = useMutation({
-    mutationFn: (replayId: number) => window.api.replays.remove(replayId),
+    mutationFn: (recordingId: number) => window.api.recordings.remove(recordingId),
     onSuccess: refresh
   })
 
   const cleanup = useMutation({
-    mutationFn: (count: number) => window.api.replays.removeOldest(account.id, count),
+    mutationFn: (count: number) => window.api.recordings.removeOldest(account.id, count),
     onSuccess: refresh
   })
 
-  const rows = replays.data ?? []
+  const rows = recordings.data ?? []
   const overCap =
     usage.data && usage.data.softCapBytes > 0 && usage.data.totalBytes > usage.data.softCapBytes
 
   return (
-    <div className="mx-auto w-full max-w-4xl p-6">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="font-display text-xl text-text">Replays</h1>
+    <div>
+      <div className="flex items-baseline justify-end gap-4">
         {usage.data && usage.data.count > 0 && (
           <p className="text-sm tabular-nums text-text-dim">
             {formatBytes(usage.data.totalBytes)} across {usage.data.count}{' '}
@@ -109,7 +108,7 @@ export function Replays({ account }: { account: Account }): JSX.Element {
       )}
 
       <div className="mt-4 overflow-hidden rounded-lg border border-hairline bg-surface/40">
-        {replays.isPending ? (
+        {recordings.isPending ? (
           <MatchListSkeleton rows={5} />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -119,11 +118,11 @@ export function Replays({ account }: { account: Account }): JSX.Element {
           />
         ) : (
           <ul className="divide-y divide-hairline/60">
-            {rows.map((replay) => (
-              <ReplayRow
-                key={replay.id}
-                replay={replay}
-                onDelete={() => remove.mutate(replay.id)}
+            {rows.map((recording) => (
+              <RecordingRow
+                key={recording.id}
+                recording={recording}
+                onDelete={() => remove.mutate(recording.id)}
               />
             ))}
           </ul>
@@ -133,17 +132,17 @@ export function Replays({ account }: { account: Account }): JSX.Element {
   )
 }
 
-function ReplayRow({
-  replay,
+function RecordingRow({
+  recording,
   onDelete
 }: {
-  replay: Replay
+  recording: Recording
   onDelete: () => void
 }): JSX.Element {
   const assets = useAssets()
-  const match = replay.match
-  const championId = match?.championId ?? replay.selfChampionId
-  const playable = replay.fileExists
+  const match = recording.match
+  const championId = match?.championId ?? recording.selfChampionId
+  const playable = recording.fileExists
 
   return (
     <li
@@ -170,15 +169,15 @@ function ReplayRow({
             ? championName(assets, championId, match?.championName)
             : (match?.championName ?? 'Recording')}
           <span className="ml-2 text-2xs text-text-mute">
-            {match ? queueName(match.queueId, match.gameMode) : queueName(replay.queueId, null)}
+            {match ? queueName(match.queueId, match.gameMode) : queueName(recording.queueId, null)}
           </span>
         </p>
         <p className="mt-0.5 text-2xs text-text-mute">
-          {formatAge(replay.startedAt)}
+          {formatAge(recording.startedAt)}
           {' · '}
-          {replay.durationSeconds !== null ? formatClock(replay.durationSeconds) : '—'}
+          {recording.durationSeconds !== null ? formatClock(recording.durationSeconds) : '—'}
           {' · '}
-          {formatBytes(replay.fileBytes)}
+          {formatBytes(recording.fileBytes)}
         </p>
       </div>
 
@@ -191,13 +190,13 @@ function ReplayRow({
         </span>
       )}
 
-      <BindBadge replay={replay} />
+      <BindBadge recording={recording} />
 
       <div className="flex shrink-0 items-center gap-1.5">
         <button
           type="button"
           disabled={!playable}
-          onClick={() => void window.api.replays.open(replay.id)}
+          onClick={() => void window.api.recordings.open(recording.id)}
           title={playable ? 'Watch' : 'The video file is missing'}
           className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -206,7 +205,7 @@ function ReplayRow({
         <IconButton
           label="Show in folder"
           disabled={!playable}
-          onClick={() => void window.api.replays.reveal(replay.id)}
+          onClick={() => void window.api.recordings.reveal(recording.id)}
         >
           <Icon.Folder width={13} height={13} />
         </IconButton>
@@ -225,14 +224,14 @@ function ReplayRow({
  * for a Practice Tool game, and a user who sees it on a ranked game learns
  * something real about their sync.
  */
-function BindBadge({ replay }: { replay: Replay }): JSX.Element | null {
-  if (!replay.fileExists) {
+function BindBadge({ recording }: { recording: Recording }): JSX.Element | null {
+  if (!recording.fileExists) {
     return <Badge tone="warning">File missing</Badge>
   }
-  if (replay.bindState === 'pending') {
+  if (recording.bindState === 'pending') {
     return <Badge tone="neutral">Matching…</Badge>
   }
-  if (replay.bindState === 'unmatched') {
+  if (recording.bindState === 'unmatched') {
     return <Badge tone="neutral">No match entry</Badge>
   }
   return null

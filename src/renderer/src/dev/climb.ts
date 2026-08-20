@@ -327,6 +327,7 @@ function summaryFor(game: Game, index: number): MatchSummary {
     isRemake: false,
     rank: null,
     hasManualRank: false,
+    recordingId: null,
     replayId: null
   }
 }

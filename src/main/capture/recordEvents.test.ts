@@ -19,7 +19,7 @@ describe('recordSignalFor', () => {
 
   it('waits for the stop that carries the filename', () => {
     // The bug this exists for: STOPPING arrives first, reports the output as
-    // inactive, and has no path. Finalising here writes a replay pointing at
+    // inactive, and has no path. Finalising here writes a recording pointing at
     // nothing and then ignores the event that knew where the file went.
     expect(
       recordSignalFor(event({ active: false, state: 'OBS_WEBSOCKET_OUTPUT_STOPPING' }))

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
+import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { SeasonSettings } from '../components/SeasonSettings'
 import { SectionSummary, SettingsSection } from '../components/SettingsSection'
@@ -168,6 +169,8 @@ export function Settings(): JSX.Element {
       <SeasonSettings />
 
       <CaptureSettings />
+
+      <ReplaySettings />
 
       <TelemetrySettings />
 

@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import * as Icon from '../components/icons'
 import { formatClock } from '../lib/matchStats'
 import { clusterEvents, describeCluster, leadEvent, seekTargetFor } from './timelineMarkers'
-import type { ReplayEvent } from '@shared/types'
+import type { RecordingEvent } from '@shared/types'
 
 /**
  * The seek bar, marked with everything that happened to you.
@@ -14,18 +14,18 @@ import type { ReplayEvent } from '@shared/types'
  *
  * Only the player's own events are here — their kills, deaths, assists and
  * multikills. A bar carrying every turret and dragon in the game is a smear,
- * and "what happened to me at fourteen minutes" is the question a replay is
+ * and "what happened to me at fourteen minutes" is the question a recording is
  * opened to answer.
  */
 
-const ROLE_STYLE: Record<ReplayEvent['role'], string> = {
+const ROLE_STYLE: Record<RecordingEvent['role'], string> = {
   kill: 'text-teal',
   death: 'text-red',
   assist: 'text-text-dim',
   multikill: 'text-accent'
 }
 
-function RoleGlyph({ role }: { role: ReplayEvent['role'] }): JSX.Element {
+function RoleGlyph({ role }: { role: RecordingEvent['role'] }): JSX.Element {
   if (role === 'death') return <Icon.Skull width={11} height={11} />
   if (role === 'multikill') return <Icon.Star filled width={11} height={11} />
   return <Icon.Swords width={11} height={11} />
@@ -40,7 +40,7 @@ export function EventTimeline({
 }: {
   /** Same source as the player, for the hover preview's own decoder. */
   src: string
-  events: readonly ReplayEvent[]
+  events: readonly RecordingEvent[]
   duration: number
   currentTime: number
   onSeek: (seconds: number) => void
