@@ -3,6 +3,8 @@ import { getBackgroundSettings } from './services/backgroundService'
 import { createMainWindow, getMainWindow } from './window'
 import { openTelemetryWindow } from './telemetryWindow'
 import { TRAY_ICON_PNG } from './trayIcon'
+import { getAppIconState, onAppIconState } from './appIcon'
+import { APP_ICON_TOOLTIP } from './appIconState'
 
 /**
  * Keeps the app alive after the window closes, which is what makes per-game LP
@@ -16,6 +18,9 @@ let tray: Tray | null = null
 
 /** Distinguishes a real quit from a close that should hide to the tray. */
 let quitting = false
+
+/** Drops the tooltip subscription when the tray goes away. */
+let untrackAppIcon: (() => void) | null = null
 
 export function isQuitting(): boolean {
   return quitting
@@ -62,7 +67,9 @@ export function ensureTray(): void {
   if (tray) return
 
   tray = new Tray(trayIcon())
-  tray.setToolTip('Foxfire — tracking rank')
+  // Read rather than assumed: the tray can be switched on from settings
+  // mid-game, and syncTray runs after capture has already reported.
+  tray.setToolTip(APP_ICON_TOOLTIP[getAppIconState()])
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Foxfire', click: showWindow },
@@ -80,9 +87,15 @@ export function ensureTray(): void {
     ])
   )
   tray.on('double-click', showWindow)
+
+  // The one signal left while the window is hidden: hiding to the tray takes
+  // the taskbar button with it, and the badge with that.
+  untrackAppIcon = onAppIconState((state) => tray?.setToolTip(APP_ICON_TOOLTIP[state]))
 }
 
 export function destroyTray(): void {
+  untrackAppIcon?.()
+  untrackAppIcon = null
   tray?.destroy()
   tray = null
 }

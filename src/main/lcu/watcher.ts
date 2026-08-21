@@ -8,6 +8,7 @@ import { refreshRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
 import { rescanReplays } from '../rofl/watcher'
 import { onGamePhase } from '../capture/captureService'
+import { setAppIconLcu } from '../appIcon'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
 import { queueTypeForQueueId, TRACKED_QUEUES } from '@shared/queues'
@@ -115,6 +116,9 @@ function setStatus(next: LcuStatus): void {
   if (!changed) return
   log.debug('LCU status changed', { state: next.state })
   recordLcuTransition(next.state)
+  // After the unchanged guard above: the badge only needs touching when the
+  // status actually moved.
+  setAppIconLcu(next)
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(CH.lcu.status, next)
   }

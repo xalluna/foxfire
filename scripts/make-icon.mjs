@@ -19,6 +19,12 @@
 // Colours are the --accent / --accent-dim / --canvas tokens from
 // src/renderer/src/styles/index.css.
 //
+// The taskbar overlay badges are generated here too. They are not the mark —
+// they are the three coloured dots the shell draws over the corner of the
+// taskbar button to say whether a game is on and whether it is being kept — but
+// they share the palette, and the rule that no icon in this app is a blob
+// somebody pasted in.
+//
 // Run with: node scripts/make-icon.mjs
 // Re-run when the mark or the palette changes.
 
@@ -32,6 +38,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ICO_OUT = join(ROOT, 'resources', 'icon.ico')
 const PNG_OUT = join(ROOT, 'resources', 'icon.png')
 const TRAY_OUT = join(ROOT, 'src', 'main', 'trayIcon.ts')
+const OVERLAY_OUT = join(ROOT, 'src', 'main', 'appIconOverlays.ts')
 const FAVICON_OUT = join(ROOT, 'src', 'renderer', 'src', 'assets', 'favicon.svg')
 
 /** The one definition of the mark, shared with the renderer. */
@@ -46,6 +53,18 @@ const SIZE = 512
 const CANVAS = '#010A13'
 const ACCENT = '#9DC8FF'
 const ACCENT_DIM = '#3E5F8A'
+
+/**
+ * The --teal / --red / --amber tokens, keyed by the state each badge means.
+ *
+ * The same three colours the in-app indicators already use for these same
+ * facts, so the taskbar button and the Live tab cannot end up disagreeing.
+ */
+const BADGE_COLOURS = {
+  game: '#0AC8B9',
+  stalled: '#EB9C00',
+  recording: '#E84057'
+}
 
 /** The mark's radius in grid units, as a fraction of the 512 tile. */
 const TILE_RADIUS = 170
@@ -84,6 +103,41 @@ const TRAY_HALF = mark.extent * TRAY_PAD
 const CROP = `${round(mark.grid / 2 - TRAY_HALF)} ${round(mark.grid / 2 - TRAY_HALF)} ${round(TRAY_HALF * 2)} ${round(TRAY_HALF * 2)}`
 const TRAY_MARK = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="${CROP}">
   ${wisps(ACCENT)}
+</svg>`
+
+/**
+ * Both sizes the shell asks for, rather than one master to scale from.
+ *
+ * Windows draws an overlay at SM_CXSMICON — 16 logical pixels, so 16 at 100%
+ * scaling and 32 at 200%. Electron hands `setOverlayIcon` only the image's 1x
+ * representation, so a multi-scale NativeImage buys nothing and the size has to
+ * be picked here; and the shell's own scaling is a plain stretch rather than a
+ * resampler, which visibly roughens an anti-aliased circle either way it goes.
+ * Two small blobs and a scale-factor pick at apply time is the cheap answer.
+ */
+const BADGE_SIZES = [16, 32]
+
+/**
+ * The overlay badge: a filled dot inside a ring of the app's own background.
+ *
+ * The ring is not decoration. The shell draws this over the corner of the
+ * taskbar button, against the icon's dark tile on one side and whatever colour
+ * the user's taskbar happens to be on the other. Against a dark taskbar it
+ * disappears and the badge reads as a bare dot, which is the intent — its whole
+ * job is separation on a light or accented one.
+ *
+ * Sized by the width/height attributes rather than by rendering large and
+ * resizing, so the vector is rasterised at the target size. That is what
+ * TRAY_MARK above does, and for a circle it is sharper than any downscale.
+ *
+ * The ring is 3 of 32 units — 1.5px at 16, 3px at 32. Wider reads as chunky at
+ * the small size and starts to crowd out the colour; narrower vanishes. The
+ * outer radius stops half a unit short of the edge so it anti-aliases instead
+ * of clipping.
+ */
+const BADGE = (colour, size) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">
+  <circle cx="16" cy="16" r="15.5" fill="${CANVAS}"/>
+  <circle cx="16" cy="16" r="12.5" fill="${colour}"/>
 </svg>`
 
 function render(size) {
@@ -154,6 +208,55 @@ async function main() {
       `export const TRAY_ICON_PNG =\n  '${tray.toString('base64')}'\n`
   )
   console.log(`  ok  ${TRAY_OUT.slice(ROOT.length + 1)}  16x16  ${tray.length}B`)
+
+  // Inlined for the same reason the tray icon is: electron-builder ships only
+  // out/ and package.json, so resources/ does not exist at runtime in a packaged
+  // build, and a path that resolved in dev would come back empty once installed.
+  const states = Object.keys(BADGE_COLOURS)
+  const badges = Object.fromEntries(
+    await Promise.all(
+      states.map(async (state) => [
+        state,
+        Object.fromEntries(
+          await Promise.all(
+            BADGE_SIZES.map(async (size) => [
+              size,
+              await sharp(Buffer.from(BADGE(BADGE_COLOURS[state], size)))
+                .png({ compressionLevel: 9 })
+                .toBuffer()
+            ])
+          )
+        )
+      ])
+    )
+  )
+
+  const union = states.map((state) => `'${state}'`).join(' | ')
+  const sizeUnion = BADGE_SIZES.join(' | ')
+  const members = states
+    .map((state) => {
+      const entries = BADGE_SIZES.map(
+        (size) => `    ${size}:\n      '${badges[state][size].toString('base64')}'`
+      ).join(',\n')
+      return `  ${state}: {\n${entries}\n  }`
+    })
+    .join(',\n')
+  await writeFile(
+    OVERLAY_OUT,
+    `// Generated by scripts/make-icon.mjs — do not edit by hand.\n` +
+      `// Re-run \`npm run make-icon\` after changing a badge colour.\n` +
+      `//\n` +
+      `// The taskbar overlay badges, keyed by the state each one means and then by\n` +
+      `// rendered size. See the BADGE template in the script for why there are two.\n` +
+      `export const OVERLAY_PNG: Record<${union}, Record<${sizeUnion}, string>> = {\n${members}\n}\n`
+  )
+  const total = states.reduce(
+    (sum, state) => sum + BADGE_SIZES.reduce((n, size) => n + badges[state][size].length, 0),
+    0
+  )
+  console.log(
+    `  ok  ${OVERLAY_OUT.slice(ROOT.length + 1)}  ${BADGE_SIZES.join('/')}  ${states.length} states  ${total}B`
+  )
 
   // For `npm run dev:web`, which is a browser tab and therefore wants a
   // favicon. Written under the renderer source tree rather than resources/ so

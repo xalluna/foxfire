@@ -39,6 +39,13 @@ const log = createLogger('app')
 // and one stored API key. Must run before the app is ready.
 app.setPath('userData', join(app.getPath('appData'), 'Foxfire'))
 
+// Matches `appId` in electron-builder.yml, which is what NSIS stamps onto the
+// installed shortcut. A process that does not claim the same identity is a
+// second taskbar button as far as Windows is concerned, separate from the
+// pinned one — and the overlay badge would land on whichever of them the user
+// happened not to be looking at. Must run before any window exists.
+app.setAppUserModelId('com.brandonbarr.foxfire')
+
 // Immediately after the pin and before anything opens a file beneath it: the
 // app was called LoL Stats until 0.8.0 and kept its data one directory over.
 migrateUserData()

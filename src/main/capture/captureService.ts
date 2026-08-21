@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { mkdirSync, statSync } from 'node:fs'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
+import { setAppIconCapture } from '../appIcon'
 import { createLogger } from '../telemetry/logger'
 import { isNotRunning, liveClientGet } from '../liveClient/client'
 import { getScoreboard } from '../services/liveClientService'
@@ -118,6 +119,10 @@ export function getCaptureStatus(): CaptureStatus {
 
 function broadcastStatus(): void {
   const status = getCaptureStatus()
+  // Hung off the broadcast rather than off dispatch, which only fires when the
+  // session phase moves. Turning capture off, and OBS coming and going, reach
+  // the status by their own routes and matter to the badge just as much.
+  setAppIconCapture(status)
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(CH.capture.status, status)
   }
