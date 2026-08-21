@@ -7,6 +7,35 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.10.2] — 2026-08-21
+
+Fixes recording never starting when you switch capture on with the app already open. Ticking the box
+in Settings connected to OBS and looked entirely healthy, but nothing was listening for OBS to say it
+had started — so every game armed, asked OBS to roll, and then sat there.
+
+### Fixed
+
+- Turning capture on in Settings now actually records. A session that had started with capture
+  switched off could never reach Recording, however healthy everything looked, because OBS's
+  confirmation had nowhere to go and no recording was written down. Restarting the app was the only
+  way out, and nothing said so. Turning capture on and playing a game straight afterwards is the
+  obvious way to try the feature, and it was the one way it could not work.
+- The capture status now follows OBS connecting and disconnecting in that same session, rather than
+  staying on whatever it said the moment the setting was switched on.
+- The taskbar dot added in 0.10.1 works in that session too. It is drawn from the same status, so it
+  could never turn red for a recording that never started, and it did not follow OBS coming and
+  going either — including the amber that exists precisely to say a game is going unrecorded.
+
+### Under the hood
+
+- The OBS connection and record-state subscriptions moved above `initCapture`'s enabled check, so
+  they are registered exactly once per process whatever the setting says at launch. `initCapture`
+  refuses to run twice and `refreshCapture` never subscribed, so anything the disabled path skipped
+  was skipped for the life of the process.
+- A new `captureService` suite drives the service over stubbed OBS, live-client and database seams
+  — arming, recording, stopping, and losing OBS mid-game — with the sequence that used to fail among
+  them. Five of its six cases fail against the old wiring.
+
 ## [0.10.1] — 2026-08-21
 
 The taskbar button now says what is happening. While a game is on it carries a coloured dot — teal
@@ -685,6 +714,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.10.2]: https://github.com/xalluna/foxfire/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/xalluna/foxfire/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/xalluna/foxfire/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/xalluna/foxfire/compare/v0.8.0...v0.9.0
