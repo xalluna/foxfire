@@ -427,18 +427,14 @@ export function initCapture(): void {
   if (running) return
   running = true
 
-  const settings = getCaptureSettings()
-  if (!settings.enabled) {
-    broadcastStatus()
-    return
-  }
-
-  // Started with the app rather than with a game: OBS takes seconds to come up
-  // and accept a connection, and a loading screen does not wait. Not awaited —
-  // the websocket client retries on its own, so nothing needs to block on it.
-  void launchObs(settings.obsInstallPath, settings.obsHost, settings.obsPort)
-  startObsClient()
-
+  // Subscribed before the enabled check, and so exactly once per process
+  // whatever the setting says. The guard above makes this the only pass, and
+  // refreshCapture has no way to subscribe later — so returning early with
+  // capture off left the OBS record feed with nobody listening, and switching
+  // capture on in settings gave a session that could never reach 'recording'
+  // until the app was restarted. Both handlers no-op unless a session is under
+  // way, which only the enabled path can produce, so listening while capture is
+  // off costs nothing.
   onObsConnectionChange(() => {
     broadcastStatus()
     // Losing OBS mid-recording means the footage stops here. The row is dropped
@@ -463,6 +459,15 @@ export function initCapture(): void {
       finalizeRecording(state.recordingId, event.path)
     }
   })
+
+  const settings = getCaptureSettings()
+  if (settings.enabled) {
+    // Started with the app rather than with a game: OBS takes seconds to come up
+    // and accept a connection, and a loading screen does not wait. Not awaited —
+    // the websocket client retries on its own, so nothing needs to block on it.
+    void launchObs(settings.obsInstallPath, settings.obsHost, settings.obsPort)
+    startObsClient()
+  }
 
   broadcastStatus()
 }
