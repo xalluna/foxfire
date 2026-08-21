@@ -5,6 +5,7 @@ import { closeTelemetryWindow } from './telemetryWindow'
 import { closeLpEditorWindow } from './lpEditorWindow'
 import { closeRecordingWindows } from './recordingWindow'
 import { closeArchivesWindow } from './archivesWindow'
+import { attachAppIcon } from './appIcon'
 
 /**
  * The app window, tracked by identity.
@@ -78,5 +79,9 @@ export function createMainWindow(): BrowserWindow {
   }
 
   mainWindow = window
+  // Every path that builds a window comes through here — bootstrap, the tray,
+  // and app.activate — so the taskbar badge cannot end up attached to only
+  // some of them.
+  attachAppIcon(window)
   return window
 }

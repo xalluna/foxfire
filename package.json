@@ -1,6 +1,6 @@
 {
   "name": "foxfire",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Personal League of Legends stats and live-game tracker",
   "main": "./out/main/index.js",
   "author": "Brandon Barr",

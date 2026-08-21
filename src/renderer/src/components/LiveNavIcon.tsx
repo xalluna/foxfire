@@ -17,6 +17,11 @@ import * as Icon from './icons'
  * the League client's business, and whether it is being recorded is OBS's. A
  * game plays perfectly well with capture switched off, and the ring should say
  * so.
+ *
+ * The taskbar button says the same thing to anyone who has tabbed away — see
+ * src/main/appIconState.ts, which reads the same two statuses and adds a fourth
+ * state this icon has no room for: a game that was meant to be recorded and is
+ * not. Keep the two in step.
  */
 export function LiveNavIcon(): JSX.Element {
   const lcu = useLcuStatus()
