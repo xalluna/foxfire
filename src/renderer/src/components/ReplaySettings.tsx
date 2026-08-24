@@ -32,7 +32,7 @@ export function ReplaySettings(): JSX.Element {
 
   return (
     <SettingsSection
-      icon={<Icon.Film />}
+      icon={<Icon.Film className="shrink-0 text-accent" />}
       title="Riot replays"
       summary={summaryFor(current)}
       blurb="Keep the .rofl files League saves, and watch them back in the client."

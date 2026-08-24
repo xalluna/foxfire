@@ -21,6 +21,7 @@ export default {
         teal: token('teal'),
         red: token('red'),
         amber: token('amber'),
+        gold: token('gold'),
         text: token('text'),
         'text-dim': token('text-dim'),
         'text-mute': token('text-mute')

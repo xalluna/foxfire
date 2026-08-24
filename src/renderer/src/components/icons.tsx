@@ -43,7 +43,7 @@ export function ChevronDown(props: IconProps): JSX.Element {
  * It sits beside 10px numbers in the scoreboard, where a 2px stroke on a 24
  * grid scales down to a grey smudge — no more readable than the literal "g"
  * this replaces, which ran together with the "k" and read as kilograms. A solid
- * disc holds its shape at that size. Still currentColor, so `text-accent` drives it.
+ * disc holds its shape at that size. Still currentColor, so `text-gold` drives it.
  */
 export function Coin(props: IconProps): JSX.Element {
   return (

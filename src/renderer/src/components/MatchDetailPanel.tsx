@@ -121,11 +121,15 @@ function ParticipantRow({
 
       <span className="w-14 shrink-0 text-2xs tabular-nums text-text-mute">{p.cs ?? 0} CS</span>
 
-      {/* The "g" that used to sit here butted against compactNumber's "k" and
-          read as a kilogram. A glyph can't be misread as a unit prefix. */}
-      <span className="flex w-14 shrink-0 items-center gap-0.5 text-2xs tabular-nums text-text-mute">
+      {/* The coin leads the figure rather than trailing it. Trailing, it moved
+          with the digit count — tabular-nums equalises how wide digits are, not
+          how many there are — so 8.1k and 13.1k put it in different places and
+          ten rows of it never lined up. It is a glyph rather than the letter
+          "g" because the "g" butted against compactNumber's "k" and read as a
+          kilogram. */}
+      <span className="flex w-14 shrink-0 items-center gap-1 text-2xs tabular-nums text-text-mute">
+        <Icon.Coin width={11} height={11} className="shrink-0 text-gold" />
         {compactNumber(p.goldEarned)}
-        <Icon.Coin width={9} height={9} className="shrink-0 text-accent" />
       </span>
 
       <div className="w-16 shrink-0">
@@ -201,10 +205,10 @@ export function MatchDetailPanel({
             {won ? 'Victory' : 'Defeat'}
           </span>
           <span className="text-2xs uppercase tracking-widest text-text-mute">{label}</span>
-          <span className="ml-auto flex items-center gap-0.5 text-2xs tabular-nums text-text-mute">
+          <span className="ml-auto flex items-center gap-1 text-2xs tabular-nums text-text-mute">
             {sum(team.map((p) => p.kills))} kills ·{' '}
+            <Icon.Coin width={11} height={11} className="shrink-0 text-gold" />
             {compactNumber(sum(team.map((p) => p.goldEarned)))}
-            <Icon.Coin width={9} height={9} className="shrink-0 text-accent" />
           </span>
         </div>
         <div className="space-y-0.5">
