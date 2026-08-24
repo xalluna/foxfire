@@ -38,9 +38,12 @@ export function createMainWindow(): BrowserWindow {
     // The renderer must leave --titlebar-controls-w clear on the right; see
     // src/renderer/src/styles/index.css.
     titleBarStyle: 'hidden',
+    // --canvas and --accent from src/renderer/src/styles/index.css. Written
+    // out because the main process never loads that stylesheet, the same way
+    // scripts/make-icon.mjs carries its own copy.
     titleBarOverlay: {
       color: '#010A13',
-      symbolColor: '#C8AA6E',
+      symbolColor: '#9DC8FF',
       height: 40
     },
     webPreferences: {

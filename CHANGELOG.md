@@ -7,6 +7,37 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.10.3] — 2026-08-24
+
+Loose ends from the 0.8.0 rebrand, in both directions: three icons that never got the new accent,
+and one that should have kept Riot's gold and went blue along with everything else. Search also gets
+the room its own layout always assumed it had.
+
+### Fixed
+
+- **Search no longer crops its match rows.** Making the window *wider* was what broke it: past
+  1280px the screen adds the rank column down the left, but the page itself was capped narrower than
+  that layout needs, so the item slots, the marker saying there is something to watch and the
+  chevron were all quietly cut off the right-hand edge. Every other screen had the room; this one
+  did not.
+- **The Riot replays icon in Settings is the same blue as every other section.** It was the only one
+  never given a colour, so it fell back to the cream the body text uses and read as gold beside Game
+  capture directly above it.
+- **The last two patches of the old gold are gone too** — the arrow on the queue dropdown, in Match
+  history and on Champions, and the minimise, maximise and close symbols in the title bar. Both were
+  still painted in the colour the app stopped using in 0.8.0.
+- **Gold in the match scoreboard is gold again**, rather than the pale blue it turned when the accent
+  colour changed. The coin also moved to the left of the figure, so all ten line up in a column
+  instead of shifting a few pixels either way depending on whether a player finished on 8.9k or 15.2k.
+
+### Under the hood
+
+- A `--gold` token joins the palette, and carries a note saying why one is back after the accent
+  deliberately stopped being Riot's gold in 0.8.0: it colours gold earned and nothing else — a
+  quantity the game denominates, so it keeps the game's colour, the same exemption the role icons and
+  rank crests already have. Explicitly not `--amber`, which means "something needs your attention"
+  everywhere else in the app.
+
 ## [0.10.2] — 2026-08-21
 
 Fixes recording never starting when you switch capture on with the app already open. Ticking the box
@@ -714,6 +745,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.10.3]: https://github.com/xalluna/foxfire/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/xalluna/foxfire/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/xalluna/foxfire/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/xalluna/foxfire/compare/v0.9.0...v0.10.0

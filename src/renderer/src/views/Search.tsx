@@ -44,7 +44,16 @@ export function Search(): JSX.Element {
     emptyEntry('RANKED_FLEX_SR')
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
+    /*
+      Capped at 1280 rather than a narrower reading column, because the aside
+      below is gated on `xl:` — a viewport query — while this cap measures the
+      container. The two have to name the same width, or crossing 1280px carves
+      a 320px rail out of a box that never grows to hold it and the row loses
+      its item slots to the list's overflow-hidden. ProfileStrip puts the figure
+      at roughly 1272px; this is the nearest step above it, and the cap LiveGame
+      already uses.
+    */
+    <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
       <div>
         <h1 className="font-display text-xl text-text">Look up a summoner</h1>
         <p className="mt-0.5 text-sm text-text-mute">
