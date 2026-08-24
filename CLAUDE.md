@@ -49,6 +49,19 @@ The PR already carries the version bump and the changelog section, so releasing 
 git tag -a v0.5.0 -m "Foxfire 0.5.0" && git push --tags
 ```
 
-The workflow verifies the tag matches `package.json`, extracts that section, and publishes the
-Release. Installers are not built in CI — run `npm run build:win` and attach the `.exe` by hand if a
-release needs one.
+There is nothing to do by hand afterwards. The workflow verifies the tag matches `package.json`,
+extracts that section, builds the Windows installer on a Windows runner, and publishes the Release
+with the installer, its `.blockmap` and `latest.yml` attached.
+
+It builds before it publishes, and creates the Release as a draft that only becomes visible once the
+uploaded installer has been read back off the API at the size that was actually built. So a release
+you can see always has a download on it — a failed build, or a half-finished upload, leaves either
+nothing or an invisible draft, and the next run clears the draft. It works that way because
+`v0.9.0`, `v0.10.0` and `v0.10.2` all shipped with no installer on them at all, back when attaching
+it was a step someone had to remember.
+
+`npm run build:win` still builds an installer into `release/`, for trying one out locally; releases
+no longer need it. To exercise the CI build without cutting a release — after a dependency bump, or
+a change to `electron-builder.yml` — run the workflow from the Actions tab. A dispatched run builds
+the installer and hands it back as a workflow artifact, and every step that can write to a release
+is gated so that it cannot.
