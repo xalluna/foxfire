@@ -1,36 +1,79 @@
 name: Release
 
-# Publishes a GitHub Release whose body is that version's CHANGELOG.md section.
-# The changelog is written by hand in the PR that bumps the version; this only
-# copies it out, so the file and the Release can never disagree.
+# Builds the Windows installer and publishes a GitHub Release that has it
+# attached, with that version's CHANGELOG.md section as the body. The changelog
+# is written by hand in the PR that bumps the version; this only copies it out,
+# so the file and the Release can never disagree.
+#
+# The installer used to be built and uploaded by hand after the tag was pushed.
+# Three releases in a row — 0.9.0, 0.10.0 and 0.10.2 — went out with no download
+# on them at all, because a step a person has to remember is a step that
+# eventually does not happen. A release page with nothing to install on it is
+# worse than no release page: it looks finished. So the build happens here now,
+# and the Release does not become visible until the file is on it.
 on:
   push:
     tags:
       - 'v*'
+  # Builds the installer and hands it back as a workflow artifact, touching no
+  # releases at all. This is here so the build half can be exercised — after a
+  # dependency bump, or a change to electron-builder.yml — without cutting a
+  # release to find out whether it still works. Every step that can write to a
+  # release is gated on `github.event_name == 'push'`, and the only push this
+  # workflow accepts is a v* tag, so a dispatched run cannot publish anything
+  # even when it is dispatched from a tag.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Windows for the whole job, rather than a Linux job that hands off to a
+    # Windows one. NSIS is a Windows toolchain; electron-builder can drive it
+    # from Linux only through wine inside its own Docker image, which fails in
+    # ways that have nothing to do with this app. Splitting it — guards and
+    # publish on ubuntu, build on windows — would mean pushing a 100 MiB
+    # installer into the artifact store and pulling it straight back out, and
+    # would put the step that guarantees a release has an asset in a different
+    # job from the one that produces it, with an upload and a download in
+    # between to go wrong. Nothing here needs Linux: the guard steps are sh and
+    # awk, and Git Bash on the Windows image runs them unchanged.
+    runs-on: windows-latest
+    # A cold cache makes electron-builder download the Electron binary. A hung
+    # download should not sit on a runner for the six hours Actions allows.
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Windows runners default to PowerShell. Every step below is written in
+        # sh, including the awk that reads the changelog.
+        shell: bash
     steps:
       - uses: actions/checkout@v5
 
+      # package.json is the version of record — it names the installer and it is
+      # what the app reports about itself. The tag is checked against it below.
+      # Reading it here rather than deriving it from the tag is what gives the
+      # dispatched build a version too, since that run has no tag to derive one
+      # from. Node is preinstalled on the runner image, so this lands before the
+      # slow setup steps and the guards can fail in seconds.
+      - name: Read the version from package.json
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
       - name: Check the tag matches package.json
+        if: github.event_name == 'push'
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          packaged="$(node -p "require('./package.json').version")"
-          if [ "$version" != "$packaged" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $packaged"
+          tagged="${GITHUB_REF_NAME#v}"
+          if [ "$tagged" != "$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $VERSION"
             exit 1
           fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
 
       # The heading is matched by exact string, so the version's dots are never
       # treated as wildcards. A section ends at the next heading or, for the
       # oldest release, at the link definitions that close the file.
       - name: Extract the changelog section
+        if: github.event_name == 'push'
         run: |
           awk -v v="$VERSION" '
             BEGIN { heading = "## [" v "]" }
@@ -45,10 +88,156 @@ jobs:
           fi
           cat notes.md
 
-      - name: Create the release
+      # Nothing has been built yet, which makes this the cheapest place to find
+      # out the run cannot finish.
+      #
+      # A published release for this tag means the tag was pushed twice and the
+      # first run already did the job. Overwriting it would swap a download
+      # people may already have started for an identical rebuild, so the run
+      # stops and leaves it alone. A draft means an earlier run died somewhere
+      # between creating the release and publishing it; drafts are visible only
+      # to people who can write to the repo, so clearing one is safe and lets a
+      # re-run get through. `gh release delete` leaves the tag alone unless
+      # asked with --cleanup-tag, which is precisely why that flag is not here:
+      # deleting the tag would delete the thing that triggered the run.
+      - name: Refuse to overwrite an existing release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$state" = "false" ]; then
+            echo "::error::$GITHUB_REF_NAME is already published. Delete that release first if you meant to rebuild it."
+            exit 1
+          fi
+          if [ "$state" = "true" ]; then
+            echo "Clearing the draft release an earlier run left behind."
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # There is no engines field to read this from, so the workflow is the
+          # one place the build's Node version is written down. 24 is what the
+          # app is developed against.
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `--publish never` is not decoration. electron-builder will publish to
+      # GitHub on its own initiative when it sees a CI build on a tag and a
+      # token in the environment, which would leave two things racing to attach
+      # assets to one release. No token is passed to this step, so it cannot
+      # happen today; the flag is here so it stays impossible if one ever
+      # arrives. npm appends extra arguments to the end of the script it runs,
+      # and build:win ends in the electron-builder call, so they land where they
+      # are meant to.
+      #
+      # There is no code-signing certificate for Foxfire. electron-builder skips
+      # signing and says so rather than failing, and identity auto-discovery is
+      # turned off so that stays true whatever the runner image happens to have
+      # in its certificate store.
+      - name: Build the installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run build:win -- --publish never
+
+      # electron-builder.yml sets artifactName to
+      # ${productName}-${version}-setup.${ext}, so these three names follow from
+      # package.json's version and nothing else. Naming them here means a change
+      # to that template fails against a listing of what was actually produced,
+      # rather than being discovered as an empty release page. The size floor
+      # covers the other half of the same failure: a file that exists but is a
+      # fraction of the ~100 MiB an Electron app weighs is not an installer, and
+      # a release carrying one is the thing this workflow is meant to prevent.
+      - name: Check the installer is really there
+        run: |
+          installer="release/Foxfire-$VERSION-setup.exe"
+          ls -l release
+          for artifact in "$installer" "$installer.blockmap" release/latest.yml; do
+            if [ ! -f "$artifact" ]; then
+              echo "::error::Expected $artifact, which the build did not produce"
+              exit 1
+            fi
+          done
+          size="$(stat -c %s "$installer")"
+          if [ "$size" -lt 50000000 ]; then
+            echo "::error::$installer is only $size bytes, which is too small to be a build of this app"
+            exit 1
+          fi
+          echo "INSTALLER_SIZE=$size" >> "$GITHUB_ENV"
+
+      # Dispatched runs only. On a tag the installer's permanent home is the
+      # Release itself, and a second copy here would be a 100 MiB upload that
+      # expires unread.
+      - name: Hand the installer back
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Foxfire-installer
+          path: |
+            release/*-setup.exe
+            release/*-setup.exe.blockmap
+            release/latest.yml
+          # The installer is already compressed; zipping it again buys nothing
+          # and costs minutes.
+          compression-level: 0
+          retention-days: 7
+
+      # The ordering this whole change exists for. The release is created after
+      # the installer is built, by one command that uploads it, and it is
+      # created as a draft: not on the releases page, not served as the
+      # repository's latest release, visible only to people who can write here.
+      # Publishing is a separate step that runs only once the upload has been
+      # read back and found to be the right size.
+      #
+      # The guarantee that buys: a Foxfire release that anyone can see has its
+      # installer on it. Everything that can go wrong before that point — a
+      # failed build, a half-finished upload, a cancelled run — leaves either
+      # nothing at all or an invisible draft that the guard above clears on the
+      # next attempt. There is no ordering in which a naked release becomes
+      # visible.
+      #
+      # latest.yml and the .blockmap go up alongside the .exe. Neither does
+      # anything today: they are what electron-updater reads to notice a newer
+      # version and to fetch only the parts of the installer that changed, and
+      # nothing in the app asks for updates yet. Together they are 110 KiB
+      # against a 100 MiB installer, and they have to be attached to the release
+      # they describe — which cannot be done retroactively for releases already
+      # cut by the time auto-update is wired up. Attaching the blockmap without
+      # latest.yml, which is what 0.10.3 ended up with, is the one combination
+      # that is no use to anybody.
+      - name: Create the release as a draft, with the installer attached
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
+            --draft \
             --title "Foxfire $VERSION" \
-            --notes-file notes.md
+            --notes-file notes.md \
+            "release/Foxfire-$VERSION-setup.exe" \
+            "release/Foxfire-$VERSION-setup.exe.blockmap" \
+            release/latest.yml
+
+      # One API read, against the size the build actually produced, is all that
+      # stands between a truncated upload and a published release, so it is
+      # worth doing rather than assuming the previous step's exit code covers
+      # it. A failure here leaves the draft in place: invisible, and cleared by
+      # the guard on the next run.
+      - name: Publish the release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uploaded="$(gh release view "$GITHUB_REF_NAME" --json assets \
+            --jq ".assets[] | select(.name == \"Foxfire-$VERSION-setup.exe\") | .size")"
+          if [ "$uploaded" != "$INSTALLER_SIZE" ]; then
+            echo "::error::The installer on the draft is ${uploaded:-absent}, not the $INSTALLER_SIZE bytes that were built"
+            exit 1
+          fi
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+          echo "Published $GITHUB_REF_NAME with a $INSTALLER_SIZE byte installer."
