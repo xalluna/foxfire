@@ -46,8 +46,18 @@ Pre-1.0, so nothing bumps major yet.
 The PR already carries the version bump and the changelog section, so releasing is just:
 
 ```bash
-git tag -a v0.5.0 -m "Foxfire 0.5.0" && git push --tags
+npm run tag-release -- --push
 ```
+
+That tags the current commit as whatever version `package.json` names — the version is read rather
+than typed, since typing it means typing it twice and the workflow rejects a tag that disagrees with
+the file. Leave off `--push` to create the tag and stop, and it prints the command to push it.
+
+It refuses rather than tagging when the tree is dirty, when the tag already exists here or on origin,
+when `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`. That last
+one is easy to get wrong: a squash merge rewrites the branch commit, so the commit a PR was developed
+on never lands on main, and tagging it gives you a Release pointing at a commit reachable from
+nothing.
 
 There is nothing to do by hand afterwards. The workflow verifies the tag matches `package.json`,
 extracts that section, builds the Windows installer on a Windows runner, and publishes the Release
