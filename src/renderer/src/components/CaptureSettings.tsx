@@ -3,8 +3,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { CAPTURE_QUEUE_OPTIONS } from '@shared/queues'
 import { CAPTURE_QUALITY_OPTIONS } from '@shared/captureQuality'
-import { Toggle } from './Toggle'
-import { SectionSummary, SettingsSection } from './SettingsSection'
+import { SettingsCard, SettingsPage } from './settings/SettingsCard'
+import {
+  ByteCapRow,
+  PathRow,
+  SettingsBlock,
+  Stat,
+  StatRow,
+  StatusRow,
+  ToggleRow
+} from './settings/SettingsRow'
+import {
+  checkboxClass,
+  ghostButtonClass,
+  inputClass,
+  primaryButtonClass,
+  selectClass
+} from './settings/controls'
 import * as Icon from './icons'
 import type {
   CaptureAudio,
@@ -26,6 +41,10 @@ import type {
  * The preview is the point of the manual path: seeing the frame OBS would
  * capture is the difference between finding out now and finding out after a
  * game you wanted to keep.
+ *
+ * By far the longest page in Settings, so it is the one that most needs its
+ * cards: OBS, which games, quality and storage are four separate questions and
+ * fourteen undivided rows made them look like one.
  */
 const PREVIEW_MS = 1500
 
@@ -90,39 +109,38 @@ export function CaptureSettings(): JSX.Element {
 
   const current = settings.data
   const disabled = !current || update.isPending
+  const enabled = current?.enabled === true
+  // Recordings outlive the switch that made them, so the figures stay on the
+  // page after capture is turned off — that is exactly when someone comes here
+  // looking for what is still taking up the drive.
+  const hasRecordings = usage.data !== undefined && usage.data.count > 0
 
   return (
-    <SettingsSection
-      icon={<Icon.Film className="shrink-0 text-accent" />}
+    <SettingsPage
       title="Game capture"
-      summary={
-        current?.enabled ? (
-          <SectionSummary tone="good">On</SectionSummary>
-        ) : (
-          <SectionSummary>Off</SectionSummary>
-        )
+      intro={
+        <>
+          Records your games through OBS while you play, and marks the timeline with your kills,
+          deaths and multikills so you can jump straight to the fight. OBS has to be installed — this
+          app drives it rather than encoding video itself.
+        </>
       }
-      blurb="Records your games through OBS and marks the timeline with your kills and deaths."
     >
-      <p className="mt-2 text-sm leading-relaxed text-text-dim">
-        Records your games through OBS while you play, and marks the timeline with your kills,
-        deaths and multikills so you can jump straight to the fight. OBS has to be installed —
-        this app drives it rather than encoding video itself.
-      </p>
+      <SettingsCard>
+        <StatusRow tone={statusTone(status.data?.state)}>{statusMessage(status.data)}</StatusRow>
 
-      <CaptureStatusPill state={status.data?.state} message={statusMessage(status.data)} />
-
-      <div className="mt-4 space-y-3">
-        <Toggle
+        <ToggleRow
           label="Record my games"
           description="Starts OBS with the app and records whenever a game in an enabled queue begins."
-          checked={current?.enabled ?? false}
+          checked={enabled}
           disabled={disabled}
-          onChange={(enabled) => update.mutate({ enabled })}
+          onChange={(next) => update.mutate({ enabled: next })}
         />
+      </SettingsCard>
 
-        {current?.enabled && (
-          <>
+      {enabled && current && (
+        <>
+          <SettingsCard title="OBS">
             <ModePicker
               mode={current.mode}
               disabled={disabled}
@@ -130,14 +148,19 @@ export function CaptureSettings(): JSX.Element {
             />
 
             {validation.data && !validation.data.ok && (
-              <ul className="space-y-1.5 rounded-md border border-amber/30 bg-amber/10 p-3">
-                {validation.data.problems.map((problem) => (
-                  <li key={problem.kind} className="flex gap-2 text-2xs leading-relaxed text-amber">
-                    <Icon.Warning className="mt-px shrink-0" width={12} height={12} />
-                    <span>{describeProblem(problem)}</span>
-                  </li>
-                ))}
-              </ul>
+              <SettingsBlock className="bg-amber/10">
+                <ul className="space-y-1.5">
+                  {validation.data.problems.map((problem) => (
+                    <li
+                      key={problem.kind}
+                      className="flex gap-2 text-2xs leading-relaxed text-amber"
+                    >
+                      <Icon.Warning className="mt-px shrink-0" width={12} height={12} />
+                      <span>{describeProblem(problem)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </SettingsBlock>
             )}
 
             {current.mode === 'manual' && (
@@ -150,19 +173,8 @@ export function CaptureSettings(): JSX.Element {
             )}
 
             <PathRow
-              label="Recording folder"
-              hint="Where recordings are written. Pick a drive with room — a 30 minute game is a gigabyte or two."
-              value={current.folder}
-              disabled={disabled}
-              onBrowse={async () => {
-                const folder = await window.api.capture.chooseFolder()
-                if (folder) update.mutate({ folder })
-              }}
-            />
-
-            <PathRow
               label="OBS install"
-              hint="Only needed if OBS is somewhere unusual — the standard install locations are found automatically."
+              description="Only needed if OBS is somewhere unusual — the standard install locations are found automatically."
               value={current.obsInstallPath}
               placeholder="Detected automatically"
               disabled={disabled}
@@ -174,13 +186,27 @@ export function CaptureSettings(): JSX.Element {
 
             <ObsPassword hasPassword={current.hasObsPassword} disabled={disabled} />
 
+            <Preview
+              open={showPreview}
+              frame={preview.data ?? null}
+              managed={current.mode === 'managed'}
+              onToggle={() => setShowPreview(!showPreview)}
+            />
+          </SettingsCard>
+
+          <SettingsCard
+            title="Which games to record"
+            description="Everything else is left alone. Nothing is recorded unless it is ticked here."
+          >
             <QueuePicker
               queues={current.queues}
               otherQueues={current.otherQueues}
               disabled={disabled}
               onChange={(patch) => update.mutate(patch)}
             />
+          </SettingsCard>
 
+          <SettingsCard title="Quality">
             <QualityPicker
               value={current.quality}
               mode={current.mode}
@@ -195,32 +221,55 @@ export function CaptureSettings(): JSX.Element {
               disabled={disabled}
               onChange={(audio) => update.mutate({ audio })}
             />
+          </SettingsCard>
+        </>
+      )}
 
-            <SoftCap
-              value={current.softCapBytes}
+      {(enabled || hasRecordings) && (
+        <SettingsCard title="Storage">
+          {enabled && current && (
+            <PathRow
+              label="Recording folder"
+              description="Where recordings are written. Pick a drive with room — a 30 minute game is a gigabyte or two."
+              value={current.folder}
+              disabled={disabled}
+              onBrowse={async () => {
+                const folder = await window.api.capture.chooseFolder()
+                if (folder) update.mutate({ folder })
+              }}
+            />
+          )}
+
+          {enabled && current && (
+            <ByteCapRow
+              label="Warn me past"
+              description="A reminder, not a limit. Recordings are never deleted automatically — crossing this only shows a warning with a one-click cleanup."
+              bytes={current.softCapBytes}
+              unit="GB"
               disabled={disabled}
               onChange={(softCapBytes) => update.mutate({ softCapBytes })}
             />
+          )}
 
-            <Preview
-              open={showPreview}
-              frame={preview.data ?? null}
-              managed={current.mode === 'managed'}
-              onToggle={() => setShowPreview(!showPreview)}
-            />
-          </>
-        )}
-      </div>
-
-      {usage.data && usage.data.count > 0 && (
-        <DiskUsage
-          totalBytes={usage.data.totalBytes}
-          count={usage.data.count}
-          unmatchedCount={usage.data.unmatchedCount}
-          softCapBytes={current?.softCapBytes ?? 0}
-        />
+          {usage.data && hasRecordings && (
+            <StatRow>
+              <Stat
+                label="On disk"
+                value={formatBytes(usage.data.totalBytes)}
+                tone={
+                  (current?.softCapBytes ?? 0) > 0 &&
+                  usage.data.totalBytes > (current?.softCapBytes ?? 0)
+                    ? 'warn'
+                    : 'normal'
+                }
+              />
+              <Stat label="Recordings" value={String(usage.data.count)} />
+              <Stat label="Unmatched" value={String(usage.data.unmatchedCount)} />
+            </StatRow>
+          )}
+        </SettingsCard>
       )}
-    </SettingsSection>
+    </SettingsPage>
   )
 }
 
@@ -242,33 +291,11 @@ function statusMessage(status: { state: string; message?: string } | undefined):
   }
 }
 
-function CaptureStatusPill({
-  state,
-  message
-}: {
-  state: string | undefined
-  message: string
-}): JSX.Element {
-  const tone =
-    state === 'recording'
-      ? 'border-red/30 bg-red/10 text-red'
-      : state === 'idle'
-        ? 'border-teal/30 bg-teal/10 text-teal'
-        : state === 'error'
-          ? 'border-amber/30 bg-amber/10 text-amber'
-          : 'border-hairline bg-canvas text-text-mute'
-
-  return (
-    <div
-      className={clsx(
-        'mt-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-2xs',
-        tone
-      )}
-    >
-      {state === 'recording' ? <Icon.Record width={10} height={10} /> : null}
-      {message}
-    </div>
-  )
+function statusTone(state: string | undefined): 'good' | 'mute' | 'warn' | 'recording' {
+  if (state === 'recording') return 'recording'
+  if (state === 'idle') return 'good'
+  if (state === 'error') return 'warn'
+  return 'mute'
 }
 
 function ModePicker({
@@ -294,31 +321,33 @@ function ModePicker({
   ]
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(option.value)}
-          className={clsx(
-            'rounded-md border p-3 text-left transition',
-            mode === option.value
-              ? 'border-accent-dim bg-accent/10'
-              : 'border-hairline bg-canvas hover:border-accent-dim/50'
-          )}
-        >
-          <span
-            className={clsx('block text-sm', mode === option.value ? 'text-accent' : 'text-text')}
+    <SettingsBlock label="How OBS is set up">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={clsx(
+              'rounded-md border p-3 text-left transition',
+              mode === option.value
+                ? 'border-accent-dim bg-accent/10'
+                : 'border-hairline bg-surface-2 hover:border-accent-dim/50'
+            )}
           >
-            {option.label}
-          </span>
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-            {option.hint}
-          </span>
-        </button>
-      ))}
-    </div>
+            <span
+              className={clsx('block text-sm', mode === option.value ? 'text-accent' : 'text-text')}
+            >
+              {option.label}
+            </span>
+            <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
+              {option.hint}
+            </span>
+          </button>
+        ))}
+      </div>
+    </SettingsBlock>
   )
 }
 
@@ -334,16 +363,16 @@ function ScenePicker({
   onChange: (scene: string) => void
 }): JSX.Element {
   return (
-    <label className="block rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">Scene</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        The scene that captures League. It is switched to when recording starts.
-      </span>
+    <SettingsBlock
+      label="Scene"
+      description="The scene that captures League. It is switched to when recording starts."
+    >
       <select
         value={value ?? ''}
         disabled={disabled || scenes.length === 0}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-accent-dim focus:outline-none"
+        aria-label="Scene"
+        className={clsx(selectClass, 'w-full')}
       >
         <option value="" disabled>
           {scenes.length === 0 ? 'Connect to OBS to list scenes' : 'Choose a scene…'}
@@ -354,47 +383,7 @@ function ScenePicker({
           </option>
         ))}
       </select>
-    </label>
-  )
-}
-
-function PathRow({
-  label,
-  hint,
-  value,
-  placeholder,
-  disabled,
-  onBrowse
-}: {
-  label: string
-  hint: string
-  value: string | null
-  placeholder?: string
-  disabled: boolean
-  onBrowse: () => void
-}): JSX.Element {
-  return (
-    <div className="rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">{label}</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{hint}</span>
-      <div className="mt-2 flex gap-2">
-        <input
-          readOnly
-          value={value ?? ''}
-          placeholder={placeholder}
-          className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text-dim placeholder:text-text-mute"
-        />
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onBrowse}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
-        >
-          <Icon.Folder width={13} height={13} />
-          Browse
-        </button>
-      </div>
-    </div>
+    </SettingsBlock>
   )
 }
 
@@ -428,13 +417,12 @@ function ObsPassword({
   })
 
   return (
-    <div className="rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">OBS websocket password</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        From OBS under Tools → WebSocket Server Settings. Stored encrypted, and never shown again.
-      </span>
+    <SettingsBlock
+      label="OBS websocket password"
+      description="From OBS under Tools → WebSocket Server Settings. Stored encrypted, and never shown again."
+    >
       <form
-        className="mt-2 flex gap-2"
+        className="flex gap-2"
         onSubmit={(event) => {
           event.preventDefault()
           if (draft.trim()) save.mutate(draft)
@@ -446,13 +434,14 @@ function ObsPassword({
           spellCheck={false}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          aria-label="OBS websocket password"
           placeholder={hasPassword ? '••••••••  (saved)' : 'Leave blank if authentication is off'}
-          className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
+          className={clsx(inputClass, 'flex-1')}
         />
         <button
           type="submit"
           disabled={disabled || !draft.trim()}
-          className="shrink-0 rounded-md border border-accent-dim bg-accent/10 px-3 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
+          className={primaryButtonClass}
         >
           Save
         </button>
@@ -466,7 +455,7 @@ function ObsPassword({
           Remove saved password
         </button>
       )}
-    </div>
+    </SettingsBlock>
   )
 }
 
@@ -482,12 +471,8 @@ function QueuePicker({
   onChange: (patch: Partial<Settings>) => void
 }): JSX.Element {
   return (
-    <div className="rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">Queues to record</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        Everything else is left alone. Nothing is recorded unless it is ticked here.
-      </span>
-      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+    <SettingsBlock>
+      <div className="grid gap-1.5 sm:grid-cols-2">
         {CAPTURE_QUEUE_OPTIONS.map((option) => (
           <label key={option.value} className="flex cursor-pointer items-center gap-2 text-sm">
             <input
@@ -501,7 +486,7 @@ function QueuePicker({
                     : queues.filter((id) => id !== option.value)
                 })
               }
-              className="h-4 w-4 accent-accent"
+              className={checkboxClass}
             />
             <span className="text-text-dim">{option.label}</span>
           </label>
@@ -512,16 +497,16 @@ function QueuePicker({
             disabled={disabled}
             checked={otherQueues}
             onChange={(event) => onChange({ otherQueues: event.target.checked })}
-            className="h-4 w-4 accent-accent"
+            className={checkboxClass}
           />
           <span className="text-text-dim">Other and rotating modes</span>
         </label>
       </div>
-      <p className="mt-2 text-2xs leading-relaxed text-text-mute">
+      <p className="mt-2.5 text-2xs leading-relaxed text-text-mute">
         “Other” covers customs, Practice Tool and whatever rotating mode is running, so a new
         gamemode is not silently missed. It never overrides a queue you unticked above.
       </p>
-    </div>
+    </SettingsBlock>
   )
 }
 
@@ -550,19 +535,20 @@ function QualityPicker({
   const chosen = CAPTURE_QUALITY_OPTIONS.find((option) => option.value === value)
 
   return (
-    <div className="rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">Recording quality</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        {managed
+    <SettingsBlock
+      label="Recording quality"
+      description={
+        managed
           ? 'Lower this if recording costs you frames in game. It changes what the encoder has to work on, not what you see while playing.'
-          : 'Your own OBS profile decides this — Settings → Video in OBS.'}
-      </span>
-
+          : 'Your own OBS profile decides this — Settings → Video in OBS.'
+      }
+    >
       <select
         value={value}
         disabled={disabled || !managed}
         onChange={(event) => onChange(event.target.value as CaptureQuality)}
-        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-accent-dim focus:outline-none disabled:opacity-50"
+        aria-label="Recording quality"
+        className={clsx(selectClass, 'w-full')}
       >
         {CAPTURE_QUALITY_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
@@ -574,7 +560,7 @@ function QualityPicker({
       {managed && chosen && (
         <p className="mt-2 text-2xs leading-relaxed text-text-mute">{chosen.hint}</p>
       )}
-    </div>
+    </SettingsBlock>
   )
 }
 
@@ -594,19 +580,20 @@ function AudioPicker({
   const managed = mode === 'managed'
 
   return (
-    <div className="rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">Audio</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        {managed
+    <SettingsBlock
+      label="Audio"
+      description={
+        managed
           ? 'Applied to the audio sources this app created.'
-          : 'Your scene decides this. Changing it here would mean muting inputs this app does not own — and leaving your microphone muted if something went wrong.'}
-      </span>
-
+          : 'Your scene decides this. Changing it here would mean muting inputs this app does not own — and leaving your microphone muted if something went wrong.'
+      }
+    >
       <select
         value={value}
         disabled={disabled || !managed}
         onChange={(event) => onChange(event.target.value as CaptureAudio)}
-        className="mt-2 h-8 w-full rounded-md border border-hairline bg-surface px-2 text-sm text-text focus:border-accent-dim focus:outline-none disabled:opacity-50"
+        aria-label="Audio"
+        className={clsx(selectClass, 'w-full')}
       >
         {(Object.keys(AUDIO_LABELS) as CaptureAudio[]).map((option) => (
           <option key={option} value={option}>
@@ -630,39 +617,7 @@ function AudioPicker({
           ))}
         </ul>
       )}
-    </div>
-  )
-}
-
-function SoftCap({
-  value,
-  disabled,
-  onChange
-}: {
-  value: number
-  disabled: boolean
-  onChange: (bytes: number) => void
-}): JSX.Element {
-  return (
-    <label className="block rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">Warn me past</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        A reminder, not a limit. Recordings are never deleted automatically — crossing this only
-        shows a warning with a one-click cleanup.
-      </span>
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          type="number"
-          min={1}
-          max={2000}
-          disabled={disabled}
-          value={Math.round(value / GB)}
-          onChange={(event) => onChange(Math.max(1, Number(event.target.value)) * GB)}
-          className="w-24 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-accent-dim focus:outline-none"
-        />
-        <span className="text-sm text-text-dim">GB</span>
-      </div>
-    </label>
+    </SettingsBlock>
   )
 }
 
@@ -678,19 +633,15 @@ function Preview({
   onToggle: () => void
 }): JSX.Element {
   return (
-    <div className="rounded-md border border-hairline bg-canvas p-3">
-      <div className="flex items-center justify-between gap-2">
+    <SettingsBlock>
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <span className="block text-sm text-text">Preview</span>
           <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
             A live frame of what would be recorded, straight from OBS.
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onToggle}
-          className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
-        >
+        <button type="button" onClick={onToggle} className={ghostButtonClass}>
           {open ? 'Hide' : 'Show'}
         </button>
       </div>
@@ -708,53 +659,7 @@ function Preview({
           )}
         </div>
       )}
-    </div>
-  )
-}
-
-function DiskUsage({
-  totalBytes,
-  count,
-  unmatchedCount,
-  softCapBytes
-}: {
-  totalBytes: number
-  count: number
-  unmatchedCount: number
-  softCapBytes: number
-}): JSX.Element {
-  const over = softCapBytes > 0 && totalBytes > softCapBytes
-
-  return (
-    <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-hairline pt-4">
-      <Stat label="On disk" value={formatBytes(totalBytes)} warn={over} />
-      <Stat label="Recordings" value={String(count)} />
-      <Stat label="Unmatched" value={String(unmatchedCount)} />
-    </dl>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  warn
-}: {
-  label: string
-  value: string
-  warn?: boolean
-}): JSX.Element {
-  return (
-    <div>
-      <dt className="text-2xs font-medium uppercase tracking-widest text-text-mute">{label}</dt>
-      <dd
-        className={clsx(
-          'mt-1 font-display text-lg tabular-nums',
-          warn ? 'text-amber' : 'text-text'
-        )}
-      >
-        {value}
-      </dd>
-    </div>
+    </SettingsBlock>
   )
 }
 

@@ -7,6 +7,53 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.11.0] — 2026-08-24
+
+Settings is rebuilt around a sidebar, taking after the Chrome settings page. Nothing is folded away
+any more: the list of what exists lives permanently down the left, and one page at a time fills the
+rest of the window.
+
+### Changed
+
+- **Settings has a sidebar, and no more folds.** It used to be seven collapsed cards in a narrow
+  column, so finding anything meant opening things to see what was inside them and closing them
+  again. The six categories now sit down the left where you can read them all at once, and clicking
+  one shows that page in full — every control open, nothing hidden behind a chevron.
+- **Ranked seasons moved onto the Rank tracking page.** It was only ever its own section because
+  everything was a section. The dates decide which games belong to which season, which is what rank
+  tracking is for, so that is where they live now.
+- **Game capture is four groups instead of one long list** — OBS, Which games to record, Quality and
+  Storage. It has roughly three times as many controls as any other page and they were all in a
+  single undivided run.
+- **Every setting reads the same way**: what it does on the left, the control that changes it on the
+  right, several to a card. Explanations are kept where they teach you something and dropped where
+  the label already said it.
+- **Settings opens on Riot API key**, which is also where both of the key warnings take you when you
+  click them.
+- **A page says how it is doing in a sentence at the top**, rather than in one word beside a
+  chevron — "Connected to the League client as…", "No key saved yet". Only actual problems are
+  coloured now. A teal panel confirming that nothing is wrong was the loudest thing on a page where
+  nothing had happened, and it trained the eye to skip the exact colour that matters when something
+  does break.
+- **The two buttons that open a separate window** — archived clients, and the telemetry panel — are
+  rows with a leaving-the-page arrow on them, so it is clear before you click that they do.
+- Riot replays has its own icon. It shared the film strip with Game capture, and the two sit next to
+  each other in the sidebar.
+
+### Under the hood
+
+- Settings rows are now a small set of shared components — `SettingsRow`, `SettingsBlock`,
+  `PathRow`, `LinkRow`, `StatusRow`, `ByteCapRow`, `StatRow` — plus one file of control classes.
+  `PathRow` had been written twice with different props, the size cap twice and the stat strip
+  twice, and the ghost button had drifted to three different paddings.
+- `SettingsSection` and `Toggle` are deleted. The first existed to fold, and its `summary` prop
+  existed only to stop folding hiding state; the second forced a description onto every switch.
+- Surfaces re-stack the right way round. Cards used to be *darker* than the section holding them
+  with inputs lighter again; the pane is now the darkest thing, cards sit above it and inputs above
+  those.
+- The selected category is component state rather than store state, since leaving Settings unmounts
+  the view — which is the whole mechanism behind always opening on the Riot key.
+
 ## [0.10.3] — 2026-08-24
 
 Loose ends from the 0.8.0 rebrand, in both directions: three icons that never got the new accent,
@@ -745,6 +792,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/xalluna/foxfire/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/xalluna/foxfire/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/xalluna/foxfire/compare/v0.10.0...v0.10.1

@@ -1,14 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
-import { SeasonSettings } from '../components/SeasonSettings'
-import { SectionSummary, SettingsSection } from '../components/SettingsSection'
 import { TelemetrySettings } from '../components/TelemetrySettings'
-import * as Icon from '../components/icons'
+import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
+import {
+  DangerRow,
+  SettingsBlock,
+  SettingsRow,
+  StatusRow
+} from '../components/settings/SettingsRow'
+import {
+  FIRST_CATEGORY,
+  SettingsNav,
+  type SettingsCategory
+} from '../components/settings/SettingsNav'
+import { checkboxClass, inputClass, primaryButtonClass } from '../components/settings/controls'
 import { Logo } from '../components/Logo'
 import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
 
@@ -16,7 +26,47 @@ import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
 // the real defaults (rateLimiter's APPLICATION_KEY_LIMITS).
 const DEFAULT_APPLICATION_LIMITS: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
 
+/**
+ * Settings, as a sidebar and one page at a time.
+ *
+ * This used to be seven folded cards in a single column, because all seven open
+ * at once are far longer than a window. A sidebar answers that better than a
+ * fold did: the list of what exists is permanent and on screen, so a page can
+ * be as long as it needs to be without hiding anything, and no section has to
+ * summarise itself beside a chevron to stay honest about its own state.
+ *
+ * There is no category in the UI store on purpose. App renders this view
+ * conditionally, so leaving Settings unmounts it and the `useState` below
+ * resets — which is exactly the wanted behaviour, and means the two Riot key
+ * banners in App still land on the right page without knowing this file exists.
+ */
 export function Settings(): JSX.Element {
+  const [category, setCategory] = useState<SettingsCategory>(FIRST_CATEGORY)
+  const pane = useRef<HTMLDivElement>(null)
+
+  // Arriving at a page scrolled to where the last one was left is disorienting
+  // when the pages are unrelated.
+  useEffect(() => {
+    pane.current?.scrollTo({ top: 0 })
+  }, [category])
+
+  return (
+    <div className="flex h-full min-h-0">
+      <SettingsNav active={category} onSelect={setCategory} />
+
+      <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
+        {category === 'riotKey' && <RiotKeySettings />}
+        {category === 'rank' && <RankTrackingSettings />}
+        {category === 'capture' && <CaptureSettings />}
+        {category === 'replays' && <ReplaySettings />}
+        {category === 'telemetry' && <TelemetrySettings />}
+        {category === 'about' && <AboutSettings />}
+      </div>
+    </div>
+  )
+}
+
+function RiotKeySettings(): JSX.Element {
   const queryClient = useQueryClient()
   const [key, setKey] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -24,13 +74,6 @@ export function Settings(): JSX.Element {
   const settings = useQuery({
     queryKey: ['settings'],
     queryFn: () => window.api.settings.get()
-  })
-
-  // Fixed for the life of the process, so it never needs refetching.
-  const version = useQuery({
-    queryKey: ['appVersion'],
-    queryFn: () => window.api.app.getVersion(),
-    staleTime: Infinity
   })
 
   const save = useMutation({
@@ -63,89 +106,65 @@ export function Settings(): JSX.Element {
   const relink = relinkSummary(save.data?.identities)
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-4 p-6">
-      <h1 className="font-display text-xl text-text">Settings</h1>
-
-      <SettingsSection
-        icon={<Icon.Key className="shrink-0 text-accent" />}
-        title="Riot API key"
-        // Flagged rather than opened when missing: nothing else in the app
-        // works without it, and a fold that quietly hides that is a trap.
-        summary={
-          hasKey ? (
-            <SectionSummary tone="good">Saved</SectionSummary>
-          ) : (
-            <SectionSummary tone="warn">Not set</SectionSummary>
-          )
-        }
-        blurb={
-          expires
-            ? 'Stored encrypted on this machine. Personal keys expire every 24 hours.'
-            : 'Stored encrypted on this machine.'
-        }
-      >
-
-        <p className="mt-2 text-sm leading-relaxed text-text-dim">
-          {expires ? (
-            <>
-              Stored encrypted on this machine only. Personal development keys expire every 24 hours
-              — when lookups start failing, paste a fresh one from the Riot developer portal.
-            </>
-          ) : (
-            <>
-              Stored encrypted on this machine only. Replacing it re-links every tracked account:
-              Riot encrypts player IDs against the key that asked for them, so a new key needs new
-              ones. Your match history comes across with them.
-            </>
-          )}
-        </p>
-
-        <div
-          className={clsx(
-            'mt-4 flex items-center gap-2 rounded-md border px-3 py-2 text-sm',
-            hasKey
-              ? 'border-teal/30 bg-teal/10 text-teal'
-              : 'border-hairline bg-canvas text-text-mute'
-          )}
-        >
-          {hasKey ? <Icon.Check width={14} height={14} /> : <Icon.Warning width={14} height={14} />}
-          {hasKey ? 'A key is saved and verified' : 'No key saved yet'}
-        </div>
-
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            setError(null)
-            save.mutate(key)
-          }}
-        >
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="RGAPI-..."
-            autoComplete="off"
-            spellCheck={false}
-            className="flex-1 rounded-md border border-hairline bg-canvas px-3 py-2 font-mono text-sm text-text outline-none transition placeholder:text-text-mute focus:border-accent-dim"
-          />
-          <button
-            type="submit"
-            disabled={!key.trim() || save.isPending}
-            className="rounded-md border border-accent-dim bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
-          >
-            {save.isPending ? 'Checking…' : 'Save'}
-          </button>
-        </form>
-
-        {error && <p className="mt-3 text-sm text-red">{error}</p>}
-        {save.isSuccess && save.data.ok && !error && (
+    <SettingsPage
+      title="Riot API key"
+      intro={
+        expires ? (
           <>
-            <p className="mt-3 text-sm text-teal">Key verified against Riot and saved.</p>
-            {relink.note && <p className="mt-1 text-sm text-text-dim">{relink.note}</p>}
-            {relink.warning && <p className="mt-1 text-sm text-red">{relink.warning}</p>}
+            Stored encrypted on this machine only. Personal development keys expire every 24 hours —
+            when lookups start failing, paste a fresh one from the Riot developer portal.
           </>
-        )}
+        ) : (
+          <>
+            Stored encrypted on this machine only. Replacing it re-links every tracked account: Riot
+            encrypts player IDs against the key that asked for them, so a new key needs new ones.
+            Your match history comes across with them.
+          </>
+        )
+      }
+    >
+      <SettingsCard>
+        <StatusRow tone={hasKey ? 'good' : 'warn'}>
+          {hasKey ? 'A key is saved and verified' : 'No key saved yet'}
+        </StatusRow>
+
+        <SettingsBlock label="Paste a key">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setError(null)
+              save.mutate(key)
+            }}
+          >
+            <input
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="RGAPI-..."
+              aria-label="Riot API key"
+              autoComplete="off"
+              spellCheck={false}
+              className={clsx(inputClass, 'flex-1 font-mono')}
+            />
+            <button
+              type="submit"
+              disabled={!key.trim() || save.isPending}
+              className={primaryButtonClass}
+            >
+              {save.isPending ? 'Checking…' : 'Save'}
+            </button>
+          </form>
+
+          {error && <p className="mt-3 text-sm text-red">{error}</p>}
+          {save.isSuccess && save.data.ok && !error && (
+            <>
+              <p className="mt-3 text-sm text-teal">Key verified against Riot and saved.</p>
+              {relink.note && <p className="mt-1 text-sm text-text-dim">{relink.note}</p>}
+              {relink.warning && <p className="mt-1 text-sm text-red">{relink.warning}</p>}
+            </>
+          )}
+        </SettingsBlock>
 
         <KeyTypeControl
           keyType={keyType}
@@ -155,42 +174,50 @@ export function Settings(): JSX.Element {
         />
 
         {hasKey && (
-          <button
+          <DangerRow
+            label="Remove saved key"
+            description="Deletes it from this machine. Nothing already synced is lost, but no further lookups will work until a key is saved again."
+            action="Remove"
+            disabled={clear.isPending}
             onClick={() => clear.mutate()}
-            className="mt-4 text-sm text-text-mute underline underline-offset-2 transition hover:text-red"
-          >
-            Remove saved key
-          </button>
+          />
         )}
-      </SettingsSection>
+      </SettingsCard>
+    </SettingsPage>
+  )
+}
 
-      <RankTrackingSettings />
+function AboutSettings(): JSX.Element {
+  // Fixed for the life of the process, so it never needs refetching.
+  const version = useQuery({
+    queryKey: ['appVersion'],
+    queryFn: () => window.api.app.getVersion(),
+    staleTime: Infinity
+  })
 
-      <SeasonSettings />
+  return (
+    <SettingsPage title="About">
+      <SettingsCard>
+        <SettingsBlock>
+          <div className="flex items-start gap-3">
+            <Logo width={28} height={28} className="mt-0.5 shrink-0 text-accent" />
+            <p className="text-sm leading-relaxed text-text-dim">
+              Foxfire is a personal League of Legends stats tracker. Match history is stored locally
+              in SQLite and served from disk — the Riot API is only called when syncing.
+            </p>
+          </div>
+        </SettingsBlock>
 
-      <CaptureSettings />
+        <SettingsRow
+          label="Version"
+          control={<span className="text-sm tabular-nums text-text-dim">{version.data ?? '—'}</span>}
+        />
 
-      <ReplaySettings />
-
-      <TelemetrySettings />
-
-      <SettingsSection
-        title="About"
-        summary={version.data && <SectionSummary>Version {version.data}</SectionSummary>}
-        blurb="What this is, and the Riot disclaimer."
-      >
-        <div className="mt-2 flex items-start gap-3">
-          <Logo width={28} height={28} className="mt-0.5 shrink-0 text-accent" />
-          <p className="text-sm leading-relaxed text-text-dim">
-            Foxfire is a personal League of Legends stats tracker. Match history is stored locally
-            in SQLite and served from disk — the Riot API is only called when syncing.
-          </p>
-        </div>
-        <div className="mt-4 border-t border-hairline pt-4">
+        <SettingsBlock>
           <Disclaimer />
-        </div>
-      </SettingsSection>
-    </div>
+        </SettingsBlock>
+      </SettingsCard>
+    </SettingsPage>
   )
 }
 
@@ -252,14 +279,11 @@ function KeyTypeControl({
   }
 
   return (
-    <div className="mt-4 rounded-md border border-hairline bg-canvas p-3">
-      <span className="block text-sm text-text">Key type</span>
-      <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
-        How fast this app is allowed to call Riot. A personal key is paced at Riot&apos;s fixed
-        20/second and 100/2 minutes; an approved application key is paced at whatever it was granted.
-      </span>
-
-      <div className="mt-2 flex flex-wrap gap-4">
+    <SettingsBlock
+      label="Key type"
+      description="How fast this app is allowed to call Riot. A personal key is paced at Riot's fixed 20/second and 100/2 minutes; an approved application key is paced at whatever it was granted."
+    >
+      <div className="flex flex-wrap gap-4">
         {(['personal', 'application'] as const).map((option) => (
           <label key={option} className="flex cursor-pointer items-center gap-2 text-sm">
             <input
@@ -268,7 +292,7 @@ function KeyTypeControl({
               disabled={disabled}
               checked={keyType === option}
               onChange={() => onChange(option, option === 'application' ? draft : undefined)}
-              className="h-4 w-4 accent-accent"
+              className={checkboxClass}
             />
             <span className="text-text-dim">
               {option === 'personal' ? 'Personal (expires every 24h)' : 'Application'}
@@ -290,7 +314,7 @@ function KeyTypeControl({
               value={draft.burstLimit}
               onChange={(event) => setDraft({ ...draft, burstLimit: Number(event.target.value) })}
               onBlur={() => commit(draft)}
-              className="mt-1 w-28 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-accent-dim focus:outline-none"
+              className={clsx(inputClass, 'mt-1 w-28 tabular-nums')}
             />
           </label>
           <label className="block">
@@ -306,11 +330,11 @@ function KeyTypeControl({
                 setDraft({ ...draft, sustainedLimit: Number(event.target.value) })
               }
               onBlur={() => commit(draft)}
-              className="mt-1 w-28 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-accent-dim focus:outline-none"
+              className={clsx(inputClass, 'mt-1 w-28 tabular-nums')}
             />
           </label>
         </div>
       )}
-    </div>
+    </SettingsBlock>
   )
 }

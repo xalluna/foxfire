@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { BackgroundSettings } from '@shared/types'
 import { useLcuStatus } from '../hooks/useLcuStatus'
-import { Toggle } from './Toggle'
-import { SectionSummary, SettingsSection } from './SettingsSection'
-import * as Icon from './icons'
+import { SeasonsCard } from './SeasonSettings'
+import { SettingsCard, SettingsPage } from './settings/SettingsCard'
+import { SettingsBlock, StatusRow, ToggleRow } from './settings/SettingsRow'
+import { ghostButtonClass, inputClass } from './settings/controls'
 
 /**
  * Controls for the half of LP tracking that cannot work from the Riot API.
@@ -14,6 +15,11 @@ import * as Icon from './icons'
  * means this app has to be running too. Both switches are off by default and
  * the copy is explicit about the trade-off, because an app that survives its
  * own close button or adds itself to Windows startup should never be a surprise.
+ *
+ * The ranked season dates live on this page too. They are what decides which
+ * games belong to which season, so every number the rank history shows is
+ * downstream of them — a separate top-level page for a table that exists to
+ * serve this one was a fold-era arrangement.
  */
 export function RankTrackingSettings(): JSX.Element {
   const queryClient = useQueryClient()
@@ -35,56 +41,37 @@ export function RankTrackingSettings(): JSX.Element {
   const path = pathDraft ?? storedPath
 
   return (
-    <SettingsSection
-      icon={<Icon.TrendingUp className="shrink-0 text-accent" />}
+    <SettingsPage
       title="Rank tracking"
-      summary={
-        status.state === 'connected' ? (
-          <SectionSummary tone="good">Client connected</SectionSummary>
-        ) : (
-          <SectionSummary>Client not detected</SectionSummary>
-        )
+      intro={
+        <>
+          Riot publishes no per-game LP, so it has to be measured by watching your rank change around
+          each game. That needs this app running while you play. With it off, rank is still recorded
+          on every sync — you just get the total across several games instead of a figure per game.
+        </>
       }
-      blurb="Per-game LP is measured from the running League client, so it needs this app open while you play."
     >
+      <SettingsCard>
+        <StatusRow
+          tone={
+            status.state === 'connected' ? 'good' : status.state === 'untracked' ? 'warn' : 'mute'
+          }
+        >
+          {status.state === 'connected' ? (
+            <>
+              Connected to the League client as {status.gameName}#{status.tagLine}
+            </>
+          ) : status.state === 'untracked' ? (
+            <>
+              {status.gameName}#{status.tagLine} is logged in but not tracked here — add the account
+              to record its rank.
+            </>
+          ) : (
+            <>League client not detected. Start it to capture per-game LP.</>
+          )}
+        </StatusRow>
 
-      <p className="mt-2 text-sm leading-relaxed text-text-dim">
-        Riot publishes no per-game LP, so it has to be measured by watching your rank change around
-        each game. That needs this app running while you play. With it off, rank is still recorded
-        on every sync — you just get the total across several games instead of a figure per game.
-      </p>
-
-      <div
-        className={clsx(
-          'mt-4 flex items-center gap-2 rounded-md border px-3 py-2 text-sm',
-          status.state === 'connected'
-            ? 'border-teal/30 bg-teal/10 text-teal'
-            : status.state === 'untracked'
-              ? 'border-amber/40 bg-amber/10 text-amber'
-              : 'border-hairline bg-canvas text-text-mute'
-        )}
-      >
-        {status.state === 'connected' ? (
-          <>
-            <Icon.Check width={14} height={14} />
-            Connected to the League client as {status.gameName}#{status.tagLine}
-          </>
-        ) : status.state === 'untracked' ? (
-          <>
-            <Icon.Warning width={14} height={14} />
-            {status.gameName}#{status.tagLine} is logged in but not tracked here — add the account
-            to record its rank.
-          </>
-        ) : (
-          <>
-            <Icon.Warning width={14} height={14} />
-            League client not detected. Start it to capture per-game LP.
-          </>
-        )}
-      </div>
-
-      <div className="mt-4 space-y-3">
-        <Toggle
+        <ToggleRow
           label="Keep running in the tray"
           description="Closing the window hides it instead of quitting, so rank keeps being recorded while you play. Quit from the tray icon."
           checked={data?.runInTray ?? false}
@@ -92,43 +79,42 @@ export function RankTrackingSettings(): JSX.Element {
           onChange={(runInTray) => update.mutate({ runInTray })}
         />
 
-        <Toggle
+        <ToggleRow
           label="Start with Windows"
           description="Launches hidden in the tray at sign-in. Only useful alongside the option above."
           checked={data?.launchAtStartup ?? false}
           disabled={update.isPending || !data || !data.runInTray}
           onChange={(launchAtStartup) => update.mutate({ launchAtStartup })}
         />
-      </div>
 
-      <div className="mt-5">
-        <label className="text-2xs font-medium uppercase tracking-widest text-text-mute">
-          League install path
-        </label>
-        <p className="mt-1 text-sm text-text-dim">
-          Only needed if the client is not found automatically — leave blank otherwise.
-        </p>
-        <div className="mt-2 flex gap-2">
-          <input
-            value={path}
-            onChange={(e) => setPathDraft(e.target.value)}
-            placeholder="C:\Riot Games\League of Legends"
-            spellCheck={false}
-            className="min-w-0 flex-1 rounded-md border border-hairline bg-canvas px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
-          />
-          <button
-            onClick={() => {
-              update.mutate({ lcuInstallPath: path })
-              setPathDraft(null)
-            }}
-            disabled={update.isPending || path === storedPath}
-            className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-40"
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </SettingsSection>
+        <SettingsBlock
+          label="League install path"
+          description="Only needed if the client is not found automatically — leave blank otherwise."
+        >
+          <div className="flex gap-2">
+            <input
+              value={path}
+              onChange={(e) => setPathDraft(e.target.value)}
+              placeholder="C:\Riot Games\League of Legends"
+              spellCheck={false}
+              aria-label="League install path"
+              className={clsx(inputClass, 'flex-1')}
+            />
+            <button
+              onClick={() => {
+                update.mutate({ lcuInstallPath: path })
+                setPathDraft(null)
+              }}
+              disabled={update.isPending || path === storedPath}
+              className={ghostButtonClass}
+            >
+              Save
+            </button>
+          </div>
+        </SettingsBlock>
+      </SettingsCard>
+
+      <SeasonsCard />
+    </SettingsPage>
   )
 }
-
