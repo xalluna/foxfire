@@ -329,3 +329,40 @@ export function Minimize(props: IconProps): JSX.Element {
     </Icon>
   )
 }
+
+/**
+ * Riot replays, in the settings sidebar.
+ *
+ * Deliberately not Film: Game capture sits directly above it in that list and
+ * already owns the film strip, and two identical glyphs side by side read as
+ * one feature listed twice. A rewind arc says "watch it again", which is what a
+ * .rofl is for.
+ */
+export function Replay(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 12a9 9 0 1 0 2.6-6.4L3 8" />
+      <path d="M3 3v5h5" />
+    </Icon>
+  )
+}
+
+/** About. */
+export function Info(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </Icon>
+  )
+}
+
+/** Marks a settings row that opens a separate window rather than expanding. */
+export function ExternalLink(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M15 3h6v6M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </Icon>
+  )
+}

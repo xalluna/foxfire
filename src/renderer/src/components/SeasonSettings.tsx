@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import clsx from 'clsx'
 import type { Season, SeasonInput } from '@shared/types'
-import { SectionSummary, SettingsSection } from './SettingsSection'
+import { SettingsCard } from './settings/SettingsCard'
+import { SettingsBlock } from './settings/SettingsRow'
+import { checkboxClass, ghostButtonClass, inputClass, primaryButtonClass } from './settings/controls'
 import * as Icon from './icons'
 
 /**
@@ -16,7 +19,8 @@ import * as Icon from './icons'
  *
  * Editing is draft-then-save rather than save-per-keystroke. A half-typed date
  * is still a real instant, and applying it would re-file every stored game the
- * moment it happened to parse.
+ * moment it happened to parse. That is also why this keeps an explicit Save
+ * where the rest of Settings applies immediately.
  */
 
 /** Epoch ms to the `YYYY-MM-DDTHH:mm` an `input[type=datetime-local]` wants, in local time. */
@@ -70,7 +74,7 @@ const sameAsSaved = (rows: Draft[], saved: Season[]): boolean =>
     )
   })
 
-export function SeasonSettings(): JSX.Element {
+export function SeasonsCard(): JSX.Element {
   const queryClient = useQueryClient()
   const [rows, setRows] = useState<Draft[] | null>(null)
 
@@ -116,112 +120,92 @@ export function SeasonSettings(): JSX.Element {
     ])
 
   return (
-    <SettingsSection
-      icon={<Icon.Trophy className="shrink-0 text-accent" />}
+    <SettingsCard
       title="Ranked seasons"
-      // Folded, the summary is all that is left of this section, so it carries
-      // the count — and flags edits that would otherwise sit forgotten behind
-      // a fold with nothing on screen to suggest they exist.
-      summary={
-        seasons.data && (
-          <SectionSummary tone={unchanged ? 'mute' : 'warn'}>
-            {unchanged
-              ? `${draft.length} ${draft.length === 1 ? 'season' : 'seasons'}`
-              : 'Unsaved changes'}
-          </SectionSummary>
-        )
-      }
-      blurb="When each ranked season started. Riot offers no way to ask, so the dates are set here."
+      description="Riot offers no way to ask when a season started, so the dates live here. Each season runs until the next one begins and the newest never ends, so nothing breaks if you add January late — add the next one once Riot announces the date."
     >
-      <p className="mt-2 text-sm leading-relaxed text-text-dim">
-        Riot offers no way to ask when a season started, so the dates live here. Each season
-        runs until the next one begins and the newest never ends, so nothing breaks if you add
-        January late — add the next one once Riot announces the date.
-      </p>
-
-      <div className="mt-4 space-y-2">
-        {draft.map((row) => (
-          <div key={row.key} className="rounded-md border border-hairline bg-canvas p-3">
-            <div className="flex gap-2">
-              <input
-                value={row.label}
-                onChange={(e) => patch(row.key, { label: e.target.value })}
-                placeholder="Season 2027"
-                spellCheck={false}
-                aria-label="Season name"
-                className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
-              />
-              <input
-                type="datetime-local"
-                value={Number.isFinite(row.startsAt) ? toLocalInput(row.startsAt) : ''}
-                onChange={(e) => patch(row.key, { startsAt: fromLocalInput(e.target.value) })}
-                aria-label="Season start"
-                className="shrink-0 rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm tabular-nums text-text focus:border-accent-dim focus:outline-none"
-              />
-              <button
-                onClick={() => setRows((c) => (c ?? []).filter((r) => r.key !== row.key))}
-                aria-label="Remove season"
-                className="shrink-0 rounded-md border border-hairline px-2 text-text-mute transition hover:border-red/40 hover:text-red"
-              >
-                <Icon.Trash width={14} height={14} />
-              </button>
-            </div>
-
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
-              <label className="flex items-center gap-2 text-2xs text-text-dim">
-                <input
-                  type="checkbox"
-                  checked={row.resetsRank}
-                  onChange={(e) => patch(row.key, { resetsRank: e.target.checked })}
-                  className="accent-accent"
-                />
-                Rank was reset
-              </label>
-              <label className="flex items-center gap-2 text-2xs text-text-dim">
-                <input
-                  type="checkbox"
-                  checked={row.isPreseason}
-                  onChange={(e) => patch(row.key, { isPreseason: e.target.checked })}
-                  className="accent-accent"
-                />
-                Preseason
-              </label>
-            </div>
+      {draft.map((row) => (
+        <SettingsBlock key={row.key}>
+          <div className="flex gap-2">
+            <input
+              value={row.label}
+              onChange={(e) => patch(row.key, { label: e.target.value })}
+              placeholder="Season 2027"
+              spellCheck={false}
+              aria-label="Season name"
+              className={clsx(inputClass, 'flex-1')}
+            />
+            <input
+              type="datetime-local"
+              value={Number.isFinite(row.startsAt) ? toLocalInput(row.startsAt) : ''}
+              onChange={(e) => patch(row.key, { startsAt: fromLocalInput(e.target.value) })}
+              aria-label="Season start"
+              className={clsx(inputClass, 'shrink-0 tabular-nums')}
+            />
+            <button
+              onClick={() => setRows((c) => (c ?? []).filter((r) => r.key !== row.key))}
+              aria-label="Remove season"
+              className="shrink-0 rounded-md border border-hairline px-2 text-text-mute transition hover:border-red/40 hover:text-red"
+            >
+              <Icon.Trash width={14} height={14} />
+            </button>
           </div>
-        ))}
-      </div>
+
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
+            <label className="flex items-center gap-2 text-2xs text-text-dim">
+              <input
+                type="checkbox"
+                checked={row.resetsRank}
+                onChange={(e) => patch(row.key, { resetsRank: e.target.checked })}
+                className={checkboxClass}
+              />
+              Rank was reset
+            </label>
+            <label className="flex items-center gap-2 text-2xs text-text-dim">
+              <input
+                type="checkbox"
+                checked={row.isPreseason}
+                onChange={(e) => patch(row.key, { isPreseason: e.target.checked })}
+                className={checkboxClass}
+              />
+              Preseason
+            </label>
+          </div>
+        </SettingsBlock>
+      ))}
 
       {/*
         The reset flag is the only control here that changes numbers rather than
         labels, so it is the only one that gets an explanation.
       */}
-      <p className="mt-3 text-2xs leading-relaxed text-text-mute">
-        Tick <span className="text-text-dim">Rank was reset</span> when the ladder was emptied and
-        you played placements. It stops the reset being recorded as a game that cost you two
-        thousand LP, and keeps it out of your promotion history. Leave it clear for a season your
-        rank carried straight into, which is usually what a preseason is.
-      </p>
+      <SettingsBlock>
+        <p className="text-2xs leading-relaxed text-text-mute">
+          Tick <span className="text-text-dim">Rank was reset</span> when the ladder was emptied and
+          you played placements. It stops the reset being recorded as a game that cost you two
+          thousand LP, and keeps it out of your promotion history. Leave it clear for a season your
+          rank carried straight into, which is usually what a preseason is.
+        </p>
+      </SettingsBlock>
 
-      <div className="mt-4 flex items-center gap-2">
-        <button
-          onClick={addSeason}
-          className="flex items-center gap-1.5 rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
-        >
-          <Icon.Plus width={12} height={12} />
-          Add season
-        </button>
+      <SettingsBlock>
+        <div className="flex items-center gap-2">
+          <button onClick={addSeason} className={clsx(ghostButtonClass, 'flex items-center gap-1.5')}>
+            <Icon.Plus width={12} height={12} />
+            Add season
+          </button>
 
-        <button
-          onClick={() => save.mutate(draft.map(({ key: _key, ...season }) => season))}
-          disabled={problem !== null || unchanged || save.isPending}
-          className="ml-auto rounded-md border border-accent-dim bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
-        >
-          {save.isPending ? 'Saving…' : 'Save seasons'}
-        </button>
-      </div>
+          <button
+            onClick={() => save.mutate(draft.map(({ key: _key, ...season }) => season))}
+            disabled={problem !== null || unchanged || save.isPending}
+            className={clsx(primaryButtonClass, 'ml-auto')}
+          >
+            {save.isPending ? 'Saving…' : 'Save seasons'}
+          </button>
+        </div>
 
-      {problem && !unchanged && <p className="mt-3 text-sm text-red">{problem}</p>}
-      {save.isError && <p className="mt-3 text-sm text-red">Could not save the seasons.</p>}
-    </SettingsSection>
+        {problem && !unchanged && <p className="mt-3 text-sm text-red">{problem}</p>}
+        {save.isError && <p className="mt-3 text-sm text-red">Could not save the seasons.</p>}
+      </SettingsBlock>
+    </SettingsCard>
   )
 }

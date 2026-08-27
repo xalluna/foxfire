@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TelemetryState } from '@shared/telemetry'
-import { Toggle } from './Toggle'
-import { SectionSummary, SettingsSection } from './SettingsSection'
-import * as Icon from './icons'
+import { SettingsCard, SettingsPage } from './settings/SettingsCard'
+import { DangerRow, LinkRow, Stat, StatRow, ToggleRow } from './settings/SettingsRow'
 
 /**
  * Switch for the developer telemetry subsystem.
@@ -41,92 +40,55 @@ export function TelemetrySettings(): JSX.Element {
   const enabled = data?.enabled ?? false
 
   return (
-    <SettingsSection
-      icon={<Icon.Activity className="shrink-0 text-accent" />}
+    <SettingsPage
       title="Developer telemetry"
-      summary={
-        enabled ? (
-          <SectionSummary tone="good">On</SectionSummary>
-        ) : (
-          <SectionSummary>Off</SectionSummary>
-        )
+      intro={
+        <>
+          Records what the app is doing and consuming — every Riot API call with its queue wait and
+          network time, rate-limit headroom, process CPU and memory, and the League client
+          connection. Stored locally in its own database, kept for two days in full detail, and never
+          sent anywhere.
+        </>
       }
-      blurb="Records what the app is doing and consuming, locally and never sent anywhere."
     >
-
-      <p className="mt-2 text-sm leading-relaxed text-text-dim">
-        Records what the app is doing and consuming — every Riot API call with its queue wait and
-        network time, rate-limit headroom, process CPU and memory, and the League client connection.
-        Stored locally in its own database, kept for two days in full detail, and never sent
-        anywhere.
-      </p>
-
-      <div className="mt-4 space-y-3">
-        <Toggle
+      <SettingsCard>
+        <ToggleRow
           label="Collect telemetry"
           description="Takes effect immediately. Adds a small amount of buffered background writing; turning it off keeps everything already collected."
           checked={enabled}
           disabled={update.isPending || !data}
           onChange={(next) => update.mutate(next)}
         />
-      </div>
 
-      <div className="mt-4 flex items-center gap-2">
-        <button
+        <LinkRow
+          label="Open panel"
+          description="or press Ctrl+Shift+T anywhere"
           onClick={() => window.api.telemetry.openWindow()}
-          className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
-        >
-          Open panel
-        </button>
-        <span className="text-2xs text-text-mute">or press Ctrl+Shift+T anywhere</span>
-      </div>
+        />
 
-      {data && (
-        <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-hairline pt-4">
-          <Stat label="On disk" value={formatBytes(data.dbBytes)} />
-          <Stat label="Buffered" value={data.pending.toLocaleString()} />
-          <Stat
-            label="Dropped"
-            value={data.dropped.toLocaleString()}
-            // A non-zero value means the panel has gaps that are not idleness.
-            tone={data.dropped > 0 ? 'warn' : 'normal'}
+        {data && (
+          <StatRow>
+            <Stat label="On disk" value={formatBytes(data.dbBytes)} />
+            <Stat label="Buffered" value={data.pending.toLocaleString()} />
+            <Stat
+              label="Dropped"
+              value={data.dropped.toLocaleString()}
+              // A non-zero value means the panel has gaps that are not idleness.
+              tone={data.dropped > 0 ? 'warn' : 'normal'}
+            />
+          </StatRow>
+        )}
+
+        {data && data.dbBytes !== null && (
+          <DangerRow
+            label="Clear collected telemetry"
+            action={clear.isPending ? 'Clearing…' : 'Clear'}
+            disabled={clear.isPending}
+            onClick={() => clear.mutate()}
           />
-        </dl>
-      )}
-
-      {data && data.dbBytes !== null && (
-        <button
-          onClick={() => clear.mutate()}
-          disabled={clear.isPending}
-          className="mt-4 text-sm text-text-mute underline underline-offset-2 transition hover:text-red disabled:opacity-40"
-        >
-          {clear.isPending ? 'Clearing…' : 'Clear collected telemetry'}
-        </button>
-      )}
-    </SettingsSection>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  tone = 'normal'
-}: {
-  label: string
-  value: string
-  tone?: 'normal' | 'warn'
-}): JSX.Element {
-  return (
-    <div>
-      <dt className="text-2xs font-medium uppercase tracking-widest text-text-mute">{label}</dt>
-      <dd
-        className={
-          tone === 'warn' ? 'mt-1 font-mono text-sm text-amber' : 'mt-1 font-mono text-sm text-text'
-        }
-      >
-        {value}
-      </dd>
-    </div>
+        )}
+      </SettingsCard>
+    </SettingsPage>
   )
 }
 
