@@ -12,6 +12,7 @@ import type {
   ClientArchive,
   EditableMatch,
   IdentityReport,
+  InvitePreview,
   LcuStatus,
   LeagueEntry,
   LiveClient,
@@ -37,6 +38,11 @@ import type {
   Scoreboard,
   Season,
   SeasonInput,
+  ServerAuthResult,
+  ServerCredentials,
+  ServerProbe,
+  ServerRegistration,
+  ServerState,
   SyncProgressEvent,
   SyncState
 } from './types'
@@ -75,6 +81,30 @@ export interface Api {
   app: {
     /** The packaged version, matching the CHANGELOG entry the build shipped with. */
     getVersion: () => Promise<string>
+  }
+  /**
+   * Joining a Foxfire server, and choosing which one answers.
+   *
+   * Everything here is about the connection itself rather than the data
+   * behind it. Once connected, the rest of this interface is unchanged: the
+   * renderer goes on calling the same methods and does not learn whether the
+   * answers came from this machine or from a server.
+   */
+  server: {
+    getState: () => Promise<ServerState>
+    /** Asks a server what it is. Never rejects — every failure is in the probe. */
+    probe: (url: string) => Promise<ServerProbe>
+    /** Accepts the code or the whole link, and says whether it can still be used. */
+    previewInvite: (url: string, token: string) => Promise<InvitePreview>
+    register: (url: string, registration: ServerRegistration) => Promise<ServerAuthResult>
+    login: (url: string, credentials: ServerCredentials) => Promise<ServerAuthResult>
+    /** Signs out of the active server and forgets its credential. */
+    logout: () => Promise<ServerState>
+    /** Null is local-only mode. Not the same as signing out: the credential stays. */
+    setActive: (url: string | null) => Promise<ServerState>
+    forget: (url: string) => Promise<ServerState>
+    /** Fires whenever the connection changes, including from a background refresh. */
+    onChanged: (cb: (state: ServerState) => void) => () => void
   }
   settings: {
     get: () => Promise<AppSettingsPublic>

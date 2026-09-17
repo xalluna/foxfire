@@ -1,6 +1,8 @@
 # Foxfire
 
-A personal, ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts. Foxfire records your ranked games, keeps the LP ledger for every season you have played, and never asks anyone else about them.
+An ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts. Foxfire records your ranked games and keeps the LP ledger for every season you have played.
+
+It runs entirely on your own machine by default. It can also read from a **Foxfire Server** that you or your community hosts, so match history, rank and LP are shared rather than kept per PC. There is no central Foxfire service — anyone can run one, and recordings, Riot replays and the League client connection always stay on your machine either way. See [apps/server](apps/server) to host one.
 
 Built with Electron, React, and TypeScript. All data comes from **Riot's official Developer API** (op.gg's Terms of Use prohibit scraping their site, and everything here is available from Riot directly).
 
@@ -12,6 +14,7 @@ Built with Electron, React, and TypeScript. All data comes from **Riot's officia
 - **Live game** — the live scoreboard of the match running on this PC: levels, items, runes, KDA, CS and vision, updated as it plays. Read from the game itself over the Live Client Data API, so it costs no Riot call and works without an API key
 - **Champions** — Riot's mastery points/levels alongside win rates computed locally from your synced games
 - **Ad-hoc search** — look up any summoner without saving them
+- **Optional server** — join one your community hosts to share match history, rank and LP; local-only stays a first-class mode
 
 ## Setup
 

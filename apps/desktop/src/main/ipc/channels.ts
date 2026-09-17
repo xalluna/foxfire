@@ -4,6 +4,21 @@ export const CH = {
   app: {
     getVersion: 'app:getVersion'
   },
+  // Joining, leaving and switching Foxfire servers. Separate from `settings`,
+  // which is the Riot API key and its limits: that is configuration for
+  // local-only mode, and connected to a server this machine holds no key at
+  // all. The two are asked about at different times by different screens.
+  server: {
+    getState: 'server:getState',
+    probe: 'server:probe',
+    previewInvite: 'server:previewInvite',
+    register: 'server:register',
+    login: 'server:login',
+    logout: 'server:logout',
+    setActive: 'server:setActive',
+    forget: 'server:forget',
+    changed: 'server:changed'
+  },
   settings: {
     get: 'settings:get',
     setApiKey: 'settings:setApiKey',

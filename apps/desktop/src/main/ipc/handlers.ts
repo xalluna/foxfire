@@ -2,6 +2,16 @@ import { app, dialog, ipcMain } from 'electron'
 import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
 import { getAssetManifest } from '../services/ddragonService'
+import {
+  forgetServer,
+  getServerState,
+  login as serverLogin,
+  logout as serverLogout,
+  previewInvite,
+  probe as serverProbe,
+  register as serverRegister,
+  setActiveServer
+} from '../services/serverService'
 import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
@@ -77,6 +87,8 @@ import type {
   RiotKeyLimits,
   RiotKeyType,
   RoflSettings,
+  ServerCredentials,
+  ServerRegistration,
   SeasonInput
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
@@ -97,6 +109,21 @@ import type { TelemetryRequestQuery } from '@shared/telemetry'
  */
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.app.getVersion, () => app.getVersion())
+
+  ipcMain.handle(CH.server.getState, () => getServerState())
+  ipcMain.handle(CH.server.probe, (_e, url: string) => serverProbe(url))
+  ipcMain.handle(CH.server.previewInvite, (_e, url: string, token: string) =>
+    previewInvite(url, token)
+  )
+  ipcMain.handle(CH.server.register, (_e, url: string, registration: ServerRegistration) =>
+    serverRegister(url, registration)
+  )
+  ipcMain.handle(CH.server.login, (_e, url: string, credentials: ServerCredentials) =>
+    serverLogin(url, credentials)
+  )
+  ipcMain.handle(CH.server.logout, () => serverLogout())
+  ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
+  ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
   ipcMain.handle(CH.settings.get, () => getSettings())
   ipcMain.handle(CH.settings.setApiKey, (_e, key: string) => setAndValidateApiKey(key))

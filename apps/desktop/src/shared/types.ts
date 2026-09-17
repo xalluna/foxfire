@@ -811,3 +811,110 @@ export interface ArchiveResult {
   error?: string
   archive?: ClientArchive
 }
+
+/* -------------------------------------------------------------------------- */
+/* Foxfire Server                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What a server said about itself when asked, before anybody typed a password.
+ *
+ * Answered by the one endpoint that needs no authentication and no version
+ * header, which is the whole point of it: a desktop too old to be served has to
+ * be able to find that out and say so. `error` is filled in and `reachable` is
+ * false for every kind of not-working — wrong address, server down, a
+ * certificate this machine will not trust — because all of them are things to
+ * render in the connect form rather than exceptions to handle.
+ */
+export interface ServerProbe {
+  url: string
+  reachable: boolean
+  error: string | null
+  serverName: string | null
+  serverVersion: string | null
+  apiVersion: number | null
+  minimumDesktop: string | null
+  recommendedDesktop: string | null
+  /** Whether anybody may register, or an invite is needed. */
+  publicSignup: boolean | null
+  /**
+   * How this build stands against that server's stated range. Advisory only:
+   * the server's allow list is a set rather than a range, so a version between
+   * the minimum and the newest can still be absent from it. This decides what
+   * the connect screen says, never whether to proceed.
+   */
+  compatibility: 'ok' | 'outdated' | 'unsupported' | 'unknown'
+}
+
+/** Who you are on a server. */
+export interface ServerSession {
+  url: string
+  username: string
+  email: string
+  isAdmin: boolean
+}
+
+/** A server this desktop has joined, whether or not it is the active one. */
+export interface KnownServer {
+  url: string
+  /** The server's own name, or its host until it has told us one. */
+  name: string
+  /** The account signed in there. Null once the session has been signed out. */
+  username: string | null
+  isActive: boolean
+}
+
+/**
+ * Which server is answering, and which ones this desktop remembers.
+ *
+ * `activeUrl` null is local-only mode — the app as it has always been, reading
+ * this machine's own database with this machine's own Riot key. Server mode is
+ * the alternative, one server at a time.
+ */
+export interface ServerState {
+  activeUrl: string | null
+  servers: KnownServer[]
+  session: ServerSession | null
+  /**
+   * Set when the active server refused this build outright, and holds the
+   * version to install. Everything server-backed is unavailable until then, so
+   * this is the one thing the UI has to say.
+   */
+  upgradeRequired: string | null
+}
+
+/** Credentials for signing in to a server. */
+export interface ServerCredentials {
+  email: string
+  password: string
+}
+
+/** Everything needed to make an account on a server. */
+export interface ServerRegistration {
+  username: string
+  email: string
+  password: string
+  /** Required when the server has public signup switched off. */
+  inviteToken?: string
+}
+
+/**
+ * The outcome of connecting, registering or signing in.
+ *
+ * Carries the whole new state rather than just a flag, so the settings page
+ * never has to ask a second time for what changed.
+ */
+export interface ServerAuthResult {
+  ok: boolean
+  error: string | null
+  state: ServerState
+}
+
+/** What a server will say about an invite code without anybody signing in. */
+export interface InvitePreview {
+  usable: boolean
+  serverName: string
+  /** The address the invite was sent to, so the form can fill it in. */
+  email: string | null
+  message: string
+}

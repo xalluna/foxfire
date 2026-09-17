@@ -10,6 +10,7 @@ import type {
   ChampionStats,
   LcuStatus,
   MatchDetail,
+  InvitePreview,
   MatchSummary,
   QueueType,
   ObsValidation,
@@ -27,6 +28,11 @@ import type {
   ArchiveResult,
   RiotKeyLimits,
   RiotKeyType,
+  ServerAuthResult,
+  ServerCredentials,
+  ServerProbe,
+  ServerRegistration,
+  ServerState,
   Scoreboard,
   Season,
   SeasonInput,
@@ -105,6 +111,9 @@ export type Scenario =
   | 'sync-error'
   | 'not-live'
   | 'no-obs'
+  // Signed in to a Foxfire server, and refused by one for being too old.
+  | 'server-connected'
+  | 'server-outdated'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')
@@ -222,6 +231,58 @@ function runFakeSync(accountId: number): void {
 let keyType: RiotKeyType = 'personal'
 let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
 
+
+/**
+ * The server connection, as module state so the harness behaves like the real
+ * thing: connect, and the page rearranges; sign out, and it comes back.
+ *
+ * Reachable by ?scenario=server-connected, which is how the connected shape of
+ * the Server settings page is reviewed without standing a .NET server up.
+ */
+const MOCK_SERVER_URL = 'https://foxfire.example.com'
+
+let serverState: ServerState =
+  scenario === 'server-connected'
+    ? {
+        activeUrl: MOCK_SERVER_URL,
+        servers: [
+          { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Alluna', isActive: true }
+        ],
+        session: {
+          url: MOCK_SERVER_URL,
+          username: 'Alluna',
+          email: 'alluna@example.com',
+          isAdmin: true
+        },
+        upgradeRequired: null
+      }
+    : scenario === 'server-outdated'
+      ? {
+          // Signed in, and then the host upgraded their server out from under
+          // this build. That is the shape worth designing for: the session is
+          // still real, and it is the reads that stop.
+          activeUrl: MOCK_SERVER_URL,
+          servers: [
+            { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Alluna', isActive: true }
+          ],
+          session: {
+            url: MOCK_SERVER_URL,
+            username: 'Alluna',
+            email: 'alluna@example.com',
+            isAdmin: false
+          },
+          upgradeRequired: '0.14.0'
+        }
+      : { activeUrl: null, servers: [], session: null, upgradeRequired: null }
+
+const serverListeners = new Set<(state: ServerState) => void>()
+
+function setServerState(next: ServerState): ServerState {
+  serverState = next
+  for (const listener of serverListeners) listener(next)
+  return next
+}
+
 export const mockApi: Api = {
   // The browser harness has no Electron and so no real path for a File.
   pathForFile: () => null,
@@ -230,6 +291,150 @@ export const mockApi: Api = {
     // stand-in; the packaged app reads it from app.getVersion().
     // Never held, even in the loading scenario — this is chrome, not data.
     getVersion: (): Promise<string> => delay('0.0.0-dev', 0, false)
+  },
+  server: {
+    getState: (): Promise<ServerState> => delay(serverState, 120, false),
+
+    probe: (url: string): Promise<ServerProbe> =>
+      delay(
+        url.includes('unreachable')
+          ? {
+              url,
+              reachable: false,
+              error: `Nothing found at ${url}. Check the address.`,
+              serverName: null,
+              serverVersion: null,
+              apiVersion: null,
+              minimumDesktop: null,
+              recommendedDesktop: null,
+              publicSignup: null,
+              compatibility: 'unknown'
+            }
+          : {
+              url,
+              reachable: true,
+              error: null,
+              serverName: 'The Fox Den',
+              serverVersion: '0.1.0',
+              apiVersion: 1,
+              minimumDesktop: '0.12.0',
+              recommendedDesktop: '0.12.0',
+              publicSignup: !url.includes('invite-only'),
+              compatibility: url.includes('too-old') ? 'unsupported' : 'ok'
+            },
+        400,
+        false
+      ),
+
+    previewInvite: (_url: string, token: string): Promise<InvitePreview> =>
+      delay(
+        token.length < 20
+          ? {
+              usable: false,
+              serverName: 'The Fox Den',
+              email: null,
+              message: 'This invite link is not valid for this server.'
+            }
+          : {
+              usable: true,
+              serverName: 'The Fox Den',
+              email: 'invitee@example.com',
+              message: 'Ready to use.'
+            },
+        350,
+        false
+      ),
+
+    register: (url: string, registration: ServerRegistration): Promise<ServerAuthResult> =>
+      delay(
+        {
+          ok: true,
+          error: null,
+          state: setServerState({
+            activeUrl: url,
+            servers: [
+              { url, name: 'The Fox Den', username: registration.username, isActive: true }
+            ],
+            session: {
+              url,
+              username: registration.username,
+              email: registration.email,
+              isAdmin: false
+            },
+            upgradeRequired: null
+          })
+        },
+        600,
+        false
+      ),
+
+    login: (url: string, credentials: ServerCredentials): Promise<ServerAuthResult> =>
+      delay(
+        credentials.password === 'wrong'
+          ? {
+              ok: false,
+              error: 'Wrong email or password.',
+              state: serverState
+            }
+          : {
+              ok: true,
+              error: null,
+              state: setServerState({
+                activeUrl: url,
+                servers: [{ url, name: 'The Fox Den', username: 'Alluna', isActive: true }],
+                session: {
+                  url,
+                  username: 'Alluna',
+                  email: credentials.email,
+                  isAdmin: true
+                },
+                upgradeRequired: null
+              })
+            },
+        600,
+        false
+      ),
+
+    logout: (): Promise<ServerState> =>
+      delay(
+        setServerState({
+          activeUrl: null,
+          servers: serverState.servers.map((s) => ({ ...s, username: null, isActive: false })),
+          session: null,
+          upgradeRequired: null
+        }),
+        300,
+        false
+      ),
+
+    setActive: (url: string | null): Promise<ServerState> =>
+      delay(
+        setServerState({
+          ...serverState,
+          activeUrl: url,
+          servers: serverState.servers.map((s) => ({ ...s, isActive: s.url === url })),
+          upgradeRequired: null
+        }),
+        200,
+        false
+      ),
+
+    forget: (url: string): Promise<ServerState> =>
+      delay(
+        setServerState({
+          activeUrl: serverState.activeUrl === url ? null : serverState.activeUrl,
+          servers: serverState.servers.filter((s) => s.url !== url),
+          session: serverState.session?.url === url ? null : serverState.session,
+          upgradeRequired: null
+        }),
+        200,
+        false
+      ),
+
+    onChanged: (cb: (state: ServerState) => void): (() => void) => {
+      serverListeners.add(cb)
+      return () => serverListeners.delete(cb)
+    }
   },
   settings: {
     get: (): Promise<AppSettingsPublic> =>

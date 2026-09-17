@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
+import { ServerSettings } from '../components/ServerSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
@@ -55,6 +56,7 @@ export function Settings(): JSX.Element {
       <SettingsNav active={category} onSelect={setCategory} />
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
+        {category === 'server' && <ServerSettings />}
         {category === 'riotKey' && <RiotKeySettings />}
         {category === 'rank' && <RankTrackingSettings />}
         {category === 'capture' && <CaptureSettings />}

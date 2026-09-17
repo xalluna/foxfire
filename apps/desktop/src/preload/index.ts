@@ -5,6 +5,7 @@ import type {
   CaptureStatus,
   LcuStatus,
   ReplayImportProgress,
+  ServerState,
   SyncProgressEvent
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
@@ -14,6 +15,21 @@ import { CH } from '../main/ipc/channels'
 const api: Api = {
   app: {
     getVersion: () => ipcRenderer.invoke(CH.app.getVersion)
+  },
+  server: {
+    getState: () => ipcRenderer.invoke(CH.server.getState),
+    probe: (url) => ipcRenderer.invoke(CH.server.probe, url),
+    previewInvite: (url, token) => ipcRenderer.invoke(CH.server.previewInvite, url, token),
+    register: (url, registration) => ipcRenderer.invoke(CH.server.register, url, registration),
+    login: (url, credentials) => ipcRenderer.invoke(CH.server.login, url, credentials),
+    logout: () => ipcRenderer.invoke(CH.server.logout),
+    setActive: (url) => ipcRenderer.invoke(CH.server.setActive, url),
+    forget: (url) => ipcRenderer.invoke(CH.server.forget, url),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, state: ServerState): void => cb(state)
+      ipcRenderer.on(CH.server.changed, handler)
+      return () => ipcRenderer.removeListener(CH.server.changed, handler)
+    }
   },
   settings: {
     get: () => ipcRenderer.invoke(CH.settings.get),

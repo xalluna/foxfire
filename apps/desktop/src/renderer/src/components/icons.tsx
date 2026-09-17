@@ -366,3 +366,18 @@ export function ExternalLink(props: IconProps): JSX.Element {
     </Icon>
   )
 }
+
+/**
+ * Two stacked racks with a status light each — the conventional shorthand for
+ * a server, and distinct at 16px from Folder and from Activity, which are its
+ * nearest neighbours in the settings sidebar.
+ */
+export function Server(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="7" rx="1.5" />
+      <rect x="3" y="13" width="18" height="7" rx="1.5" />
+      <path d="M7 7.5h.01M7 16.5h.01" />
+    </Icon>
+  )
+}

@@ -10,21 +10,36 @@ import * as Icon from '../icons'
  * decide which games belong to which season — so it is now a card on the Rank
  * tracking page rather than a sibling of it.
  */
-export type SettingsCategory = 'riotKey' | 'rank' | 'capture' | 'replays' | 'telemetry' | 'about'
+export type SettingsCategory =
+  | 'server'
+  | 'riotKey'
+  | 'rank'
+  | 'capture'
+  | 'replays'
+  | 'telemetry'
+  | 'about'
 
-/** The first category, and where Settings always opens. */
+/**
+ * The first category, and where Settings always opens.
+ *
+ * Still the Riot key rather than Server, because the key is what the app cannot
+ * work without and both of App's key banners land here. Server sits above it in
+ * the sidebar — it is the bigger decision, and it decides whether the key page
+ * applies at all — but it is not where somebody with a problem needs to arrive.
+ */
 export const FIRST_CATEGORY: SettingsCategory = 'riotKey'
 
 /**
  * The sidebar, in groups.
  *
- * Grouped the way the app is: what it needs to talk to Riot, what it records
- * off your machine, and the two pages that are about Foxfire itself rather than
+ * Grouped the way the app is: where its data comes from, what it records off
+ * your machine, and the two pages that are about Foxfire itself rather than
  * about League. The dividers do the work a heading would, without adding six
  * more words to a 220px column.
  */
 const GROUPS: Array<Array<{ id: SettingsCategory; label: string; icon: JSX.Element }>> = [
   [
+    { id: 'server', label: 'Server', icon: <Icon.Server /> },
     { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key /> },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],

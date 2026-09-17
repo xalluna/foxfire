@@ -7,6 +7,55 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.12.0] — 2026-09-17
+
+Foxfire can now read from a server your community hosts, instead of only from this PC. This release
+is the connection itself — joining a server, and saying which League accounts are yours. Match
+history still comes from your own machine; moving that across is the next piece of work.
+
+Nothing changes if you do not want a server. Local-only stays exactly as it was, and it is what
+Foxfire does until you point it somewhere.
+
+### Added
+
+- **A Server page in Settings.** Type the address whoever runs it gave you, and Foxfire asks the
+  server what it is before anything else happens — its name, its version, and whether anyone can
+  make an account there or you need an invite. Only then does it show you a form, because the
+  answer decides which form to show.
+- **Invites that work the way a link should.** Paste the code you were sent or the whole link;
+  either is fine. Foxfire checks it with the server and fills in the email address it was sent to,
+  so you cannot accidentally register with the wrong one and be turned away without being told why.
+  A link can be opened as many times as you like and makes exactly one account.
+- **Switching between a server and this PC without signing out.** Coming back does not mean typing
+  a password again.
+- **Being told when a server is too new for this copy.** A server states which versions of Foxfire
+  it serves, and one that will not serve yours says which version to install rather than failing
+  with something you cannot act on. A server that would merely prefer a newer Foxfire still works,
+  and says so quietly.
+
+### Changed
+
+- **Live game no longer shows each player's rank.** The scoreboard itself is free — it is read from
+  the game running on this PC, not from Riot — but the rank column was two Riot requests per
+  player, twenty every time the tab was opened. That is a fifth of what a personal key allows in
+  two minutes, spent on a number that without op.gg's scale of history behind it was never worth
+  it. Everything else on that screen is unchanged, and it now costs nothing and needs no API key.
+
+### Under the hood
+
+- The repository is a monorepo. The desktop app lives in `apps/desktop` and the Foxfire Server in
+  `apps/server`; each has its own version, its own changelog and its own release tag.
+- Server credentials are held the way the Riot API key already was — encrypted with Windows DPAPI,
+  outside the database file, so `stats.db` stays something you can copy or attach to a bug report
+  without handing over a login. The short-lived half of the session is never written to disk at all.
+- The renderer still has no network access and never sees a token. It goes on calling the same
+  `window.api` it always has; the main process decides where the answers come from.
+- Events reaching the UI now go through one place instead of ten, which is what will let them
+  arrive from a server rather than only from this process.
+- Fifty-seven new tests, twenty-five of them on what counts as a server address — Foxfire refuses
+  plain http to anywhere but this machine, because a password and a month-long token travel over
+  that connection.
+
 ## [0.11.0] — 2026-08-24
 
 Settings is rebuilt around a sidebar, taking after the Chrome settings page. Nothing is folded away
@@ -792,6 +841,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/xalluna/foxfire/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/xalluna/foxfire/compare/v0.10.1...v0.10.2
