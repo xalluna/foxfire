@@ -11,6 +11,7 @@
     "fetch-assets": "node scripts/fetch-assets.mjs",
     "make-icon": "node scripts/make-icon.mjs",
     "make-mark": "node scripts/make-mark.mjs",
+    "generate-corpus": "vite-node scripts/generate-ladder-corpus.ts",
     "build": "electron-vite build",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
