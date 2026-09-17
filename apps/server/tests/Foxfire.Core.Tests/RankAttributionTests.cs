@@ -41,7 +41,7 @@ public class RankAttributionTests
         new DateTimeOffset(new DateTime(year, month, day, hour, 0, 0, DateTimeKind.Local))
             .ToUnixTimeMilliseconds();
 
-    private static RankSnapshot Snapshot(
+    private static RankReading Snapshot(
         string tier,
         string division,
         int lp,
@@ -255,7 +255,7 @@ public class RankAttributionTests
         [Fact]
         public void Is_idempotent_a_second_pass_decides_the_same_thing()
         {
-            RankSnapshot[] snapshots =
+            RankReading[] snapshots =
             [
                 Snapshot("GOLD", "II", 20, T0, 1420),
                 Snapshot("GOLD", "II", 41, T0 + 1000, 1441)
@@ -308,7 +308,7 @@ public class RankAttributionTests
 
             private static readonly RankedMatch[] Games = [Match("NA1_LOSS", Loss), Match("NA1_WIN", Win)];
 
-            private static RankSnapshot Plat(int lp, long capturedAt) =>
+            private static RankReading Plat(int lp, long capturedAt) =>
                 new(RankedQueue.SoloDuo, "PLATINUM", "IV", lp, 10, 8, 1600 + lp, "lcu", capturedAt);
 
             [Fact]
@@ -422,7 +422,7 @@ public class RankAttributionTests
         {
             // Attribution is replayed unbounded on every pass, so a guard that
             // only held the first time would be no guard at all.
-            RankSnapshot[] snapshots =
+            RankReading[] snapshots =
             [
                 Snapshot("EMERALD", "II", 20, Dec, EmeraldII),
                 Snapshot("BRONZE", "IV", 0, Jan, BronzeIV)

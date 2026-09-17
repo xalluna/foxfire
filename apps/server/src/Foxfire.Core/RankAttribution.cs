@@ -2,6 +2,12 @@ namespace Foxfire.Core;
 
 /// <summary>
 /// One reading of somebody's rank at a moment.
+///
+/// Called a reading rather than a snapshot, which is what the row it comes from
+/// is called: this is the input to a rule, and the rule is about what happened
+/// between two readings. It also leaves the persistence name free for the
+/// entity, so neither has to be namespace-qualified at the one place that
+/// touches both.
 /// </summary>
 /// <param name="CapturedAt">
 /// Epoch milliseconds, so it compares directly against a match's gameCreation.
@@ -10,7 +16,7 @@ namespace Foxfire.Core;
 /// Stamped on write from tier, division and LP. Null when the reading was of an
 /// unranked account, which is why an interval touching one is never attributed.
 /// </param>
-public sealed record RankSnapshot(
+public sealed record RankReading(
     RankedQueue Queue,
     string? Tier,
     string? Division,
@@ -89,8 +95,8 @@ public static class RankAttribution
     /// interval, so a caller may pass everything it has for the account.
     /// </param>
     public static MatchRankAttribution? Attribute(
-        RankSnapshot before,
-        RankSnapshot after,
+        RankReading before,
+        RankReading after,
         IReadOnlyList<RankedMatch> candidates,
         IReadOnlyList<Season> seasons)
     {
@@ -174,7 +180,7 @@ public static class RankAttribution
     /// One queue's readings, oldest first. Pairs are taken in the order given.
     /// </param>
     public static IReadOnlyList<MatchRankAttribution> Replay(
-        IReadOnlyList<RankSnapshot> snapshots,
+        IReadOnlyList<RankReading> snapshots,
         IReadOnlyList<RankedMatch> candidates,
         IReadOnlyList<Season> seasons)
     {

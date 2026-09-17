@@ -89,6 +89,17 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     /// <summary>A client with no version header at all — what something else entirely looks like.</summary>
     public HttpClient AnonymousClient() => _factory!.CreateClient();
 
+    /// <summary>
+    /// The running server's services, for tests about the database rather than
+    /// about the HTTP surface.
+    ///
+    /// Scoped the way a request does it: resolve a DbContext from a scope and
+    /// dispose the scope, never hold one across tests. Sharing the context would
+    /// share its change tracker, and a test would start seeing entities another
+    /// one had loaded.
+    /// </summary>
+    public IServiceProvider Services => _factory!.Services;
+
     /// <summary>Registers somebody and returns their session.</summary>
     public async Task<Session> RegisterAsync(
         HttpClient client,
