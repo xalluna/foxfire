@@ -1,0 +1,85 @@
+# Foxfire Server, its database, and its blob store.
+#
+#   cp .env.example .env     # then fill it in — the server refuses to start otherwise
+#   docker compose up -d
+#
+# Run this from apps/server/docker. The build context is the repository root
+# because the Dockerfile needs the whole apps/server tree.
+#
+# This publishes plain HTTP on 8080 and binds it to localhost only. That is
+# deliberate: put Caddy or nginx in front of it for TLS before you expose
+# anything. Passwords and account tokens travel over this connection, and the
+# desktop refuses a non-HTTPS server that is not localhost.
+
+name: foxfire
+
+services:
+  server:
+    build:
+      context: ../../..
+      dockerfile: apps/server/docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: "Server=db,1433;Database=Foxfire;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      ConnectionStrings__Blob: "${BLOB_CONNECTION_STRING:-DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://blob:10000/devstoreaccount1;}"
+      Server__PublicUrl: "${SERVER_PUBLIC_URL}"
+      Server__Name: "${SERVER_NAME:-Foxfire}"
+      Riot__ApiKey: "${RIOT_API_KEY}"
+      Riot__KeyType: "${RIOT_KEY_TYPE:-personal}"
+      Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"
+      Auth__InviteSigningKey: "${INVITE_SIGNING_KEY}"
+      Admin__Email: "${ADMIN_EMAIL}"
+      Smtp__Host: "${SMTP_HOST:-}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__Username: "${SMTP_USERNAME:-}"
+      Smtp__Password: "${SMTP_PASSWORD:-}"
+      Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
+      Smtp__FromName: "${SMTP_FROM_NAME:-Foxfire}"
+    ports:
+      # Localhost only. Point your reverse proxy here; do not forward this port.
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      # Express: free to run for real, capped at 10 GB per database. That is a
+      # great deal of League history — matches are stored once and shared by
+      # everybody on the server — but if you outgrow it, Developer is free and
+      # uncapped for non-production use and Standard is the licensed option.
+      MSSQL_PID: "${MSSQL_EDITION:-Express}"
+    volumes:
+      - db-data:/var/opt/mssql
+    healthcheck:
+      # The server waits for this. SQL Server takes a while to come up, and
+      # starting the API against a database that is not listening yet turns a
+      # slow boot into a crash loop.
+      test: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "$$MSSQL_SA_PASSWORD", "-C", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  blob:
+    # Azurite is Microsoft's Azure Storage emulator, and it speaks the real
+    # Blob API — so a self-hoster gets object storage with no cloud account,
+    # and a host who would rather use actual Azure just points
+    # BLOB_CONNECTION_STRING at it instead and stops this service.
+    #
+    # Nothing uploads replays yet; that is Phase 3. It is here now so the
+    # storage is configured before the feature that needs it arrives, rather
+    # than asking every host to reconfigure later.
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    restart: unless-stopped
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--location", "/data"]
+    volumes:
+      - blob-data:/data
+
+volumes:
+  db-data:
+  blob-data:

@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Foxfire.Api/Foxfire.Api.csproj" />
+    <Project Path="src/Foxfire.Core/Foxfire.Core.csproj" />
+    <Project Path="src/Foxfire.Data/Foxfire.Data.csproj" />
+    <Project Path="src/Foxfire.Riot/Foxfire.Riot.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Foxfire.Api.Tests/Foxfire.Api.Tests.csproj" />
+    <Project Path="tests/Foxfire.Core.Tests/Foxfire.Core.Tests.csproj" />
+    <Project Path="tests/Foxfire.Riot.Tests/Foxfire.Riot.Tests.csproj" />
+  </Folder>
+</Solution>

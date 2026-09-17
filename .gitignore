@@ -13,3 +13,8 @@ Thumbs.db
 
 # .claude/launch.json is tracked; the worktree checkouts beneath it are not.
 .claude/worktrees
+
+# .NET build output (apps/server)
+bin/
+obj/
+*.user
