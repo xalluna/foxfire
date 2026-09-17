@@ -37,9 +37,15 @@ worth pointing a community at.
   that is not proof survivable on a server whose admin knows everybody.
 - **Everything on a server is visible to everybody on it.** Who has claimed
   which League account is not private here. Editing is what ownership gates.
+- **Managing who is on the server.** An admin can see everybody, make somebody
+  an admin or stop, disable an account without deleting anything, and remove one
+  outright. Changing a role or disabling somebody ends their sessions, so it
+  takes effect immediately rather than whenever their token next renews.
+  Nothing here will leave the server with no administrator — there is no way
+  back from that except editing configuration and restarting.
 - **A version handshake.** `GET /version` answers without authentication and
   without a client version, so an out-of-date desktop can be told "this server
-  needs Foxfire 0.13" on the connect screen rather than failing after somebody
+  needs Foxfire 0.12" on the connect screen rather than failing after somebody
   types a password. Builds this server does not speak to are refused with 426;
   builds that are behind but still supported are served, with a header saying
   there is something newer. That grace window matters while the desktop has no
@@ -79,8 +85,18 @@ worth pointing a community at.
   Homelab mail without a relay fails silently, so nothing is allowed to depend
   on it: every link the server would send is also copyable from the admin
   section.
+- **Releases.** `server-v*` tags build self-contained `linux-x64` and
+  `win-x64` archives and a container image on GHCR, and the Release stays an
+  invisible draft until its downloads have been read back at the size that was
+  built — the same guarantee the desktop's workflow gives. The test suite runs
+  first, including the ones that stand a real SQL Server up, so a release cannot
+  go out on a schema that does not migrate.
 - Tests: 40 over the invite tokens and the version allow list, 17 over the rate
   limiter against a fake clock — including the burst-window case the desktop
-  gets wrong.
+  gets wrong — and 49 contract tests driving the HTTP surface against a real
+  SQL Server in a container. Those last ones earned their keep immediately: the
+  account-deletion path has to clear an invite's redeemer by hand, because SQL
+  Server refuses two cascading paths between the same two tables and the
+  database would otherwise refuse the delete.
 
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

@@ -1,6 +1,10 @@
 import type { Api, DashboardData, MasteryData, ValidateResult } from '@shared/api'
 import type {
   Account,
+  AdminActionResult,
+  AdminInvite,
+  AdminUser,
+  AdminUserPatch,
   AdHocSummonerResult,
   AppSettingsPublic,
   AssetManifest,
@@ -30,6 +34,7 @@ import type {
   RiotKeyType,
   ServerAuthResult,
   ServerCredentials,
+  ServerAdminSettings,
   ServerProbe,
   ServerRegistration,
   ServerState,
@@ -283,6 +288,72 @@ function setServerState(next: ServerState): ServerState {
   return next
 }
 
+
+/**
+ * The server this harness pretends to administer.
+ *
+ * Mutable, so the management page behaves: promote somebody and the badge
+ * appears, withdraw an invite and it leaves the list. Reachable under
+ * ?scenario=server-connected, whose session is an admin.
+ */
+let mockUsers: AdminUser[] = [
+  {
+    id: 'u-1',
+    username: 'Alluna',
+    email: 'alluna@example.com',
+    isAdmin: true,
+    isDisabled: false,
+    createdAt: '2026-06-01T10:00:00.000Z',
+    linkedRiotAccounts: 2,
+    activeSessions: 1
+  },
+  {
+    id: 'u-2',
+    username: 'phantomduval',
+    email: 'duval@example.com',
+    isAdmin: false,
+    isDisabled: false,
+    createdAt: '2026-07-14T18:30:00.000Z',
+    linkedRiotAccounts: 1,
+    activeSessions: 2
+  },
+  {
+    id: 'u-3',
+    username: 'ward andersen',
+    email: 'ward@example.com',
+    isAdmin: false,
+    isDisabled: true,
+    createdAt: '2026-08-02T09:15:00.000Z',
+    linkedRiotAccounts: 0,
+    activeSessions: 0
+  }
+]
+
+let mockInvites: AdminInvite[] = [
+  {
+    id: 'i-1',
+    email: 'killua@example.com',
+    link: 'https://foxfire.example.com/invite/QbGgAX5_snuoIQKRWXw1EQAAAABqvs9-.K8nkbyg6mVzANgvRHI7L2RS2JaXxPzmf',
+    createdAt: '2026-09-10T12:00:00.000Z',
+    expiresAt: '2026-09-24T12:00:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  {
+    id: 'i-2',
+    email: 'duval@example.com',
+    link: 'https://foxfire.example.com/invite/spent-token-for-the-harness-only-aaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    createdAt: '2026-07-10T12:00:00.000Z',
+    expiresAt: '2026-07-24T12:00:00.000Z',
+    redeemedAt: '2026-07-14T18:30:00.000Z',
+    redeemedBy: 'phantomduval',
+    isOpen: false
+  }
+]
+
+let mockServerSettings: ServerAdminSettings = { publicSignup: true, backfillTarget: 200 }
+
 export const mockApi: Api = {
   // The browser harness has no Electron and so no real path for a File.
   pathForFile: () => null,
@@ -434,6 +505,82 @@ export const mockApi: Api = {
     onChanged: (cb: (state: ServerState) => void): (() => void) => {
       serverListeners.add(cb)
       return () => serverListeners.delete(cb)
+    }
+  },
+  serverAdmin: {
+    users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
+
+    updateUser: (id: string, patch: AdminUserPatch): Promise<AdminActionResult> => {
+      const target = mockUsers.find((u) => u.id === id)
+      const admins = mockUsers.filter((u) => u.isAdmin)
+
+      // The same refusal the server makes, so the harness shows the message
+      // rather than letting the page reach a state the real thing forbids.
+      if (target?.isAdmin && admins.length === 1 && (patch.isAdmin === false || patch.isDisabled)) {
+        return delay(
+          {
+            ok: false,
+            error:
+              'That is the only administrator on this server, so there is no way to change them from here. Make somebody else an admin first.'
+          },
+          200,
+          false
+        )
+      }
+
+      mockUsers = mockUsers.map((u) => (u.id === id ? { ...u, ...patch } : u))
+      return delay({ ok: true, error: null }, 200, false)
+    },
+
+    deleteUser: (id: string): Promise<AdminActionResult> => {
+      const target = mockUsers.find((u) => u.id === id)
+      if (target?.isAdmin && mockUsers.filter((u) => u.isAdmin).length === 1) {
+        return delay(
+          {
+            ok: false,
+            error:
+              'That is the only administrator on this server, so there is no way to remove them from here. Make somebody else an admin first.'
+          },
+          200,
+          false
+        )
+      }
+
+      mockUsers = mockUsers.filter((u) => u.id !== id)
+      return delay({ ok: true, error: null }, 200, false)
+    },
+
+    invites: (): Promise<AdminInvite[]> => delay(mockInvites, 200, false),
+
+    createInvite: (email: string): Promise<AdminInvite> => {
+      const existing = mockInvites.find((i) => i.email === email && i.isOpen)
+      if (existing) return delay(existing, 300, false)
+
+      const invite: AdminInvite = {
+        id: `i-${mockInvites.length + 1}`,
+        email,
+        link: `https://foxfire.example.com/invite/${btoa(email).replace(/=/g, "")}-harness-token-aaaaaaaaaaaa`,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 14 * 24 * 3600_000).toISOString(),
+        redeemedAt: null,
+        redeemedBy: null,
+        isOpen: true
+      }
+
+      mockInvites = [invite, ...mockInvites]
+      return delay(invite, 300, false)
+    },
+
+    revokeInvite: (id: string): Promise<AdminActionResult> => {
+      mockInvites = mockInvites.filter((i) => i.id !== id)
+      return delay({ ok: true, error: null }, 200, false)
+    },
+
+    getSettings: (): Promise<ServerAdminSettings> => delay(mockServerSettings, 180, false),
+
+    setSettings: (patch: Partial<ServerAdminSettings>): Promise<ServerAdminSettings> => {
+      mockServerSettings = { ...mockServerSettings, ...patch }
+      return delay(mockServerSettings, 180, false)
     }
   },
   settings: {

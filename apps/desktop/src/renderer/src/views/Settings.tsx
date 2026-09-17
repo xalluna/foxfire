@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
+import { ServerAdminSettings } from '../components/ServerAdminSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
@@ -43,6 +44,24 @@ const DEFAULT_APPLICATION_LIMITS: RiotKeyLimits = { burstLimit: 500, sustainedLi
  */
 export function Settings(): JSX.Element {
   const [category, setCategory] = useState<SettingsCategory>(FIRST_CATEGORY)
+
+  // Drives whether the management page is offered at all. Refetched on every
+  // connection change, so signing out of a server takes its admin page with it
+  // rather than leaving a category whose every call now fails.
+  const [isServerAdmin, setIsServerAdmin] = useState(false)
+
+  useEffect(() => {
+    const read = (state: { session: { isAdmin: boolean } | null }): void =>
+      setIsServerAdmin(state.session?.isAdmin ?? false)
+
+    void window.api.server.getState().then(read)
+    return window.api.server.onChanged(read)
+  }, [])
+
+  // Somebody demoted, or signed out, while looking at the page that is now gone.
+  useEffect(() => {
+    if (!isServerAdmin && category === 'serverAdmin') setCategory(FIRST_CATEGORY)
+  }, [isServerAdmin, category])
   const pane = useRef<HTMLDivElement>(null)
 
   // Arriving at a page scrolled to where the last one was left is disorienting
@@ -53,10 +72,11 @@ export function Settings(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0">
-      <SettingsNav active={category} onSelect={setCategory} />
+      <SettingsNav active={category} isServerAdmin={isServerAdmin} onSelect={setCategory} />
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
         {category === 'server' && <ServerSettings />}
+        {category === 'serverAdmin' && <ServerAdminSettings />}
         {category === 'riotKey' && <RiotKeySettings />}
         {category === 'rank' && <RankTrackingSettings />}
         {category === 'capture' && <CaptureSettings />}

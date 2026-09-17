@@ -13,6 +13,6 @@
     "typecheck": "npm run typecheck -w foxfire",
     "lint": "npm run lint -w foxfire",
     "test": "npm run test -w foxfire",
-    "tag-release": "npm run tag-release -w foxfire"
+    "tag-release": "node scripts/tag-release.mjs"
   }
 }

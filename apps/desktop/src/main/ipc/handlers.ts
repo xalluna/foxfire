@@ -12,6 +12,16 @@ import {
   register as serverRegister,
   setActiveServer
 } from '../services/serverService'
+import {
+  createInvite,
+  deleteUser,
+  getSettings as getServerAdminSettings,
+  listInvites,
+  listUsers,
+  revokeInvite,
+  setSettings as setServerAdminSettings,
+  updateUser
+} from '../services/serverAdminService'
 import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
@@ -78,6 +88,7 @@ import { managedPreviewSource } from '../obs/provision'
 import { reconnectObs } from '../obs/client'
 import { getMainWindow } from '../window'
 import type {
+  AdminUserPatch,
   BackgroundSettings,
   CaptureSettings,
   ManualRankEdit,
@@ -87,6 +98,7 @@ import type {
   RiotKeyLimits,
   RiotKeyType,
   RoflSettings,
+  ServerAdminSettings,
   ServerCredentials,
   ServerRegistration,
   SeasonInput
@@ -124,6 +136,19 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.server.logout, () => serverLogout())
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
+
+  ipcMain.handle(CH.serverAdmin.users, () => listUsers())
+  ipcMain.handle(CH.serverAdmin.updateUser, (_e, id: string, patch: AdminUserPatch) =>
+    updateUser(id, patch)
+  )
+  ipcMain.handle(CH.serverAdmin.deleteUser, (_e, id: string) => deleteUser(id))
+  ipcMain.handle(CH.serverAdmin.invites, () => listInvites())
+  ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
+  ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
+  ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
+  ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>
+    setServerAdminSettings(patch)
+  )
 
   ipcMain.handle(CH.settings.get, () => getSettings())
   ipcMain.handle(CH.settings.setApiKey, (_e, key: string) => setAndValidateApiKey(key))

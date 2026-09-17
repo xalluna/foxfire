@@ -12,6 +12,7 @@ import * as Icon from '../icons'
  */
 export type SettingsCategory =
   | 'server'
+  | 'serverAdmin'
   | 'riotKey'
   | 'rank'
   | 'capture'
@@ -37,9 +38,18 @@ export const FIRST_CATEGORY: SettingsCategory = 'riotKey'
  * about League. The dividers do the work a heading would, without adding six
  * more words to a 220px column.
  */
-const GROUPS: Array<Array<{ id: SettingsCategory; label: string; icon: JSX.Element }>> = [
+interface NavItem {
+  id: SettingsCategory
+  label: string
+  icon: JSX.Element
+  /** Shown only to an administrator of the server currently connected. */
+  adminOnly?: boolean
+}
+
+const GROUPS: NavItem[][] = [
   [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
+    { id: 'serverAdmin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
     { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key /> },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],
@@ -55,11 +65,24 @@ const GROUPS: Array<Array<{ id: SettingsCategory; label: string; icon: JSX.Eleme
 
 export function SettingsNav({
   active,
+  isServerAdmin,
   onSelect
 }: {
   active: SettingsCategory
+  /**
+   * Whether the active session says this person administers the server.
+   *
+   * Decides what to draw and nothing else. The server checks the role on every
+   * request it serves, so a window belonging to somebody demoted a minute ago
+   * shows a page whose every call is refused — which is the right way round.
+   */
+  isServerAdmin: boolean
   onSelect: (category: SettingsCategory) => void
 }): JSX.Element {
+  const groups = GROUPS.map((group) =>
+    group.filter((item) => !item.adminOnly || isServerAdmin)
+  ).filter((group) => group.length > 0)
+
   return (
     <nav
       aria-label="Settings"
@@ -70,7 +93,7 @@ export function SettingsNav({
         <span className="font-display text-lg text-text">Settings</span>
       </div>
 
-      {GROUPS.map((group, index) => (
+      {groups.map((group, index) => (
         <div
           key={group[0].id}
           className={clsx('space-y-0.5', index > 0 && 'mt-3 border-t border-hairline pt-3')}

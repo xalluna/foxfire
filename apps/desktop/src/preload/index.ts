@@ -31,6 +31,16 @@ const api: Api = {
       return () => ipcRenderer.removeListener(CH.server.changed, handler)
     }
   },
+  serverAdmin: {
+    users: () => ipcRenderer.invoke(CH.serverAdmin.users),
+    updateUser: (id, patch) => ipcRenderer.invoke(CH.serverAdmin.updateUser, id, patch),
+    deleteUser: (id) => ipcRenderer.invoke(CH.serverAdmin.deleteUser, id),
+    invites: () => ipcRenderer.invoke(CH.serverAdmin.invites),
+    createInvite: (email) => ipcRenderer.invoke(CH.serverAdmin.createInvite, email),
+    revokeInvite: (id) => ipcRenderer.invoke(CH.serverAdmin.revokeInvite, id),
+    getSettings: () => ipcRenderer.invoke(CH.serverAdmin.getSettings),
+    setSettings: (patch) => ipcRenderer.invoke(CH.serverAdmin.setSettings, patch)
+  },
   settings: {
     get: () => ipcRenderer.invoke(CH.settings.get),
     setApiKey: (key) => ipcRenderer.invoke(CH.settings.setApiKey, key),

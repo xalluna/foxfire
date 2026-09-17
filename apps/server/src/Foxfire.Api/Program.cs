@@ -155,6 +155,7 @@ app.MapVersionEndpoints();
 app.MapAuthEndpoints();
 app.MapInviteEndpoints();
 app.MapAdminSettingsEndpoints();
+app.MapAdminUserEndpoints();
 app.MapRiotLinkEndpoints();
 
 var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");

@@ -19,6 +19,20 @@ export const CH = {
     forget: 'server:forget',
     changed: 'server:changed'
   },
+  // Administering the active server. Its own domain rather than a corner of
+  // `server`, because none of it is about the connection: these are calls a
+  // member with the right role can make, and the server decides that on every
+  // one of them.
+  serverAdmin: {
+    users: 'serverAdmin:users',
+    updateUser: 'serverAdmin:updateUser',
+    deleteUser: 'serverAdmin:deleteUser',
+    invites: 'serverAdmin:invites',
+    createInvite: 'serverAdmin:createInvite',
+    revokeInvite: 'serverAdmin:revokeInvite',
+    getSettings: 'serverAdmin:getSettings',
+    setSettings: 'serverAdmin:setSettings'
+  },
   settings: {
     get: 'settings:get',
     setApiKey: 'settings:setApiKey',

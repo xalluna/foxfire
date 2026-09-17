@@ -1,6 +1,10 @@
 import type {
   Account,
   AdHocSummonerResult,
+  AdminActionResult,
+  AdminInvite,
+  AdminUser,
+  AdminUserPatch,
   AppSettingsPublic,
   ArchiveCopyProgress,
   ArchiveResult,
@@ -41,6 +45,7 @@ import type {
   ServerAuthResult,
   ServerCredentials,
   ServerProbe,
+  ServerAdminSettings,
   ServerRegistration,
   ServerState,
   SyncProgressEvent,
@@ -105,6 +110,24 @@ export interface Api {
     forget: (url: string) => Promise<ServerState>
     /** Fires whenever the connection changes, including from a background refresh. */
     onChanged: (cb: (state: ServerState) => void) => () => void
+  }
+  /**
+   * Administering the active server.
+   *
+   * Only shown to somebody whose session says they are an admin, and only
+   * ever authoritative because the server checks the role itself — the flag
+   * on the session decides what to draw, never what is allowed.
+   */
+  serverAdmin: {
+    users: () => Promise<AdminUser[]>
+    updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
+    deleteUser: (id: string) => Promise<AdminActionResult>
+    invites: () => Promise<AdminInvite[]>
+    /** Returns the outstanding invite for that address if there already is one. */
+    createInvite: (email: string) => Promise<AdminInvite>
+    revokeInvite: (id: string) => Promise<AdminActionResult>
+    getSettings: () => Promise<ServerAdminSettings>
+    setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
   }
   settings: {
     get: () => Promise<AppSettingsPublic>

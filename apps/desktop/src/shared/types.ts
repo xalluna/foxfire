@@ -918,3 +918,63 @@ export interface InvitePreview {
   email: string | null
   message: string
 }
+
+/* -------------------------------------------------------------------------- */
+/* Server administration                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Somebody on the active server, as an admin sees them. */
+export interface AdminUser {
+  id: string
+  username: string
+  email: string
+  isAdmin: boolean
+  /** Cannot sign in. Nothing of theirs is deleted. */
+  isDisabled: boolean
+  createdAt: string
+  linkedRiotAccounts: number
+  /** Live sessions — roughly, machines signed in. */
+  activeSessions: number
+}
+
+/** What to change about somebody. Undefined leaves a field alone. */
+export interface AdminUserPatch {
+  isAdmin?: boolean
+  isDisabled?: boolean
+}
+
+/** An invite, with the link an admin can copy. */
+export interface AdminInvite {
+  id: string
+  email: string
+  /**
+   * The whole point of the admin-facing shape. SMTP is optional, so every link
+   * the server would have emailed is also copyable — paste it wherever your
+   * community actually talks.
+   */
+  link: string
+  createdAt: string
+  expiresAt: string
+  redeemedAt: string | null
+  redeemedBy: string | null
+  isOpen: boolean
+}
+
+/** The switches an admin can change while the server runs. */
+export interface ServerAdminSettings {
+  publicSignup: boolean
+  backfillTarget: number
+}
+
+/**
+ * The outcome of an administrative action.
+ *
+ * A result rather than a thrown error, because every one of these can be
+ * refused for a reason worth showing — the last administrator cannot be
+ * demoted, an invite that has been used cannot be withdrawn — and the caller
+ * needs the message, not a stack.
+ */
+export interface AdminActionResult {
+  ok: boolean
+  error: string | null
+}

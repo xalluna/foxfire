@@ -57,22 +57,35 @@ Pre-1.0, so nothing bumps major yet.
 The PR already carries the version bump and the changelog section, so releasing is just:
 
 ```bash
-npm run tag-release -- --push
+npm run tag-release -- --push                    # the desktop app
+npm run tag-release -- --target server --push    # the server
 ```
 
-That tags the current commit as whatever version `package.json` names — the version is read rather
+Both run from the repo root. The desktop is the default because that is what a
+Foxfire release meant for every release before there was a server, and the common case
+should not be the one you have to spell out. The desktop tags `v0.12.0` and the server
+tags `server-v0.1.0`; the two patterns never collide, so each triggers only its own
+workflow.
+
+That tags the current commit as whatever version the app being released already names —
+`apps/desktop/package.json` for the desktop, `<VersionPrefix>` in
+`apps/server/Directory.Build.props` for the server — the version is read rather
 than typed, since typing it means typing it twice and the workflow rejects a tag that disagrees with
 the file. Leave off `--push` to create the tag and stop, and it prints the command to push it.
 
 It refuses rather than tagging when the tree is dirty, when the tag already exists here or on origin,
-when its `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`. That last
+when that app's `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`. That last
 one is easy to get wrong: a squash merge rewrites the branch commit, so the commit a PR was developed
 on never lands on main, and tagging it gives you a Release pointing at a commit reachable from
 nothing.
 
-There is nothing to do by hand afterwards. The workflow verifies the tag matches `package.json`,
-extracts that section, builds the Windows installer on a Windows runner, and publishes the Release
-with the installer, its `.blockmap` and `latest.yml` attached.
+There is nothing to do by hand afterwards. The desktop workflow verifies the tag matches
+`package.json`, extracts that section, builds the Windows installer on a Windows runner, and
+publishes the Release with the installer, its `.blockmap` and `latest.yml` attached. The server
+workflow does the same shape of thing on Linux: it runs the tests — including the ones that stand a
+real SQL Server up in a container, so a release cannot go out on a schema that does not migrate —
+then builds self-contained `linux-x64` and `win-x64` archives and a container image, pushes the
+image to GHCR, and publishes the Release with both archives attached.
 
 It builds before it publishes, and creates the Release as a draft that only becomes visible once the
 uploaded installer has been read back off the API at the size that was actually built. So a release

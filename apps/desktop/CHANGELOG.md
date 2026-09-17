@@ -32,6 +32,12 @@ Foxfire does until you point it somewhere.
   it serves, and one that will not serve yours says which version to install rather than failing
   with something you cannot act on. A server that would merely prefer a newer Foxfire still works,
   and says so quietly.
+- **A management page, if you administer the server you are signed in to.** Invite people and copy
+  the links, open or close public sign-up, and see who is on the server — with the League accounts
+  each of them has claimed and how many machines they are signed in on. You can make somebody an
+  admin, disable an account without deleting anything, or remove one. The page only appears when
+  the server says you are an admin, and it is not where the Riot API key lives: that and the
+  database are set in the server's own configuration and need a restart.
 
 ### Changed
 
