@@ -1,12 +1,23 @@
 # Foxfire
 
+## Repository layout
+
+This is a monorepo. The Electron desktop app lives in `apps/desktop`; the Foxfire Server will live
+in `apps/server`. The repo root holds only the npm workspace (`package.json` + the single
+`package-lock.json` for the whole tree), this file, the README, and `.github/`.
+
+Each app carries its own version and its own `CHANGELOG.md`, and each releases on its own tag
+prefix: `v*` for the desktop, `server-v*` for the server. Nothing about the two version numbers
+is coupled — they move independently, and the compatibility contract between them is a separate
+`apiVersion` integer that the server publishes and gates on.
+
 ## Patch notes
 
-`CHANGELOG.md` at the repo root is the source of truth for what shipped when. GitHub Releases are
+`apps/desktop/CHANGELOG.md` is the source of truth for what the desktop app shipped when. GitHub Releases are
 generated from it by `.github/workflows/release.yml`, so the two can never disagree.
 
-**Any PR that bumps `version` in `package.json` must add that version's `CHANGELOG.md` section in
-the same commit.** There is no `[Unreleased]` section — the section lands with the bump that names
+**Any PR that bumps `version` in `apps/desktop/package.json` must add that version's
+`apps/desktop/CHANGELOG.md` section in the same commit.** There is no `[Unreleased]` section — the section lands with the bump that names
 it.
 
 ### Format
@@ -54,7 +65,7 @@ than typed, since typing it means typing it twice and the workflow rejects a tag
 the file. Leave off `--push` to create the tag and stop, and it prints the command to push it.
 
 It refuses rather than tagging when the tree is dirty, when the tag already exists here or on origin,
-when `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`. That last
+when its `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`. That last
 one is easy to get wrong: a squash merge rewrites the branch commit, so the commit a PR was developed
 on never lands on main, and tagging it gives you a Release pointing at a commit reachable from
 nothing.
@@ -70,7 +81,7 @@ nothing or an invisible draft, and the next run clears the draft. It works that 
 `v0.9.0`, `v0.10.0` and `v0.10.2` all shipped with no installer on them at all, back when attaching
 it was a step someone had to remember.
 
-`npm run build:win` still builds an installer into `release/`, for trying one out locally; releases
+`npm run build:win` still builds an installer into `apps/desktop/release/`, for trying one out locally; releases
 no longer need it. To exercise the CI build without cutting a release — after a dependency bump, or
 a change to `electron-builder.yml` — run the workflow from the Actions tab. A dispatched run builds
 the installer and hands it back as a workflow artifact, and every step that can write to a release

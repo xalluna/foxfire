@@ -4,12 +4,7 @@ import { isNotRunning, liveClientGet } from '../liveClient/client'
 import { AllGameDataSchema } from '../liveClient/types'
 import { toScoreboard } from '../liveClient/scoreboardMapping'
 import { getAssetManifest } from './ddragonService'
-import { getAccountByRiotId } from '../riot/endpoints/account'
-import { getLeagueEntriesByPuuid } from '../riot/endpoints/league'
-import { PLATFORM_TO_REGIONAL, type PlatformId } from '../riot/regions'
-import type { LeagueEntryDto } from '../riot/types'
-import type { LeagueEntry, QueueType, Scoreboard } from '@shared/types'
-import { TRACKED_QUEUES } from '@shared/queues'
+import type { Scoreboard } from '@shared/types'
 
 /**
  * Reads the scoreboard out of the game running on this machine.
@@ -46,39 +41,3 @@ export async function getScoreboard(accountId: number): Promise<Scoreboard | nul
   return toScoreboard(data, await getAssetManifest(), account)
 }
 
-/** Solo queue first, then any other ladder this app tracks. */
-function soloEntry(entries: LeagueEntryDto[]): LeagueEntry | null {
-  const solo =
-    entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
-    entries.find((e) => TRACKED_QUEUES.includes(e.queueType as QueueType))
-  if (!solo) return null
-
-  return {
-    queueType: solo.queueType as QueueType,
-    tier: solo.tier ?? null,
-    rank: solo.rank ?? null,
-    leaguePoints: solo.leaguePoints ?? null,
-    wins: solo.wins ?? null,
-    losses: solo.losses ?? null,
-    fetchedAt: new Date().toISOString()
-  }
-}
-
-/**
- * Resolves one row's rank, called once per row so the board fills in
- * progressively rather than waiting on ten lookups.
- *
- * Two calls rather than one: the game names players but does not identify them,
- * so the Riot ID has to be turned into a puuid before a ladder can be asked
- * about it. This is the only part of the scoreboard that touches the rate
- * limited API or needs a key at all — everything else still draws without one.
- */
-export async function getRankByRiotId(
-  platform: string,
-  gameName: string,
-  tagLine: string
-): Promise<LeagueEntry | null> {
-  const region = PLATFORM_TO_REGIONAL[platform as PlatformId]
-  const account = await getAccountByRiotId(region, gameName, tagLine)
-  return soloEntry(await getLeagueEntriesByPuuid(platform as PlatformId, account.puuid))
-}

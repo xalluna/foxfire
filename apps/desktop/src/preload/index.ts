@@ -52,9 +52,7 @@ const api: Api = {
     get: () => ipcRenderer.invoke(CH.assets.get)
   },
   liveClient: {
-    scoreboard: (accountId) => ipcRenderer.invoke(CH.liveClient.scoreboard, accountId),
-    playerRank: (platform, gameName, tagLine) =>
-      ipcRenderer.invoke(CH.liveClient.playerRank, platform, gameName, tagLine)
+    scoreboard: (accountId) => ipcRenderer.invoke(CH.liveClient.scoreboard, accountId)
   },
   champions: {
     stats: (accountId, queueId, range) =>

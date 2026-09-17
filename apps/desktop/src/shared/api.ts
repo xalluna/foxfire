@@ -111,15 +111,14 @@ export interface Api {
   assets: {
     get: () => Promise<AssetManifest>
   }
+  /**
+   * The in-game scoreboard, read from the game running on this machine over the
+   * Live Client Data API on 127.0.0.1:2999. Costs no Riot call and needs no key,
+   * so it works identically in local-only and server mode.
+   */
   liveClient: {
     /** Null whenever no game is running on this machine, which is not an error. */
     scoreboard: (accountId: number) => Promise<Scoreboard | null>
-    /** The one call on this screen that reaches Riot, hence the one that needs a key. */
-    playerRank: (
-      platform: string,
-      gameName: string,
-      tagLine: string
-    ) => Promise<LeagueEntry | null>
   }
   champions: {
     /** Local-only, so the Champions screen renders whatever the API key is doing. */

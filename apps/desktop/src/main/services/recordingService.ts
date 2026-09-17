@@ -1,7 +1,8 @@
-import { BrowserWindow, shell } from 'electron'
+import { shell } from 'electron'
 import { rmSync } from 'node:fs'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
+import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import {
@@ -29,9 +30,7 @@ import type { Recording, RecordingDetail, RecordingDiskUsage } from '@shared/typ
 const log = createLogger('recordings')
 
 export function broadcastRecordingsChanged(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.recordings.changed)
-  }
+  broadcast(CH.recordings.changed)
 }
 
 export function listRecordings(accountId: number): Recording[] {

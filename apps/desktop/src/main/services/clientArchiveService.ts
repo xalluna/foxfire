@@ -1,9 +1,9 @@
-import { BrowserWindow } from 'electron'
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs'
 import { readdir, stat, statfs } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
+import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
 import { getSetting } from '../db/repositories/appSettings.repo'
 import {
@@ -217,9 +217,7 @@ export function cancelArchiveCopy(): void {
 }
 
 function broadcastCopyProgress(progress: ArchiveCopyProgress): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.archives.copyProgress, progress)
-  }
+  broadcast(CH.archives.copyProgress, progress)
 }
 
 interface FileEntry {

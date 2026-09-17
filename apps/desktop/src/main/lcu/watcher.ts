@@ -1,8 +1,8 @@
-import { BrowserWindow } from 'electron'
 import { getDb } from '../db'
 import { getAccountByRiotId } from '../db/repositories/accounts.repo'
 import { getSetting } from '../db/repositories/appSettings.repo'
 import { CH } from '../ipc/channels'
+import { broadcast } from '../ipc/broadcast'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
@@ -119,9 +119,7 @@ function setStatus(next: LcuStatus): void {
   // After the unchanged guard above: the badge only needs touching when the
   // status actually moved.
   setAppIconLcu(next)
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.lcu.status, next)
-  }
+  broadcast(CH.lcu.status, next)
 }
 
 /**
@@ -289,9 +287,7 @@ async function tick(): Promise<void> {
         log.debug('Backstop rank refresh failed after LP change', { error: String(err) })
       })
 
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send(CH.lcu.rankChanged, account.id)
-      }
+      broadcast(CH.lcu.rankChanged, account.id)
     }
 
     recordLcuPoll(Date.now() - pollStartedAt)

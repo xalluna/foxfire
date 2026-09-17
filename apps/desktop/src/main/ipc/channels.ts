@@ -28,12 +28,13 @@ export const CH = {
     getState: 'sync:getState',
     progress: 'sync:progress'
   },
-  // The scoreboard is read from the game running on this machine and costs no
-  // Riot call at all; playerRank is the one thing on that screen that does, so
-  // it stays a separate channel rather than making the board fail with the key.
+  // Read from the game running on this machine, so it costs no Riot call and
+  // needs no key. It used to have a playerRank sibling that resolved each row's
+  // ladder standing at two Riot calls a player — twenty per board. That is a lot
+  // of a shared server's budget for a number nobody could act on, and without
+  // op.gg-scale history behind it the ranks were not worth what they cost.
   liveClient: {
-    scoreboard: 'liveClient:scoreboard',
-    playerRank: 'liveClient:playerRank'
+    scoreboard: 'liveClient:scoreboard'
   },
   // Separate from mastery:get on purpose. Champion stats are pure SQLite, so
   // they must not sit behind a channel that can reach out to Riot and fail.

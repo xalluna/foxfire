@@ -1,6 +1,6 @@
-import { BrowserWindow } from 'electron'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
+import { broadcast } from '../ipc/broadcast'
 import { getHomeAccount } from '../db/repositories/accounts.repo'
 import { getSetting, setSetting } from '../db/repositories/appSettings.repo'
 import { APPLICATION_KEY_LIMITS, PERSONAL_KEY_LIMITS, RiotApiError } from '../riot/rateLimiter'
@@ -27,9 +27,7 @@ export function initSettings(): void {
   // Personal keys expire every 24h; tell the renderer so it can prompt for a
   // fresh one instead of leaving the user staring at failed lookups.
   rateLimiter.on('key-invalid', () => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(CH.settings.keyInvalid)
-    }
+    broadcast(CH.settings.keyInvalid)
   })
 }
 

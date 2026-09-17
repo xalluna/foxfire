@@ -9,7 +9,6 @@ import type {
   CaptureStatus,
   ChampionStats,
   LcuStatus,
-  LeagueEntry,
   MatchDetail,
   MatchSummary,
   QueueType,
@@ -345,8 +344,7 @@ export const mockApi: Api = {
     // Answered fast and without the shell hold, because the real one polls: a
     // held promise under ?scenario=loading would stall every tick behind it.
     scoreboard: (): Promise<Scoreboard | null> =>
-      scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false),
-    playerRank: (): Promise<LeagueEntry | null> => delay(LEAGUE_ENTRIES[1][0], 500)
+      scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false)
   },
 
   champions: {

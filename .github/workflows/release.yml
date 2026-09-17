@@ -48,6 +48,11 @@ jobs:
         # Windows runners default to PowerShell. Every step below is written in
         # sh, including the awk that reads the changelog.
         shell: bash
+        # The desktop app lives in apps/desktop since the monorepo split, and
+        # every path below — package.json, CHANGELOG.md, release/ — is relative
+        # to it. Only the install step steps back out to the repo root, because
+        # that is where the workspace lockfile lives.
+        working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v5
 
@@ -123,8 +128,15 @@ jobs:
           # app is developed against.
           node-version: '24'
           cache: npm
+          # The lockfile is at the repo root, not in the workspace — npm
+          # workspaces keep one lockfile for the whole tree.
+          cache-dependency-path: package-lock.json
 
+      # At the repo root: npm workspaces install the whole tree from the one
+      # lockfile there and hoist into the root node_modules, which is what every
+      # later step resolves through.
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: npm ci
 
       # `--publish never` is not decoration. electron-builder will publish to
@@ -178,10 +190,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Foxfire-installer
+          # upload-artifact is not a `run:` step, so the job's
+          # working-directory does not apply and these are workspace-relative.
           path: |
-            release/*-setup.exe
-            release/*-setup.exe.blockmap
-            release/latest.yml
+            apps/desktop/release/*-setup.exe
+            apps/desktop/release/*-setup.exe.blockmap
+            apps/desktop/release/latest.yml
           # The installer is already compressed; zipping it again buys nothing
           # and costs minutes.
           compression-level: 0

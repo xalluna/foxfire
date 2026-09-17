@@ -5,7 +5,6 @@ import { useAssets } from '../hooks/useAssets'
 import { championIconUrl, championName, runeIconUrl, spellIconUrl } from '../lib/assets'
 import { formatClock } from '../lib/matchStats'
 import { positionIcon, positionLabel } from '../lib/positions'
-import { rankRecord, tierColor, tierCrest, tierLabel } from '../lib/rank'
 import { Asset } from '../components/Asset'
 import { EmptyState } from '../components/EmptyState'
 import { ItemStrip } from '../components/ItemStrip'
@@ -17,61 +16,13 @@ import { CaptureBanner } from '../components/CaptureIndicator'
 const POLL_MS = 1000
 
 /**
- * Each row resolves its own rank so the board paints immediately instead of
- * waiting on ten lookups.
- *
- * Two calls deep, because the game names players without identifying them and a
- * ladder can only be asked about a puuid. Cached for five minutes and keyed on
- * the Riot ID, so the one-second poll never re-issues it — rank does not move
- * mid-game anyway.
- */
-function RankBadge({
-  platform,
-  gameName,
-  tagLine
-}: {
-  platform: string
-  gameName: string
-  tagLine: string
-}): JSX.Element {
-  const { data, isLoading } = useQuery({
-    queryKey: ['playerRank', platform, gameName, tagLine],
-    queryFn: () => window.api.liveClient.playerRank(platform, gameName, tagLine),
-    staleTime: 5 * 60 * 1000,
-    retry: false
-  })
-
-  if (isLoading) return <Skeleton className="h-7 w-[72px]" />
-
-  if (!data?.tier) {
-    return <span className="w-[72px] text-right text-2xs text-text-mute">Unranked</span>
-  }
-
-  const { winRate } = rankRecord(data)
-
-  return (
-    <div className="flex w-[72px] shrink-0 items-center justify-end gap-1">
-      <Asset src={tierCrest(data.tier)} className="h-6 w-6" rounded="rounded-none" />
-      <div className="text-right">
-        <p className="text-2xs leading-tight" style={{ color: tierColor(data.tier) }}>
-          {tierLabel(data.tier, data.rank)}
-        </p>
-        {winRate !== null && (
-          <p className="text-[10px] tabular-nums text-text-mute">{winRate}% WR</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/**
  * One player, in the order the game's own scoreboard reads: who they are, then
  * what they have, then what they have done with it.
  *
  * A dead player dims and counts down over their own portrait, which is the only
  * state here that changes what a row means rather than just what it says.
  */
-function PlayerRow({ p, platform }: { p: ScoreboardPlayer; platform: string }): JSX.Element {
+function PlayerRow({ p }: { p: ScoreboardPlayer }): JSX.Element {
   const assets = useAssets()
   const champion =
     assets && p.championId !== null ? championName(assets, p.championId) : (p.championName ?? '')
@@ -176,11 +127,6 @@ function PlayerRow({ p, platform }: { p: ScoreboardPlayer; platform: string }): 
         />
       )}
 
-      {p.gameName !== null && p.tagLine !== null && !p.isBot ? (
-        <RankBadge platform={platform} gameName={p.gameName} tagLine={p.tagLine} />
-      ) : (
-        <span className="w-[72px] shrink-0" />
-      )}
     </div>
   )
 }
@@ -188,13 +134,11 @@ function PlayerRow({ p, platform }: { p: ScoreboardPlayer; platform: string }): 
 function Team({
   board,
   teamId,
-  label,
-  platform
+  label
 }: {
   board: Scoreboard
   teamId: number
   label: string
-  platform: string
 }): JSX.Element {
   const players = board.players.filter((p) => p.teamId === teamId)
   const kills = players.reduce((total, p) => total + p.kills, 0)
@@ -215,7 +159,7 @@ function Team({
       </div>
       <div className="space-y-0.5">
         {players.map((p) => (
-          <PlayerRow key={p.slot} p={p} platform={platform} />
+          <PlayerRow key={p.slot} p={p} />
         ))}
       </div>
     </section>
@@ -227,7 +171,9 @@ function Team({
  * than from Riot.
  *
  * That is the whole reason this screen can show levels, items and a running
- * score at all — and the whole reason it shows nothing at any other time. The
+ * score at all, and the whole reason it costs no Riot call and needs no API key:
+ * the game is the source. It is also the whole reason it shows nothing at any
+ * other time. The
  * Live Client Data API only answers while a match is actually in progress here,
  * so there is nothing to see during champion select, or when the account being
  * viewed is playing somewhere else.
@@ -320,8 +266,8 @@ export function LiveGame({ account }: { account: Account }): JSX.Element {
 
       {data && (
         <div className="grid grid-cols-2 gap-3">
-          <Team board={data} teamId={100} label="Blue team" platform={account.platform} />
-          <Team board={data} teamId={200} label="Red team" platform={account.platform} />
+          <Team board={data} teamId={100} label="Blue team" />
+          <Team board={data} teamId={200} label="Red team" />
         </div>
       )}
     </div>

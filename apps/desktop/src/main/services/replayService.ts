@@ -1,9 +1,10 @@
-import { BrowserWindow, shell } from 'electron'
+import { shell } from 'electron'
 import { copyFileSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
+import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
 import { HEAD_READ_BYTES, TAIL_READ_BYTES, parseRoflHeader, type RoflHeader } from '../rofl/header'
 import { copyFileName, gameIdFromMatchId, matchIdFromRoflName } from '../rofl/filename'
@@ -41,15 +42,11 @@ import type { Replay, ReplayDiskUsage, ReplayImportProgress } from '@shared/type
 const log = createLogger('rofl')
 
 export function broadcastReplaysChanged(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.replays.changed)
-  }
+  broadcast(CH.replays.changed)
 }
 
 function broadcastImportProgress(progress: ReplayImportProgress): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.replays.importProgress, progress)
-  }
+  broadcast(CH.replays.importProgress, progress)
 }
 
 /* -------------------------------------------------------------------------- */

@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron'
 import type { DatabaseSync } from 'node:sqlite'
 import { getDb } from '../db'
 import { getAccountById } from '../db/repositories/accounts.repo'
@@ -14,6 +13,7 @@ import { getMatchById, getMatchIdsByPuuid, MATCH_IDS_PAGE_SIZE } from '../riot/e
 import { RiotApiError } from '../riot/rateLimiter'
 import type { RegionalRoute } from '../riot/regions'
 import { CH } from '../ipc/channels'
+import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
 import { withSpan } from '../telemetry/spans'
 import { BACKFILL_TARGET, refreshRank } from './accountService'
@@ -138,9 +138,7 @@ export function isSyncing(accountId: number): boolean {
  * events.
  */
 function emit(event: SyncProgressEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.sync.progress, event)
-  }
+  broadcast(CH.sync.progress, event)
 }
 
 /** Collects up to `target` match IDs, paging at Riot's 100-per-request maximum. */

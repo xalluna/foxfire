@@ -1,25 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, dialog, ipcMain } from 'electron'
 import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
-import {
-  addAccount,
-  getAccounts,
-  getDashboard,
-  getHome,
-  removeAccount,
-  setHome
-} from '../services/accountService'
-import { readSyncState, startSync } from '../services/syncService'
 import { getAssetManifest } from '../services/ddragonService'
-import { getRankByRiotId, getScoreboard } from '../services/liveClientService'
-import { getMasteryData } from '../services/masteryService'
-import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
-import { rangeBounds } from '@shared/seasons'
-import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
+import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
-import { searchSummoner } from '../services/searchService'
 import {
   addReplayByPath,
   getReplayUsage,
@@ -46,8 +32,8 @@ import { openArchivesWindow } from '../archivesWindow'
 import { schedulePostGameSync } from '../services/postGameSync'
 import { replayAttribution } from '../services/rankAttribution'
 import { getDb } from '../db'
-import { getAccountById, getHomeAccount, listAccounts } from '../db/repositories/accounts.repo'
-import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
+import { serverBacked } from '../api'
+import { getHomeAccount, listAccounts } from '../db/repositories/accounts.repo'
 import { getTelemetryState, setTelemetryEnabled } from '../telemetry'
 import {
   clearTelemetry,
@@ -81,11 +67,6 @@ import { validateObs } from '../obs/validate'
 import { managedPreviewSource } from '../obs/provision'
 import { reconnectObs } from '../obs/client'
 import { getMainWindow } from '../window'
-import {
-  clearManualRank,
-  getEditableMatches,
-  saveManualRanks
-} from '../services/manualRankService'
 import type {
   BackgroundSettings,
   CaptureSettings,
@@ -101,20 +82,19 @@ import type {
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 
 /**
- * Tells every window that hand-entered LP changed.
+ * Wires every channel to something that answers it.
  *
- * Broadcast rather than returned, because the window that needs to react is not
- * the one that made the call: the editor is a separate renderer process with
- * its own query cache, and the match list and rank graph it just changed live
- * in the main window. Lives here rather than in manualRankService, which stays
- * free of Electron so it can be tested against an in-memory database.
+ * The bodies used to live here. The ones whose answers come from the shared
+ * store now sit behind serverBacked(), which is the single place that decides
+ * whether that store is this machine's SQLite or a Foxfire Server — see
+ * src/main/api/types.ts for where that line falls and why.
+ *
+ * What is left inline is what only this process can do: native dialogs, opening
+ * windows, the League client, OBS, and the local disk.
+ *
+ * serverBacked() is called per handler rather than captured once, because these
+ * register at startup and the answer can change while the app is running.
  */
-function broadcastRankEdited(accountId: number): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(CH.rank.edited, accountId)
-  }
-}
-
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.app.getVersion, () => app.getVersion())
 
@@ -128,113 +108,76 @@ export function registerIpcHandlers(): void {
     return getSettings()
   })
 
-  ipcMain.handle(CH.accounts.list, () => getAccounts())
-  ipcMain.handle(CH.accounts.getHome, () => getHome())
-  ipcMain.handle(CH.accounts.add, async (_e, input: RiotIdInput) => {
-    const account = await addAccount(input)
-    // Kick off the long match backfill without blocking the response, so the
-    // UI can navigate to the new account and show progress immediately.
-    startSync(account.id)
-    return account
-  })
-  ipcMain.handle(CH.accounts.remove, (_e, accountId: number) => {
-    removeAccount(accountId)
-    return getAccounts()
-  })
-  ipcMain.handle(CH.accounts.setHome, (_e, accountId: number) => {
-    setHome(accountId)
-    return getAccounts()
-  })
+  ipcMain.handle(CH.accounts.list, () => serverBacked().accounts.list())
+  ipcMain.handle(CH.accounts.getHome, () => serverBacked().accounts.getHome())
+  ipcMain.handle(CH.accounts.add, (_e, input: RiotIdInput) => serverBacked().accounts.add(input))
+  ipcMain.handle(CH.accounts.remove, (_e, accountId: number) =>
+    serverBacked().accounts.remove(accountId)
+  )
+  ipcMain.handle(CH.accounts.setHome, (_e, accountId: number) =>
+    serverBacked().accounts.setHome(accountId)
+  )
 
-  ipcMain.handle(CH.dashboard.get, (_e, accountId: number) => getDashboard(accountId))
+  ipcMain.handle(CH.dashboard.get, (_e, accountId: number) =>
+    serverBacked().dashboard.get(accountId)
+  )
   ipcMain.handle(
     CH.dashboard.matchList,
-    (_e, accountId: number, limit: number, offset: number, queueId: number | null) => {
-      const account = getAccountById(getDb(), accountId)
-      if (!account) return []
-      return getMatchSummaries(getDb(), account.puuid, limit, offset, queueId)
-    }
+    (_e, accountId: number, limit: number, offset: number, queueId: number | null) =>
+      serverBacked().dashboard.matchList(accountId, limit, offset, queueId)
   )
   ipcMain.handle(CH.dashboard.matchDetail, (_e, matchId: string) =>
-    getMatchDetail(getDb(), matchId)
+    serverBacked().dashboard.matchDetail(matchId)
   )
 
-  ipcMain.handle(CH.sync.start, (_e, accountId: number) => {
-    startSync(accountId)
-  })
-  ipcMain.handle(CH.sync.getState, (_e, accountId: number) => readSyncState(accountId))
+  ipcMain.handle(CH.sync.start, (_e, accountId: number) => serverBacked().sync.start(accountId))
+  ipcMain.handle(CH.sync.getState, (_e, accountId: number) =>
+    serverBacked().sync.getState(accountId)
+  )
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
 
   ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: number) => getScoreboard(accountId))
-  ipcMain.handle(
-    CH.liveClient.playerRank,
-    (_e, platform: string, gameName: string, tagLine: string) =>
-      getRankByRiotId(platform, gameName, tagLine)
-  )
 
   ipcMain.handle(
     CH.champions.stats,
-    (_e, accountId: number, queueId: number | null, range: RankRange) => {
-      const account = getAccountById(getDb(), accountId)
-      if (!account) return []
-      const { sinceMs, untilMs } = rangeBounds(range, listSeasons(getDb()))
-      return getChampionStats(getDb(), account.puuid, queueId, sinceMs, untilMs)
-    }
+    (_e, accountId: number, queueId: number | null, range: RankRange) =>
+      serverBacked().champions.stats(accountId, queueId, range)
   )
 
   ipcMain.handle(
     CH.mastery.get,
     (_e, accountId: number, refresh: boolean, queueId: number | null) =>
-      getMasteryData(accountId, refresh, queueId)
+      serverBacked().mastery.get(accountId, refresh, queueId)
   )
 
   ipcMain.handle(
     CH.rank.history,
     (_e, accountId: number, queueType: QueueType, range: RankRange) =>
-      getRankHistory(accountId, queueType, range)
+      serverBacked().rank.history(accountId, queueType, range)
   )
 
-  ipcMain.handle(CH.rank.periods, (_e, accountId: number) => getRankPeriods(accountId))
+  ipcMain.handle(CH.rank.periods, (_e, accountId: number) =>
+    serverBacked().rank.periods(accountId)
+  )
 
-  ipcMain.handle(CH.seasons.list, () => listSeasons(getDb()))
+  ipcMain.handle(CH.seasons.list, () => serverBacked().seasons.list())
   ipcMain.handle(CH.seasons.save, (_e, seasons: SeasonInput[]) =>
-    saveSeasons(getDb(), seasons)
+    serverBacked().seasons.save(seasons)
   )
 
-  ipcMain.handle(
-    CH.rank.editable,
-    (_e, accountId: number, queueType: QueueType) => {
-      const account = getAccountById(getDb(), accountId)
-      if (!account) return []
-      return getEditableMatches(getDb(), accountId, account.puuid, queueType)
-    }
+  ipcMain.handle(CH.rank.editable, (_e, accountId: number, queueType: QueueType) =>
+    serverBacked().rank.editable(accountId, queueType)
   )
-
-  // Both writers return the fresh list rather than void: an edit can resolve a
-  // neighbouring game on its own, so what the editor should show afterwards is
-  // not something it can work out from what it sent.
   ipcMain.handle(
     CH.rank.saveManual,
-    (_e, accountId: number, queueType: QueueType, edits: ManualRankEdit[]) => {
-      const db = getDb()
-      const account = getAccountById(db, accountId)
-      if (!account) return []
-      saveManualRanks(db, accountId, account.puuid, queueType, edits)
-      broadcastRankEdited(accountId)
-      return getEditableMatches(db, accountId, account.puuid, queueType)
-    }
+    (_e, accountId: number, queueType: QueueType, edits: ManualRankEdit[]) =>
+      serverBacked().rank.saveManual(accountId, queueType, edits)
   )
-
   ipcMain.handle(
     CH.rank.clearManual,
-    (_e, accountId: number, queueType: QueueType, matchId: string) => {
-      const db = getDb()
-      const account = getAccountById(db, accountId)
-      if (!account) return []
-      if (clearManualRank(db, accountId, account.puuid, matchId)) broadcastRankEdited(accountId)
-      return getEditableMatches(db, accountId, account.puuid, queueType)
-    }
+    (_e, accountId: number, queueType: QueueType, matchId: string) =>
+      serverBacked().rank.clearManual(accountId, queueType, matchId)
   )
 
   ipcMain.handle(
@@ -386,7 +329,9 @@ export function registerIpcHandlers(): void {
     main.webContents.send(CH.recordings.showMatch, accountId, matchId)
   })
 
-  ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) => searchSummoner(input))
+  ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) =>
+    serverBacked().search.summoner(input)
+  )
 
   ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())
   ipcMain.handle(CH.telemetry.setEnabled, (_e, enabled: boolean) => {
