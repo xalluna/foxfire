@@ -32,6 +32,10 @@ export const CH = {
     revokeInvite: 'serverAdmin:revokeInvite',
     getSettings: 'serverAdmin:getSettings',
     setSettings: 'serverAdmin:setSettings',
+    storage: 'serverAdmin:storage',
+    storedReplays: 'serverAdmin:storedReplays',
+    removeReplay: 'serverAdmin:removeReplay',
+    forceUnlink: 'serverAdmin:forceUnlink',
     chooseDatabase: 'serverAdmin:chooseDatabase',
     importDatabase: 'serverAdmin:importDatabase',
     importProgress: 'serverAdmin:importProgress'

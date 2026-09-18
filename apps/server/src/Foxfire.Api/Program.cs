@@ -209,6 +209,7 @@ app.MapAuthEndpoints();
 app.MapInviteEndpoints();
 app.MapAdminSettingsEndpoints();
 app.MapAdminUserEndpoints();
+app.MapAdminStorageEndpoints();
 app.MapRiotLinkEndpoints();
 app.MapSyncEndpoints();
 app.MapDashboardEndpoints();

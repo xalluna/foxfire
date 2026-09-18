@@ -3,10 +3,12 @@ import { ServerError } from '../server/client'
 import { createLogger } from '../telemetry/logger'
 import type {
   AdminActionResult,
+  AdminReplay,
   AdminInvite,
   AdminUser,
   AdminUserPatch,
-  ServerAdminSettings
+  ServerAdminSettings,
+  ServerStorageUsage
 } from '@shared/types'
 
 const log = createLogger('server-admin')
@@ -29,6 +31,36 @@ const log = createLogger('server-admin')
  * and it decides it on every request; a check here would only be a second
  * opinion that could disagree after somebody was demoted mid-session.
  */
+
+export async function getStorageUsage(): Promise<ServerStorageUsage> {
+  return authedRequest<ServerStorageUsage>('/admin/storage/')
+}
+
+export async function listStoredReplays(): Promise<AdminReplay[]> {
+  return authedRequest<AdminReplay[]>('/admin/storage/replays')
+}
+
+/**
+ * Removes a shared replay.
+ *
+ * A write, so it answers with a result rather than throwing: the reason it
+ * failed is usually one the person can act on, and a community's library is not
+ * a thing to delete from silently.
+ */
+export async function removeStoredReplay(matchId: string): Promise<AdminActionResult> {
+  return attempt(() =>
+    authedRequest<void>(`/replays/${encodeURIComponent(matchId)}`, { method: 'DELETE' })
+  )
+}
+
+/** Takes a League account away from whoever claimed it. The games stay. */
+export async function forceUnlink(riotAccountId: string): Promise<AdminActionResult> {
+  return attempt(() =>
+    authedRequest<void>(`/admin/riot-accounts/${encodeURIComponent(riotAccountId)}/owner`, {
+      method: 'DELETE'
+    })
+  )
+}
 
 export async function listUsers(): Promise<AdminUser[]> {
   return authedRequest<AdminUser[]>('/admin/users/')

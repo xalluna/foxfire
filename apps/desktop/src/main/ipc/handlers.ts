@@ -15,6 +15,10 @@ import {
 import {
   createInvite,
   deleteUser,
+  forceUnlink,
+  getStorageUsage,
+  listStoredReplays,
+  removeStoredReplay,
   getSettings as getServerAdminSettings,
   listInvites,
   listUsers,
@@ -148,6 +152,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
+  ipcMain.handle(CH.serverAdmin.storage, () => getStorageUsage())
+  ipcMain.handle(CH.serverAdmin.storedReplays, () => listStoredReplays())
+  ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
+  ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
   ipcMain.handle(CH.serverAdmin.chooseDatabase, () => chooseImportDatabase())
   ipcMain.handle(CH.serverAdmin.importDatabase, (_e, filePath: string) => importDatabase(filePath))
   ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>

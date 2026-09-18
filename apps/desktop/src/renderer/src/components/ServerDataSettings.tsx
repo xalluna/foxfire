@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import type { ImportProgress, ImportResult } from '@shared/types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { AdminReplay, ImportProgress, ImportResult } from '@shared/types'
 import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import { SettingsBlock, StatusRow } from './settings/SettingsRow'
-import { primaryButtonClass } from './settings/controls'
+import { SettingsBlock, SettingsRow, StatusRow } from './settings/SettingsRow'
+import { ghostButtonClass, primaryButtonClass } from './settings/controls'
+import { EmptyState } from './EmptyState'
 import * as Icon from './icons'
 
 /**
@@ -95,8 +96,189 @@ export function ServerDataSettings(): JSX.Element {
         {progress && <ProgressRow progress={progress} />}
         {result && <ResultRows result={result} />}
       </SettingsCard>
+
+      <StorageCard />
+      <ReplayLibraryCard />
     </SettingsPage>
   )
+}
+
+/**
+ * What the server is holding, and where.
+ *
+ * The two halves are not symmetrical and the copy says so. A deduplicated match
+ * history takes a long time to trouble SQL Server Express's 10 GB, because a
+ * game ten people played is one row; replays are tens of megabytes each and are
+ * what will actually fill a volume.
+ */
+function StorageCard(): JSX.Element {
+  const usage = useQuery({
+    queryKey: ['adminStorage'],
+    queryFn: () => window.api.serverAdmin.storage()
+  })
+
+  if (usage.data === undefined) return <></>
+
+  const data = usage.data
+
+  return (
+    <SettingsCard
+      title="What this server is holding"
+      description={
+        'Matches are stored once and shared by everybody who played them, so the database grows '
+        + 'with the community rather than with each person in it. Replays do not — every one is its '
+        + 'own file.'
+      }
+    >
+      <SettingsRow
+        label="Replays"
+        description="In the blob store, as the store counts them."
+        control={
+          <span className="text-sm tabular-nums text-text">
+            {data.replaysConfigured
+              ? `${data.replayCount} · ${gigabytes(data.replayBytes)}`
+              : 'Not set up'}
+          </span>
+        }
+      />
+
+      {data.replaysConfigured && data.replayRecords !== data.replayCount && (
+        // The store is the one that is right about disk. A disagreement means a
+        // delete failed or an upload was abandoned, and saying so beats quietly
+        // showing whichever number was asked for first.
+        <StatusRow tone="warn">
+          The server has {data.replayRecords} replay {data.replayRecords === 1 ? 'record' : 'records'}{' '}
+          but the store holds {data.replayCount}. Something was deleted from one and not the other.
+        </StatusRow>
+      )}
+
+      <SettingsRow
+        label="Matches"
+        description="Each one shared by everybody in it."
+        control={
+          <span className="text-sm tabular-nums text-text">
+            {data.matches.toLocaleString()} · {data.matchParticipants.toLocaleString()} player rows
+          </span>
+        }
+      />
+
+      <SettingsRow
+        label="Rank readings"
+        description="What every LP figure is derived from."
+        control={
+          <span className="text-sm tabular-nums text-text">{data.rankReadings.toLocaleString()}</span>
+        }
+      />
+
+      <SettingsRow
+        label="League accounts"
+        description="Unclaimed ones are usually imported, waiting for their owner to link them."
+        control={
+          <span className="text-sm tabular-nums text-text">
+            {data.riotAccounts} · {data.unclaimedAccounts} unclaimed
+          </span>
+        }
+      />
+    </SettingsCard>
+  )
+}
+
+/**
+ * The library, biggest first, with a way to remove one.
+ *
+ * Biggest rather than newest because the reason to open this list is that space
+ * is needed, and nobody hunting for space scrolls past the first screen. Removal
+ * is per replay and there is no "delete everything": the failure mode of a full
+ * store is a refused upload, which is recoverable, and one click between a
+ * community and its library is not.
+ */
+function ReplayLibraryCard(): JSX.Element {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const replays = useQuery({
+    queryKey: ['adminReplays'],
+    queryFn: () => window.api.serverAdmin.storedReplays()
+  })
+
+  const remove = useMutation({
+    mutationFn: (matchId: string) => window.api.serverAdmin.removeReplay(matchId),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setError(null)
+        void queryClient.invalidateQueries({ queryKey: ['adminReplays'] })
+        void queryClient.invalidateQueries({ queryKey: ['adminStorage'] })
+      } else {
+        setError(result.error)
+      }
+    }
+  })
+
+  return (
+    <SettingsCard
+      title="Shared replays"
+      description="The largest first, since that is where the space is. Anybody who played a game can upload its replay again afterwards."
+    >
+      {error !== null && <StatusRow tone="error">{error}</StatusRow>}
+
+      {replays.data !== undefined && replays.data.length === 0 && (
+        <EmptyState
+          icon={<Icon.Replay />}
+          title="Nothing uploaded yet"
+          description="Replays appear here as members play games and Foxfire picks the files up."
+        />
+      )}
+
+      {replays.data?.map((replay) => (
+        <ReplayRow
+          key={replay.matchId}
+          replay={replay}
+          onRemove={() => remove.mutate(replay.matchId)}
+          removing={remove.isPending && remove.variables === replay.matchId}
+        />
+      ))}
+    </SettingsCard>
+  )
+}
+
+function ReplayRow({
+  replay,
+  onRemove,
+  removing
+}: {
+  replay: AdminReplay
+  onRemove: () => void
+  removing: boolean
+}): JSX.Element {
+  return (
+    <SettingsRow
+      label={replay.matchId}
+      description={[
+        replay.patch === null ? 'Patch unknown' : `Patch ${replay.patch}`,
+        replay.uploadedBy === null ? 'uploader has left' : `uploaded by ${replay.uploadedBy}`
+      ].join(' · ')}
+      control={
+        <div className="flex items-center gap-3">
+          <span className="text-sm tabular-nums text-text-dim">{megabytes(replay.fileBytes)}</span>
+          <button type="button" className={ghostButtonClass} onClick={onRemove} disabled={removing}>
+            <Icon.Trash width={13} height={13} />
+            {removing ? 'Removing…' : 'Remove'}
+          </button>
+        </div>
+      }
+    />
+  )
+}
+
+/** Gigabytes to one place, which is the unit a volume is thought about in. */
+function gigabytes(bytes: number): string {
+  if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function megabytes(bytes: number | null): string {
+  if (bytes === null) return '—'
+  return `${Math.round(bytes / (1024 * 1024))} MB`
 }
 
 /** Where the run has got to, named for what it is actually doing. */

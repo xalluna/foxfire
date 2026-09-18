@@ -4,7 +4,9 @@ import type {
   AdminActionResult,
   AdminInvite,
   AdminUser,
+  AdminReplay,
   AdminUserPatch,
+  ServerStorageUsage,
   ImportProgress,
   ImportResult,
   AdHocSummonerResult,
@@ -285,6 +287,35 @@ let serverState: ServerState =
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
 
+/**
+ * The shared replay library, biggest first — which is the order the panel
+ * shows them in, because the reason to open that list is that something needs
+ * to go.
+ */
+const MOCK_STORED_REPLAYS: AdminReplay[] = [
+  {
+    matchId: 'NA1_5312345678',
+    patch: '15.16',
+    fileBytes: 34_200_000,
+    uploadedBy: 'Alluna',
+    uploadedAt: '2026-09-16T21:04:00.000Z'
+  },
+  {
+    matchId: 'NA1_5312301111',
+    patch: '15.14',
+    fileBytes: 29_800_000,
+    uploadedBy: 'Sova',
+    uploadedAt: '2026-08-30T19:41:00.000Z'
+  },
+  {
+    matchId: 'NA1_5311900042',
+    patch: null,
+    fileBytes: 21_500_000,
+    uploadedBy: null,
+    uploadedAt: '2026-07-02T23:12:00.000Z'
+  }
+]
+
 function setServerState(next: ServerState): ServerState {
   serverState = next
   for (const listener of serverListeners) listener(next)
@@ -512,6 +543,35 @@ export const mockApi: Api = {
   },
   serverAdmin: {
     users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
+
+    // Numbers a host would actually be looking at: a match history that is
+    // nowhere near troubling a 10 GB database, beside replays that are the
+    // thing which will fill a volume.
+    storage: (): Promise<ServerStorageUsage> =>
+      delay(
+        {
+          replaysConfigured: true,
+          replayCount: 46,
+          replayBytes: 1_412_000_000,
+          replayRecords: 46,
+          matches: 4_812,
+          matchParticipants: 48_120,
+          riotAccounts: 7,
+          unclaimedAccounts: 2,
+          rankReadings: 1_904
+        },
+        220
+      ),
+
+    storedReplays: (): Promise<AdminReplay[]> => delay(MOCK_STORED_REPLAYS, 240),
+
+    removeReplay: (matchId: string): Promise<AdminActionResult> => {
+      const index = MOCK_STORED_REPLAYS.findIndex((r) => r.matchId === matchId)
+      if (index >= 0) MOCK_STORED_REPLAYS.splice(index, 1)
+      return delay({ ok: true, error: null }, 200, false)
+    },
+
+    forceUnlink: (): Promise<AdminActionResult> => delay({ ok: true, error: null }, 200, false),
 
     // The harness has no file system and no server, so the import is the one
     // shape the panel has to draw for real: a run that reports its way through

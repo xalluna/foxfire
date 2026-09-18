@@ -52,6 +52,11 @@ match history for you.
   two people who were in the same game do not both run it.
 - **Live progress.** A backfill of a few hundred games takes minutes on a shared
   key, so the desktop is told how far through it is as it goes.
+- **A storage summary for whoever is paying for the disk.** Replay count and bytes as the blob
+  store itself reports them, beside the database's own counts — and a warning when the two disagree
+  about how many replays exist, which means a delete failed on one side. There is no "delete
+  everything": a full store refuses an upload, which is recoverable, and one click between a
+  community and its history is not.
 - **Importing an existing Foxfire database.** An admin points the desktop at an old `stats.db`
   and everything in it lands here. Every player id in that file is dead on arrival — Riot encrypts
   them against the key that asked, and that was somebody's desktop — so accounts are re-resolved

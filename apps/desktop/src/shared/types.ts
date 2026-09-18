@@ -936,6 +936,37 @@ export interface ServerState {
 }
 
 /**
+ * What a server is holding, and where.
+ *
+ * The two halves are not symmetrical and the panel says so: a deduplicated
+ * match history takes a long time to trouble a 10 GB database, while replays
+ * are tens of megabytes each and are what will fill a volume.
+ */
+export interface ServerStorageUsage {
+  /** False when no blob store is set up, which is a different thing from an empty one. */
+  replaysConfigured: boolean
+  /** Blobs actually in the store, as the store counts them. */
+  replayCount: number
+  replayBytes: number
+  /** Rows saying a replay was uploaded. Disagreeing with replayCount means a delete failed. */
+  replayRecords: number
+  matches: number
+  matchParticipants: number
+  riotAccounts: number
+  unclaimedAccounts: number
+  rankReadings: number
+}
+
+/** A shared replay, as an admin deciding what to delete sees one. */
+export interface AdminReplay {
+  matchId: string
+  patch: string | null
+  fileBytes: number | null
+  uploadedBy: string | null
+  uploadedAt: string | null
+}
+
+/**
  * How far through importing a stats.db the server is.
  *
  * Reported rather than returned because the run is minutes long: a Riot lookup

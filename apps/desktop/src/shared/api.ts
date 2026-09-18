@@ -1,6 +1,8 @@
 import type {
+  AdminReplay,
   ImportProgress,
   ImportResult,
+  ServerStorageUsage,
   Account,
   AdHocSummonerResult,
   AdminActionResult,
@@ -131,6 +133,20 @@ export interface Api {
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
     /** Opens a file picker. Resolves with null when it was dismissed. */
+    /** What the server is holding, for the Data & storage page. */
+    storage: () => Promise<ServerStorageUsage>
+    /** The biggest shared replays, so space can be reclaimed where it actually is. */
+    storedReplays: () => Promise<AdminReplay[]>
+    /** Removes a shared replay, blob and record. Anybody who played the game can upload it again. */
+    removeReplay: (matchId: string) => Promise<AdminActionResult>
+    /**
+     * Takes a League account away from whoever claimed it.
+     *
+     * The escape hatch first-claim-wins needs to be survivable: somebody claims
+     * an account that is not theirs, or leaves still holding one. The account
+     * and its games stay; only the claim goes.
+     */
+    forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
     chooseDatabase: () => Promise<string | null>
     /**
      * Reads an old stats.db and pushes it at the active server.
