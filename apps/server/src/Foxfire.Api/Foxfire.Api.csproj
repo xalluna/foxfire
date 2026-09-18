@@ -4,6 +4,7 @@
     <ProjectReference Include="..\Foxfire.Core\Foxfire.Core.csproj" />
     <ProjectReference Include="..\Foxfire.Data\Foxfire.Data.csproj" />
     <ProjectReference Include="..\Foxfire.Riot\Foxfire.Riot.csproj" />
+    <ProjectReference Include="..\Foxfire.Storage\Foxfire.Storage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

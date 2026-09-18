@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Foxfire.Core;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Testcontainers.Azurite;
 using Testcontainers.MsSql;
 
 namespace Foxfire.Api.Tests;
@@ -31,7 +32,16 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     /// </summary>
     private const string SqlServerImage = "mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04";
 
+    /// <summary>
+    /// Pinned for the same reason SQL Server is. Azurite is not a mock — it
+    /// speaks the real Blob protocol, signs real SAS tokens and enforces them —
+    /// so the replay tests exercise the code a self-hoster runs and the code
+    /// somebody paying Microsoft runs, down to the signature.
+    /// </summary>
+    private const string AzuriteImage = "mcr.microsoft.com/azure-storage/azurite:3.35.0";
+
     private readonly MsSqlContainer _sql = new MsSqlBuilder(SqlServerImage).Build();
+    private readonly AzuriteContainer _blob = new AzuriteBuilder(AzuriteImage).Build();
     private WebApplicationFactory<Program>? _factory;
 
     /// <summary>The address configured as this server's administrator.</summary>
@@ -47,9 +57,10 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _sql.StartAsync();
+        await Task.WhenAll(_sql.StartAsync(), _blob.StartAsync());
 
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", _sql.GetConnectionString());
+        Environment.SetEnvironmentVariable("ConnectionStrings__Blob", _blob.GetConnectionString());
         Environment.SetEnvironmentVariable("Server__PublicUrl", "https://test.example.com");
         Environment.SetEnvironmentVariable("Server__Name", ServerName);
         Environment.SetEnvironmentVariable("Riot__ApiKey", "RGAPI-test-key-not-real");
@@ -71,6 +82,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     {
         if (_factory is not null) await _factory.DisposeAsync();
         await _sql.DisposeAsync();
+        await _blob.DisposeAsync();
     }
 
     /// <summary>

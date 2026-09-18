@@ -52,6 +52,12 @@ match history for you.
   two people who were in the same game do not both run it.
 - **Live progress.** A backfill of a few hundred games takes minutes on a shared
   key, so the desktop is told how far through it is as it goes.
+- **A shared replay library.** Riot writes one .rofl per game, identical for
+  all ten players, so one upload serves everybody who was in it — and the client
+  that plays it is one everybody already has. A game a friend played is watchable
+  from inside your own client, every camera angle, for the cost of an upload
+  nobody had to coordinate. The match row says which patch it needs, because a
+  .rofl only runs on the build that produced it.
 - **Everything on a server is visible to everybody on it.** Who has claimed
   which League account is not private here. Editing is what ownership gates.
 - **Managing who is on the server.** An admin can see everybody, make somebody
@@ -98,6 +104,20 @@ match history for you.
   its replacement and marks it spent, so presenting an already-spent token means
   a copy is in use somewhere — and the whole chain is cut rather than the replay
   merely failing.
+- **No replay ever passes through the server.** The desktop claims a match,
+  gets a signed URL good for fifteen minutes, and puts the bytes straight into
+  the blob store; a 30 MB file through a homelab's API process would be its
+  upstream spent twice and a request held open for the length of an upload. The
+  server then asks the store how big the blob actually is, because the desktop
+  saying it finished is not evidence — an interrupted upload leaves a short
+  blob, and a short blob offered to somebody else fails only after they have
+  waited for it.
+- **Claiming a replay is first-come and expires.** Nine of the ten people in a
+  game have the same file and will all offer it; one wins and the rest are told
+  it is covered. A claim that never completes goes stale after half an hour, so
+  somebody closing their laptop mid-upload does not lock the game out forever.
+- **Blob storage is optional**, and the server says so at startup when it is
+  absent. Everything that is not a replay works without it.
 - **SMTP is optional**, and the server says so at startup when it is absent.
   Homelab mail without a relay fails silently, so nothing is allowed to depend
   on it: every link the server would send is also copyable from the admin
@@ -148,6 +168,11 @@ match history for you.
   built — the same guarantee the desktop's workflow gives. The test suite runs
   first, including the ones that stand a real SQL Server up, so a release cannot
   go out on a schema that does not migrate.
+- The replay tests run against Azurite in a container rather than a fake. A SAS
+  is a signature over a container name, a blob name, a permission set and a
+  validity window, and every one of them is a way to mint a URL that looks right
+  and is refused — so the tests upload through the URL the server handed out and
+  read the bytes back through another.
 - Tests: 108 over the pure rules — invite tokens, the version allow list, the
   ladder corpus, what a sync decides to fetch — 17 over the rate limiter against
   a fake clock, including the burst-window case the desktop gets wrong, and 69

@@ -4,6 +4,7 @@
     <Project Path="src/Foxfire.Core/Foxfire.Core.csproj" />
     <Project Path="src/Foxfire.Data/Foxfire.Data.csproj" />
     <Project Path="src/Foxfire.Riot/Foxfire.Riot.csproj" />
+    <Project Path="src/Foxfire.Storage/Foxfire.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Foxfire.Api.Tests/Foxfire.Api.Tests.csproj" />

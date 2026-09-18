@@ -4,6 +4,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Reads;
 
+/// <summary>
+/// The shared replay of a game, as a match row advertises one.
+///
+/// Two fields and no URL. A download URL is a credential and is minted when
+/// somebody asks for one, not printed on every row of a page of history — and
+/// the patch is the part the row actually needs, because whether this viewer
+/// can play it depends on which League installs are on their machine.
+/// </summary>
+public sealed record MatchSharedReplay(string? Patch, long? FileBytes);
+
 /// <summary>What one game was worth, when it could be worked out.</summary>
 public sealed record MatchRankSummary(
     int LpDelta,
@@ -50,7 +60,8 @@ public sealed record MatchSummaryResponse(
     int TeamDamage,
     bool IsRemake,
     MatchRankSummary? Rank,
-    bool HasManualRank);
+    bool HasManualRank,
+    MatchSharedReplay? SharedReplay);
 
 /// <summary>One player's line, as the match detail screen draws it.</summary>
 public sealed record MatchParticipantResponse(
@@ -183,7 +194,14 @@ public sealed class MatchReads(FoxfireDbContext db)
                 HasManualRank = db.RankSnapshots.Any(s =>
                     s.MatchId == x.p.MatchId
                     && s.Source == "manual"
-                    && s.RiotAccountId == riotAccountId)
+                    && s.RiotAccountId == riotAccountId),
+
+                // A claim nobody finished is not a replay, so the row must not
+                // offer one: UploadedAt is what separates the two.
+                SharedReplay = db.SharedReplays
+                    .Where(r => r.MatchId == x.p.MatchId && r.UploadedAt != null)
+                    .Select(r => new MatchSharedReplay(r.Patch, r.FileBytes))
+                    .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
 
@@ -216,7 +234,8 @@ public sealed class MatchReads(FoxfireDbContext db)
                 x.TeamDamage,
                 x.p.GameEndedInEarlySurrender,
                 x.Rank,
-                x.HasManualRank))
+                x.HasManualRank,
+                x.SharedReplay))
         ];
     }
 

@@ -35,6 +35,7 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     public DbSet<SyncState> SyncStates => Set<SyncState>();
     public DbSet<RetiredPuuid> RetiredPuuids => Set<RetiredPuuid>();
     public DbSet<RankedSeason> Seasons => Set<RankedSeason>();
+    public DbSet<SharedReplay> SharedReplays => Set<SharedReplay>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -332,6 +333,31 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
                 .WithMany()
                 .HasForeignKey(r => r.RiotAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SharedReplay>(e =>
+        {
+            // Riot's match id is the key and the dedup rule at once: the same
+            // file is produced for all ten players, so a second copy would be
+            // the same bytes under a different name.
+            e.HasKey(r => r.MatchId);
+
+            e.Property(r => r.MatchId).HasMaxLength(32);
+            e.Property(r => r.BlobKey).HasMaxLength(128);
+            e.Property(r => r.GameVersion).HasMaxLength(32);
+            e.Property(r => r.Patch).HasMaxLength(16);
+
+            // SET NULL, because the replay belongs to the community once it is
+            // uploaded. Deleting somebody must not take the only copy of a game
+            // nine other people were also in.
+            e.HasOne(r => r.UploadedBy)
+                .WithMany()
+                .HasForeignKey(r => r.UploadedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // The match list asks "is there one of these" for a page of games at
+            // a time, and an abandoned claim must not answer yes.
+            e.HasIndex(r => r.UploadedAt);
         });
 
         builder.Entity<RankedSeason>(e =>

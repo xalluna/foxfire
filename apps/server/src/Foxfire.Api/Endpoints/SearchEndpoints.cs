@@ -163,6 +163,12 @@ public static class SearchEndpoints
             team.Sum(p => p.TotalDamageDealtToChampions),
             me.GameEndedInEarlySurrender,
             Rank: null,
-            HasManualRank: false);
+            HasManualRank: false,
+
+            // Search stores nothing, so it has no games of its own and no
+            // replays of them. A stranger's replay would only be here if
+            // somebody on this server had played the same game — and then it is
+            // already on their own history, where it belongs.
+            SharedReplay: null);
     }
 }

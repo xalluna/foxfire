@@ -11,6 +11,7 @@ using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Riot;
+using Foxfire.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -180,6 +181,13 @@ builder.Services.AddSingleton(sp => new RiotClient(
     riotOptions.ApiKey,
     sp.GetRequiredService<ILogger<RiotClient>>()));
 
+// Optional, and the server says so rather than refusing to start: a
+// community that never uploads a replay needs no blob store, and everything
+// else on the server works without one.
+builder.Services.AddSingleton<IReplayStorage>(sp => new AzureBlobReplayStorage(
+    builder.Configuration.GetConnectionString("Blob"),
+    sp.GetRequiredService<ILogger<AzureBlobReplayStorage>>()));
+
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
@@ -206,6 +214,7 @@ app.MapSyncEndpoints();
 app.MapDashboardEndpoints();
 app.MapRankEndpoints();
 app.MapSearchEndpoints();
+app.MapReplayEndpoints();
 app.MapHub<FoxfireHub>(FoxfireHub.Path);
 
 var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");
@@ -217,6 +226,32 @@ startup.LogInformation(
     DesktopCompatibility.ApiVersion,
     DesktopCompatibility.AllowList.Minimum,
     DesktopCompatibility.AllowList.Recommended);
+
+// The container, once, at boot. Not awaited into the startup path — a blob
+// store that is slow to answer is no reason to refuse to serve match history —
+// and a failure turns the feature off rather than the server.
+_ = Task.Run(async () =>
+{
+    var storage = app.Services.GetRequiredService<IReplayStorage>();
+
+    if (!storage.IsConfigured)
+    {
+        startup.LogInformation(
+            "No blob store configured, so replays are not shared. Everything else works; set "
+            + "ConnectionStrings__Blob to turn it on.");
+        return;
+    }
+
+    try
+    {
+        await storage.PrepareAsync(app.Lifetime.ApplicationStopping);
+        startup.LogInformation("Blob store ready for replays.");
+    }
+    catch (ReplayStorageException ex)
+    {
+        startup.LogError(ex, "The blob store could not be reached; replay sharing will fail until it can");
+    }
+});
 
 if (!smtpOptions.IsConfigured)
 {
