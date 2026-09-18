@@ -72,7 +72,12 @@ export const ACCOUNTS: Account[] = [
     summonerLevel: 412,
     isHomeAccount: true,
     createdAt: '2026-01-04T10:00:00Z',
-    updatedAt: '2026-08-14T18:00:00Z'
+    updatedAt: '2026-08-14T18:00:00Z',
+
+    // Only meaningful connected to a server, where an account belongs to one
+    // member and everybody else can read its games but not write its LP.
+    isMine: true,
+    ownerUsername: 'Alluna'
   },
   {
     id: '2',

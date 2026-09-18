@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { AdminReplay, ImportProgress, ImportResult } from '@shared/types'
+import type { Account, AdminReplay, ImportProgress, ImportResult } from '@shared/types'
 import { SettingsCard, SettingsPage } from './settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from './settings/SettingsRow'
 import { ghostButtonClass, primaryButtonClass } from './settings/controls'
@@ -98,8 +98,99 @@ export function ServerDataSettings(): JSX.Element {
       </SettingsCard>
 
       <StorageCard />
+      <LinkedAccountsCard />
       <ReplayLibraryCard />
     </SettingsPage>
+  )
+}
+
+/**
+ * Who has claimed which League account, and the way to take one back.
+ *
+ * Claiming is first-come and LCU-attested, which is not proof — a hand-written
+ * HTTP client can claim any Riot ID — and the trade is deliberate: it costs an
+ * honest person nothing. What makes it survivable is this. Without a way to
+ * unlink, somebody claiming an account that is not theirs, or leaving the
+ * community still holding one, is permanent.
+ *
+ * The account and its games stay; only the claim goes. History on a Foxfire
+ * server belongs to the server, and whoever the account really belongs to
+ * claims it again the ordinary way.
+ */
+function LinkedAccountsCard(): JSX.Element {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const accounts = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => window.api.accounts.list()
+  })
+
+  const unlink = useMutation({
+    mutationFn: (accountId: string) => window.api.serverAdmin.forceUnlink(accountId),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setError(null)
+        void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+        void queryClient.invalidateQueries({ queryKey: ['adminStorage'] })
+      } else {
+        setError(result.error)
+      }
+    }
+  })
+
+  const claimed = (accounts.data ?? []).filter((account) => account.ownerUsername != null)
+
+  return (
+    <SettingsCard
+      title="Claimed League accounts"
+      description={
+        'Claiming is first-come and attested by a running League client, which is not proof. This is '
+        + 'what makes that survivable: unlinking returns an account to unclaimed and leaves every '
+        + 'game it played where it is.'
+      }
+    >
+      {error !== null && <StatusRow tone="error">{error}</StatusRow>}
+
+      {accounts.data !== undefined && claimed.length === 0 && (
+        <EmptyState
+          icon={<Icon.Server />}
+          title="Nobody has claimed an account yet"
+          description="Members claim their own by signing in to the League client with Foxfire connected."
+        />
+      )}
+
+      {claimed.map((account) => (
+        <LinkedAccountRow
+          key={account.id}
+          account={account}
+          onUnlink={() => unlink.mutate(account.id)}
+          unlinking={unlink.isPending && unlink.variables === account.id}
+        />
+      ))}
+    </SettingsCard>
+  )
+}
+
+function LinkedAccountRow({
+  account,
+  onUnlink,
+  unlinking
+}: {
+  account: Account
+  onUnlink: () => void
+  unlinking: boolean
+}): JSX.Element {
+  return (
+    <SettingsRow
+      label={`${account.gameName}#${account.tagLine}`}
+      description={`Claimed by ${account.ownerUsername}`}
+      control={
+        <button type="button" className={ghostButtonClass} onClick={onUnlink} disabled={unlinking}>
+          {unlinking ? 'Unlinking…' : 'Unlink'}
+        </button>
+      }
+    />
   )
 }
 

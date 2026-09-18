@@ -571,7 +571,17 @@ export const mockApi: Api = {
       return delay({ ok: true, error: null }, 200, false)
     },
 
-    forceUnlink: (): Promise<AdminActionResult> => delay({ ok: true, error: null }, 200, false),
+    // Actually clears the claim, so the harness shows what the panel does
+    // rather than only that it asked. The account and its games stay; that is
+    // the whole distinction the card exists to make.
+    forceUnlink: (riotAccountId: string): Promise<AdminActionResult> => {
+      const account = ACCOUNTS.find((a) => a.id === riotAccountId)
+      if (account) {
+        account.ownerUsername = null
+        account.isMine = false
+      }
+      return delay({ ok: true, error: null }, 200, false)
+    },
 
     // The harness has no file system and no server, so the import is the one
     // shape the panel has to draw for real: a run that reports its way through
