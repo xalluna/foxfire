@@ -149,6 +149,7 @@ export const CH = {
     add: 'replays:add',
     /** Links a replay to a match the user chose by hand. */
     link: 'replays:link',
+    download: 'replays:download',
     /** Re-reads Riot's folder now, rather than waiting for the next scan. */
     rescan: 'replays:rescan',
     settings: 'replays:settings',

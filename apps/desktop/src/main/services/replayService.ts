@@ -1,8 +1,10 @@
 import { shell } from 'electron'
-import { copyFileSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs'
+import { closeSync, copyFileSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { accountContext } from '../api/accountContext'
+import { fetchSharedReplay, shareReplay } from '../server/replaySharing'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
@@ -323,7 +325,61 @@ export function ingestReplay(sourcePath: string, options: { copy?: boolean } = {
   })
 
   log.info('Ingested a replay', { id, matchId, patch })
+
+  // Offered to the server, never awaited. The file is already on this disk,
+  // already listed and already playable; sharing it is the extra, and nothing
+  // about ingesting should wait on somebody's homelab.
+  void shareReplay(matchId, filePath, {
+    gameVersion: header?.gameVersion ?? null,
+    patch,
+    durationSeconds: header?.durationSeconds ?? null
+  }).catch(() => undefined)
+
   return id
+}
+
+/**
+ * Fetches a replay somebody else on the server uploaded, and files it as ours.
+ *
+ * Written into the replay folder and then ingested through the ordinary path,
+ * so a downloaded replay is a replay: it appears in the list, it plays through
+ * the same launcher, its patch is read from its own header, and removing it
+ * works the way removing any other does.
+ *
+ * Returns the new row's id, or null when there was nothing to fetch.
+ */
+export async function downloadSharedReplay(matchId: string): Promise<number | null> {
+  const folder = getRoflSettings().folder
+  if (folder === null) return null
+
+  const bytes = await fetchSharedReplay(matchId)
+  if (bytes === null) return null
+
+  // Riot's own naming, so the ordinary ingest reads the match id back out of
+  // the filename without needing to be told.
+  const scratch = join(tmpdir(), `foxfire-${matchId.replace('_', '-')}.rofl`)
+
+  try {
+    writeFileSync(scratch, bytes)
+    const id = ingestReplay(scratch)
+
+    if (id !== null) {
+      log.info('Downloaded a shared replay', { matchId, id, bytes: bytes.length })
+      broadcastReplaysChanged()
+    }
+
+    return id
+  } catch (err) {
+    log.warn('Could not write a downloaded replay', { matchId, error: String(err) })
+    return null
+  } finally {
+    // The ingest copied it into the replay folder; this is the courier's copy.
+    try {
+      rmSync(scratch, { force: true })
+    } catch {
+      // A temp file that will not delete is the operating system's problem.
+    }
+  }
 }
 
 function patchOf(header: RoflHeader): string | null {

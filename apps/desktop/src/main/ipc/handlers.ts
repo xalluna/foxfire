@@ -32,6 +32,7 @@ import {
   linkReplayToMatch,
   listReplays,
   openReplay,
+  downloadSharedReplay,
   removeReplay,
   revealReplay,
   scanReplayFolder
@@ -330,6 +331,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplay(replayId))
   ipcMain.handle(CH.replays.reveal, (_e, replayId: number) => revealReplay(replayId))
   ipcMain.handle(CH.replays.remove, (_e, replayId: number) => removeReplay(replayId))
+  ipcMain.handle(CH.replays.download, (_e, matchId: string) => downloadSharedReplay(matchId))
   ipcMain.handle(CH.replays.add, (_e, filePath: string) => addReplayByPath(filePath))
   ipcMain.handle(CH.replays.link, (_e, replayId: number, matchId: string) =>
     linkReplayToMatch(replayId, matchId)

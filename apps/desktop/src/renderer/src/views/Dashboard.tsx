@@ -116,6 +116,14 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
         onWatchRecording: () => {
           if (match.recordingId !== null) void window.api.recordings.open(match.recordingId)
         },
+        onDownloadReplay: () => {
+          // The list refreshes off the replays:changed broadcast the download
+          // raises, so the row picks up its new replayId without this having to
+          // say anything — and the menu is gone by the time it lands anyway.
+          void window.api.replays.download(match.matchId).then((id) => {
+            if (id === null) setReplayError('That replay could not be downloaded from the server.')
+          })
+        },
         onWatchReplay: () => {
           // Unlike a recording, opening this can fail for a reason the user can
           // act on — no installed client still plays that patch. The menu is

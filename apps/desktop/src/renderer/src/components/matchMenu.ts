@@ -43,6 +43,21 @@ export function replayBlockedReason(match: MatchSummary): string | null {
   return null
 }
 
+/**
+ * Why a game's replay cannot be fetched from the server, or null when it can.
+ *
+ * Three states rather than two, and the middle one is why this is spelled out.
+ * A row can have no server copy, a server copy worth downloading, or a server
+ * copy of a game whose replay is already on this disk — and in that last case
+ * the download is pointless rather than unavailable, which is a different
+ * sentence.
+ */
+export function downloadBlockedReason(match: MatchSummary): string | null {
+  if (match.replayId !== null) return 'Already downloaded'
+  if (!match.sharedReplay) return 'Nobody has uploaded this game'
+  return null
+}
+
 export function matchContextItems(
   match: MatchSummary,
   actions: {
@@ -52,12 +67,14 @@ export function matchContextItems(
     onOpenDetails: () => void
     onWatchRecording: () => void
     onWatchReplay: () => void
+    onDownloadReplay: () => void
   },
   { expandable = true }: { expandable?: boolean } = {}
 ): ContextMenuItem[] {
   const blocked = lpEditBlockedReason(match)
   const noRecording = recordingBlockedReason(match)
   const noReplay = replayBlockedReason(match)
+  const noDownload = downloadBlockedReason(match)
 
   return [
     // Two separate artefacts, so two separate items, both always present. A
@@ -73,6 +90,22 @@ export function matchContextItems(
       onSelect: actions.onWatchReplay,
       ...(noReplay ? { disabledReason: noReplay } : {})
     },
+    // Only when there is something to fetch. Unlike the two above, this item is
+    // hidden rather than disabled on a row with no server copy: those two are
+    // about a game you played and the absence is worth explaining, while this
+    // one is about somebody else having uploaded theirs, and a permanently
+    // greyed row on every match in local-only mode explains nothing.
+    ...(match.sharedReplay
+      ? [
+          {
+            label: match.sharedReplay.patch
+              ? `Download replay (patch ${match.sharedReplay.patch})`
+              : 'Download replay',
+            onSelect: actions.onDownloadReplay,
+            ...(noDownload ? { disabledReason: noDownload } : {})
+          }
+        ]
+      : []),
     match.hasManualRank
       ? { label: 'Clear LP edit', onSelect: actions.onClearLp }
       : {

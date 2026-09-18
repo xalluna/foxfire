@@ -190,6 +190,7 @@ const api: Api = {
     remove: (replayId) => ipcRenderer.invoke(CH.replays.remove, replayId),
     add: (filePath) => ipcRenderer.invoke(CH.replays.add, filePath),
     link: (replayId, matchId) => ipcRenderer.invoke(CH.replays.link, replayId, matchId),
+    download: (matchId) => ipcRenderer.invoke(CH.replays.download, matchId),
     rescan: () => ipcRenderer.invoke(CH.replays.rescan),
     settings: () => ipcRenderer.invoke(CH.replays.settings),
     setSettings: (patch) => ipcRenderer.invoke(CH.replays.setSettings, patch),

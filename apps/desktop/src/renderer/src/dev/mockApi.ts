@@ -959,6 +959,9 @@ export const mockApi: Api = {
   // ingested with no match yet.
   replays: {
     list: (): Promise<Replay[]> => delay(MOCK_REPLAYS, 220),
+    // The harness has no server behind it, so there is never one to fetch —
+    // which is also what local-only mode answers.
+    download: (): Promise<number | null> => delay(null, 400, false),
     usage: (): Promise<ReplayDiskUsage> =>
       delay(
         {

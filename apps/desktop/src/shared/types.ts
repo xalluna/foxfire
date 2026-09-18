@@ -63,6 +63,18 @@ export interface LeagueEntry {
  * aggregates over the row's own team, needed for kill participation and
  * damage share, which are ratios rather than raw stats.
  */
+/**
+ * A replay the active server holds, as a match row advertises it.
+ *
+ * The patch and nothing else that matters: a .rofl only runs on the build that
+ * produced it, and whether this machine has that build is decided here rather
+ * than by the server, against the League installs it knows about.
+ */
+export interface SharedReplaySummary {
+  patch: string | null
+  fileBytes: number | null
+}
+
 export interface MatchSummary {
   matchId: string
   gameCreation: number
@@ -115,6 +127,17 @@ export interface MatchSummary {
    * produces renders identically to a derived one, so nothing else looks at it.
    */
   hasManualRank: boolean
+  /**
+   * The replay this server holds of the game, when it holds one.
+   *
+   * Null in local-only mode, where there is no server to hold one, and null on
+   * a server nobody has uploaded this game to yet. Distinct from `replayId`,
+   * which is a .rofl already on this disk: a row can have one, both or neither,
+   * and the pair is what the context menu reads to decide between offering a
+   * download and offering to watch.
+   */
+  sharedReplay?: SharedReplaySummary | null
+
   /**
    * The recording of this game, when one exists.
    *

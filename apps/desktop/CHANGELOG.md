@@ -38,6 +38,13 @@ Foxfire does until you point it somewhere.
 - **A game ten of you played is fetched once.** Which is most of the point: the second person on a
   server to have played a match already has it, so a friend joining costs almost nothing out of the
   key everybody shares.
+- **Riot replays, shared with the server.** When Foxfire picks up a .rofl it offers it to the
+  server, and when somebody else has already uploaded one the match row says so and offers to
+  download it. A downloaded replay is an ordinary replay: it lists, it plays through the League
+  client the same way, and removing it works like any other. The menu names the patch it needs,
+  because a .rofl only runs on the build that produced it.
+- **Nothing waits on any of that.** A replay you just recorded is listed and playable the moment it
+  lands, whether or not the server is reachable — sharing it is the extra, not the point.
 - **Switching between a server and this PC without signing out.** Coming back does not mean typing
   a password again.
 - **Being told when a server is too new for this copy.** A server states which versions of Foxfire

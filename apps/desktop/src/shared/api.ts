@@ -287,6 +287,15 @@ export interface Api {
     remove: (replayId: number) => Promise<void>
     add: (filePath: string) => Promise<{ ok: boolean; replay: Replay | null }>
     link: (replayId: number, matchId: string) => Promise<void>
+    /**
+     * Fetches the replay the active server holds for a game.
+     *
+     * Resolves with the new local replay's id, or null when there was nothing
+     * to fetch — a server with no copy, no blob store, or local-only mode. Once
+     * it lands it is an ordinary replay: it lists, it plays, and removing it
+     * works like any other.
+     */
+    download: (matchId: string) => Promise<number | null>
     rescan: () => Promise<number>
     settings: () => Promise<RoflSettings>
     setSettings: (patch: Partial<RoflSettings>) => Promise<RoflSettings>
