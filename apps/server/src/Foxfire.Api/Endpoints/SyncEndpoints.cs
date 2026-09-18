@@ -199,35 +199,12 @@ public static class SyncEndpoints
         return Results.NoContent();
     }
 
-    /// <summary>
-    /// The account, if it is the caller's to spend requests on.
-    ///
-    /// Admins are not special-cased. An admin syncing somebody else's account is
-    /// not a power anybody has asked for, and every other admin ability here is
-    /// about people and access rather than about other people's data.
-    /// </summary>
-    private static async Task<RiotAccount?> OwnedAsync(
+    private static Task<RiotAccount?> OwnedAsync(
         FoxfireDbContext db,
         ClaimsPrincipal principal,
         Guid riotAccountId,
-        CancellationToken cancellationToken)
-    {
-        if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var me)) return null;
+        CancellationToken cancellationToken) =>
+        Ownership.MineAsync(db, principal, riotAccountId, cancellationToken);
 
-        return await db.RiotAccounts
-            .FirstOrDefaultAsync(a => a.Id == riotAccountId && a.OwnerId == me, cancellationToken);
-    }
-
-    /// <summary>
-    /// One answer for "not yours" and "no such account", deliberately.
-    ///
-    /// Splitting them would let anybody enumerate which account ids exist on a
-    /// server by watching which id returns which code, and the caller can do
-    /// nothing differently with the distinction anyway.
-    /// </summary>
-    private static IResult NotYours() =>
-        AuthEndpoints.Problem(
-            "not_your_account",
-            "That League account is not linked to your Foxfire account.",
-            StatusCodes.Status403Forbidden);
+    private static IResult NotYours() => Ownership.NotYours();
 }

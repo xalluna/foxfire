@@ -49,6 +49,93 @@ public static class RankedSeasons
         return seasons[0];
     }
 
+    /// <summary>Half-open bounds of one season. Null on either side means unbounded.</summary>
+    /// <param name="startMs">
+    /// Null for the oldest season, which reaches backwards forever so nothing
+    /// older than the first recorded boundary is stranded outside every period.
+    /// </param>
+    /// <param name="endMs">Null for the newest, which reaches forwards forever.</param>
+    public sealed record SeasonBounds(long? StartMs, long? EndMs);
+
+    /// <summary>The window one season covers, or null when no season has that id.</summary>
+    public static SeasonBounds? BoundsOf(IReadOnlyList<Season> seasons, int id)
+    {
+        ArgumentNullException.ThrowIfNull(seasons);
+
+        var index = -1;
+        for (var i = 0; i < seasons.Count; i++)
+        {
+            if (seasons[i].Id == id)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0) return null;
+
+        return new SeasonBounds(
+            StartMs: index == 0 ? null : seasons[index].StartsAt,
+            EndMs: index == seasons.Count - 1 ? null : seasons[index + 1].StartsAt);
+    }
+
+    /// <summary>
+    /// A range as the window it selects.
+    ///
+    /// The single place a range becomes numbers, so the rank graph and the
+    /// champion table can never disagree about what a season covers.
+    ///
+    /// Both bounds are epoch milliseconds, never a SQL date expression: a date
+    /// function resolves in UTC while a hand-entered boundary is local, and the
+    /// two would put a changeover-day game in different seasons on different
+    /// screens.
+    ///
+    /// An unparseable range, or one naming a season since deleted, selects
+    /// everything rather than nothing — a better failure than an empty screen.
+    /// </summary>
+    /// <param name="range">"all", "7d", "30d", or "season:{id}".</param>
+    public static SeasonBounds RangeBounds(string? range, IReadOnlyList<Season> seasons, long nowMs)
+    {
+        ArgumentNullException.ThrowIfNull(seasons);
+
+        const long DayMs = 86_400_000L;
+
+        if (range == "7d") return new SeasonBounds(nowMs - (7 * DayMs), null);
+        if (range == "30d") return new SeasonBounds(nowMs - (30 * DayMs), null);
+
+        if (range is not null
+            && range.StartsWith("season:", StringComparison.Ordinal)
+            && int.TryParse(range["season:".Length..], out var id))
+        {
+            return BoundsOf(seasons, id) ?? new SeasonBounds(null, null);
+        }
+
+        return new SeasonBounds(null, null);
+    }
+
+    /// <summary>
+    /// The seasons a span of history touches, newest first.
+    ///
+    /// Contiguous by construction, so this is a slice rather than a filter:
+    /// every season between the one holding the oldest record and the one
+    /// holding the newest is included, whether or not it has games in it. A
+    /// season somebody sat out still belongs in the picker; a hole there reads
+    /// as lost data.
+    /// </summary>
+    public static IReadOnlyList<Season> Spanning(IReadOnlyList<Season> seasons, long oldestMs, long newestMs)
+    {
+        ArgumentNullException.ThrowIfNull(seasons);
+
+        var first = SeasonAt(seasons, oldestMs);
+        var last = SeasonAt(seasons, newestMs);
+        if (first is null || last is null) return [];
+
+        var from = seasons.ToList().FindIndex(s => s.Id == first.Id);
+        var to = seasons.ToList().FindIndex(s => s.Id == last.Id);
+
+        return [.. seasons.Skip(from).Take(to - from + 1).Reverse()];
+    }
+
     /// <summary>
     /// Whether the ladder was reset between two moments.
     ///

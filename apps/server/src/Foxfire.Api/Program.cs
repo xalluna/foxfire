@@ -2,6 +2,7 @@ using System.Text;
 using Foxfire.Api.Auth;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Endpoints;
+using Foxfire.Api.Reads;
 using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
 using Foxfire.Api.Sync;
@@ -152,6 +153,12 @@ builder.Services.AddScoped<RankRecorder>();
 builder.Services.AddScoped<AttributionRunner>();
 builder.Services.AddScoped<IdentityRepair>();
 
+// The read half. Every screen the desktop draws in server mode comes
+// through one of these.
+builder.Services.AddScoped<MatchReads>();
+builder.Services.AddScoped<RankReads>();
+builder.Services.AddScoped<ManualRankEditor>();
+
 builder.Services.AddSingleton<ISyncProgressSink, SignalRSyncProgressSink>();
 builder.Services.AddSingleton<SyncService>();
 builder.Services.AddSingleton<PostGameSyncScheduler>();
@@ -196,6 +203,9 @@ app.MapAdminSettingsEndpoints();
 app.MapAdminUserEndpoints();
 app.MapRiotLinkEndpoints();
 app.MapSyncEndpoints();
+app.MapDashboardEndpoints();
+app.MapRankEndpoints();
+app.MapSearchEndpoints();
 app.MapHub<FoxfireHub>(FoxfireHub.Path);
 
 var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");

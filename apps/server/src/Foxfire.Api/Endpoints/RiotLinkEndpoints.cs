@@ -249,10 +249,16 @@ public static class RiotLinkEndpoints
         return Results.NoContent();
     }
 
-    private static Guid? UserId(ClaimsPrincipal principal) =>
-        Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+    private static Guid? UserId(ClaimsPrincipal principal) => Ownership.UserId(principal);
 
-    private static RiotAccountResponse Describe(RiotAccount account, Guid? me) =>
+    /// <summary>
+    /// One League account, as the caller sees it.
+    ///
+    /// Shared with the dashboard rather than described twice: both answer the
+    /// same question about the same row, and two copies would eventually
+    /// disagree about what IsMine means.
+    /// </summary>
+    public static RiotAccountResponse Describe(RiotAccount account, Guid? me) =>
         new(account.Id,
             account.GameName,
             account.TagLine,
