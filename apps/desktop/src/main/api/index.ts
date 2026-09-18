@@ -1,9 +1,10 @@
 import { httpApi } from './http'
 import { localApi } from './local'
-import { getServerState } from '../services/serverService'
+import { isServerMode } from '../services/serverService'
 import type { ServerBackedApi } from './types'
 
 export type { ServerBackedApi } from './types'
+export { isServerMode } from '../services/serverService'
 
 /**
  * Whichever implementation is currently answering the renderer's reads.
@@ -24,12 +25,5 @@ export type { ServerBackedApi } from './types'
  * somebody is halfway through joining a community.
  */
 export function serverBacked(): ServerBackedApi {
-  const { activeUrl, session } = getServerState()
-  return activeUrl && session ? httpApi : localApi
-}
-
-/** Whether reads are currently coming from a server rather than from this PC. */
-export function isServerMode(): boolean {
-  const { activeUrl, session } = getServerState()
-  return activeUrl !== null && session !== null
+  return isServerMode() ? httpApi : localApi
 }

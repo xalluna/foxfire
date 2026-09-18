@@ -419,3 +419,23 @@ export function getRecordingIdsForMatches(
 
   return new Map(rows.map((row) => [row.match_id, row.id]))
 }
+
+/**
+ * Which of these matches a recording already claims.
+ *
+ * Asked separately from the candidates rather than folded into them, because
+ * the candidates can come from a server and a recording cannot: it is a file on
+ * this disk, and no server knows one exists. Two back-to-back games on the same
+ * champion are why it is asked at all — without it, the second recording would
+ * bind to the first game.
+ */
+export function takenMatchIds(db: DatabaseSync, matchIds: string[]): Set<string> {
+  if (matchIds.length === 0) return new Set()
+
+  const placeholders = matchIds.map(() => '?').join(', ')
+  const rows = db
+    .prepare(`SELECT DISTINCT match_id FROM recordings WHERE match_id IN (${placeholders})`)
+    .all(...matchIds) as unknown as Array<{ match_id: string }>
+
+  return new Set(rows.map((row) => row.match_id))
+}

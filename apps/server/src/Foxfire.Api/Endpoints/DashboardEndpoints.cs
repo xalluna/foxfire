@@ -65,6 +65,7 @@ public static class DashboardEndpoints
         accounts.MapGet("/matches", MatchListAsync);
         accounts.MapGet("/champions", ChampionsAsync);
         accounts.MapGet("/mastery", MasteryAsync);
+        accounts.MapGet("/bind-candidates", BindCandidatesAsync);
 
         // Not under an account: a match belongs to the server, and the detail
         // screen opens the same row whoever's history reached it.
@@ -141,6 +142,43 @@ public static class DashboardEndpoints
             Math.Max(offset, 0),
             queueId,
             cancellationToken));
+    }
+
+    /// <summary>
+    /// The games a finished recording might be of.
+    ///
+    /// Bounded by the caller's window rather than by the account's whole
+    /// history: a long-standing library is thousands of matches and the
+    /// fingerprint only ever looks at the last few hours. The bound is clamped
+    /// here anyway, because a window nobody chose is a table scan somebody else
+    /// on the server waits behind.
+    /// </summary>
+    private static async Task<IResult> BindCandidatesAsync(
+        Guid riotAccountId,
+        long sinceMs,
+        long untilMs,
+        FoxfireDbContext db,
+        MatchReads matches,
+        CancellationToken cancellationToken)
+    {
+        var account = await db.RiotAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == riotAccountId, cancellationToken);
+
+        if (account is null) return Results.NotFound();
+
+        // Two weeks, which is well past the seven-day horizon the desktop stops
+        // retrying a recording at.
+        const long MaxWindowMs = 14L * 86_400_000L;
+
+        if (untilMs <= sinceMs || untilMs - sinceMs > MaxWindowMs)
+        {
+            return AuthEndpoints.Problem(
+                "window_too_wide",
+                "Ask for a window of at most a fortnight.");
+        }
+
+        return Results.Ok(
+            await matches.BindCandidatesAsync(account.Puuid, sinceMs, untilMs, cancellationToken));
     }
 
     private static async Task<IResult> MatchDetailAsync(

@@ -38,6 +38,15 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./captureSettings', () => ({ getCaptureSettings: () => ({ softCapBytes: 0 }) }))
 
+// Local-only, which is the mode these tests are about: the binding pass reads
+// this machine's matches, and the server path is a different set of candidates
+// through the same fingerprint. The service reaches for the connection to know
+// which, and the real one holds an encrypted credential store.
+vi.mock('./serverService', () => ({
+  isServerMode: () => false,
+  authedRequest: () => Promise.reject(new Error('not connected'))
+}))
+
 const { bindPendingRecordings } = await import('./recordingService')
 
 const ME = 'puuid-me'

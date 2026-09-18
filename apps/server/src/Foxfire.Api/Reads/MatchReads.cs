@@ -87,6 +87,21 @@ public sealed record MatchDetailResponse(
     int? QueueId,
     IReadOnlyList<MatchParticipantResponse> Participants);
 
+/// <summary>
+/// A game a recording might be of, as far as the server can narrow it.
+/// </summary>
+/// <param name="ChampionIds">
+/// All ten, in no particular order. The fingerprint counts how many of them the
+/// recording's own live roster saw, so it is the set that matters and not the
+/// order.
+/// </param>
+public sealed record BindCandidateResponse(
+    string MatchId,
+    long GameCreation,
+    int GameDuration,
+    IReadOnlyList<int> ChampionIds,
+    int? SelfChampionId);
+
 /// <summary>Per-champion performance, aggregated over stored games.</summary>
 public sealed record ChampionStatsResponse(
     int ChampionId,
@@ -329,6 +344,54 @@ public sealed class MatchReads(FoxfireDbContext db)
                     Mean(g.Where(r => r.TeamDamage > 0).Select(r => (double)r.Damage / r.TeamDamage)),
                     Mean(g.Where(r => r.TeamKills > 0).Select(r => (double)(r.Kills + r.Assists) / r.TeamKills))))
                 .OrderByDescending(s => s.Games)
+        ];
+    }
+
+    /// <summary>
+    /// The games that could be the one a recording caught, by time alone.
+    ///
+    /// Time only. Which of them it actually is comes down to a roster
+    /// fingerprint — same champion, ten ids overlapping, clocks within an hour —
+    /// and that decision stays on the desktop, where it is already written and
+    /// already tested against every awkward case a duo night produces. Sending
+    /// the candidates rather than the answer keeps one implementation of it.
+    ///
+    /// Nor does this say which are already spoken for: a recording is a file on
+    /// somebody's disk and no server knows one exists. The desktop crosses those
+    /// off against its own table.
+    /// </summary>
+    public async Task<IReadOnlyList<BindCandidateResponse>> BindCandidatesAsync(
+        string puuid,
+        long sinceMs,
+        long untilMs,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await db.MatchParticipants
+            .AsNoTracking()
+            .Where(p => p.Puuid == puuid)
+            .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => new { p, m })
+            .Where(x => x.m.GameCreation >= sinceMs && x.m.GameCreation <= untilMs)
+            .Select(x => new
+            {
+                x.m.MatchId,
+                x.m.GameCreation,
+                x.m.GameDuration,
+                SelfChampionId = (int?)x.p.ChampionId,
+                ChampionIds = db.MatchParticipants
+                    .Where(all => all.MatchId == x.p.MatchId)
+                    .Select(all => all.ChampionId)
+                    .ToList()
+            })
+            .ToListAsync(cancellationToken);
+
+        return
+        [
+            .. rows.Select(x => new BindCandidateResponse(
+                x.MatchId,
+                x.GameCreation,
+                x.GameDuration,
+                x.ChampionIds,
+                x.SelfChampionId))
         ];
     }
 

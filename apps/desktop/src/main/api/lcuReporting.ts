@@ -1,10 +1,9 @@
-import { isServerMode } from '.'
 import { getDb } from '../db'
 import { getAccountByRiotId } from '../db/repositories/accounts.repo'
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
-import { authedRequest } from '../services/serverService'
+import { authedRequest, isServerMode } from '../services/serverService'
 import { startSync } from '../services/syncService'
 import type { Account, QueueType } from '@shared/types'
 
@@ -99,10 +98,10 @@ const serverReporting: LcuReporting = {
   },
 
   recordRank: async (accountId, reading, force) => {
-    // 204 for a reading that did not move, which is the server's way of saying
-    // the same thing the local path says by returning false. Both callers care
-    // for the same reason: a forced reading that was actually written is what
-    // clears the watcher's pending settle.
+    // The server says whether it filed the reading rather than leaving it to a
+    // status code, because the watcher acts on the answer exactly as it does on
+    // the local path's: a forced reading that was written is what clears its
+    // wait for a post-game value to settle.
     const written = await authedRequest<{ recorded: boolean }>('/rank-readings', {
       method: 'POST',
       body: {

@@ -4,6 +4,7 @@ import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
+import { authedRequest, isServerMode } from './serverService'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import {
   bindRecording,
@@ -16,7 +17,8 @@ import {
   getRecordingFilePath,
   getRecordingUsage,
   getRecordings,
-  markRecordingUnmatched
+  markRecordingUnmatched,
+  takenMatchIds
 } from '../db/repositories/recordings.repo'
 import {
   BIND_RETRY_HORIZON_MS,
@@ -89,20 +91,64 @@ interface CandidateRow {
   game_duration: number
   champion_ids: string
   self_champion_id: number | null
-  taken: number
 }
 
 /**
  * Matches finished around the same time as any pending recording.
  *
- * Scoped by time in SQL rather than loading the account's whole history: a
+ * Scoped by time rather than by loading the account's whole history: a
  * long-standing library is thousands of matches and the fingerprint only ever
  * looks at the last few hours.
+ *
+ * Whether a match is already spoken for is decided here in both modes, and not
+ * by whoever supplied the candidates. A recording is a file on this disk; a
+ * server has no idea one exists, and in local-only mode asking the same
+ * question twice in one query was only ever a convenience.
  */
-function candidatesFor(accountId: string, since: number, until: number): MatchCandidate[] {
-  // Local-only: binding reads this machine's matches, and an id minted by a
-  // server parses to NaN and finds nothing — which is the right answer, since
-  // in server mode the candidates come from the server instead.
+async function candidatesFor(
+  accountId: string,
+  since: number,
+  until: number
+): Promise<MatchCandidate[]> {
+  const found = isServerMode()
+    ? await serverCandidates(accountId, since, until)
+    : localCandidates(accountId, since, until)
+
+  if (found.length === 0) return []
+
+  const taken = takenMatchIds(
+    getDb(),
+    found.map((candidate) => candidate.matchId)
+  )
+
+  return found.map((candidate) => ({ ...candidate, taken: taken.has(candidate.matchId) }))
+}
+
+/** The same question, asked of the server that holds the matches. */
+async function serverCandidates(
+  accountId: string,
+  since: number,
+  until: number
+): Promise<Omit<MatchCandidate, 'taken'>[]> {
+  try {
+    return await authedRequest<Omit<MatchCandidate, 'taken'>[]>(
+      `/riot-accounts/${accountId}/bind-candidates?sinceMs=${since}&untilMs=${until}`
+    )
+  } catch (err) {
+    // A server that cannot be reached leaves the recordings pending, which is
+    // exactly where they were. Nothing is written off on a pass that could not
+    // look — see allowGiveUp.
+    log.debug('Could not ask the server for binding candidates', { error: String(err) })
+    return []
+  }
+}
+
+/** The same question, asked of this machine's own matches. */
+function localCandidates(
+  accountId: string,
+  since: number,
+  until: number
+): Omit<MatchCandidate, 'taken'>[] {
   const account = getAccountById(getDb(), Number(accountId))
   if (!account) return []
 
@@ -111,8 +157,7 @@ function candidatesFor(accountId: string, since: number, until: number): MatchCa
       `SELECT m.match_id, m.game_creation, m.game_duration,
               (SELECT group_concat(p2.champion_id)
                  FROM match_participants p2 WHERE p2.match_id = m.match_id) AS champion_ids,
-              p.champion_id AS self_champion_id,
-              EXISTS (SELECT 1 FROM recordings r WHERE r.match_id = m.match_id) AS taken
+              p.champion_id AS self_champion_id
          FROM matches m
          JOIN match_participants p ON p.match_id = m.match_id AND p.puuid = ?
         WHERE m.game_creation BETWEEN ? AND ?`
@@ -123,11 +168,8 @@ function candidatesFor(accountId: string, since: number, until: number): MatchCa
     matchId: row.match_id,
     gameCreation: row.game_creation,
     gameDuration: row.game_duration,
-    championIds: row.champion_ids
-      ? row.champion_ids.split(',').map((id) => Number(id))
-      : [],
-    selfChampionId: row.self_champion_id,
-    taken: row.taken === 1
+    championIds: row.champion_ids ? row.champion_ids.split(',').map((id) => Number(id)) : [],
+    selfChampionId: row.self_champion_id
   }))
 }
 
@@ -170,7 +212,7 @@ export async function bindPendingRecordings(
   if (pending.length === 0) return 0
 
   const oldest = Math.min(...pending.map((recording) => recording.startedAt))
-  const candidates = candidatesFor(
+  const candidates = await candidatesFor(
     accountId,
     oldest - CANDIDATE_WINDOW_MS,
     now + CANDIDATE_WINDOW_MS

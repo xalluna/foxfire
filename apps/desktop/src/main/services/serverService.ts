@@ -117,6 +117,20 @@ function hasCredentials(url: string): boolean {
   return loadSecret(secretName(url)) !== null
 }
 
+/**
+ * Whether this install is currently reading from a server rather than from its
+ * own database.
+ *
+ * A signed-in session and not merely a configured server. One that is known but
+ * not signed in to is a row on the Settings page: every read through it would
+ * fail on a missing token, while local-only mode works — which makes local-only
+ * the honest answer while somebody is halfway through joining a community.
+ */
+export function isServerMode(): boolean {
+  const { activeUrl, session } = getServerState()
+  return activeUrl !== null && session !== null
+}
+
 export function getServerState(): ServerState {
   const active = readActive()
   const known = readKnown()
