@@ -26,6 +26,18 @@ Foxfire does until you point it somewhere.
   either is fine. Foxfire checks it with the server and fills in the email address it was sent to,
   so you cannot accidentally register with the wrong one and be turned away without being told why.
   A link can be opened as many times as you like and makes exactly one account.
+- **Your community's match history, on every screen.** Connected to a server, the dashboard, the
+  match list, a single game, champion stats, mastery, the rank graph and search all read from it
+  instead of from this PC — and you can read everybody else's as well as your own, because that is
+  what a shared server is for. Editing is still yours alone: LP you type by hand goes on an account
+  you have claimed, and nothing else.
+- **The server does the fetching, and tells you as it goes.** Play a game and it notices, waits for
+  Riot to publish the match, and fills it in; a first backfill of a few hundred games reports its
+  progress the same way it always has. Nothing on this PC needs a Riot API key any more — the
+  server has one, shared by everybody on it.
+- **A game ten of you played is fetched once.** Which is most of the point: the second person on a
+  server to have played a match already has it, so a friend joining costs almost nothing out of the
+  key everybody shares.
 - **Switching between a server and this PC without signing out.** Coming back does not mean typing
   a password again.
 - **Being told when a server is too new for this copy.** A server states which versions of Foxfire
@@ -62,6 +74,18 @@ Foxfire does until you point it somewhere.
   until the accounts live somewhere else and are identified by something entirely different. The
   app passes the id around without looking inside it, so the same screens work whichever store
   answered.
+- **One contract, two implementations.** Everything the screens read goes through a single typed
+  interface with a local half and a server half, chosen per call rather than per launch — so
+  connecting or disconnecting changes what the next screen reads, not what the next launch does.
+  The renderer is unchanged and still has no idea which answered.
+- **The League client watcher reports rather than writes.** It still reads loopback, still decides
+  when a post-game reading has settled, and still knows when a game ended; connected to a server
+  it posts those facts instead of storing them. The retry ladder that waits for Riot to publish a
+  match moved to the server with them, which is what lets it keep running after you close the
+  laptop, and stops two people who were in the same game from both walking it.
+- **A live connection to the server.** Sync progress, LP edits and rank changes arrive over it on
+  the same channels the app already used for its own events, so nothing above the transport knows
+  which one delivered them.
 - **Your recordings and replays stop pointing into tables that are about to leave.** They are files
   on this disk and stay here, so their link to an account and to a match is now a value rather than
   a database constraint — a match id was already Riot's own and is valid anywhere, and each row
@@ -78,6 +102,9 @@ Foxfire does until you point it somewhere.
   gone, because in server mode the match is on somebody's homelab and nothing here could reach it —
   and keeping Riot's id is the better answer anyway: it still names the game, and still finds it if
   this database is later pointed at a server that has it.
+- A server's answers are checked against the shapes this app reads, field name by field name. Two
+  were already wrong when that check was written, and neither would have failed anything: a
+  mismatched name arrives as nothing at all and renders as a blank where a number should be.
 
 ## [0.11.0] — 2026-08-24
 

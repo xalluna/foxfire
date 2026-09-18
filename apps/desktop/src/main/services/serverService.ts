@@ -3,6 +3,7 @@ import { getSetting, setSetting } from '../db/repositories/appSettings.repo'
 import { clearSecret, loadSecret, saveSecret } from '../security/keyStore'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
+import { connectHub, disconnectHub } from '../server/hub'
 import { createLogger } from '../telemetry/logger'
 import { ServerError, probeServer, serverRequest } from '../server/client'
 import { displayName, inviteTokenFrom, normaliseServerUrl } from '../server/url'
@@ -149,7 +150,32 @@ export function getServerState(): ServerState {
 function announce(): ServerState {
   const state = getServerState()
   broadcast(CH.server.changed, state)
+  syncHubConnection(state)
   return state
+}
+
+/**
+ * Keeps the push connection pointing wherever the reads are.
+ *
+ * Driven from announce rather than from each caller because every way the
+ * answer changes — signing in, signing out, switching servers, forgetting
+ * one — already goes through it, and a connection left open to a server this
+ * app is no longer reading from would deliver events about somebody else's
+ * community.
+ *
+ * Never awaited. Everything the hub carries is a refresh of something the
+ * renderer can also ask for, so a socket that will not open costs a stale
+ * screen rather than a broken one.
+ */
+function syncHubConnection(state: ServerState): void {
+  const url = state.activeUrl
+
+  if (!url || !state.session) {
+    void disconnectHub()
+    return
+  }
+
+  void connectHub(url, () => accessTokenFor(url))
 }
 
 /** Asks a server what it is. Never throws; every failure is part of the answer. */

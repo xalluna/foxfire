@@ -29,6 +29,19 @@ export interface Account {
   isHomeAccount: boolean
   createdAt: string
   updatedAt: string
+
+  /**
+   * Whether this is an account you have claimed, on a server where others have
+   * claimed their own.
+   *
+   * Absent in local-only mode, where the question does not arise: every account
+   * in the file is yours. On a server it decides what is writable — you can see
+   * everybody's history and edit only your own LP.
+   */
+  isMine?: boolean
+
+  /** Who claimed it, on a server. Absent in local-only mode, and null for unclaimed. */
+  ownerUsername?: string | null
 }
 
 export interface LeagueEntry {

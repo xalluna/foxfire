@@ -1,11 +1,8 @@
 import { getDb } from '../db'
-import { getAccountByRiotId } from '../db/repositories/accounts.repo'
 import { getSetting } from '../db/repositories/appSettings.repo'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
-import { recordRankSnapshot } from '../services/rankHistoryService'
-import { refreshRank } from '../services/accountService'
-import { schedulePostGameSync } from '../services/postGameSync'
+import { lcuReporting } from '../api/lcuReporting'
 import { rescanReplays } from '../rofl/watcher'
 import { onGamePhase } from '../capture/captureService'
 import { setAppIconLcu } from '../appIcon'
@@ -140,7 +137,7 @@ function normaliseRankField(value: string | null): string | null {
  * to a poll whose real job is rank, and an older client missing one of them
  * must not take the rank snapshot down with it.
  */
-async function trackGameflow(creds: LcuCredentials, accountId: number): Promise<boolean> {
+async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<boolean> {
   let phase: string | null = null
   try {
     phase = await lcuGet<string>(creds, '/lol-gameflow/v1/gameflow-phase')
@@ -163,7 +160,7 @@ async function trackGameflow(creds: LcuCredentials, accountId: number): Promise<
   // the loading screen that follows lasts at least a minute, and the recording
   // itself is started by the game answering on loopback.
   inGame = isPlayingPhase(phase)
-  onGamePhase(String(accountId), currentQueueId, inGame)
+  onGamePhase(accountId, currentQueueId, inGame)
 
   const ended = isGameEndTransition(lastPhase, phase)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
@@ -189,10 +186,13 @@ async function tick(): Promise<void> {
   try {
     const summoner = await lcuGet<CurrentSummoner>(creds, '/lol-summoner/v1/current-summoner')
 
-    // Matched on Riot ID, not puuid: the client reports the canonical account
-    // UUID while stored accounts carry Riot's per-key encrypted puuid, and the
-    // two never compare equal. See getAccountByRiotId.
-    const account = getAccountByRiotId(db, summoner.gameName, summoner.tagLine)
+    // Through the reporting seam rather than straight to SQLite, because
+    // connected to a server the accounts are the server's. Either way the match
+    // is on the Riot ID, not the player id: the client reports the canonical
+    // account UUID while everything stored carries Riot's per-key encrypted
+    // puuid, and the two never compare equal.
+    const reporting = lcuReporting()
+    const account = await reporting.findAccount(summoner.gameName, summoner.tagLine)
 
     if (!account) {
       // Surfaced as a prompt rather than acted on: adding an account hits Riot
@@ -207,7 +207,7 @@ async function tick(): Promise<void> {
 
     const connected = {
       state: 'connected' as const,
-      accountId: String(account.id),
+      accountId: account.id,
       gameName: account.gameName,
       tagLine: account.tagLine
     }
@@ -242,7 +242,7 @@ async function tick(): Promise<void> {
       if (!tier) continue
 
       const now = Date.now()
-      const recorded = recordRankSnapshot(
+      const recorded = await reporting.recordRank(
         account.id,
         {
           queueType,
@@ -252,8 +252,6 @@ async function tick(): Promise<void> {
           wins: queue.wins,
           losses: queue.losses
         },
-        'lcu',
-        now,
         // A ranked game that moved no LP — a loss at 0 LP with demotion
         // protection — still has to close its interval, or the open one runs on
         // and swallows the next game too, costing both their LP figure. Only
@@ -271,7 +269,11 @@ async function tick(): Promise<void> {
     if (gameEnded) {
       // Every queue, not just ranked: a normal or ARAM game moves no LP but
       // still needs fetching, which is the whole point of the refresh.
-      schedulePostGameSync(account.id)
+      //
+      // The waiting is somebody else's job in server mode — match-v5 publishes
+      // minutes late, and that ladder has to keep running after this laptop
+      // closes — so this is a signal rather than a schedule.
+      await reporting.gameEnded(account.id)
 
       // The client writes the .rofl around now, if the player has replays
       // switched on. The folder watcher will usually see it first; this is the
@@ -280,10 +282,10 @@ async function tick(): Promise<void> {
     }
 
     if (moved) {
-      // The snapshot is already stored; this refreshes league_entries so the
-      // profile card matches, and is skipped when nothing moved so an idle
+      // The reading is already stored; this brings the profile card's current
+      // standing into line with it, and is skipped when nothing moved so an idle
       // client costs no Riot API budget.
-      refreshRank(account.id).catch((err) => {
+      reporting.refreshStanding(account.id).catch((err) => {
         log.debug('Backstop rank refresh failed after LP change', { error: String(err) })
       })
 

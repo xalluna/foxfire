@@ -247,3 +247,32 @@ export function getUsage(
 
   return { ...row, unlinkedCount: row.unlinkedCount ?? 0 }
 }
+
+/**
+ * The replay for each of these matches, whoever played it.
+ *
+ * Deliberately not scoped to an account, matching how a single row is read: a
+ * .rofl is one file per game on this machine and serves whoever played it, so a
+ * game played on a second account still offers the replay imported under the
+ * first. Soft-deleted rows are excluded, or a replay somebody removed would go
+ * on advertising itself on the match row.
+ */
+export function getReplayIdsForMatches(
+  db: DatabaseSync,
+  matchIds: string[]
+): Map<string, number> {
+  if (matchIds.length === 0) return new Map()
+
+  const placeholders = matchIds.map(() => '?').join(', ')
+  const rows = db
+    .prepare(
+      `SELECT match_id, MAX(id) AS id
+         FROM replays
+        WHERE match_id IN (${placeholders})
+          AND deleted_at IS NULL
+        GROUP BY match_id`
+    )
+    .all(...matchIds) as unknown as Array<{ match_id: string; id: number }>
+
+  return new Map(rows.map((row) => [row.match_id, row.id]))
+}

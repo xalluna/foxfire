@@ -1,16 +1,16 @@
 import { join } from 'path'
 import { app, BrowserWindow, globalShortcut } from 'electron'
 import { createMainWindow } from './window'
-import { closeDatabase, getDb, initDatabase } from './db'
-import { listAccounts } from './db/repositories/accounts.repo'
+import { closeDatabase, initDatabase } from './db'
 import { registerIpcHandlers } from './ipc/handlers'
 import { initSettings } from './services/settingsService'
 import { getBackgroundSettings, initBackground } from './services/backgroundService'
 import { cancelAllPostGameSyncs } from './services/postGameSync'
 import { repairAttribution } from './services/rankHistoryService'
+import { serverBacked } from './api'
+import { startSyncFor } from './api/lcuReporting'
 import { bindPendingRecordings } from './services/recordingService'
 import { rescanReplays, startReplayWatcher, stopReplayWatcher } from './rofl/watcher'
-import { startSync } from './services/syncService'
 import { stopLcuWatcher } from './lcu/watcher'
 import { attachTrayBehaviour, beginQuit, showWindow, syncTray } from './tray'
 import { initTelemetry, shutdownTelemetry } from './telemetry'
@@ -151,16 +151,27 @@ function bootstrap(): void {
  * touch only SQLite, so neither may sit behind a Riot call that an expired key
  * would fail. Binding especially — an expired key is the reason a recording is
  * still waiting, so making the pairing wait on a working one is backwards.
+ *
+ * The accounts come from whichever store currently owns them, so connected to a
+ * server this sweeps that server's accounts and asks it to do the fetching. The
+ * attribution repair stays local because it is about this file: on a server the
+ * same pass runs there, at the end of every sync, with no key needed either.
  */
 function catchUpOnLaunch(): void {
   repairAttribution()
-  for (const account of listAccounts(getDb())) {
-    // Fire-and-forget, with the rejection swallowed rather than left floating:
-    // a launch must not fail because one account's recordings could not be
-    // paired, and the next sync tries again anyway.
-    void bindPendingRecordings(String(account.id)).catch(() => undefined)
-    startSync(account.id, 'auto')
-  }
+
+  void (async () => {
+    const accounts = await serverBacked().accounts.list()
+
+    for (const account of accounts) {
+      // Each swallowed separately, because a launch must not fail on one
+      // account: a recording that could not be paired is paired by the next
+      // sync, and an account the server refused is one account rather than the
+      // sweep.
+      void bindPendingRecordings(account.id).catch(() => undefined)
+      void startSyncFor(account.id).catch(() => undefined)
+    }
+  })().catch(() => undefined)
 
   // Replays are picked up the same way and for the same reason: the folder
   // watcher only sees files written while the app is running, so a session

@@ -384,3 +384,38 @@ export function getOldestRecordingIds(
     .all(...ownedByParams(account), count) as unknown as Array<{ id: number }>
   return rows.map((row) => row.id)
 }
+
+/**
+ * The recording for each of these matches, for one account.
+ *
+ * One query for a whole page of history rather than one per row. In server mode
+ * the match list arrives over HTTP with no idea what is on this disk, and this
+ * is what fills the gap — twenty round trips to the same table to answer twenty
+ * yes/no questions is twenty for nothing.
+ *
+ * Scoped to the account, unlike replays: a game two people played together is
+ * one match row each, and only one of them has the footage.
+ */
+export function getRecordingIdsForMatches(
+  db: DatabaseSync,
+  account: AccountContext,
+  matchIds: string[]
+): Map<string, number> {
+  if (matchIds.length === 0) return new Map()
+
+  const placeholders = matchIds.map(() => '?').join(', ')
+  const rows = db
+    .prepare(
+      `SELECT match_id, MAX(id) AS id
+         FROM recordings
+        WHERE match_id IN (${placeholders})
+          AND ${ownedBy('account_id', 'riot_id')}
+        GROUP BY match_id`
+    )
+    .all(...matchIds, ...ownedByParams(account)) as unknown as Array<{
+    match_id: string
+    id: number
+  }>
+
+  return new Map(rows.map((row) => [row.match_id, row.id]))
+}

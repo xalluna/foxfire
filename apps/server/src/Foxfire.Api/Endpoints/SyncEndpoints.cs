@@ -28,9 +28,22 @@ public sealed record RankReadingRequest(
     int? Losses,
     bool Force);
 
+/// <summary>
+/// Whether the reading was actually filed.
+///
+/// Said out loud rather than left as a status code, because the desktop acts
+/// on it: a forced reading that was written is what clears the watcher's
+/// wait for a post-game value to settle, and one that was not means the
+/// client is still serving the rank the player went in with.
+/// </summary>
+public sealed record RankReadingResponse(bool Recorded);
+
 /// <summary>How far through fetching an account's history the server has got.</summary>
 public sealed record SyncStateResponse(
-    Guid RiotAccountId,
+    // Named for what the desktop calls it rather than for the column it came
+    // from. This is the shape its SyncState type consumes, and a field it spells
+    // differently is a field it silently reads as undefined.
+    Guid AccountId,
     string? MostRecentMatchId,
     bool BackfillComplete,
     int BackfillTarget,
@@ -189,14 +202,14 @@ public static class SyncEndpoints
             request.Force,
             cancellationToken);
 
-        if (!wrote) return Results.NoContent();
+        if (!wrote) return Results.Ok(new RankReadingResponse(false));
 
         await db.SaveChangesAsync(cancellationToken);
 
         var since = time.GetUtcNow().ToUnixTimeMilliseconds() - AttributionRunner.ReplayWindowMs;
         await attribution.ReplayAsync(account.Id, account.Puuid, since, cancellationToken);
 
-        return Results.NoContent();
+        return Results.Ok(new RankReadingResponse(true));
     }
 
     private static Task<RiotAccount?> OwnedAsync(

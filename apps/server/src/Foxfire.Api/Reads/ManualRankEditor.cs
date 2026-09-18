@@ -7,6 +7,29 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Reads;
 
 /// <summary>
+/// A rank somebody typed, as it crosses the wire.
+///
+/// Riot calls the division "rank" and so does the desktop, while Foxfire.Core
+/// calls it a division because a property called Rank beside one called Tier
+/// reads as the whole rank. Both names are right where they are, so the
+/// translation happens here — at the boundary — rather than by pushing a wire
+/// concern into the domain or a domain word onto every screen.
+/// </summary>
+public sealed record ManualRankDto(string Tier, string? Rank, int LeaguePoints)
+{
+    public ManualRank ToDomain() => new(Tier, Rank, LeaguePoints);
+
+    public static ManualRankDto? From(ManualRank? rank) =>
+        rank is null ? null : new ManualRankDto(rank.Tier, rank.Division, rank.LeaguePoints);
+}
+
+/// <summary>One hand-entered figure for one game, as the desktop sends it.</summary>
+public sealed record ManualRankEditDto(string MatchId, ManualRankDto After, ManualRankDto? Before)
+{
+    public ManualRankEdit ToDomain() => new(MatchId, After.ToDomain(), Before?.ToDomain());
+}
+
+/// <summary>
 /// A ranked game with no worked-out LP, offered for hand-entry.
 /// </summary>
 /// <param name="Before">The rank going in, so the editor can show it without a second query.</param>
@@ -26,10 +49,10 @@ public sealed record EditableMatchResponse(
     int Kills,
     int Deaths,
     int Assists,
-    ManualRank? Before,
+    ManualRankDto? Before,
     long? BeforeAt,
     bool BeforeUsable,
-    ManualRank? Manual);
+    ManualRankDto? Manual);
 
 /// <summary>
 /// Hand-entered LP, for the games attribution cannot work out on its own.
@@ -83,7 +106,7 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
             {
                 MatchId = r.MatchId!,
                 r.CapturedAt,
-                Rank = new ManualRank(r.Tier!, r.Division, r.LeaguePoints ?? 0)
+                Rank = new ManualRankDto(r.Tier!, r.Division, r.LeaguePoints ?? 0)
             })
             .ToList();
 
@@ -131,7 +154,7 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
 
             var before = ownBefore?.Rank
                 ?? (previous?.Tier is not null
-                    ? new ManualRank(previous.Tier, previous.Division, previous.LeaguePoints ?? 0)
+                    ? new ManualRankDto(previous.Tier, previous.Division, previous.LeaguePoints ?? 0)
                     : null);
 
             result.Add(new EditableMatchResponse(

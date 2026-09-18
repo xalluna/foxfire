@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Endpoints;
 
 /// <summary>A batch of hand-entered figures for one ladder.</summary>
-public sealed record SaveManualRanksRequest(string QueueType, IReadOnlyList<ManualRankEdit> Edits);
+public sealed record SaveManualRanksRequest(string QueueType, IReadOnlyList<ManualRankEditDto> Edits);
 
 /// <summary>A season boundary, as an admin edits it.</summary>
 public sealed record SeasonRequest(int? Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
@@ -129,7 +129,11 @@ public static class RankEndpoints
         }
 
         var problem = await editor.SaveAsync(
-            riotAccountId, account.Puuid, queue.Value, request.Edits ?? [], cancellationToken);
+            riotAccountId,
+            account.Puuid,
+            queue.Value,
+            [.. (request.Edits ?? []).Select(e => e.ToDomain())],
+            cancellationToken);
 
         return problem is null
             ? Results.NoContent()
