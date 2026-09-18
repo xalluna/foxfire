@@ -5,6 +5,7 @@ import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { ServerAdminSettings } from '../components/ServerAdminSettings'
+import { ServerDataSettings } from '../components/ServerDataSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
@@ -60,7 +61,9 @@ export function Settings(): JSX.Element {
 
   // Somebody demoted, or signed out, while looking at the page that is now gone.
   useEffect(() => {
-    if (!isServerAdmin && category === 'serverAdmin') setCategory(FIRST_CATEGORY)
+    if (!isServerAdmin && (category === 'serverAdmin' || category === 'serverData')) {
+      setCategory(FIRST_CATEGORY)
+    }
   }, [isServerAdmin, category])
   const pane = useRef<HTMLDivElement>(null)
 
@@ -77,6 +80,7 @@ export function Settings(): JSX.Element {
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
         {category === 'server' && <ServerSettings />}
         {category === 'serverAdmin' && <ServerAdminSettings />}
+        {category === 'serverData' && <ServerDataSettings />}
         {category === 'riotKey' && <RiotKeySettings />}
         {category === 'rank' && <RankTrackingSettings />}
         {category === 'capture' && <CaptureSettings />}

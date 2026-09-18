@@ -215,6 +215,7 @@ app.MapDashboardEndpoints();
 app.MapRankEndpoints();
 app.MapSearchEndpoints();
 app.MapReplayEndpoints();
+app.MapImportEndpoints();
 app.MapHub<FoxfireHub>(FoxfireHub.Path);
 
 var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");

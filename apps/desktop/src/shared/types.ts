@@ -935,6 +935,40 @@ export interface ServerState {
   upgradeRequired: string | null
 }
 
+/**
+ * How far through importing a stats.db the server is.
+ *
+ * Reported rather than returned because the run is minutes long: a Riot lookup
+ * per account and a page of matches per request, and a panel sitting on one
+ * promise would have nothing to say for any of it.
+ */
+export interface ImportProgress {
+  phase: 'accounts' | 'matches' | 'readings' | 'finishing' | 'done'
+  current: number
+  /** Zero while finishing, which has no countable work. */
+  total: number
+}
+
+/** What an import came to. */
+export interface ImportResult {
+  ok: boolean
+  /** Why it could not run, when it could not. Null on success. */
+  message: string | null
+  accounts: number
+  matches: number
+  readings: number
+  seasons: number
+  /** Games the server worked LP out for once everything had arrived. */
+  attributed: number
+  /**
+   * Riot IDs the server could not resolve, almost always renames.
+   *
+   * Named rather than counted: the fix is to re-add each under the name it
+   * plays under now, and that is not something a number can tell anybody.
+   */
+  unresolved: string[]
+}
+
 /** Credentials for signing in to a server. */
 export interface ServerCredentials {
   email: string

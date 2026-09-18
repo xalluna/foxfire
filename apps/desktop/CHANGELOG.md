@@ -45,6 +45,17 @@ Foxfire does until you point it somewhere.
   because a .rofl only runs on the build that produced it.
 - **Nothing waits on any of that.** A replay you just recorded is listed and playable the moment it
   lands, whether or not the server is reachable — sharing it is the extra, not the point.
+- **Bringing your existing Foxfire onto a server.** If you administer one, Settings now has a Data
+  & storage page that reads a `stats.db` and pushes everything in it up: accounts, match history,
+  rank readings and season boundaries. Recordings and Riot replays stay on the PC they are on,
+  because that is where the files are. The old file is opened read-only and never modified, and
+  running the import twice is safe — nothing is imported over itself.
+- **Imported accounts arrive unclaimed.** The file says which League accounts its owner played; it
+  does not say who on the server they are, and that is something the League client attests to
+  rather than something an import can assert. The history is there either way, and claiming an
+  account is the ordinary link. Anything Riot no longer recognises — almost always a rename — is
+  named at the end rather than counted, because the fix is to link it under the name it plays
+  under now.
 - **Switching between a server and this PC without signing out.** Coming back does not mean typing
   a password again.
 - **Being told when a server is too new for this copy.** A server states which versions of Foxfire

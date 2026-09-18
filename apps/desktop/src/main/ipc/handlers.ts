@@ -22,6 +22,7 @@ import {
   setSettings as setServerAdminSettings,
   updateUser
 } from '../services/serverAdminService'
+import { chooseImportDatabase, importDatabase } from '../services/importService'
 import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
@@ -147,6 +148,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
+  ipcMain.handle(CH.serverAdmin.chooseDatabase, () => chooseImportDatabase())
+  ipcMain.handle(CH.serverAdmin.importDatabase, (_e, filePath: string) => importDatabase(filePath))
   ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>
     setServerAdminSettings(patch)
   )

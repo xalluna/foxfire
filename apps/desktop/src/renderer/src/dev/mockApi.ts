@@ -5,6 +5,8 @@ import type {
   AdminInvite,
   AdminUser,
   AdminUserPatch,
+  ImportProgress,
+  ImportResult,
   AdHocSummonerResult,
   AppSettingsPublic,
   AssetManifest,
@@ -281,6 +283,7 @@ let serverState: ServerState =
       : { activeUrl: null, servers: [], session: null, upgradeRequired: null }
 
 const serverListeners = new Set<(state: ServerState) => void>()
+const importListeners = new Set<(progress: ImportProgress) => void>()
 
 function setServerState(next: ServerState): ServerState {
   serverState = next
@@ -509,6 +512,40 @@ export const mockApi: Api = {
   },
   serverAdmin: {
     users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
+
+    // The harness has no file system and no server, so the import is the one
+    // shape the panel has to draw for real: a run that reports its way through
+    // the phases and finishes with a tally.
+    chooseDatabase: (): Promise<string | null> => delay('C:\\Users\\you\\stats.db', 400, false),
+
+    importDatabase: async (): Promise<ImportResult> => {
+      for (const [phase, total] of [['accounts', 3], ['matches', 412], ['readings', 190]] as const) {
+        for (const current of [0, total / 2, total]) {
+          importListeners.forEach((cb) => cb({ phase, current: Math.round(current), total }))
+          await new Promise((resolve) => setTimeout(resolve, 120))
+        }
+      }
+
+      importListeners.forEach((cb) => cb({ phase: 'finishing', current: 0, total: 0 }))
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      importListeners.forEach((cb) => cb({ phase: 'done', current: 0, total: 0 }))
+
+      return {
+        ok: true,
+        message: null,
+        accounts: 3,
+        matches: 412,
+        readings: 190,
+        seasons: 1,
+        attributed: 88,
+        unresolved: ['OldName#NA1']
+      }
+    },
+
+    onImportProgress: (cb: (progress: ImportProgress) => void): (() => void) => {
+      importListeners.add(cb)
+      return () => importListeners.delete(cb)
+    },
 
     updateUser: (id: string, patch: AdminUserPatch): Promise<AdminActionResult> => {
       const target = mockUsers.find((u) => u.id === id)

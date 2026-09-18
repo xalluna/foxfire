@@ -13,6 +13,7 @@ import * as Icon from '../icons'
 export type SettingsCategory =
   | 'server'
   | 'serverAdmin'
+  | 'serverData'
   | 'riotKey'
   | 'rank'
   | 'capture'
@@ -50,6 +51,7 @@ const GROUPS: NavItem[][] = [
   [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
     { id: 'serverAdmin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
+    { id: 'serverData', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
     { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key /> },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],

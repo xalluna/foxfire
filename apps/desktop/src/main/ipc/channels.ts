@@ -31,7 +31,10 @@ export const CH = {
     createInvite: 'serverAdmin:createInvite',
     revokeInvite: 'serverAdmin:revokeInvite',
     getSettings: 'serverAdmin:getSettings',
-    setSettings: 'serverAdmin:setSettings'
+    setSettings: 'serverAdmin:setSettings',
+    chooseDatabase: 'serverAdmin:chooseDatabase',
+    importDatabase: 'serverAdmin:importDatabase',
+    importProgress: 'serverAdmin:importProgress'
   },
   settings: {
     get: 'settings:get',

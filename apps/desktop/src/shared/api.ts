@@ -1,4 +1,6 @@
 import type {
+  ImportProgress,
+  ImportResult,
   Account,
   AdHocSummonerResult,
   AdminActionResult,
@@ -128,6 +130,16 @@ export interface Api {
     revokeInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
+    /** Opens a file picker. Resolves with null when it was dismissed. */
+    chooseDatabase: () => Promise<string | null>
+    /**
+     * Reads an old stats.db and pushes it at the active server.
+     *
+     * Minutes long, so the answer arrives in pieces on onImportProgress and
+     * this resolves once with the tally.
+     */
+    importDatabase: (filePath: string) => Promise<ImportResult>
+    onImportProgress: (cb: (progress: ImportProgress) => void) => () => void
   }
   settings: {
     get: () => Promise<AppSettingsPublic>

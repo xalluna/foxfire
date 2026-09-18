@@ -6,7 +6,8 @@ import type {
   LcuStatus,
   ReplayImportProgress,
   ServerState,
-  SyncProgressEvent
+  SyncProgressEvent,
+  ImportProgress
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -39,7 +40,14 @@ const api: Api = {
     createInvite: (email) => ipcRenderer.invoke(CH.serverAdmin.createInvite, email),
     revokeInvite: (id) => ipcRenderer.invoke(CH.serverAdmin.revokeInvite, id),
     getSettings: () => ipcRenderer.invoke(CH.serverAdmin.getSettings),
-    setSettings: (patch) => ipcRenderer.invoke(CH.serverAdmin.setSettings, patch)
+    setSettings: (patch) => ipcRenderer.invoke(CH.serverAdmin.setSettings, patch),
+    chooseDatabase: () => ipcRenderer.invoke(CH.serverAdmin.chooseDatabase),
+    importDatabase: (filePath) => ipcRenderer.invoke(CH.serverAdmin.importDatabase, filePath),
+    onImportProgress: (cb) => {
+      const listener = (_e: IpcRendererEvent, progress: ImportProgress): void => cb(progress)
+      ipcRenderer.on(CH.serverAdmin.importProgress, listener)
+      return () => ipcRenderer.removeListener(CH.serverAdmin.importProgress, listener)
+    }
   },
   settings: {
     get: () => ipcRenderer.invoke(CH.settings.get),

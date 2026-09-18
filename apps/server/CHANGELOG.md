@@ -52,6 +52,12 @@ match history for you.
   two people who were in the same game do not both run it.
 - **Live progress.** A backfill of a few hundred games takes minutes on a shared
   key, so the desktop is told how far through it is as it goes.
+- **Importing an existing Foxfire database.** An admin points the desktop at an old `stats.db`
+  and everything in it lands here. Every player id in that file is dead on arrival — Riot encrypts
+  them against the key that asked, and that was somebody's desktop — so accounts are re-resolved
+  from their Riot ID first, and every later batch is translated through what that recorded. LP is
+  not imported at all: it is derived from the readings, which are, so the server works it out
+  itself once everything has arrived.
 - **A shared replay library.** Riot writes one .rofl per game, identical for
   all ten players, so one upload serves everybody who was in it — and the client
   that plays it is one everybody already has. A game a friend played is watchable
@@ -104,6 +110,10 @@ match history for you.
   its replacement and marks it spent, so presenting an already-spent token means
   a copy is in use somewhere — and the whole chain is cut rather than the replay
   merely failing.
+- **The import needs no session and no state.** The record that makes it translatable is the same
+  retired-id row a key rotation leaves behind, because it is the same event — an id that used to
+  mean an account and no longer does. So an import interrupted by a failure or a restart is
+  resumed by running it again, and every batch skips what has already landed.
 - **No replay ever passes through the server.** The desktop claims a match,
   gets a signed URL good for fifteen minutes, and puts the bytes straight into
   the blob store; a 30 MB file through a homelab's API process would be its
