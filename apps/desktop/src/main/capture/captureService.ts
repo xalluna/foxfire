@@ -5,6 +5,7 @@ import { broadcast } from '../ipc/broadcast'
 import { setAppIconCapture } from '../appIcon'
 import { createLogger } from '../telemetry/logger'
 import { isNotRunning, liveClientGet } from '../liveClient/client'
+import { accountContext } from '../api/accountContext'
 import { getScoreboard } from '../services/liveClientService'
 import { getCaptureSettings } from '../services/captureSettings'
 import { bindPendingRecordings, broadcastRecordingsChanged } from '../services/recordingService'
@@ -69,7 +70,7 @@ let timer: NodeJS.Timeout | null = null
 let running = false
 
 /** Set between asking OBS to record and OBS confirming it started. */
-let awaitingStart: { accountId: number; queueId: number | null } | null = null
+let awaitingStart: { accountId: string; queueId: number | null } | null = null
 
 /** Last moment the game answered on loopback, so a crash can be told from a stall. */
 let gameLastSeen = 0
@@ -241,8 +242,15 @@ async function onRecordingStarted(): Promise<void> {
   )
 
   const settings = getCaptureSettings()
+  // Resolved now rather than stored on the session: the Riot ID is what finds
+  // this recording again after a move between servers, and it is cheapest to
+  // ask for at the one moment the row is written.
+  const account = await accountContext(pending.accountId)
+
   const recordingId = createRecording(getDb(), {
-    accountId: pending.accountId,
+    accountId: account.accountId,
+    riotId: account.riotId,
+    serverKey: account.serverKey,
     // A placeholder: OBS names the file and only reports the name on stop.
     filePath: `${settings.folder}\\pending-${Date.now()}`,
     queueId: pending.queueId,
@@ -287,10 +295,14 @@ function finalizeRecording(recordingId: number, eventPath: string | null): void 
   // eventually make this succeed. Trying once now costs one query and catches
   // the case where the match was already synced. Never allowed to give up: a
   // recording that stopped a second ago has had no chance to be found yet.
-  if (accountId !== null) bindPendingRecordings(accountId)
+  // Not awaited, and the rejection swallowed rather than left floating: the
+  // recording is already written down, and the post-game retries are what
+  // actually pair it. This is only the free attempt in case the match was
+  // already there.
+  if (accountId !== null) void bindPendingRecordings(accountId).catch(() => undefined)
 }
 
-async function readScoreboard(accountId: number): Promise<Scoreboard | null> {
+async function readScoreboard(accountId: string): Promise<Scoreboard | null> {
   try {
     return await getScoreboard(accountId)
   } catch (err) {
@@ -369,7 +381,7 @@ async function tick(): Promise<void> {
   }
 
   if (state.phase === 'recording' && state.recordingId !== null) {
-    const board = await readScoreboard(state.accountId ?? 0)
+    const board = await readScoreboard(state.accountId ?? '')
     if (board) {
       gameLastSeen = now
       await pollEvents(state.recordingId)
@@ -402,7 +414,7 @@ function scheduleNextPoll(): void {
  * recording by — but arming does not need to be quick. It only has to happen
  * before the loading screen ends, and that takes at least a minute.
  */
-export function onGamePhase(accountId: number, queueId: number | null, playing: boolean): void {
+export function onGamePhase(accountId: string, queueId: number | null, playing: boolean): void {
   if (!running) return
   if (playing) {
     const wasIdle = state.phase === 'idle'

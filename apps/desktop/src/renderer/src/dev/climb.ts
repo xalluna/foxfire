@@ -97,7 +97,7 @@ interface Profile {
   damagePerMin: number
 }
 
-const PROFILES: Record<number, Profile> = {
+const PROFILES: Record<string, Profile> = {
   [C.Ahri]:    { position: 'MIDDLE',  spells: [S.Flash, S.Ignite],   keystone: 'Electrocute',     items: ITEMS_AP,      csPerMin: 7.4, kills: 8, deaths: 5, assists: 8,  damagePerMin: 1000 },
   [C.Viktor]:  { position: 'MIDDLE',  spells: [S.Teleport, S.Flash], keystone: 'ArcaneComet',     items: ITEMS_AP,      csPerMin: 8.2, kills: 7, deaths: 4, assists: 7,  damagePerMin: 1050 },
   [C.Lux]:     { position: 'MIDDLE',  spells: [S.Flash, S.Barrier],  keystone: 'ArcaneComet',     items: ITEMS_AP,      csPerMin: 6.6, kills: 6, deaths: 5, assists: 12, damagePerMin: 950 },

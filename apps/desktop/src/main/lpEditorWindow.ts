@@ -21,14 +21,14 @@ import type { QueueType } from '@shared/types'
 let editorWindow: BrowserWindow | null = null
 
 /** What the open window is showing, so a repeat open knows whether to reload. */
-let context: { accountId: number; queueType: QueueType } | null = null
+let context: { accountId: string; queueType: QueueType } | null = null
 
-function editorHash(accountId: number, queueType: QueueType, matchId: string): string {
+function editorHash(accountId: string, queueType: QueueType, matchId: string): string {
   return `#lp-editor?account=${accountId}&queue=${queueType}&match=${encodeURIComponent(matchId)}`
 }
 
 export function openLpEditorWindow(
-  accountId: number,
+  accountId: string,
   queueType: QueueType,
   matchId: string
 ): void {
@@ -83,7 +83,7 @@ export function openLpEditorWindow(
 
 function loadEditor(
   window: BrowserWindow,
-  accountId: number,
+  accountId: string,
   queueType: QueueType,
   matchId: string
 ): void {

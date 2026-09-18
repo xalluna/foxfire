@@ -12,7 +12,7 @@ interface SyncStateRow {
 
 function toSyncState(row: SyncStateRow): SyncState {
   return {
-    accountId: row.account_id,
+    accountId: String(row.account_id),
     mostRecentMatchId: row.most_recent_match_id,
     backfillComplete: row.backfill_complete === 1,
     backfillTarget: row.backfill_target,

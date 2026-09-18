@@ -2,7 +2,7 @@ import { useUiStore } from '../store/uiStore'
 import { Bar } from './Bar'
 import * as Icon from './icons'
 
-export function SyncProgressBar({ accountId }: { accountId: number }): JSX.Element | null {
+export function SyncProgressBar({ accountId }: { accountId: string }): JSX.Element | null {
   const progress = useUiStore((s) => s.syncProgress[accountId])
   if (!progress || progress.phase === 'complete') return null
 

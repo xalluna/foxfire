@@ -26,7 +26,7 @@ function run(events: SessionEvent[], config = CONFIG): CaptureSessionState {
   )
 }
 
-const started: SessionEvent = { type: 'gameStarted', accountId: 1, queueId: 420, at: T0 }
+const started: SessionEvent = { type: 'gameStarted', accountId: '1', queueId: 420, at: T0 }
 const ready: SessionEvent = { type: 'gameReady', gameTime: 42.5, at: T0 + 120_000 }
 const recording: SessionEvent = { type: 'recordingStarted', recordingId: 7, at: T0 + 121_000 }
 
@@ -36,32 +36,32 @@ describe('capture state machine', () => {
 
     expect(state.phase).toBe('armed')
     expect(state.queueId).toBe(420)
-    expect(state.accountId).toBe(1)
+    expect(state.accountId).toBe('1')
   })
 
   it('ignores a queue the user unticked', () => {
-    const state = run([{ type: 'gameStarted', accountId: 1, queueId: 450, at: T0 }])
+    const state = run([{ type: 'gameStarted', accountId: '1', queueId: 450, at: T0 }])
 
     expect(state.phase).toBe('idle')
   })
 
   it('records an unlisted queue only when the catch-all is on', () => {
     // Practice Tool reports 0, which is how this gets tested without a real game.
-    const practice: SessionEvent = { type: 'gameStarted', accountId: 1, queueId: 0, at: T0 }
+    const practice: SessionEvent = { type: 'gameStarted', accountId: '1', queueId: 0, at: T0 }
 
     expect(run([practice]).phase).toBe('idle')
     expect(run([practice], { ...CONFIG, otherQueues: true }).phase).toBe('armed')
   })
 
   it('does not let the catch-all resurrect a queue that was unticked', () => {
-    const aram: SessionEvent = { type: 'gameStarted', accountId: 1, queueId: 450, at: T0 }
+    const aram: SessionEvent = { type: 'gameStarted', accountId: '1', queueId: 450, at: T0 }
 
     // 450 is a queue the settings screen lists by name, and it is not ticked.
     expect(run([aram], { ...CONFIG, otherQueues: true }).phase).toBe('idle')
   })
 
   it('treats a queue the client never reported as unrecognised', () => {
-    const unknown: SessionEvent = { type: 'gameStarted', accountId: 1, queueId: null, at: T0 }
+    const unknown: SessionEvent = { type: 'gameStarted', accountId: '1', queueId: null, at: T0 }
 
     expect(run([unknown]).phase).toBe('idle')
     expect(run([unknown], { ...CONFIG, otherQueues: true }).phase).toBe('armed')
@@ -87,7 +87,7 @@ describe('capture state machine', () => {
 
     expect(effect).toEqual({
       type: 'beginRecording',
-      accountId: 1,
+      accountId: '1',
       queueId: 420,
       gameTime: 42.5,
       at: T0 + 120_000
@@ -175,7 +175,7 @@ describe('capture state machine', () => {
 
   it('ignores repeat game-start reports from the ten-second poll', () => {
     const live = run([started, ready, recording])
-    const again = reduce(live, { type: 'gameStarted', accountId: 1, queueId: 420, at: T0 }, CONFIG)
+    const again = reduce(live, { type: 'gameStarted', accountId: '1', queueId: 420, at: T0 }, CONFIG)
 
     expect(again.state.phase).toBe('recording')
     expect(again.state.recordingId).toBe(7)

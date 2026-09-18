@@ -142,14 +142,14 @@ export interface Api {
     list: () => Promise<Account[]>
     getHome: () => Promise<Account | null>
     add: (input: RiotIdInput) => Promise<Account>
-    remove: (accountId: number) => Promise<Account[]>
-    setHome: (accountId: number) => Promise<Account[]>
+    remove: (accountId: string) => Promise<Account[]>
+    setHome: (accountId: string) => Promise<Account[]>
   }
   dashboard: {
-    get: (accountId: number) => Promise<DashboardData | null>
+    get: (accountId: string) => Promise<DashboardData | null>
     /** `queueId` null means every queue; filtering happens in SQL so paging stays even. */
     matchList: (
-      accountId: number,
+      accountId: string,
       limit: number,
       offset: number,
       queueId: number | null
@@ -157,8 +157,8 @@ export interface Api {
     matchDetail: (matchId: string) => Promise<MatchDetail | null>
   }
   sync: {
-    start: (accountId: number) => Promise<void>
-    getState: (accountId: number) => Promise<SyncState | null>
+    start: (accountId: string) => Promise<void>
+    getState: (accountId: string) => Promise<SyncState | null>
     onProgress: (cb: (event: SyncProgressEvent) => void) => () => void
   }
   assets: {
@@ -171,12 +171,12 @@ export interface Api {
    */
   liveClient: {
     /** Null whenever no game is running on this machine, which is not an error. */
-    scoreboard: (accountId: number) => Promise<Scoreboard | null>
+    scoreboard: (accountId: string) => Promise<Scoreboard | null>
   }
   champions: {
     /** Local-only, so the Champions screen renders whatever the API key is doing. */
     stats: (
-      accountId: number,
+      accountId: string,
       queueId: number | null,
       range: RankRange
     ) => Promise<ChampionStats[]>
@@ -191,32 +191,32 @@ export interface Api {
   }
   mastery: {
     /** Win rates are scoped to `queueId`; Riot mastery is lifetime and never is. */
-    get: (accountId: number, refresh: boolean, queueId: number | null) => Promise<MasteryData>
+    get: (accountId: string, refresh: boolean, queueId: number | null) => Promise<MasteryData>
   }
   rank: {
-    history: (accountId: number, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+    history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
     /** Seasons with data, newest first. The first is what the pickers open on. */
-    periods: (accountId: number) => Promise<Season[]>
+    periods: (accountId: string) => Promise<Season[]>
     /** Ranked games with no LP figure — everything the editor can offer. */
-    editable: (accountId: number, queueType: QueueType) => Promise<EditableMatch[]>
+    editable: (accountId: string, queueType: QueueType) => Promise<EditableMatch[]>
     /**
      * Stores a batch of entries and returns what still needs one. Fewer rows can
      * come back than were left: stating the rank after two games of a run of
      * three resolves the third on its own.
      */
     saveManual: (
-      accountId: number,
+      accountId: string,
       queueType: QueueType,
       edits: ManualRankEdit[]
     ) => Promise<EditableMatch[]>
     clearManual: (
-      accountId: number,
+      accountId: string,
       queueType: QueueType,
       matchId: string
     ) => Promise<EditableMatch[]>
-    openEditor: (accountId: number, queueType: QueueType, matchId: string) => Promise<void>
+    openEditor: (accountId: string, queueType: QueueType, matchId: string) => Promise<void>
     /** Fires after any edit, so the match list and rank graph refetch. */
-    onEdited: (cb: (accountId: number) => void) => () => void
+    onEdited: (cb: (accountId: string) => void) => () => void
     /** Fires when an already-open editor is asked to show a different game. */
     onEditorFocus: (cb: (matchId: string) => void) => () => void
   }
@@ -224,7 +224,7 @@ export interface Api {
     getStatus: () => Promise<LcuStatus>
     onStatus: (cb: (status: LcuStatus) => void) => () => void
     /** Fires when the watcher records an LP change, so views can refetch. */
-    onRankChanged: (cb: (accountId: number) => void) => () => void
+    onRankChanged: (cb: (accountId: string) => void) => () => void
   }
   background: {
     get: () => Promise<BackgroundSettings>
@@ -250,20 +250,20 @@ export interface Api {
   }
   recordings: {
     /** Every recording for an account, newest first, bound or not. */
-    list: (accountId: number) => Promise<Recording[]>
+    list: (accountId: string) => Promise<Recording[]>
     detail: (recordingId: number) => Promise<RecordingDetail | null>
     usage: () => Promise<RecordingDiskUsage>
     remove: (recordingId: number) => Promise<void>
     /** Deletes the N oldest recordings, for the one-click cleanup on the cap warning. */
-    removeOldest: (accountId: number, count: number) => Promise<number>
+    removeOldest: (accountId: string, count: number) => Promise<number>
     /** Opens a window owning this recording. Called again, it opens another one. */
     open: (recordingId: number) => Promise<void>
     reveal: (recordingId: number) => Promise<void>
     /** Fires when a recording is added, bound or deleted. */
     onChanged: (cb: () => void) => () => void
     /** Sent by a recording window; the main window focuses and expands that match. */
-    showMatch: (accountId: number, matchId: string) => Promise<void>
-    onShowMatch: (cb: (accountId: number, matchId: string) => void) => () => void
+    showMatch: (accountId: string, matchId: string) => Promise<void>
+    onShowMatch: (cb: (accountId: string, matchId: string) => void) => () => void
   }
   /**
    * Riot's own replays. No detail call and no player: a .rofl is handed to the
@@ -279,8 +279,8 @@ export interface Api {
    */
   pathForFile: (file: File) => string | null
   replays: {
-    list: (accountId: number) => Promise<Replay[]>
-    usage: (accountId: number) => Promise<ReplayDiskUsage>
+    list: (accountId: string) => Promise<Replay[]>
+    usage: (accountId: string) => Promise<ReplayDiskUsage>
     /** Resolves with why it could not be opened, or null when it opened. */
     open: (replayId: number) => Promise<ReplayLaunchResult>
     reveal: (replayId: number) => Promise<void>

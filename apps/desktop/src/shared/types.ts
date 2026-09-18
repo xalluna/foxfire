@@ -6,7 +6,18 @@ export type { CaptureQuality } from './captureQuality'
 export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
 
 export interface Account {
-  id: number
+  /**
+   * Opaque. Whoever owns accounts chose it, and nothing here may take it apart.
+   *
+   * In local-only mode it is this machine's SQLite rowid written as text; on a
+   * Foxfire Server it is that server's own id, which is a GUID. The renderer
+   * passes it back through `window.api` and never reads it, which is what lets
+   * the same screens work against either store.
+   *
+   * What crosses between the two is `gameName#tagLine`, not this. An id from
+   * one server means nothing on another, and nothing at all locally.
+   */
+  id: string
   puuid: string
   gameName: string
   tagLine: string
@@ -274,7 +285,7 @@ export type LcuStatus =
   | { state: 'disconnected' }
   | {
       state: 'connected'
-      accountId: number
+      accountId: string
       gameName: string
       tagLine: string
       /**
@@ -364,7 +375,7 @@ export interface ChampionStats {
 }
 
 export interface SyncState {
-  accountId: number
+  accountId: string
   mostRecentMatchId: string | null
   backfillComplete: boolean
   backfillTarget: number
@@ -382,7 +393,7 @@ export interface SyncState {
 export type SyncTrigger = 'manual' | 'auto'
 
 export interface SyncProgressEvent {
-  accountId: number
+  accountId: string
   phase: 'backfill' | 'delta' | 'complete' | 'error'
   current: number
   total: number
@@ -506,7 +517,7 @@ export type IdentityOutcome =
   | 'failed'
 
 export interface IdentityReport {
-  accountId: number
+  accountId: string
   /** `gameName#tagLine`, so a message about it can name the account. */
   riotId: string
   outcome: IdentityOutcome
@@ -634,8 +645,11 @@ export interface LinkedMatchInfo {
 }
 
 export interface Recording {
+  /** This machine's own row id. Recordings never leave the disk they are on. */
   id: number
-  accountId: number
+
+  /** Whose account it was recorded on, as whichever store owns accounts spells it. */
+  accountId: string
   matchId: string | null
   bindState: RecordingBindState
   fileBytes: number | null
@@ -693,9 +707,11 @@ export interface RecordingDiskUsage {
  * appears and `match` simply fills in later, by itself, once that game syncs.
  */
 export interface Replay {
+  /** This machine's own row id. A .rofl lives on one disk. */
   id: number
+
   /** Resolved from the match's participants. Null until the match is known. */
-  accountId: number | null
+  accountId: string | null
   matchId: string | null
   /**
    * False once Foxfire's copy has gone missing behind our back. The row is kept

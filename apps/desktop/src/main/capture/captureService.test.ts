@@ -23,7 +23,7 @@ import type { RecordStateEvent } from './recordEvents'
  */
 
 const T0 = 1_700_000_000_000
-const ACCOUNT = 1
+const ACCOUNT = '1'
 const QUEUE = 420
 const RECORDING_ID = 7
 
@@ -85,6 +85,13 @@ vi.mock('../appIcon', () => ({
 // Never touched: every repository call below is stubbed.
 vi.mock('../db', () => ({ getDb: () => null }))
 
+// Resolving an account reaches the API layer, which reaches the database and
+// the server client. Capture only ever asks it for what to stamp on the row.
+vi.mock('../api/accountContext', () => ({
+  accountContext: (accountId: string) =>
+    Promise.resolve({ accountId, riotId: 'Alluna#NA1', serverKey: null })
+}))
+
 vi.mock('../db/repositories/recordings.repo', () => ({
   createRecording: () => {
     live.createdRecordings += 1
@@ -100,7 +107,7 @@ vi.mock('../db/repositories/recordings.repo', () => ({
 }))
 
 vi.mock('../services/recordingService', () => ({
-  bindPendingRecordings: () => {},
+  bindPendingRecordings: () => Promise.resolve(0),
   broadcastRecordingsChanged: () => {}
 }))
 

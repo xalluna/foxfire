@@ -3,7 +3,7 @@
 // imports so it stays trivially testable, in the manner of syncPlanning.ts.
 
 import { byPosition, isPosition } from '@shared/positions'
-import type { Account, AssetManifest, Scoreboard, ScoreboardPlayer } from '@shared/types'
+import type { AssetManifest, Scoreboard, ScoreboardPlayer } from '@shared/types'
 import type { AllGameDataDto, LivePlayerDto } from './types'
 
 /** How many inventory slots the game reports; index 6 is the trinket. */
@@ -165,7 +165,10 @@ function sameRiotId(gameName: string | null, tagLine: string | null, riotId: str
 export function toScoreboard(
   data: AllGameDataDto,
   manifest: AssetManifest,
-  account: Account
+
+  // `gameName#tagLine`, which is the only thing this ever wanted from an
+  // account and the one identity that means the same on any server.
+  accountRiotId: string
 ): Scoreboard {
   const lookups = buildLookups(manifest)
   const rows = data.allPlayers ?? []
@@ -176,7 +179,7 @@ export function toScoreboard(
   // highlight two rows.
   const matches = (riotId: string): boolean =>
     rows.some((p) => sameRiotId(text(p.riotIdGameName), text(p.riotIdTagLine), riotId))
-  const accountRiotId = `${account.gameName}#${account.tagLine}`
+
   const selfRiotId = matches(accountRiotId) ? accountRiotId : (data.activePlayer?.riotId ?? null)
 
   const players = rows.map((player, slot) =>

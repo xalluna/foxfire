@@ -61,7 +61,7 @@ import {
 
 export const ACCOUNTS: Account[] = [
   {
-    id: 1,
+    id: '1',
     puuid: 'puuid-alluna',
     gameName: 'Alluna',
     tagLine: 'NA1',
@@ -75,7 +75,7 @@ export const ACCOUNTS: Account[] = [
     updatedAt: '2026-08-14T18:00:00Z'
   },
   {
-    id: 2,
+    id: '2',
     // Long enough to exercise truncation in the 64px rail and the 320px card.
     puuid: 'puuid-smurf',
     gameName: 'AbsolutelyEnormousName',
@@ -92,7 +92,7 @@ export const ACCOUNTS: Account[] = [
   }
 ]
 
-export const LEAGUE_ENTRIES: Record<number, LeagueEntry[]> = {
+export const LEAGUE_ENTRIES: Record<string, LeagueEntry[]> = {
   1: [
     {
       queueType: 'RANKED_SOLO_5x5',
@@ -442,7 +442,7 @@ const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
  * accountId, and a harness that ignored it would hide any bug where the app
  * shows one account's climb under another's name.
  */
-export const RANK_SNAPSHOTS: Record<number, Record<QueueType, RankSnapshot[]>> = {
+export const RANK_SNAPSHOTS: Record<string, Record<QueueType, RankSnapshot[]>> = {
   1: ALLUNA_SNAPSHOTS,
   2: {
     // Two ranked years, oldest first. The gap between them is January's reset:
@@ -500,7 +500,7 @@ const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
  * are generated (see climb.ts) to cover the volume case the hand-written list
  * cannot — paging, a champion pool with a real distribution, a month of rank.
  */
-export const MATCHES: Record<number, MatchSummary[]> = {
+export const MATCHES: Record<string, MatchSummary[]> = {
   1: ALLUNA_MATCHES,
   // Newest first across both seasons: each block is already reversed, and the
   // prior one is wholly older, so concatenating keeps the list ordered.
@@ -528,7 +528,7 @@ const ALLUNA_MASTERY: MasteryEntry[] = [
 ]
 
 /** Riot mastery per account — lifetime, so never scoped to a queue. */
-export const MASTERY: Record<number, MasteryEntry[]> = {
+export const MASTERY: Record<string, MasteryEntry[]> = {
   1: ALLUNA_MASTERY,
   2: CLIMB_MASTERY
 }
@@ -545,7 +545,7 @@ export const MASTERY: Record<number, MasteryEntry[]> = {
  * quietly lie about arithmetic the real app gets right.
  */
 export function championStatsFor(
-  accountId: number,
+  accountId: string,
   queueId: number | null,
   range: RankRange = 'all'
 ): ChampionStats[] {
@@ -642,11 +642,11 @@ export const SCOREBOARD: Scoreboard = {
  * game — the Practice Tool case, which is the normal reason a recording stays
  * unmatched and is exactly the row most likely to be got wrong.
  */
-export const RECORDINGS: Record<number, Recording[]> = {
+export const RECORDINGS: Record<string, Recording[]> = {
   1: [
     {
       id: 1,
-      accountId: 1,
+      accountId: '1',
       matchId: matchIdAt(0),
       bindState: 'bound',
       fileBytes: 1_820_000_000,
@@ -672,7 +672,7 @@ export const RECORDINGS: Record<number, Recording[]> = {
     },
     {
       id: 2,
-      accountId: 1,
+      accountId: '1',
       matchId: null,
       bindState: 'pending',
       fileBytes: 1_100_000_000,
@@ -686,7 +686,7 @@ export const RECORDINGS: Record<number, Recording[]> = {
     },
     {
       id: 3,
-      accountId: 1,
+      accountId: '1',
       matchId: null,
       bindState: 'unmatched',
       fileBytes: 260_000_000,
@@ -732,7 +732,7 @@ export const RECORDING_EVENTS: RecordingEvent[] = [
 export const MOCK_REPLAYS: Replay[] = [
   {
     id: 1,
-    accountId: 1,
+    accountId: '1',
     matchId: 'NA1_5312345678',
     fileExists: true,
     fileBytes: 31_400_000,
@@ -757,7 +757,7 @@ export const MOCK_REPLAYS: Replay[] = [
   },
   {
     id: 2,
-    accountId: 1,
+    accountId: '1',
     matchId: 'NA1_5312345600',
     fileExists: true,
     fileBytes: 29_900_000,

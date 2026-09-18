@@ -155,7 +155,10 @@ function bootstrap(): void {
 function catchUpOnLaunch(): void {
   repairAttribution()
   for (const account of listAccounts(getDb())) {
-    bindPendingRecordings(account.id)
+    // Fire-and-forget, with the rejection swallowed rather than left floating:
+    // a launch must not fail because one account's recordings could not be
+    // paired, and the next sync tries again anyway.
+    void bindPendingRecordings(String(account.id)).catch(() => undefined)
     startSync(account.id, 'auto')
   }
 

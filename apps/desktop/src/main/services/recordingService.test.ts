@@ -17,6 +17,15 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 const live = vi.hoisted(() => ({ db: null as unknown }))
 vi.mock('../db', () => ({ getDb: () => live.db }))
 
+// The account context reaches the API layer, which reaches Electron. These
+// tests are about what the service does with the answer, not where it came
+// from — the Riot ID is here so the "claimed by either handle" predicate is
+// exercised rather than bypassed.
+vi.mock('../api/accountContext', () => ({
+  accountContext: (accountId: string) =>
+    Promise.resolve({ accountId, riotId: 'Alluna#NA1', serverKey: null })
+}))
+
 vi.mock('../telemetry/logger', () => ({
   createLogger: () => ({ info: () => {}, debug: () => {}, error: () => {} })
 }))
@@ -32,7 +41,7 @@ vi.mock('./captureSettings', () => ({ getCaptureSettings: () => ({ softCapBytes:
 const { bindPendingRecordings } = await import('./recordingService')
 
 const ME = 'puuid-me'
-const ACCOUNT = 1
+const ACCOUNT = '1'
 const T0 = 1_700_000_000_000
 const MINUTE = 60_000
 /** Seconds, as the schema stores it — 25 minutes. */
@@ -99,6 +108,8 @@ function finishedRecording(name = 'game'): number {
   const path = `recording-${name}.mp4`
   const id = createRecording(db, {
     accountId: ACCOUNT,
+    riotId: 'Alluna#NA1',
+    serverKey: null,
     filePath: path,
     queueId: 420,
     startedAt: T0,
@@ -129,44 +140,44 @@ afterEach(() => {
 })
 
 describe('bindPendingRecordings', () => {
-  it('gives a recording the match that arrived after it', () => {
+  it('gives a recording the match that arrived after it', async () => {
     const id = finishedRecording()
     insertMatch(db, match('NA1_1'))
 
-    expect(bindPendingRecordings(ACCOUNT)).toBe(1)
+    expect(await bindPendingRecordings(ACCOUNT)).toBe(1)
     expect(getRecording(db, id)?.bindState).toBe('bound')
     expect(getRecording(db, id)?.matchId).toBe('NA1_1')
   })
 
-  it('will not write a recording off on a pass that cannot vouch for the sync', () => {
+  it('will not write a recording off on a pass that cannot vouch for the sync', async () => {
     // The stale-key case. The match is missing because nothing could be fetched,
     // not because the game does not exist, and the recording is already hours
     // past the give-up deadline by the time a new key is pasted in.
     const id = finishedRecording()
 
-    expect(bindPendingRecordings(ACCOUNT)).toBe(0)
+    expect(await bindPendingRecordings(ACCOUNT)).toBe(0)
     expect(getRecording(db, id)?.bindState).toBe('pending')
 
-    expect(bindPendingRecordings(ACCOUNT, { allowGiveUp: false })).toBe(0)
+    expect(await bindPendingRecordings(ACCOUNT, { allowGiveUp: false })).toBe(0)
     expect(getRecording(db, id)?.bindState).toBe('pending')
   })
 
-  it('writes a recording off once a clean sync has looked and found nothing', () => {
+  it('writes a recording off once a clean sync has looked and found nothing', async () => {
     const id = finishedRecording()
 
-    expect(bindPendingRecordings(ACCOUNT, { allowGiveUp: true })).toBe(0)
+    expect(await bindPendingRecordings(ACCOUNT, { allowGiveUp: true })).toBe(0)
     expect(getRecording(db, id)?.bindState).toBe('unmatched')
   })
 
-  it('does not write off a recording that has not waited long enough yet', () => {
+  it('does not write off a recording that has not waited long enough yet', async () => {
     const id = finishedRecording()
     vi.setSystemTime(T0 + DURATION * 1000 + MINUTE)
 
-    expect(bindPendingRecordings(ACCOUNT, { allowGiveUp: true })).toBe(0)
+    expect(await bindPendingRecordings(ACCOUNT, { allowGiveUp: true })).toBe(0)
     expect(getRecording(db, id)?.bindState).toBe('pending')
   })
 
-  it('picks a written-off recording back up when its match finally appears', () => {
+  it('picks a written-off recording back up when its match finally appears', async () => {
     // The recovery that used to be impossible: nothing ever read a row again
     // once it had been marked unmatched.
     const id = finishedRecording()
@@ -174,12 +185,12 @@ describe('bindPendingRecordings', () => {
 
     insertMatch(db, match('NA1_1'))
 
-    expect(bindPendingRecordings(ACCOUNT)).toBe(1)
+    expect(await bindPendingRecordings(ACCOUNT)).toBe(1)
     expect(getRecording(db, id)?.bindState).toBe('bound')
     expect(getRecording(db, id)?.matchId).toBe('NA1_1')
   })
 
-  it('leaves a written-off recording alone once it has aged past the retry horizon', () => {
+  it('leaves a written-off recording alone once it has aged past the retry horizon', async () => {
     const id = finishedRecording()
     markRecordingUnmatched(db, id)
     insertMatch(db, match('NA1_1'))
@@ -187,16 +198,16 @@ describe('bindPendingRecordings', () => {
     // Two weeks on, a recording nothing has ever matched is a Practice Tool game.
     vi.setSystemTime(T0 + 14 * 24 * 60 * MINUTE)
 
-    expect(bindPendingRecordings(ACCOUNT)).toBe(0)
+    expect(await bindPendingRecordings(ACCOUNT)).toBe(0)
     expect(getRecording(db, id)?.bindState).toBe('unmatched')
   })
 
-  it('does not let two recordings claim the same game', () => {
+  it('does not let two recordings claim the same game', async () => {
     const first = finishedRecording('first')
     const second = finishedRecording('second')
     insertMatch(db, match('NA1_1'))
 
-    expect(bindPendingRecordings(ACCOUNT)).toBe(1)
+    expect(await bindPendingRecordings(ACCOUNT)).toBe(1)
     const states = [first, second].map((id) => getRecording(db, id)?.bindState)
     expect(states.filter((state) => state === 'bound')).toHaveLength(1)
   })

@@ -78,9 +78,9 @@ import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
  * Here there is only one, but the match list and rank graph still have to be
  * told to refetch after an edit.
  */
-const editedListeners = new Set<(accountId: number) => void>()
+const editedListeners = new Set<(accountId: string) => void>()
 
-function notifyEdited(accountId: number): void {
+function notifyEdited(accountId: string): void {
   for (const listener of editedListeners) listener(accountId)
 }
 
@@ -171,12 +171,12 @@ function accounts(): Account[] {
   return scenario === 'no-accounts' ? [] : ACCOUNTS
 }
 
-function matchesFor(accountId: number): MatchSummary[] {
+function matchesFor(accountId: string): MatchSummary[] {
   if (scenario === 'no-matches') return []
   return MATCHES[accountId] ?? []
 }
 
-function syncState(accountId: number): SyncState {
+function syncState(accountId: string): SyncState {
   return {
     accountId,
     mostRecentMatchId: matchesFor(accountId)[0]?.matchId ?? null,
@@ -192,7 +192,7 @@ const progressListeners = new Set<(event: SyncProgressEvent) => void>()
 const keyInvalidListeners = new Set<() => void>()
 
 /** Drives a believable progress sequence so the progress bar can be designed against motion. */
-function runFakeSync(accountId: number): void {
+function runFakeSync(accountId: string): void {
   if (scenario === 'sync-error') {
     setTimeout(() => {
       for (const cb of progressListeners) {
@@ -634,7 +634,7 @@ export const mockApi: Api = {
       delay(
         {
           ...ACCOUNTS[0],
-          id: Date.now(),
+          id: String(Date.now()),
           puuid: `puuid-${input.gameName}`,
           gameName: input.gameName,
           tagLine: input.tagLine,
@@ -642,14 +642,14 @@ export const mockApi: Api = {
         },
         700
       ),
-    remove: (accountId: number): Promise<Account[]> =>
+    remove: (accountId: string): Promise<Account[]> =>
       delay(accounts().filter((a) => a.id !== accountId)),
-    setHome: (accountId: number): Promise<Account[]> =>
+    setHome: (accountId: string): Promise<Account[]> =>
       delay(accounts().map((a) => ({ ...a, isHomeAccount: a.id === accountId })))
   },
 
   dashboard: {
-    get: (accountId: number): Promise<DashboardData | null> => {
+    get: (accountId: string): Promise<DashboardData | null> => {
       if (scenario === 'key-expired') return fail(KEY_EXPIRED)
       const account = accounts().find((a) => a.id === accountId)
       if (!account) return delay(null)
@@ -660,7 +660,7 @@ export const mockApi: Api = {
       })
     },
     matchList: (
-      accountId: number,
+      accountId: string,
       limit: number,
       offset: number,
       queueId: number | null
@@ -675,11 +675,11 @@ export const mockApi: Api = {
   },
 
   sync: {
-    start: (accountId: number): Promise<void> => {
+    start: (accountId: string): Promise<void> => {
       runFakeSync(accountId)
       return delay(undefined, 100)
     },
-    getState: (accountId: number): Promise<SyncState | null> => delay(syncState(accountId)),
+    getState: (accountId: string): Promise<SyncState | null> => delay(syncState(accountId)),
     onProgress: (cb) => {
       progressListeners.add(cb)
       return () => progressListeners.delete(cb)
@@ -701,7 +701,7 @@ export const mockApi: Api = {
 
   champions: {
     stats: (
-      accountId: number,
+      accountId: string,
       queueId: number | null,
       range: RankRange
     ): Promise<ChampionStats[]> => delay(championStatsFor(accountId, queueId, range), 300)
@@ -721,7 +721,7 @@ export const mockApi: Api = {
   },
 
   mastery: {
-    get: (accountId: number, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
+    get: (accountId: string, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
       delay(
         {
           // Mastery is lifetime and never narrows; only the win rates do.
@@ -733,7 +733,7 @@ export const mockApi: Api = {
   },
 
   rank: {
-    history: (accountId: number, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
+    history: (accountId: string, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
       const { sinceMs, untilMs } = rangeBounds(range, DEV_SEASONS)
       const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
         (s) =>
@@ -767,7 +767,7 @@ export const mockApi: Api = {
       return delay({ snapshots, milestones }, 280)
     },
 
-    periods: (accountId: number): Promise<Season[]> => {
+    periods: (accountId: string): Promise<Season[]> => {
       const times = [
         ...Object.values(RANK_SNAPSHOTS[accountId] ?? {}).flatMap((series) =>
           series.map((s) => s.capturedAt)
@@ -778,16 +778,16 @@ export const mockApi: Api = {
       return delay(seasonsSpanning(DEV_SEASONS, Math.min(...times), Math.max(...times)), 120)
     },
 
-    editable: (accountId: number, queueType: QueueType) =>
+    editable: (accountId: string, queueType: QueueType) =>
       delay(editableMatches(accountId, queueType), 200),
 
-    saveManual: (accountId: number, queueType: QueueType, edits) => {
+    saveManual: (accountId: string, queueType: QueueType, edits) => {
       const fresh = saveManualRanks(accountId, queueType, edits)
       notifyEdited(accountId)
       return delay(fresh, 250)
     },
 
-    clearManual: (accountId: number, queueType: QueueType, matchId: string) => {
+    clearManual: (accountId: string, queueType: QueueType, matchId: string) => {
       const fresh = clearManualRank(accountId, queueType, matchId)
       notifyEdited(accountId)
       return delay(fresh, 250)
@@ -796,7 +796,7 @@ export const mockApi: Api = {
     // There are no windows in a browser, so the editor takes over the page
     // instead. main.tsx picks its root from the hash at startup, so setting it
     // and reloading lands on the editor exactly as the real window does.
-    openEditor: (accountId: number, queueType: QueueType, matchId: string): Promise<void> => {
+    openEditor: (accountId: string, queueType: QueueType, matchId: string): Promise<void> => {
       window.location.hash = `#lp-editor?account=${accountId}&queue=${queueType}&match=${encodeURIComponent(matchId)}`
       window.location.reload()
       return Promise.resolve()
@@ -821,7 +821,7 @@ export const mockApi: Api = {
           ? { state: 'disconnected' }
           : {
               state: 'connected',
-              accountId: 1,
+              accountId: '1',
               gameName: 'Alluna',
               tagLine: 'NA1',
               // A game in progress in the default scenario, so the Live tab's
@@ -929,7 +929,7 @@ export const mockApi: Api = {
     reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
   },
   recordings: {
-    list: (accountId: number): Promise<Recording[]> => delay(RECORDINGS[accountId] ?? [], 220),
+    list: (accountId: string): Promise<Recording[]> => delay(RECORDINGS[accountId] ?? [], 220),
     detail: (recordingId: number): Promise<RecordingDetail | null> => {
       const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
       return delay(recording ? { recording, events: RECORDING_EVENTS } : null, 220)

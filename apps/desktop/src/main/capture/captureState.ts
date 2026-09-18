@@ -20,7 +20,7 @@ export type CapturePhase = 'idle' | 'armed' | 'recording' | 'stopping'
 
 export interface CaptureSessionState {
   phase: CapturePhase
-  accountId: number | null
+  accountId: string | null
   queueId: number | null
   recordingId: number | null
   /** When the client said a game was on, so a loading screen that never ends can be given up on. */
@@ -42,7 +42,7 @@ export const INITIAL_STATE: CaptureSessionState = {
 
 export type SessionEvent =
   /** The League client entered a playing phase. */
-  | { type: 'gameStarted'; accountId: number; queueId: number | null; at: number }
+  | { type: 'gameStarted'; accountId: string; queueId: number | null; at: number }
   /** The game answered on loopback, so there is finally something to capture. */
   | { type: 'gameReady'; gameTime: number; at: number }
   | { type: 'recordingStarted'; recordingId: number; at: number }
@@ -59,7 +59,7 @@ export type SessionEffect =
   | { type: 'none' }
   | {
       type: 'beginRecording'
-      accountId: number
+      accountId: string
       queueId: number | null
       gameTime: number
       at: number

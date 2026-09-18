@@ -2,6 +2,7 @@ import { shell } from 'electron'
 import { copyFileSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { accountContext } from '../api/accountContext'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
@@ -60,9 +61,9 @@ function broadcastImportProgress(progress: ReplayImportProgress): void {
  * depends on which clients are installed at this moment, which is not something
  * the database knows or should be told.
  */
-export async function listReplays(accountId: number): Promise<Replay[]> {
+export async function listReplays(accountId: string): Promise<Replay[]> {
   const db = getDb()
-  const replays = getReplays(db, accountId)
+  const replays = getReplays(db, await accountContext(accountId))
   if (replays.length === 0) return replays
 
   const archives = getArchivePatches(db)
@@ -76,8 +77,8 @@ export async function listReplays(accountId: number): Promise<Replay[]> {
   }))
 }
 
-export async function getReplayUsage(accountId: number): Promise<ReplayDiskUsage> {
-  const usage = getUsage(getDb(), accountId)
+export async function getReplayUsage(accountId: string): Promise<ReplayDiskUsage> {
+  const usage = getUsage(getDb(), await accountContext(accountId))
   // Reuses the list rather than re-deriving playability: both answers come from
   // the same per-row check, and the live client's patch is cached behind it.
   const replays = await listReplays(accountId)
@@ -401,7 +402,7 @@ function fingerprintMatch(db: ReturnType<typeof getDb>, header: RoflHeader | nul
 }
 
 /** Which of our accounts played this match, if any of them did. */
-function accountForMatch(db: ReturnType<typeof getDb>, matchId: string): number | null {
+function accountForMatch(db: ReturnType<typeof getDb>, matchId: string): string | null {
   const row = db
     .prepare(
       `SELECT a.id AS id
@@ -411,7 +412,10 @@ function accountForMatch(db: ReturnType<typeof getDb>, matchId: string): number 
         LIMIT 1`
     )
     .get(matchId) as { id: number } | undefined
-  return row?.id ?? null
+
+  // Stringified on the way out: a replay row records the id the way every
+  // other machine-local row does, so it survives the move to a server.
+  return row === undefined ? null : String(row.id)
 }
 
 /**

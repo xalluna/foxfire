@@ -17,7 +17,21 @@ interface AccountRow {
   updated_at: string
 }
 
-function toAccount(row: AccountRow): Account {
+/**
+ * An account as this machine stores it.
+ *
+ * The renderer's Account carries an opaque string id, because connected to a
+ * server that id is the server's and is a GUID. Down here it is SQLite's
+ * rowid, and it stays an integer because that is what every foreign key in
+ * this file actually is. The two are the same row; only the spelling of the
+ * id differs, and the conversion happens once, at the API boundary in
+ * src/main/api/local.ts.
+ */
+export interface StoredAccount extends Omit<Account, 'id'> {
+  id: number
+}
+
+function toAccount(row: AccountRow): StoredAccount {
   return {
     id: row.id,
     puuid: row.puuid,
@@ -34,21 +48,21 @@ function toAccount(row: AccountRow): Account {
   }
 }
 
-export function listAccounts(db: DatabaseSync): Account[] {
+export function listAccounts(db: DatabaseSync): StoredAccount[] {
   const rows = db
     .prepare('SELECT * FROM accounts ORDER BY is_home_account DESC, created_at ASC')
     .all() as unknown as AccountRow[]
   return rows.map(toAccount)
 }
 
-export function getAccountById(db: DatabaseSync, id: number): Account | null {
+export function getAccountById(db: DatabaseSync, id: number): StoredAccount | null {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as
     | unknown as AccountRow
     | undefined
   return row ? toAccount(row) : null
 }
 
-export function getAccountByPuuid(db: DatabaseSync, puuid: string): Account | null {
+export function getAccountByPuuid(db: DatabaseSync, puuid: string): StoredAccount | null {
   const row = db.prepare('SELECT * FROM accounts WHERE puuid = ?').get(puuid) as
     | unknown as AccountRow
     | undefined
@@ -71,14 +85,14 @@ export function getAccountByRiotId(
   db: DatabaseSync,
   gameName: string,
   tagLine: string
-): Account | null {
+): StoredAccount | null {
   const row = db
     .prepare('SELECT * FROM accounts WHERE LOWER(game_name) = LOWER(?) AND LOWER(tag_line) = LOWER(?)')
     .get(gameName, tagLine) as unknown as AccountRow | undefined
   return row ? toAccount(row) : null
 }
 
-export function getHomeAccount(db: DatabaseSync): Account | null {
+export function getHomeAccount(db: DatabaseSync): StoredAccount | null {
   const row = db.prepare('SELECT * FROM accounts WHERE is_home_account = 1').get() as
     | unknown as AccountRow
     | undefined

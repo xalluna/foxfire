@@ -58,9 +58,26 @@ Foxfire does until you point it somewhere.
   `window.api` it always has; the main process decides where the answers come from.
 - Events reaching the UI now go through one place instead of ten, which is what will let them
   arrive from a server rather than only from this process.
-- Fifty-seven new tests, twenty-five of them on what counts as a server address — Foxfire refuses
+- **An account id is opaque now.** It used to be a row number in this PC's database, which is fine
+  until the accounts live somewhere else and are identified by something entirely different. The
+  app passes the id around without looking inside it, so the same screens work whichever store
+  answered.
+- **Your recordings and replays stop pointing into tables that are about to leave.** They are files
+  on this disk and stay here, so their link to an account and to a match is now a value rather than
+  a database constraint — a match id was already Riot's own and is valid anywhere, and each row
+  records the Riot ID of the account alongside whatever that account's id happened to be.
+- **Which is what carries your footage across when you join a server.** Your account stops being
+  "the first account on this PC" and becomes an id that server minted, and without the Riot ID
+  beside it every recording you have made would quietly disappear from the list. There is a test
+  for exactly that: a recording made before joining, found again afterwards, and not offered to
+  somebody else on the same server.
+- Fifty-eight new tests, twenty-five of them on what counts as a server address — Foxfire refuses
   plain http to anywhere but this machine, because a password and a month-long token travel over
   that connection.
+- Deleting a match no longer clears the recording that names it. The foreign key that did so is
+  gone, because in server mode the match is on somebody's homelab and nothing here could reach it —
+  and keeping Riot's id is the better answer anyway: it still names the game, and still finds it if
+  this database is later pointed at a server that has it.
 
 ## [0.11.0] — 2026-08-24
 

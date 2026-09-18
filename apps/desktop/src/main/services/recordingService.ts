@@ -27,14 +27,16 @@ import {
 import { getCaptureSettings } from './captureSettings'
 import type { Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
 
+import { accountContext } from '../api/accountContext'
+
 const log = createLogger('recordings')
 
 export function broadcastRecordingsChanged(): void {
   broadcast(CH.recordings.changed)
 }
 
-export function listRecordings(accountId: number): Recording[] {
-  return getRecordings(getDb(), accountId)
+export async function listRecordings(accountId: string): Promise<Recording[]> {
+  return getRecordings(getDb(), await accountContext(accountId))
 }
 
 export function getRecordingDetail(recordingId: number): RecordingDetail | null {
@@ -70,8 +72,8 @@ export function removeRecording(recordingId: number): void {
 }
 
 /** The one-click cleanup offered when the advisory cap is crossed. */
-export function removeOldestRecordings(accountId: number, count: number): number {
-  const ids = getOldestRecordingIds(getDb(), accountId, count)
+export async function removeOldestRecordings(accountId: string, count: number): Promise<number> {
+  const ids = getOldestRecordingIds(getDb(), await accountContext(accountId), count)
   for (const id of ids) removeRecording(id)
   return ids.length
 }
@@ -97,8 +99,11 @@ interface CandidateRow {
  * long-standing library is thousands of matches and the fingerprint only ever
  * looks at the last few hours.
  */
-function candidatesFor(accountId: number, since: number, until: number): MatchCandidate[] {
-  const account = getAccountById(getDb(), accountId)
+function candidatesFor(accountId: string, since: number, until: number): MatchCandidate[] {
+  // Local-only: binding reads this machine's matches, and an id minted by a
+  // server parses to NaN and finds nothing — which is the right answer, since
+  // in server mode the candidates come from the server instead.
+  const account = getAccountById(getDb(), Number(accountId))
   if (!account) return []
 
   const rows = getDb()
@@ -153,11 +158,15 @@ export interface BindOptions {
  * only happens when the caller passes `allowGiveUp`, which it should do only
  * for a sync that landed everything it went looking for.
  */
-export function bindPendingRecordings(accountId: number, options: BindOptions = {}): number {
+export async function bindPendingRecordings(
+  accountId: string,
+  options: BindOptions = {}
+): Promise<number> {
   const { allowGiveUp = false } = options
   const db = getDb()
   const now = Date.now()
-  const pending = getBindableRecordings(db, accountId, now - BIND_RETRY_HORIZON_MS)
+  const account = await accountContext(accountId)
+  const pending = getBindableRecordings(db, account, now - BIND_RETRY_HORIZON_MS)
   if (pending.length === 0) return 0
 
   const oldest = Math.min(...pending.map((recording) => recording.startedAt))

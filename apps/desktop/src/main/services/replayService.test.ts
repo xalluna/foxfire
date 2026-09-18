@@ -21,6 +21,15 @@ const live = vi.hoisted(() => ({
 }))
 
 vi.mock('../db', () => ({ getDb: () => live.db }))
+
+// The account context reaches the API layer, which reaches Electron. These
+// tests are about what the service does with the answer, not where it came
+// from — the Riot ID is here so the "claimed by either handle" predicate is
+// exercised rather than bypassed.
+vi.mock('../api/accountContext', () => ({
+  accountContext: (accountId: string) =>
+    Promise.resolve({ accountId, riotId: 'Alluna#NA1', serverKey: null })
+}))
 vi.mock('../telemetry/logger', () => ({
   createLogger: () => ({ info: () => {}, debug: () => {}, warn: () => {}, error: () => {} })
 }))
@@ -91,7 +100,7 @@ describe('replay ingest', () => {
 
     expect(await scanReplayFolder()).toBe(1)
 
-    const replays = await listReplays(1)
+    const replays = await listReplays('1')
     expect(replays).toHaveLength(1)
     expect(replays[0]?.matchId).toBe('NA1_5312345678')
     // The patch is what decides which client can play it back.
@@ -106,7 +115,7 @@ describe('replay ingest', () => {
 
     expect(await scanReplayFolder()).toBe(1)
     expect(await scanReplayFolder()).toBe(0)
-    expect(await listReplays(1)).toHaveLength(1)
+    expect(await listReplays('1')).toHaveLength(1)
   })
 
   it('ingests a replay whose header cannot be read, keeping the name link', async () => {
@@ -115,7 +124,7 @@ describe('replay ingest', () => {
 
     expect(await scanReplayFolder()).toBe(1)
 
-    const replays = await listReplays(1)
+    const replays = await listReplays('1')
     expect(replays[0]?.matchId).toBe('NA1_5312345679')
     expect(replays[0]?.patch).toBeNull()
     expect(replays[0]?.blockedReason).toMatch(/could not read/i)
@@ -126,7 +135,7 @@ describe('replay ingest', () => {
     writeFileSync(join(live.sourceFolder, 'half-written.rofl'), Buffer.from('RIOT'))
 
     expect(await scanReplayFolder()).toBe(0)
-    expect(await listReplays(1)).toHaveLength(0)
+    expect(await listReplays('1')).toHaveLength(0)
   })
 
   it('ignores files that are not replays', async () => {
@@ -142,10 +151,10 @@ describe('replay deletion', () => {
     writeRofl(source)
     await scanReplayFolder()
 
-    const [replay] = await listReplays(1)
+    const [replay] = await listReplays('1')
     removeReplay(replay!.id)
 
-    expect(await listReplays(1)).toHaveLength(0)
+    expect(await listReplays('1')).toHaveLength(0)
     expect(readdirSync(live.destFolder)).toEqual([])
     expect(existsSync(source)).toBe(true)
   })
@@ -157,11 +166,11 @@ describe('replay deletion', () => {
     writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'))
     await scanReplayFolder()
 
-    const [replay] = await listReplays(1)
+    const [replay] = await listReplays('1')
     removeReplay(replay!.id)
 
     expect(await scanReplayFolder()).toBe(0)
-    expect(await listReplays(1)).toHaveLength(0)
+    expect(await listReplays('1')).toHaveLength(0)
   })
 })
 
@@ -170,14 +179,14 @@ describe('playability', () => {
     writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'), '16.16.804.9184')
     await scanReplayFolder()
 
-    expect((await listReplays(1))[0]?.blockedReason).toBeNull()
+    expect((await listReplays('1'))[0]?.blockedReason).toBeNull()
   })
 
   it('names the patch it needs when nothing can play it', async () => {
     writeRofl(join(live.sourceFolder, 'NA1-5312345600.rofl'), '15.14.600.4410')
     await scanReplayFolder()
 
-    expect((await listReplays(1))[0]?.blockedReason).toBe('Needs a League client for patch 15.14')
+    expect((await listReplays('1'))[0]?.blockedReason).toBe('Needs a League client for patch 15.14')
   })
 
   it('becomes watchable once a matching archive is registered', async () => {
@@ -187,6 +196,6 @@ describe('playability', () => {
       .prepare("INSERT INTO client_archives (path, patch, patch_source) VALUES (?, '15.14', 'detected')")
       .run('D:\\archives\\15.14')
 
-    expect((await listReplays(1))[0]?.blockedReason).toBeNull()
+    expect((await listReplays('1'))[0]?.blockedReason).toBeNull()
   })
 })

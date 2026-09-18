@@ -12,9 +12,9 @@ export type View =
   | 'settings'
 
 interface UiState {
-  activeAccountId: number | null
+  activeAccountId: string | null
   view: View
-  syncProgress: Record<number, SyncProgressEvent>
+  syncProgress: Record<string, SyncProgressEvent>
   /**
    * Queue filters, held per page rather than globally so browsing ARAM history
    * does not silently rescope champion stats.
@@ -25,7 +25,7 @@ interface UiState {
    */
   matchQueueFilter: number | null
   championQueueFilter: number | null
-  setActiveAccount: (id: number | null) => void
+  setActiveAccount: (id: string | null) => void
   setView: (view: View) => void
   setSyncProgress: (event: SyncProgressEvent) => void
   setMatchQueueFilter: (queueId: number | null) => void

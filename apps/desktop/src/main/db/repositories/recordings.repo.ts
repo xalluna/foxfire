@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
+import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
 import type {
   Recording,
   RecordingBindState,
@@ -10,7 +11,13 @@ import type {
 
 /** What is known about a recording at the moment it starts. */
 export interface NewRecording {
-  accountId: number
+  accountId: string
+
+  /** `gameName#tagLine`, which is what finds this row again after a server change. */
+  riotId: string | null
+
+  /** The active server's URL, or null in local-only mode. */
+  serverKey: string | null
   filePath: string
   queueId: number | null
   startedAt: number
@@ -23,7 +30,7 @@ export interface NewRecording {
 
 interface RecordingRow {
   id: number
-  account_id: number
+  account_id: string
   match_id: string | null
   bind_state: string
   file_path: string
@@ -111,10 +118,13 @@ function toRecording(row: RecordingRow): Recording {
 export function createRecording(db: DatabaseSync, input: NewRecording): number {
   db.prepare(
     `INSERT INTO recordings
-       (account_id, file_path, queue_id, started_at, game_time_offset, self_champion_id, roster_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+       (account_id, riot_id, server_key, file_path, queue_id, started_at,
+        game_time_offset, self_champion_id, roster_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     input.accountId,
+    input.riotId,
+    input.serverKey,
     input.filePath,
     input.queueId,
     input.startedAt,
@@ -187,10 +197,14 @@ export function insertRecordingEvents(
   }
 }
 
-export function getRecordings(db: DatabaseSync, accountId: number): Recording[] {
+export function getRecordings(db: DatabaseSync, account: AccountContext): Recording[] {
   const rows = db
-    .prepare(`${SELECT_RECORDING} WHERE r.account_id = ? ORDER BY r.started_at DESC`)
-    .all(accountId) as unknown as RecordingRow[]
+    .prepare(
+      `${SELECT_RECORDING}
+        WHERE ${ownedBy('r.account_id', 'r.riot_id')}
+        ORDER BY r.started_at DESC`
+    )
+    .all(...ownedByParams(account)) as unknown as RecordingRow[]
   return rows.map(toRecording)
 }
 
@@ -248,7 +262,7 @@ export function deleteRecording(db: DatabaseSync, recordingId: number): string |
 
 export interface BindableRecording {
   id: number
-  accountId: number
+  accountId: string
   startedAt: number
   endedAt: number | null
   roster: number[]
@@ -270,22 +284,22 @@ export interface BindableRecording {
  */
 export function getBindableRecordings(
   db: DatabaseSync,
-  accountId: number,
+  account: AccountContext,
   retryUnmatchedSince: number
 ): BindableRecording[] {
   const rows = db
     .prepare(
       `SELECT id, account_id, started_at, ended_at, roster_json, self_champion_id
          FROM recordings
-        WHERE account_id = ?
+        WHERE ${ownedBy('account_id', 'riot_id')}
           AND ended_at IS NOT NULL
           AND (bind_state = 'pending'
                OR (bind_state = 'unmatched' AND started_at >= ?))
         ORDER BY started_at DESC`
     )
-    .all(accountId, retryUnmatchedSince) as unknown as Array<{
+    .all(...ownedByParams(account), retryUnmatchedSince) as unknown as Array<{
     id: number
-    account_id: number
+    account_id: string
     started_at: number
     ended_at: number | null
     roster_json: string | null
@@ -356,9 +370,17 @@ export function countMissingFiles(db: DatabaseSync): number {
 }
 
 /** The N oldest recordings for an account — what the cleanup button deletes. */
-export function getOldestRecordingIds(db: DatabaseSync, accountId: number, count: number): number[] {
+export function getOldestRecordingIds(
+  db: DatabaseSync,
+  account: AccountContext,
+  count: number
+): number[] {
   const rows = db
-    .prepare('SELECT id FROM recordings WHERE account_id = ? ORDER BY started_at ASC LIMIT ?')
-    .all(accountId, count) as unknown as Array<{ id: number }>
+    .prepare(
+      `SELECT id FROM recordings
+        WHERE ${ownedBy('account_id', 'riot_id')}
+        ORDER BY started_at ASC LIMIT ?`
+    )
+    .all(...ownedByParams(account), count) as unknown as Array<{ id: number }>
   return rows.map((row) => row.id)
 }

@@ -105,7 +105,7 @@ const api: Api = {
     openEditor: (accountId, queueType, matchId) =>
       ipcRenderer.invoke(CH.rank.openEditor, accountId, queueType, matchId),
     onEdited: (cb) => {
-      const listener = (_e: IpcRendererEvent, accountId: number): void => cb(accountId)
+      const listener = (_e: IpcRendererEvent, accountId: string): void => cb(accountId)
       ipcRenderer.on(CH.rank.edited, listener)
       return () => ipcRenderer.removeListener(CH.rank.edited, listener)
     },
@@ -123,7 +123,7 @@ const api: Api = {
       return () => ipcRenderer.removeListener(CH.lcu.status, listener)
     },
     onRankChanged: (cb) => {
-      const listener = (_e: IpcRendererEvent, accountId: number): void => cb(accountId)
+      const listener = (_e: IpcRendererEvent, accountId: string): void => cb(accountId)
       ipcRenderer.on(CH.lcu.rankChanged, listener)
       return () => ipcRenderer.removeListener(CH.lcu.rankChanged, listener)
     }
@@ -166,7 +166,7 @@ const api: Api = {
     showMatch: (accountId, matchId) =>
       ipcRenderer.invoke(CH.recordings.showMatch, accountId, matchId),
     onShowMatch: (cb) => {
-      const listener = (_e: IpcRendererEvent, accountId: number, matchId: string): void =>
+      const listener = (_e: IpcRendererEvent, accountId: string, matchId: string): void =>
         cb(accountId, matchId)
       ipcRenderer.on(CH.recordings.showMatch, listener)
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)

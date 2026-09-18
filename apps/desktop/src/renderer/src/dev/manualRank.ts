@@ -37,7 +37,7 @@ interface Entry {
 
 const entries = new Map<string, Map<string, Entry>>()
 
-function key(accountId: number, queueType: QueueType): string {
+function key(accountId: string, queueType: QueueType): string {
   return `${accountId}:${queueType}`
 }
 
@@ -71,11 +71,11 @@ function restore(): void {
 
   for (const id of entries.keys()) {
     const [accountId, queueType] = id.split(':')
-    rebuild(Number(accountId), queueType as QueueType)
+    rebuild(accountId, queueType as QueueType)
   }
 }
 
-function baseSnapshots(accountId: number, queueType: QueueType): RankSnapshot[] {
+function baseSnapshots(accountId: string, queueType: QueueType): RankSnapshot[] {
   const id = key(accountId, queueType)
   if (!observed.has(id)) {
     observed.set(id, [...(RANK_SNAPSHOTS[accountId]?.[queueType] ?? [])])
@@ -83,7 +83,7 @@ function baseSnapshots(accountId: number, queueType: QueueType): RankSnapshot[] 
   return observed.get(id)!
 }
 
-function entriesFor(accountId: number, queueType: QueueType): Map<string, Entry> {
+function entriesFor(accountId: string, queueType: QueueType): Map<string, Entry> {
   const id = key(accountId, queueType)
   if (!entries.has(id)) entries.set(id, new Map())
   return entries.get(id)!
@@ -95,7 +95,7 @@ function entriesFor(accountId: number, queueType: QueueType): Map<string, Entry>
  * Chronological because the rebuild walks intervals in time order. The editor
  * is served the reverse — see editableMatches.
  */
-function ladderMatches(accountId: number, queueType: QueueType): MatchSummary[] {
+function ladderMatches(accountId: string, queueType: QueueType): MatchSummary[] {
   const queueId = queueIdForQueueType(queueType)
   return (MATCHES[accountId] ?? [])
     .filter((m) => m.queueId === queueId && !m.isRemake)
@@ -126,7 +126,7 @@ function toSnapshot(queueType: QueueType, rank: ManualRank, capturedAt: number):
  * it. Runs after any edit, which is why saving two games of a run of three can
  * hand back a third that resolved on its own.
  */
-function rebuild(accountId: number, queueType: QueueType): void {
+function rebuild(accountId: string, queueType: QueueType): void {
   const matches = ladderMatches(accountId, queueType)
   const byId = new Map(matches.map((m) => [m.matchId, m]))
   const entered = entriesFor(accountId, queueType)
@@ -177,7 +177,7 @@ function rebuild(accountId: number, queueType: QueueType): void {
   }
 }
 
-export function editableMatches(accountId: number, queueType: QueueType): EditableMatch[] {
+export function editableMatches(accountId: string, queueType: QueueType): EditableMatch[] {
   const snapshots = RANK_SNAPSHOTS[accountId]?.[queueType] ?? []
   const entered = entriesFor(accountId, queueType)
 
@@ -220,7 +220,7 @@ export function editableMatches(accountId: number, queueType: QueueType): Editab
 }
 
 export function saveManualRanks(
-  accountId: number,
+  accountId: string,
   queueType: QueueType,
   edits: ManualRankEdit[]
 ): EditableMatch[] {
@@ -234,7 +234,7 @@ export function saveManualRanks(
 }
 
 export function clearManualRank(
-  accountId: number,
+  accountId: string,
   queueType: QueueType,
   matchId: string
 ): EditableMatch[] {

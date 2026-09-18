@@ -114,8 +114,8 @@ describe('repairAllIdentities', () => {
     const reports = await repairAllIdentities()
 
     expect(reports).toEqual([
-      { accountId: 1, riotId: 'Alluna#NA1', outcome: 'failed' },
-      { accountId: 2, riotId: 'Alluna Smurf#NA1', outcome: 'repaired' }
+      { accountId: '1', riotId: 'Alluna#NA1', outcome: 'failed' },
+      { accountId: '2', riotId: 'Alluna Smurf#NA1', outcome: 'repaired' }
     ])
   })
 })

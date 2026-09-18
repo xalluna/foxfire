@@ -85,10 +85,14 @@ export async function repairAllIdentities(): Promise<IdentityReport[]> {
   for (const account of listAccounts(getDb())) {
     const riotId = `${account.gameName}#${account.tagLine}`
     try {
-      reports.push({ accountId: account.id, riotId, outcome: await repairAccountIdentity(account.id) })
+      reports.push({
+        accountId: String(account.id),
+        riotId,
+        outcome: await repairAccountIdentity(account.id)
+      })
     } catch (err) {
       log.error('Could not re-resolve an account', err, { accountId: account.id })
-      reports.push({ accountId: account.id, riotId, outcome: 'failed' })
+      reports.push({ accountId: String(account.id), riotId, outcome: 'failed' })
     }
   }
 

@@ -163,53 +163,53 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.accounts.list, () => serverBacked().accounts.list())
   ipcMain.handle(CH.accounts.getHome, () => serverBacked().accounts.getHome())
   ipcMain.handle(CH.accounts.add, (_e, input: RiotIdInput) => serverBacked().accounts.add(input))
-  ipcMain.handle(CH.accounts.remove, (_e, accountId: number) =>
+  ipcMain.handle(CH.accounts.remove, (_e, accountId: string) =>
     serverBacked().accounts.remove(accountId)
   )
-  ipcMain.handle(CH.accounts.setHome, (_e, accountId: number) =>
+  ipcMain.handle(CH.accounts.setHome, (_e, accountId: string) =>
     serverBacked().accounts.setHome(accountId)
   )
 
-  ipcMain.handle(CH.dashboard.get, (_e, accountId: number) =>
+  ipcMain.handle(CH.dashboard.get, (_e, accountId: string) =>
     serverBacked().dashboard.get(accountId)
   )
   ipcMain.handle(
     CH.dashboard.matchList,
-    (_e, accountId: number, limit: number, offset: number, queueId: number | null) =>
+    (_e, accountId: string, limit: number, offset: number, queueId: number | null) =>
       serverBacked().dashboard.matchList(accountId, limit, offset, queueId)
   )
   ipcMain.handle(CH.dashboard.matchDetail, (_e, matchId: string) =>
     serverBacked().dashboard.matchDetail(matchId)
   )
 
-  ipcMain.handle(CH.sync.start, (_e, accountId: number) => serverBacked().sync.start(accountId))
-  ipcMain.handle(CH.sync.getState, (_e, accountId: number) =>
+  ipcMain.handle(CH.sync.start, (_e, accountId: string) => serverBacked().sync.start(accountId))
+  ipcMain.handle(CH.sync.getState, (_e, accountId: string) =>
     serverBacked().sync.getState(accountId)
   )
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
 
-  ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: number) => getScoreboard(accountId))
+  ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: string) => getScoreboard(accountId))
 
   ipcMain.handle(
     CH.champions.stats,
-    (_e, accountId: number, queueId: number | null, range: RankRange) =>
+    (_e, accountId: string, queueId: number | null, range: RankRange) =>
       serverBacked().champions.stats(accountId, queueId, range)
   )
 
   ipcMain.handle(
     CH.mastery.get,
-    (_e, accountId: number, refresh: boolean, queueId: number | null) =>
+    (_e, accountId: string, refresh: boolean, queueId: number | null) =>
       serverBacked().mastery.get(accountId, refresh, queueId)
   )
 
   ipcMain.handle(
     CH.rank.history,
-    (_e, accountId: number, queueType: QueueType, range: RankRange) =>
+    (_e, accountId: string, queueType: QueueType, range: RankRange) =>
       serverBacked().rank.history(accountId, queueType, range)
   )
 
-  ipcMain.handle(CH.rank.periods, (_e, accountId: number) =>
+  ipcMain.handle(CH.rank.periods, (_e, accountId: string) =>
     serverBacked().rank.periods(accountId)
   )
 
@@ -218,23 +218,23 @@ export function registerIpcHandlers(): void {
     serverBacked().seasons.save(seasons)
   )
 
-  ipcMain.handle(CH.rank.editable, (_e, accountId: number, queueType: QueueType) =>
+  ipcMain.handle(CH.rank.editable, (_e, accountId: string, queueType: QueueType) =>
     serverBacked().rank.editable(accountId, queueType)
   )
   ipcMain.handle(
     CH.rank.saveManual,
-    (_e, accountId: number, queueType: QueueType, edits: ManualRankEdit[]) =>
+    (_e, accountId: string, queueType: QueueType, edits: ManualRankEdit[]) =>
       serverBacked().rank.saveManual(accountId, queueType, edits)
   )
   ipcMain.handle(
     CH.rank.clearManual,
-    (_e, accountId: number, queueType: QueueType, matchId: string) =>
+    (_e, accountId: string, queueType: QueueType, matchId: string) =>
       serverBacked().rank.clearManual(accountId, queueType, matchId)
   )
 
   ipcMain.handle(
     CH.rank.openEditor,
-    (_e, accountId: number, queueType: QueueType, matchId: string) =>
+    (_e, accountId: string, queueType: QueueType, matchId: string) =>
       openLpEditorWindow(accountId, queueType, matchId)
   )
 
@@ -314,19 +314,19 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.recordings.list, (_e, accountId: number) => listRecordings(accountId))
+  ipcMain.handle(CH.recordings.list, (_e, accountId: string) => listRecordings(accountId))
   ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
   ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
   ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
-  ipcMain.handle(CH.recordings.removeOldest, (_e, accountId: number, count: number) =>
+  ipcMain.handle(CH.recordings.removeOldest, (_e, accountId: string, count: number) =>
     removeOldestRecordings(accountId, count)
   )
   ipcMain.handle(CH.recordings.open, (_e, recordingId: number) => openRecordingWindow(recordingId))
   ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */
-  ipcMain.handle(CH.replays.list, (_e, accountId: number) => listReplays(accountId))
-  ipcMain.handle(CH.replays.usage, (_e, accountId: number) => getReplayUsage(accountId))
+  ipcMain.handle(CH.replays.list, (_e, accountId: string) => listReplays(accountId))
+  ipcMain.handle(CH.replays.usage, (_e, accountId: string) => getReplayUsage(accountId))
   ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplay(replayId))
   ipcMain.handle(CH.replays.reveal, (_e, replayId: number) => revealReplay(replayId))
   ipcMain.handle(CH.replays.remove, (_e, replayId: number) => removeReplay(replayId))
@@ -372,7 +372,7 @@ export function registerIpcHandlers(): void {
 
   // Sent by a recording window, delivered to the main one: the match list it wants
   // opened lives in a different renderer process with its own state.
-  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: number, matchId: string) => {
+  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: string, matchId: string) => {
     const main = getMainWindow()
     if (!main) return
     if (main.isMinimized()) main.restore()

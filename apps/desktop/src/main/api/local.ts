@@ -18,6 +18,8 @@ import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
 import { searchSummoner } from '../services/searchService'
 import { rangeBounds } from '@shared/seasons'
+import type { StoredAccount } from '../db/repositories/accounts.repo'
+import type { Account } from '@shared/types'
 import type { ServerBackedApi } from './types'
 
 /**
@@ -42,33 +44,56 @@ import type { ServerBackedApi } from './types'
  * window between its render and its fetch, and that is not an error worth
  * showing anybody.
  */
+/**
+ * This machine's own id, out of the opaque one the renderer holds.
+ *
+ * An id minted by a Foxfire Server is a GUID and parses to NaN here, which is
+ * the right answer rather than a problem to guard against: every lookup below
+ * misses, and the reads return empty the same way they do for an account
+ * deleted in another window. Nothing is invented for an id from somewhere else.
+ */
+function rowId(accountId: string): number {
+  return Number(accountId)
+}
+
+/** The same account, spelled the way the renderer takes it. */
+function wire(account: StoredAccount): Account {
+  return { ...account, id: String(account.id) }
+}
+
 export const localApi: ServerBackedApi = {
   accounts: {
-    list: async () => getAccounts(),
-    getHome: async () => getHome(),
+    list: async () => getAccounts().map(wire),
+    getHome: async () => {
+      const home = getHome()
+      return home ? wire(home) : null
+    },
     add: async (input) => {
       const account = await addAccount(input)
       // Not awaited. The backfill is up to 200 matches through a rate limiter
       // and takes minutes; the account itself exists now, so the UI navigates
       // to it and watches sync:progress fill it in.
       startSync(account.id)
-      return account
+      return wire(account)
     },
     remove: async (accountId) => {
-      removeAccount(accountId)
-      return getAccounts()
+      removeAccount(rowId(accountId))
+      return getAccounts().map(wire)
     },
     setHome: async (accountId) => {
-      setHome(accountId)
-      return getAccounts()
+      setHome(rowId(accountId))
+      return getAccounts().map(wire)
     }
   },
 
   dashboard: {
-    get: async (accountId) => getDashboard(accountId),
+    get: async (accountId) => {
+      const data = getDashboard(rowId(accountId))
+      return data ? { ...data, account: wire(data.account) } : null
+    },
     matchList: async (accountId, limit, offset, queueId) => {
       const db = getDb()
-      const account = getAccountById(db, accountId)
+      const account = getAccountById(db, rowId(accountId))
       if (!account) return []
       return getMatchSummaries(db, account.puuid, limit, offset, queueId)
     },
@@ -77,15 +102,15 @@ export const localApi: ServerBackedApi = {
 
   sync: {
     start: async (accountId) => {
-      startSync(accountId)
+      startSync(rowId(accountId))
     },
-    getState: async (accountId) => readSyncState(accountId)
+    getState: async (accountId) => readSyncState(rowId(accountId))
   },
 
   champions: {
     stats: async (accountId, queueId, range) => {
       const db = getDb()
-      const account = getAccountById(db, accountId)
+      const account = getAccountById(db, rowId(accountId))
       if (!account) return []
       const { sinceMs, untilMs } = rangeBounds(range, listSeasons(db))
       return getChampionStats(db, account.puuid, queueId, sinceMs, untilMs)
@@ -93,17 +118,19 @@ export const localApi: ServerBackedApi = {
   },
 
   mastery: {
-    get: async (accountId, refresh, queueId) => getMasteryData(accountId, refresh, queueId)
+    get: async (accountId, refresh, queueId) => getMasteryData(rowId(accountId), refresh, queueId)
   },
 
   rank: {
-    history: async (accountId, queueType, range) => getRankHistory(accountId, queueType, range),
-    periods: async (accountId) => getRankPeriods(accountId),
+    history: async (accountId, queueType, range) =>
+      getRankHistory(rowId(accountId), queueType, range),
+    periods: async (accountId) => getRankPeriods(rowId(accountId)),
     editable: async (accountId, queueType) => {
       const db = getDb()
-      const account = getAccountById(db, accountId)
+      const id = rowId(accountId)
+      const account = getAccountById(db, id)
       if (!account) return []
-      return getEditableMatches(db, accountId, account.puuid, queueType)
+      return getEditableMatches(db, id, account.puuid, queueType)
     },
 
     // Both writers return the fresh list rather than void: an edit can resolve a
@@ -119,20 +146,22 @@ export const localApi: ServerBackedApi = {
     // back over its own event stream.
     saveManual: async (accountId, queueType, edits) => {
       const db = getDb()
-      const account = getAccountById(db, accountId)
+      const id = rowId(accountId)
+      const account = getAccountById(db, id)
       if (!account) return []
-      saveManualRanks(db, accountId, account.puuid, queueType, edits)
+      saveManualRanks(db, id, account.puuid, queueType, edits)
       broadcast(CH.rank.edited, accountId)
-      return getEditableMatches(db, accountId, account.puuid, queueType)
+      return getEditableMatches(db, id, account.puuid, queueType)
     },
     clearManual: async (accountId, queueType, matchId) => {
       const db = getDb()
-      const account = getAccountById(db, accountId)
+      const id = rowId(accountId)
+      const account = getAccountById(db, id)
       if (!account) return []
-      if (clearManualRank(db, accountId, account.puuid, matchId)) {
+      if (clearManualRank(db, id, account.puuid, matchId)) {
         broadcast(CH.rank.edited, accountId)
       }
-      return getEditableMatches(db, accountId, account.puuid, queueType)
+      return getEditableMatches(db, id, account.puuid, queueType)
     }
   },
 

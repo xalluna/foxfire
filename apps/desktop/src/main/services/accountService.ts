@@ -20,15 +20,16 @@ import { getAccountByRiotId } from '../riot/endpoints/account'
 import { getSummonerByPuuid } from '../riot/endpoints/summoner'
 import { getLeagueEntriesByPuuid } from '../riot/endpoints/league'
 import { DEFAULT_PLATFORM, DEFAULT_REGIONAL_ROUTE, type PlatformId, type RegionalRoute } from '../riot/regions'
-import type { Account, LeagueEntry, RiotIdInput, SyncState } from '@shared/types'
+import type { StoredAccount } from '../db/repositories/accounts.repo'
+import type { LeagueEntry, RiotIdInput, SyncState } from '@shared/types'
 
 export const BACKFILL_TARGET = 200
 
-export function getAccounts(): Account[] {
+export function getAccounts(): StoredAccount[] {
   return listAccounts(getDb())
 }
 
-export function getHome(): Account | null {
+export function getHome(): StoredAccount | null {
   return getHomeAccount(getDb())
 }
 
@@ -37,7 +38,7 @@ export function getHome(): Account | null {
  * Deliberately fast — the caller kicks off the long match backfill separately
  * so the UI can navigate to the new account immediately.
  */
-export async function addAccount(input: RiotIdInput): Promise<Account> {
+export async function addAccount(input: RiotIdInput): Promise<StoredAccount> {
   const db = getDb()
   const platform: PlatformId = DEFAULT_PLATFORM
   const regional: RegionalRoute = DEFAULT_REGIONAL_ROUTE
@@ -141,13 +142,19 @@ export function setHome(accountId: number): void {
   setHomeAccount(getDb(), accountId)
 }
 
-export interface DashboardData {
-  account: Account
+/**
+ * The account page, as this machine assembles it.
+ *
+ * Named apart from the renderer's DashboardData because the account inside it
+ * still carries an integer id here. src/main/api/local.ts converts.
+ */
+export interface StoredDashboardData {
+  account: StoredAccount
   leagueEntries: LeagueEntry[]
   syncState: SyncState | null
 }
 
-export function getDashboard(accountId: number): DashboardData | null {
+export function getDashboard(accountId: number): StoredDashboardData | null {
   const db = getDb()
   const account = getAccountById(db, accountId)
   if (!account) return null

@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
+import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
 import type { LinkedMatchInfo, Replay } from '@shared/types'
 
 /** What is known about a replay the moment it is ingested. */
 export interface NewReplay {
   matchId: string | null
-  accountId: number | null
+  accountId: string | null
   filePath: string
   sourcePath: string | null
   fileBytes: number | null
@@ -17,7 +18,7 @@ export interface NewReplay {
 
 interface ReplayRow {
   id: number
-  account_id: number | null
+  account_id: string | null
   match_id: string | null
   file_path: string
   source_path: string | null
@@ -137,15 +138,15 @@ export function createReplay(db: DatabaseSync, input: NewReplay): number {
  * that exists on disk is unreachable from inside the app — the same failure the
  * Recordings tab exists to prevent.
  */
-export function getReplays(db: DatabaseSync, accountId: number): Replay[] {
+export function getReplays(db: DatabaseSync, account: AccountContext): Replay[] {
   const rows = db
     .prepare(
       `${SELECT_REPLAY}
         WHERE r.deleted_at IS NULL
-          AND (r.account_id = ? OR r.account_id IS NULL)
+          AND (${ownedBy('r.account_id', 'r.riot_id')} OR r.account_id IS NULL)
         ORDER BY r.recorded_at DESC`
     )
-    .all(accountId) as unknown as ReplayRow[]
+    .all(...ownedByParams(account)) as unknown as ReplayRow[]
 
   return rows.map(toReplay)
 }
@@ -206,7 +207,7 @@ export function getUnownedReplays(db: DatabaseSync): Array<{ id: number; matchId
     .all() as unknown as Array<{ id: number; matchId: string }>
 }
 
-export function setReplayAccount(db: DatabaseSync, id: number, accountId: number): void {
+export function setReplayAccount(db: DatabaseSync, id: number, accountId: string): void {
   db.prepare('UPDATE replays SET account_id = ? WHERE id = ?').run(accountId, id)
 }
 
@@ -227,7 +228,7 @@ export function softDeleteReplay(db: DatabaseSync, id: number, now: number): voi
 
 export function getUsage(
   db: DatabaseSync,
-  accountId: number
+  account: AccountContext
 ): { totalBytes: number; count: number; unlinkedCount: number } {
   const row = db
     .prepare(
@@ -235,9 +236,14 @@ export function getUsage(
               COUNT(*) AS count,
               SUM(CASE WHEN match_id IS NULL THEN 1 ELSE 0 END) AS unlinkedCount
          FROM replays
-        WHERE deleted_at IS NULL AND (account_id = ? OR account_id IS NULL)`
+        WHERE deleted_at IS NULL
+          AND (${ownedBy('account_id', 'riot_id')} OR account_id IS NULL)`
     )
-    .get(accountId) as { totalBytes: number; count: number; unlinkedCount: number | null }
+    .get(...ownedByParams(account)) as {
+    totalBytes: number
+    count: number
+    unlinkedCount: number | null
+  }
 
   return { ...row, unlinkedCount: row.unlinkedCount ?? 0 }
 }

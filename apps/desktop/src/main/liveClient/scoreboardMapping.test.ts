@@ -1,22 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { toScoreboard } from './scoreboardMapping'
 import { AllGameDataSchema, type AllGameDataDto, type LivePlayerDto } from './types'
-import type { Account, AssetManifest } from '@shared/types'
+import type { AssetManifest } from '@shared/types'
 
-const ACCOUNT: Account = {
-  id: 1,
-  puuid: 'puuid-me',
-  gameName: 'Alluna',
-  tagLine: 'NA1',
-  platform: 'na1',
-  regionalRoute: 'americas',
-  summonerId: null,
-  profileIconId: null,
-  summonerLevel: null,
-  isHomeAccount: true,
-  createdAt: '',
-  updatedAt: ''
-}
+const ACCOUNT = 'Alluna#NA1'
 
 /**
  * Enough of a manifest to exercise every lookup, including the two champions

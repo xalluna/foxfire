@@ -4,7 +4,7 @@ import { APP_ICON_TOOLTIP, deriveAppIconState, type AppIconState } from './appIc
 
 const IN_GAME: LcuStatus = {
   state: 'connected',
-  accountId: 1,
+  accountId: '1',
   gameName: 'Ashe',
   tagLine: 'NA1',
   inGame: true

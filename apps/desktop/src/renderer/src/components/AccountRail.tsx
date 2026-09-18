@@ -60,12 +60,12 @@ export function AccountRail({ accounts }: { accounts: Account[] }): JSX.Element 
   }, [adding])
 
   const setHome = useMutation({
-    mutationFn: (id: number) => window.api.accounts.setHome(id),
+    mutationFn: (id: string) => window.api.accounts.setHome(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['accounts'] })
   })
 
   const remove = useMutation({
-    mutationFn: (id: number) => window.api.accounts.remove(id),
+    mutationFn: (id: string) => window.api.accounts.remove(id),
     onSuccess: (remaining) => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
       setActiveAccount(remaining.length > 0 ? remaining[0].id : null)

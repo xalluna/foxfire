@@ -19,14 +19,17 @@ import { RankInput, RankLabel } from './RankInput'
  * right-click on a specific row in another renderer process and there is no
  * shared store between the two — see lpEditorWindow.ts.
  */
-function readContext(): { accountId: number; queueType: QueueType; matchId: string } | null {
+function readContext(): { accountId: string; queueType: QueueType; matchId: string } | null {
   const raw = window.location.hash.replace(/^#lp-editor\??/, '')
   const params = new URLSearchParams(raw)
-  const accountId = Number.parseInt(params.get('account') ?? '', 10)
+  // Taken as written rather than parsed. An account id is opaque now, and
+  // this window was already carrying it as text — the parse was only ever
+  // there because the id used to be a number.
+  const accountId = params.get('account')
   const queueType = params.get('queue')
   const matchId = params.get('match')
 
-  if (Number.isNaN(accountId) || !queueType || !matchId) return null
+  if (!accountId || !queueType || !matchId) return null
   return { accountId, queueType: queueType as QueueType, matchId }
 }
 
@@ -66,7 +69,7 @@ export function LpEditorApp(): JSX.Element {
   const [focusedMatchId, setFocusedMatchId] = useState(context?.matchId ?? null)
   const rowRefs = useRef(new Map<string, HTMLLIElement>())
 
-  const accountId = context?.accountId ?? 0
+  const accountId = context?.accountId ?? ''
   const queueType = context?.queueType ?? 'RANKED_SOLO_5x5'
 
   const editable = useQuery({

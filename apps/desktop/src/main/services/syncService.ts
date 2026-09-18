@@ -22,7 +22,8 @@ import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttributi
 import { resolveReplayOwners } from './replayService'
 import { bindPendingRecordings } from './recordingService'
 import { afterIdentityRepair, selectNewMatchIds } from './syncPlanning'
-import type { Account, SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
+import type { StoredAccount } from '../db/repositories/accounts.repo'
+import type { SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
 
 const log = createLogger('sync')
 
@@ -99,9 +100,9 @@ function replayRecentAttribution(db: DatabaseSync, accountId: number, puuid: str
  * Best-effort for the same reason as the two passes below — the matches are
  * already committed, so nothing here may fail the import.
  */
-function bindFinishedRecordings(accountId: number, cleanSweep: boolean): void {
+async function bindFinishedRecordings(accountId: number, cleanSweep: boolean): Promise<void> {
   try {
-    bindPendingRecordings(accountId, { allowGiveUp: cleanSweep })
+    await bindPendingRecordings(String(accountId), { allowGiveUp: cleanSweep })
   } catch (err) {
     log.debug('Recording binding failed after sync', { accountId, error: String(err) })
   }
@@ -137,8 +138,15 @@ export function isSyncing(accountId: number): boolean {
  * can sync concurrently and one's trigger must not leak into the other's
  * events.
  */
-function emit(event: SyncProgressEvent): void {
-  broadcast(CH.sync.progress, event)
+/**
+ * Takes this machine's own id and publishes the renderer's.
+ *
+ * The conversion is here rather than at the five call sites because each of
+ * those already spells the id the way the function around it does, and
+ * stringifying at each would be five chances to forget.
+ */
+function emit(event: Omit<SyncProgressEvent, 'accountId'> & { accountId: number }): void {
+  broadcast(CH.sync.progress, { ...event, accountId: String(event.accountId) })
 }
 
 /** Collects up to `target` match IDs, paging at Riot's 100-per-request maximum. */
@@ -178,7 +186,7 @@ async function fetchMatchIds(
  * attribution reads it back out of the same rows this repair just rewrote.
  */
 async function fetchMatchIdsRepairingIdentity(
-  account: Account,
+  account: StoredAccount,
   target: number
 ): Promise<{ matchIds: string[]; puuid: string }> {
   const region = account.regionalRoute as RegionalRoute
@@ -317,7 +325,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
     // and so does a recording whose match was imported by an earlier sync that
     // never got to look for it.
     replayRecentAttribution(db, accountId, puuid)
-    bindFinishedRecordings(accountId, true)
+    await bindFinishedRecordings(accountId, true)
     resolveFinishedReplays()
     emit({ accountId, phase: 'complete', current: 0, total: 0, trigger })
     return { stored: 0, failed: 0 }
@@ -331,7 +339,7 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
   // empty interval and leave the games that just arrived unattributed.
   await snapshotRank(accountId)
   replayRecentAttribution(db, accountId, puuid)
-  bindFinishedRecordings(accountId, failed === 0)
+  await bindFinishedRecordings(accountId, failed === 0)
   resolveFinishedReplays()
 
   // Only advance the sync marker when everything landed. Leaving it alone on

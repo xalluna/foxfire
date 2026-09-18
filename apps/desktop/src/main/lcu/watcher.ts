@@ -163,7 +163,7 @@ async function trackGameflow(creds: LcuCredentials, accountId: number): Promise<
   // the loading screen that follows lasts at least a minute, and the recording
   // itself is started by the game answering on loopback.
   inGame = isPlayingPhase(phase)
-  onGamePhase(accountId, currentQueueId, inGame)
+  onGamePhase(String(accountId), currentQueueId, inGame)
 
   const ended = isGameEndTransition(lastPhase, phase)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
@@ -207,7 +207,7 @@ async function tick(): Promise<void> {
 
     const connected = {
       state: 'connected' as const,
-      accountId: account.id,
+      accountId: String(account.id),
       gameName: account.gameName,
       tagLine: account.tagLine
     }
