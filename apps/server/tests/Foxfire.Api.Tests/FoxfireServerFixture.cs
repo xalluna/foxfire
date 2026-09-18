@@ -100,6 +100,16 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     /// </summary>
     public IServiceProvider Services => _factory!.Services;
 
+    /// <summary>
+    /// The host itself, for a test that needs to replace one of its services.
+    ///
+    /// WithWebHostBuilder on this returns a second host sharing the same
+    /// configuration and therefore the same database, but with its own
+    /// singletons — which is what a sync test wants: the schema and its
+    /// migrations are the real ones, and the rate limiter starts empty.
+    /// </summary>
+    public WebApplicationFactory<Program> Factory => _factory!;
+
     /// <summary>Registers somebody and returns their session.</summary>
     public async Task<Session> RegisterAsync(
         HttpClient client,

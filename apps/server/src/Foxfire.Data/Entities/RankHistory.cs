@@ -13,7 +13,18 @@ namespace Foxfire.Data.Entities;
 /// </summary>
 public sealed class RankSnapshot
 {
-    public Guid Id { get; set; }
+    /// <summary>
+    /// An identity column rather than a Guid, because this one is read in order.
+    ///
+    /// Two readings can share a millisecond — a hand-entered one stamped at a
+    /// game's end time landing beside an observed one — and attribution walks
+    /// adjacent pairs, so which of them comes first changes the answer. SQL
+    /// Server's sort is not stable and its ordering of uniqueidentifier is not
+    /// byte order, so a Guid tiebreak would be both arbitrary and liable to
+    /// differ between runs. Insertion order is the tiebreak the desktop uses,
+    /// and it makes (account, queue, capturedAt, id) genuinely ordered.
+    /// </summary>
+    public long Id { get; set; }
 
     public Guid RiotAccountId { get; set; }
     public RiotAccount RiotAccount { get; set; } = null!;

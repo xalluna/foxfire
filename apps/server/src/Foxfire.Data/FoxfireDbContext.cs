@@ -266,8 +266,11 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
                 .OnDelete(DeleteBehavior.ClientSetNull);
 
             // Every read walks one account's readings for one queue in time
-            // order. This is the index attribution lives on.
-            e.HasIndex(r => new { r.RiotAccountId, r.QueueType, r.CapturedAt });
+            // order. This is the index attribution lives on, and Id is on the
+            // end of it because the walk is over adjacent pairs: two readings
+            // sharing a millisecond have to come back in the same order every
+            // time, or the pair between them changes.
+            e.HasIndex(r => new { r.RiotAccountId, r.QueueType, r.CapturedAt, r.Id });
 
             // Clearing a manual edit is a targeted delete by match.
             e.HasIndex(r => r.MatchId);

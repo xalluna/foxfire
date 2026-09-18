@@ -11,9 +11,8 @@ commit, and there is no `[Unreleased]` section.
 ## [0.1.0] — 2026-09-17
 
 The first thing that runs. You can stand a server up, register on it, sign in,
-and say which League accounts are yours. Nothing fetches match history yet —
-that is the next piece of work — so this is a foundation rather than something
-worth pointing a community at.
+say which League accounts are yours, and have it fetch and keep everybody's
+match history for you.
 
 ### Added
 
@@ -35,6 +34,24 @@ worth pointing a community at.
   Riot and files it. A League account belongs to at most one Foxfire account at
   a time, first claim wins, and an admin can unlink — which is what makes a lock
   that is not proof survivable on a server whose admin knows everybody.
+- **Match history, fetched by the server and shared by everybody on it.** Link
+  an account and the server fills in its recent games; play one and it picks
+  that up by itself. A game ten people played is stored once, so the second
+  person on the server to have played it gets it for free — which on one shared
+  Riot key is the difference between a friend joining costing an afternoon of
+  requests and costing almost none.
+- **LP on each match row.** The server records where you stood whenever it can
+  see — from your League client while you play, and from Riot after every
+  sync — and works out what a game was worth whenever exactly one ranked game
+  sits between two readings. When several do, it says nothing rather than
+  splitting a guess between them.
+- **It waits for Riot rather than missing the game.** A match is not published
+  the moment it ends, and how long that takes varies, so the server tries again
+  at thirty seconds, ninety, three minutes, six and ten. That schedule belongs
+  to the server now, which means it keeps going after you close your laptop, and
+  two people who were in the same game do not both run it.
+- **Live progress.** A backfill of a few hundred games takes minutes on a shared
+  key, so the desktop is told how far through it is as it goes.
 - **Everything on a server is visible to everybody on it.** Who has claimed
   which League account is not private here. Editing is what ownership gates.
 - **Managing who is on the server.** An admin can see everybody, make somebody
@@ -85,13 +102,39 @@ worth pointing a community at.
   Homelab mail without a relay fails silently, so nothing is allowed to depend
   on it: every link the server would send is also copyable from the admin
   section.
-- **The schema for match history is in place**, though nothing fills it yet.
-  Matches, participants, rank readings, attributed LP, mastery, league entries,
-  sync progress and retired puuids, with the indexes ported from the desktop
-  rather than guessed at — each of those was added there against a query
-  observed to be doing something worse. Matches are stored once and shared by
-  everybody in them, which is what makes a community's storage sublinear in its
-  size and why a friend linking an account often costs almost no Riot requests.
+- **The schema for match history**: matches, participants, rank readings,
+  attributed LP, mastery, league entries, sync progress and retired puuids, with
+  the indexes ported from the desktop rather than guessed at — each of those was
+  added there against a query observed to be doing something worse. Matches are
+  stored once and shared by everybody in them, which is what makes a community's
+  storage sublinear in its size.
+- **The whole match payload is kept as Riot sent it.** Three of the desktop's
+  migrations add a projected column and backfill it out of the stored payload
+  with no Riot calls at all; on a server sharing one personal key the
+  alternative is not slower, it is days.
+- **A rank reading's key is an identity column rather than a Guid.** Attribution
+  walks adjacent pairs, so two readings sharing a millisecond have to come back
+  in the same order every time — and SQL Server neither sorts stably nor orders
+  uniqueidentifier by its bytes, so a Guid tiebreak would have been arbitrary
+  *and* liable to differ between runs.
+- **The server repairs itself after a key rotation.** Riot encrypts a player id
+  against the key that asked for it, so replacing the key kills every id the
+  server has ever stored. When Riot refuses one, the account is re-resolved from
+  its Riot ID — the one handle a key change cannot invalidate — and its history,
+  including the copy inside the stored payload, is rewritten onto the new id in
+  one transaction. Lazily, when a request is actually refused: a sweep at
+  startup would spend a request per account on every boot to discover, nearly
+  always, that nothing had changed.
+- **A sync runs on its own scope and is joined rather than repeated.** It
+  outlives the request that asked for it, because a backfill is minutes; and a
+  second caller for an account already syncing gets the first run's result
+  instead of spending the community's budget proving the same thing twice.
+- **A backfill is background work however it was triggered.** Two hundred
+  requests is the whole server's allowance for four minutes, so nobody else's
+  search waits behind somebody linking an account.
+- **SignalR carries the events the desktop used to raise for itself**, on the
+  same channel names, so nothing above the transport knows which one delivered
+  them.
 - **The LP attribution rule is ported to C# and pinned to the desktop's.** Both
   now compute the figure on a match row, and `fixtures/ladder-corpus.json` —
   generated by running the TypeScript over ten thousand inputs — is asserted by
@@ -105,12 +148,14 @@ worth pointing a community at.
   built — the same guarantee the desktop's workflow gives. The test suite runs
   first, including the ones that stand a real SQL Server up, so a release cannot
   go out on a schema that does not migrate.
-- Tests: 40 over the invite tokens and the version allow list, 17 over the rate
-  limiter against a fake clock — including the burst-window case the desktop
-  gets wrong — and 49 contract tests driving the HTTP surface against a real
-  SQL Server in a container. Those last ones earned their keep immediately: the
-  account-deletion path has to clear an invite's redeemer by hand, because SQL
-  Server refuses two cascading paths between the same two tables and the
-  database would otherwise refuse the delete.
+- Tests: 108 over the pure rules — invite tokens, the version allow list, the
+  ladder corpus, what a sync decides to fetch — 17 over the rate limiter against
+  a fake clock, including the burst-window case the desktop gets wrong, and 69
+  against a real SQL Server in a container. The database ones earned their keep
+  twice: the account-deletion path has to clear an invite's redeemer by hand,
+  because SQL Server refuses two cascading paths between the same two tables;
+  and the sync suite runs the real engine with only the socket replaced, so
+  ingestion, deduplication and re-keying are asserted against the schema that
+  actually enforces them.
 
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

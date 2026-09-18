@@ -121,6 +121,125 @@ public sealed class RiotClient
         }
     }
 
+    /// <summary>Riot's maximum page size for a match id list, and therefore ours.</summary>
+    public const int MatchIdsPageSize = 100;
+
+    /// <summary>
+    /// One page of a player's match ids, newest first.
+    ///
+    /// Paging lives in the query string and is deliberately left out of the
+    /// endpoint template, so every page of a backfill groups under one endpoint
+    /// in the limiter's accounting rather than appearing as a new one per offset.
+    /// </summary>
+    public Task<List<string>> GetMatchIdsAsync(
+        string regionalRoute,
+        string puuid,
+        int start,
+        int count,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"/lol/match/v5/matches/by-puuid/{Uri.EscapeDataString(puuid)}/ids?start={start}&count={count}";
+
+        return SendAsync<List<string>>(
+            endpoint: "/lol/match/v5/matches/by-puuid/{puuid}/ids",
+            baseUrl: RiotRegions.RegionalBaseUrl(regionalRoute),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// One whole game, parsed and verbatim.
+    ///
+    /// The raw text comes back with it because that is what gets stored. See
+    /// <see cref="RawMatch"/>: re-serialising the parse would silently drop every
+    /// field this version of the code does not model, which is exactly the set a
+    /// future migration would want to backfill from.
+    /// </summary>
+    public async Task<RawMatch> GetMatchAsync(
+        string regionalRoute,
+        string matchId,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        const string Endpoint = "/lol/match/v5/matches/{matchId}";
+        var path = $"/lol/match/v5/matches/{Uri.EscapeDataString(matchId)}";
+
+        var body = await SendRawAsync(
+            endpoint: Endpoint,
+            baseUrl: RiotRegions.RegionalBaseUrl(regionalRoute),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var match = Parse<MatchDto>(body, Endpoint);
+
+        // A payload that parses into something unusable is caught here rather
+        // than by a foreign key three layers down. The desktop validates this
+        // boundary with a schema for the same reason: a changed or truncated
+        // response should fail where it arrived, not corrupt a table quietly.
+        if (string.IsNullOrEmpty(match.Metadata?.MatchId) || match.Info?.Participants is not { Count: > 0 })
+        {
+            throw new RiotApiException($"Riot returned a match with no id or no participants ({matchId})", 0);
+        }
+
+        return new RawMatch(match, body);
+    }
+
+    /// <summary>Every ladder this account has an entry on. An unranked account has none.</summary>
+    public Task<List<LeagueEntryDto>> GetLeagueEntriesAsync(
+        string platform,
+        string puuid,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        // Riot removed the by-summoner (encryptedSummonerId) variant; by-puuid
+        // is the supported path.
+        var path = $"/lol/league/v4/entries/by-puuid/{Uri.EscapeDataString(puuid)}";
+
+        return SendAsync<List<LeagueEntryDto>>(
+            endpoint: "/lol/league/v4/entries/by-puuid/{puuid}",
+            baseUrl: RiotRegions.PlatformBaseUrl(platform),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>Mastery for every champion this account has played.</summary>
+    public Task<List<ChampionMasteryDto>> GetChampionMasteryAsync(
+        string platform,
+        string puuid,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"/lol/champion-mastery/v4/champion-masteries/by-puuid/{Uri.EscapeDataString(puuid)}";
+
+        return SendAsync<List<ChampionMasteryDto>>(
+            endpoint: "/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}",
+            baseUrl: RiotRegions.PlatformBaseUrl(platform),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>Profile icon and level. Cosmetic, and fetched alongside rank rather than alone.</summary>
+    public Task<SummonerDto> GetSummonerAsync(
+        string platform,
+        string puuid,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"/lol/summoner/v4/summoners/by-puuid/{Uri.EscapeDataString(puuid)}";
+
+        return SendAsync<SummonerDto>(
+            endpoint: "/lol/summoner/v4/summoners/by-puuid/{puuid}",
+            baseUrl: RiotRegions.PlatformBaseUrl(platform),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken);
+    }
+
     /// <summary>
     /// One request, through the queue, with Riot's failures turned into ours.
     ///
@@ -137,7 +256,33 @@ public sealed class RiotClient
         RiotRequestPriority priority,
         CancellationToken cancellationToken)
     {
-        var body = await _limiter.ScheduleAsync(
+        var body = await SendRawAsync(endpoint, baseUrl, path, priority, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Parse<T>(body, endpoint);
+    }
+
+    /// <summary>Deserialisation, in one place and off the pump's critical path.</summary>
+    private static T Parse<T>(string body, string endpoint)
+    {
+        var parsed = JsonSerializer.Deserialize<T>(body, Json);
+        if (parsed is null)
+        {
+            throw new RiotApiException($"Riot returned an empty body for {endpoint}", 0);
+        }
+
+        return parsed;
+    }
+
+    /// <summary>The request itself, answering with the response text unparsed.</summary>
+    private async Task<string> SendRawAsync(
+        string endpoint,
+        Uri baseUrl,
+        string path,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken)
+    {
+        return await _limiter.ScheduleAsync(
             async ct =>
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUrl, path));
@@ -158,14 +303,6 @@ public sealed class RiotClient
             },
             priority,
             cancellationToken).ConfigureAwait(false);
-
-        var parsed = JsonSerializer.Deserialize<T>(body, Json);
-        if (parsed is null)
-        {
-            throw new RiotApiException($"Riot returned an empty body for {endpoint}", 0);
-        }
-
-        return parsed;
     }
 
     /// <summary>

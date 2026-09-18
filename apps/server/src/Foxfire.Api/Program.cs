@@ -4,6 +4,7 @@ using Foxfire.Api.Configuration;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
+using Foxfire.Api.Sync;
 using Foxfire.Api.Versioning;
 using Foxfire.Core;
 using Foxfire.Data;
@@ -111,12 +112,49 @@ builder.Services
             // homelab and somebody's PC without extending a token by a third.
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+
+        // A WebSocket handshake carries no Authorization header, so the hub
+        // is the one place a token arrives in the query string. Scoped to the
+        // hub path deliberately: a token in a URL reaches logs and history,
+        // and that is a trade worth making for exactly one endpoint.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token)
+                    && context.HttpContext.Request.Path.StartsWithSegments(FoxfireHub.Path))
+                {
+                    context.Token = token;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
 
+// One hub for everything the server pushes. The desktop holds a single
+// connection to a single active server, and every event on it is addressed
+// the same way, so splitting by concern would multiply connections without
+// separating anything.
+builder.Services.AddSignalR();
+
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ServerSettingsService>();
+
+// The ingestion half. Scoped, because each of these is a DbContext and a
+// little logic on top of it; the engine that drives them is not, because a
+// sync outlives the request that asked for it.
+builder.Services.AddScoped<MatchIngestion>();
+builder.Services.AddScoped<RankRecorder>();
+builder.Services.AddScoped<AttributionRunner>();
+builder.Services.AddScoped<IdentityRepair>();
+
+builder.Services.AddSingleton<ISyncProgressSink, SignalRSyncProgressSink>();
+builder.Services.AddSingleton<SyncService>();
+builder.Services.AddSingleton<PostGameSyncScheduler>();
 
 builder.Services.AddHttpClient(RiotClient.HttpClientName, http =>
 {
@@ -157,6 +195,8 @@ app.MapInviteEndpoints();
 app.MapAdminSettingsEndpoints();
 app.MapAdminUserEndpoints();
 app.MapRiotLinkEndpoints();
+app.MapSyncEndpoints();
+app.MapHub<FoxfireHub>(FoxfireHub.Path);
 
 var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");
 

@@ -380,9 +380,11 @@ namespace Foxfire.Data.Migrations
 
             modelBuilder.Entity("Foxfire.Data.Entities.RankSnapshot", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<long>("CapturedAt")
                         .HasColumnType("bigint");
@@ -428,7 +430,7 @@ namespace Foxfire.Data.Migrations
 
                     b.HasIndex("MatchId");
 
-                    b.HasIndex("RiotAccountId", "QueueType", "CapturedAt");
+                    b.HasIndex("RiotAccountId", "QueueType", "CapturedAt", "Id");
 
                     b.ToTable("RankSnapshots");
                 });

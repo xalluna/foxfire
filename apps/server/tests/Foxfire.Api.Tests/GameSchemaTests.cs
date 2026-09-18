@@ -201,7 +201,6 @@ public class GameSchemaTests(FoxfireServerFixture server)
 
         var reading = new RankSnapshot
         {
-            Id = Guid.CreateVersion7(),
             RiotAccountId = account.Id,
             QueueType = RankedQueue.SoloDuo.RiotName(),
             Tier = "GOLD",
@@ -245,7 +244,6 @@ public class GameSchemaTests(FoxfireServerFixture server)
         db.Matches.Add(NewMatch(matchId, T0));
         db.RankSnapshots.Add(new RankSnapshot
         {
-            Id = Guid.CreateVersion7(),
             RiotAccountId = account.Id,
             QueueType = RankedQueue.SoloDuo.RiotName(),
             Source = "lcu",
@@ -275,7 +273,6 @@ public class GameSchemaTests(FoxfireServerFixture server)
         var account = await AddAccountAsync(db);
         var row = new RankSnapshot
         {
-            Id = Guid.CreateVersion7(),
             RiotAccountId = account.Id,
             QueueType = RankedQueue.Flex.RiotName(),
             Tier = "EMERALD",
@@ -328,7 +325,6 @@ public class GameSchemaTests(FoxfireServerFixture server)
         {
             db.RankSnapshots.Add(new RankSnapshot
             {
-                Id = Guid.CreateVersion7(),
                 RiotAccountId = account.Id,
                 QueueType = solo.RiotName(),
                 Tier = "GOLD",

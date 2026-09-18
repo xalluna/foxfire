@@ -210,7 +210,8 @@ namespace Foxfire.Data.Migrations
                 name: "RankSnapshots",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
                     RiotAccountId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     QueueType = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     Tier = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: true),
@@ -275,9 +276,9 @@ namespace Foxfire.Data.Migrations
                 column: "MatchId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RankSnapshots_RiotAccountId_QueueType_CapturedAt",
+                name: "IX_RankSnapshots_RiotAccountId_QueueType_CapturedAt_Id",
                 table: "RankSnapshots",
-                columns: new[] { "RiotAccountId", "QueueType", "CapturedAt" });
+                columns: new[] { "RiotAccountId", "QueueType", "CapturedAt", "Id" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Seasons_StartsAt",
