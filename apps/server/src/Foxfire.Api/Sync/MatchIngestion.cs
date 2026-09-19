@@ -144,7 +144,7 @@ public sealed class MatchIngestion(FoxfireDbContext db, TimeProvider time)
             Cs = p.Cs,
             DamageDealtToChampions = p.TotalDamageDealtToChampions,
             DamageTaken = p.TotalDamageTaken,
-            ItemsJson = JsonSerializer.Serialize(p.Items),
+            Items = [.. p.Items],
             Summoner1Id = p.Summoner1Id,
             Summoner2Id = p.Summoner2Id,
 

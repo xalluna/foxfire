@@ -44,6 +44,16 @@ public sealed class Match
     ///
     /// Roughly 100–200 KB each, uncompressed. A few thousand deduplicated
     /// matches is well under a gigabyte, and storage is the cheap resource here.
+    ///
+    /// It is already a JSON column, in the only sense SQL Server 2022 has one:
+    /// there is no `json` type before 2025, and nvarchar(max) is what JSON_VALUE
+    /// and OPENJSON read. So a query that needs to reach inside this can,
+    /// today, and indexing one field means a persisted computed column over
+    /// JSON_VALUE rather than a change here.
+    ///
+    /// What it is deliberately not is an owned entity mapped with ToJson. The
+    /// point of keeping the payload is the fields nobody has modelled yet —
+    /// modelling it would discard exactly those.
     /// </summary>
     public required string RawJson { get; set; }
 
@@ -133,8 +143,16 @@ public sealed class MatchParticipant
     public int? DamageDealtToChampions { get; set; }
     public int? DamageTaken { get; set; }
 
-    /// <summary>The six bought slots plus the trinket, as a JSON array.</summary>
-    public string? ItemsJson { get; set; }
+    /// <summary>
+    /// The six bought slots plus the trinket.
+    ///
+    /// A list rather than the JSON text of one. EF stores it as a JSON array
+    /// in the same nvarchar column it always did — the column is still called
+    /// ItemsJson, because that is still what is in it — and the serialising
+    /// that used to happen by hand on the way in and the parsing that happened
+    /// by hand on the way out are both the provider's job now.
+    /// </summary>
+    public List<int> Items { get; set; } = [];
 
     /// <summary>
     /// The role quest reward, which is not an inventory slot.
@@ -176,7 +194,10 @@ internal sealed class MatchParticipantConfiguration : IEntityTypeConfiguration<M
         builder.Property(p => p.TagLine).HasMaxLength(16);
         builder.Property(p => p.ChampionName).HasMaxLength(32);
         builder.Property(p => p.TeamPosition).HasMaxLength(16);
-        builder.Property(p => p.ItemsJson).HasMaxLength(256);
+        // Named for the column rather than the property. Renaming it would
+        // be a migration for a cosmetic, and "ItemsJson" is an honest name for
+        // a column holding a JSON array.
+        builder.PrimitiveCollection(p => p.Items).HasColumnName("ItemsJson").HasMaxLength(256);
         builder.Property(p => p.PerksJson).HasMaxLength(2048);
 
         builder.HasOne(p => p.Match)

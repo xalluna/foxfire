@@ -119,7 +119,7 @@ public class WireShapeTests(FoxfireServerFixture server)
             Cs = 190,
             DamageDealtToChampions = 20_000,
             DamageTaken = 24_000,
-            ItemsJson = "[3153,3006,6672,3031,3072,0,3363]",
+            Items = { 3153, 3006, 6672, 3031, 3072, 0, 3363 },
             PerksJson = """{"statPerks":{"defense":5002}}""",
             TeamPosition = "JUNGLE",
             LargestMultiKill = 2,

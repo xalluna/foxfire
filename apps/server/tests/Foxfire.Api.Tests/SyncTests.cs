@@ -151,7 +151,7 @@ public class SyncTests(FoxfireServerFixture server)
             // Minions and monsters summed on the way in, the way the renderer
             // expects to read it.
             Assert.Equal(200, mine.Cs);
-            Assert.Equal("[3153,3006,6672,3031,3072,0,3363]", mine.ItemsJson);
+            Assert.Equal([3153, 3006, 6672, 3031, 3072, 0, 3363], mine.Items);
             Assert.False(mine.GameEndedInEarlySurrender);
             Assert.NotNull(mine.PerksJson);
             Assert.Contains("statPerks", mine.PerksJson);

@@ -253,7 +253,7 @@ public sealed class MatchReads(FoxfireDbContext db)
                 x.p.GoldEarned,
                 x.p.DamageDealtToChampions,
                 x.p.LargestMultiKill,
-                Numbers(x.p.ItemsJson),
+                x.p.Items,
                 x.p.RoleBoundItem,
                 x.p.Summoner1Id,
                 x.p.Summoner2Id,
@@ -307,7 +307,7 @@ public sealed class MatchReads(FoxfireDbContext db)
                     p.Cs,
                     p.DamageDealtToChampions,
                     p.DamageTaken,
-                    Numbers(p.ItemsJson),
+                    p.Items,
                     p.RoleBoundItem,
                     p.Summoner1Id,
                     p.Summoner2Id,
@@ -452,9 +452,6 @@ public sealed class MatchReads(FoxfireDbContext db)
         var list = values.ToList();
         return list.Count == 0 ? null : list.Average();
     }
-
-    private static IReadOnlyList<int> Numbers(string? json) =>
-        string.IsNullOrEmpty(json) ? [] : JsonSerializer.Deserialize<int[]>(json) ?? [];
 
     private static JsonElement? Element(string? json) =>
         string.IsNullOrEmpty(json) ? null : JsonDocument.Parse(json).RootElement.Clone();
