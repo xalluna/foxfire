@@ -701,6 +701,32 @@ public class AdminSettingsTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task A_refused_patch_changes_nothing_at_all()
+    {
+        // It used to change something. The endpoint stored the replay cap and
+        // then looked at the backfill target, so a request carrying a good cap
+        // and a bad target was refused with the cap already written — and the
+        // answer said the request had failed.
+        using var admin = await AdminAsync();
+
+        var before = await admin.GetFromJsonAsync<ServerSettings>(
+            new Uri("/admin/settings/", UriKind.Relative));
+
+        var response = await admin.PatchAsJsonAsync(
+            new Uri("/admin/settings/", UriKind.Relative),
+            new { replayByteCap = 5_000_000_000L, backfillTarget = 5000 });
+
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("invalid_backfill_target", error?.Error);
+
+        var after = await admin.GetFromJsonAsync<ServerSettings>(
+            new Uri("/admin/settings/", UriKind.Relative));
+
+        Assert.Equal(before?.ReplayByteCap, after?.ReplayByteCap);
+        Assert.Equal(before?.BackfillTarget, after?.BackfillTarget);
+    }
+
+    [Fact]
     public async Task A_sensible_backfill_target_sticks()
     {
         using var admin = await AdminAsync();

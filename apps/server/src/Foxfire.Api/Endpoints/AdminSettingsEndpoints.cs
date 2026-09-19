@@ -1,23 +1,10 @@
-using Foxfire.Api.Services;
+using Foxfire.Api.Common;
+using Foxfire.Api.Features.ServerSettings;
 using Foxfire.Data.Entities;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Foxfire.Api.Endpoints;
-
-/// <summary>What an admin may change while the server is running.</summary>
-/// <param name="PublicSignup">Null leaves it alone.</param>
-/// <param name="BackfillTarget">Null leaves it alone.</param>
-/// <param name="ReplayByteCap">Null leaves it alone. Zero removes the cap.</param>
-public sealed record UpdateServerSettingsRequest(
-    bool? PublicSignup,
-    int? BackfillTarget,
-    long? ReplayByteCap);
-
-/// <summary>The current state of those switches.</summary>
-public sealed record ServerSettingsResponse(
-    bool PublicSignup,
-    int BackfillTarget,
-    long ReplayByteCap);
 
 /// <summary>
 /// The switches behind the server management section of the desktop's settings.
@@ -26,6 +13,12 @@ public sealed record ServerSettingsResponse(
 /// key, the connection strings and the signing keys are environment
 /// configuration — changing one is an edit and a restart, not a button. What is
 /// here is what can safely change underneath a running server.
+///
+/// The file is a route table and nothing else. Which routes exist, what they
+/// are called, and who is allowed to reach them live here; what they do lives
+/// in Features/ServerSettings, one request to a file. Authorization stays on
+/// the route rather than moving into a handler, because a policy is a fact
+/// about an endpoint and minimal APIs already know how to enforce one.
 /// </summary>
 public static class AdminSettingsEndpoints
 {
@@ -35,55 +28,13 @@ public static class AdminSettingsEndpoints
             .WithTags("Admin")
             .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.Admin));
 
-        admin.MapGet("/", async (ServerSettingsService settings, CancellationToken cancellationToken) =>
-            Results.Ok(new ServerSettingsResponse(
-                await settings.IsPublicSignupEnabledAsync(cancellationToken),
-                await settings.GetBackfillTargetAsync(cancellationToken),
-                await settings.GetReplayByteCapAsync(cancellationToken))));
+        admin.MapGet("/", (ISender sender, CancellationToken cancellationToken) =>
+            sender.SendAsync(new GetServerSettingsRequest(), cancellationToken));
 
-        admin.MapPatch("/", async (
-            [FromBody] UpdateServerSettingsRequest request,
-            ServerSettingsService settings,
-            ILogger<Program> logger,
-            CancellationToken cancellationToken) =>
-        {
-            if (request.ReplayByteCap is { } cap && cap < 0)
-            {
-                return AuthEndpoints.Problem(
-                    "invalid_replay_cap",
-                    "A storage cap is a number of bytes, or zero for no cap.");
-            }
-
-            if (request.ReplayByteCap is { } replayCap)
-            {
-                await settings.SetReplayByteCapAsync(replayCap, cancellationToken);
-            }
-
-            if (request.BackfillTarget is { } target && target is < 1 or > 1000)
-            {
-                return AuthEndpoints.Problem(
-                    "invalid_backfill_target",
-                    "A backfill target is between 1 and 1000 matches. Remember it is roughly one Riot "
-                    + "request per match, out of about a hundred every two minutes for the whole server.");
-            }
-
-            if (request.PublicSignup is { } publicSignup)
-            {
-                await settings.SetPublicSignupAsync(publicSignup, cancellationToken);
-                logger.LogInformation(
-                    "Public signup is now {State}", publicSignup ? "open" : "closed — invites only");
-            }
-
-            if (request.BackfillTarget is { } value)
-            {
-                await settings.SetBackfillTargetAsync(value, cancellationToken);
-                logger.LogInformation("Backfill target is now {Target} matches", value);
-            }
-
-            return Results.Ok(new ServerSettingsResponse(
-                await settings.IsPublicSignupEnabledAsync(cancellationToken),
-                await settings.GetBackfillTargetAsync(cancellationToken),
-                await settings.GetReplayByteCapAsync(cancellationToken)));
-        });
+        admin.MapPatch("/", (
+                [FromBody] UpdateServerSettingsRequest request,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(request, cancellationToken));
     }
 }

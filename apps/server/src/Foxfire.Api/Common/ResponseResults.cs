@@ -1,3 +1,5 @@
+using MediatR;
+
 namespace Foxfire.Api.Common;
 
 /// <summary>
@@ -17,6 +19,24 @@ namespace Foxfire.Api.Common;
 /// </summary>
 public static class ResponseResults
 {
+    /// <summary>
+    /// Send it, then turn the answer into an HTTP one.
+    ///
+    /// A route could await and call ToResult itself. Fifty of them doing it is
+    /// fifty chances to write the endpoint's real work into a lambda again,
+    /// which is the thing this whole change is getting away from — so the
+    /// one-liner is the only shape a route needs.
+    /// </summary>
+    public static async Task<IResult> SendAsync<TResponse>(
+        this ISender sender,
+        IRequest<TResponse> request,
+        CancellationToken cancellationToken)
+        where TResponse : IResponse
+    {
+        ArgumentNullException.ThrowIfNull(sender);
+        return (await sender.Send(request, cancellationToken)).ToResult();
+    }
+
     public static IResult ToResult(this IResponse response)
     {
         ArgumentNullException.ThrowIfNull(response);
