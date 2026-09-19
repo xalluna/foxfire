@@ -175,6 +175,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTyp
 // where it reads one from instead.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IIdentityContext, HttpIdentityContext>();
+builder.Services.AddScoped<AccountOwnership>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ServerSettingsService>();

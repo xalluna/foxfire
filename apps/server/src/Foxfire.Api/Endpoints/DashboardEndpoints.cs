@@ -1,3 +1,5 @@
+using Foxfire.Api.Features.RiotAccounts;
+using Foxfire.Api.Features.Sync;
 using Foxfire.Api.Reads;
 using Foxfire.Api.Sync;
 using Foxfire.Core;
@@ -100,7 +102,7 @@ public static class DashboardEndpoints
         var me = Ownership.UserId(principal);
 
         return Results.Ok(new DashboardResponse(
-            RiotLinkEndpoints.Describe(account, me),
+            RiotAccountResponse.Describe(account, me),
             [.. entries.Select(Describe)],
             state is null
                 ? null
