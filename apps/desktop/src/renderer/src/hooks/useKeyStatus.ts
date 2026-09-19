@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ServerState } from '@shared/types'
 
 /**
  * Tracks whether Riot has rejected the stored key. Personal keys expire every
@@ -14,6 +15,28 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
  * next settings fetch until a working key is saved, which is the point — the
  * banner should not be permanently dismissable while the key is still dead.
  */
+/**
+ * Whether this window is reading from a server, and whether that server's Riot
+ * key still works.
+ *
+ * Both come from the same place because they are the same question asked twice:
+ * a key problem means something different depending on whose key it is, and
+ * there is nothing on this machine to fix when it is the host's.
+ */
+export function useServerHealth(): { connected: boolean; riotKeyRejected: boolean } {
+  const [state, setState] = useState<ServerState | null>(null)
+
+  useEffect(() => {
+    void window.api.server.getState().then(setState)
+    return window.api.server.onChanged(setState)
+  }, [])
+
+  return {
+    connected: state?.activeUrl != null && state.session != null,
+    riotKeyRejected: state?.riotKeyRejected === true
+  }
+}
+
 export function useKeyRejected(): [boolean, () => void] {
   const [dismissed, setDismissed] = useState(false)
   const [rejected, setRejected] = useState(false)

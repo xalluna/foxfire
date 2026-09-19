@@ -21,7 +21,7 @@ import {
   useReplayUpdates,
   useSyncProgress
 } from './hooks/useSyncProgress'
-import { useKeyRejected } from './hooks/useKeyStatus'
+import { useKeyRejected, useServerHealth } from './hooks/useKeyStatus'
 import { useUiStore, type View } from './store/uiStore'
 
 const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
@@ -42,27 +42,42 @@ const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'captures', 'mastery', '
  * A full-width strip under the title bar. Used for the two Riot key states,
  * which are routine rather than exceptional: personal keys expire every 24h.
  */
+/**
+ * A strip across the top of the app.
+ *
+ * Renders as a button only when there is somewhere to go. A banner about the
+ * *server's* expired key has nothing on this machine to offer — there is no
+ * field to paste into — and one that looked clickable and did nothing would be
+ * worse than plain text.
+ */
 function Banner({
   tone,
   onClick,
   children
 }: {
   tone: 'error' | 'warning'
-  onClick: () => void
+  onClick?: () => void
   children: React.ReactNode
 }): JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      className={clsx(
-        'flex shrink-0 items-center gap-2 border-b px-5 py-2 text-left text-sm transition',
-        tone === 'error'
-          ? 'border-red/30 bg-red/10 text-red hover:bg-red/15'
-          : 'border-amber/30 bg-amber/10 text-amber hover:bg-amber/15'
-      )}
-    >
+  const className = clsx(
+    'flex shrink-0 items-center gap-2 border-b px-5 py-2 text-left text-sm',
+    tone === 'error' ? 'border-red/30 bg-red/10 text-red' : 'border-amber/30 bg-amber/10 text-amber',
+    onClick !== undefined && 'transition',
+    onClick !== undefined && (tone === 'error' ? 'hover:bg-red/15' : 'hover:bg-amber/15')
+  )
+
+  const body = (
+    <>
       <Icon.Warning className="shrink-0" />
       <span>{children}</span>
+    </>
+  )
+
+  if (onClick === undefined) return <div className={className}>{body}</div>
+
+  return (
+    <button onClick={onClick} className={className}>
+      {body}
     </button>
   )
 }
@@ -99,6 +114,10 @@ function App(): JSX.Element {
   }, [accounts.data, activeAccountId, setActiveAccount])
 
   const activeAccount = accounts.data?.find((a) => a.id === activeAccountId) ?? null
+  const { connected, riotKeyRejected: serverKeyRejected } = useServerHealth()
+
+  // Only meaningful in local-only mode. Connected to a server this machine holds
+  // no key, and the settings page that would ask for one is not even shown.
   const needsKey = settings.data && !settings.data.hasApiKey
   const showRail = ACCOUNT_VIEWS.includes(view)
 
@@ -148,7 +167,20 @@ function App(): JSX.Element {
         </div>
       </header>
 
-      {keyRejected && (
+{/*
+        Three banners about one situation, and which one shows depends entirely
+        on whose key it is. Connected to a server this machine holds no key at
+        all, so neither of the local two can be right — and the server's has no
+        "click here", because there is nothing here to paste.
+      */}
+      {connected && serverKeyRejected && (
+        <Banner tone="error">
+          This server&rsquo;s Riot API key is not working, so nothing new is being fetched.
+          Everything already stored still works. Its administrator needs to replace the key.
+        </Banner>
+      )}
+
+      {!connected && keyRejected && (
         <Banner
           tone="error"
           onClick={() => {
@@ -161,7 +193,7 @@ function App(): JSX.Element {
         </Banner>
       )}
 
-      {needsKey && !keyRejected && view !== 'settings' && (
+      {!connected && needsKey && !keyRejected && view !== 'settings' && (
         <Banner tone="warning" onClick={() => setView('settings')}>
           No Riot API key saved — open Settings to add one before looking anything up.
         </Banner>

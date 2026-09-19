@@ -316,6 +316,80 @@ public class RiotRateLimiterTests
     }
 
     [Fact]
+    public async Task A_rejected_key_is_announced_once_rather_than_per_stranded_call()
+    {
+        // Once the key is dead every later call fails too, and none of those is
+        // separate news. Whoever is listening pushes a banner at every connected
+        // desktop, and doing that five times for one expired key is five banners.
+        using var limiter = new RiotRateLimiter(Roomy, Clock());
+
+        var announcements = 0;
+        limiter.KeyRejectedOnce += () => announcements++;
+
+        await Assert.ThrowsAsync<RiotApiException>(
+            () => limiter.ScheduleAsync<string>(_ => throw new RiotApiException("expired", 401)));
+
+        for (var i = 0; i < 4; i++)
+        {
+            await Assert.ThrowsAnyAsync<Exception>(
+                () => limiter.ScheduleAsync(_ => Task.FromResult("after the latch")));
+        }
+
+        Assert.Equal(1, announcements);
+    }
+
+    [Fact]
+    public async Task Resuming_arms_the_announcement_again()
+    {
+        // A momentary 401 is re-probed rather than treated as the end, so the
+        // second genuine rejection after a recovery is genuinely new.
+        using var limiter = new RiotRateLimiter(Roomy, Clock());
+
+        var announcements = 0;
+        limiter.KeyRejectedOnce += () => announcements++;
+
+        await Assert.ThrowsAsync<RiotApiException>(
+            () => limiter.ScheduleAsync<string>(_ => throw new RiotApiException("blip", 401)));
+
+        limiter.Resume();
+
+        await Assert.ThrowsAsync<RiotApiException>(
+            () => limiter.ScheduleAsync<string>(_ => throw new RiotApiException("expired", 403)));
+
+        Assert.Equal(2, announcements);
+    }
+
+    [Fact]
+    public void Shutting_down_is_not_a_rejected_key()
+    {
+        // Stopping strands everything queued the same way a dead key does, and
+        // it is emphatically not something anybody can fix by replacing a key.
+        var announcements = 0;
+
+        var limiter = new RiotRateLimiter(Roomy, Clock());
+        limiter.KeyRejectedOnce += () => announcements++;
+
+        limiter.Dispose();
+
+        Assert.Equal(0, announcements);
+    }
+
+    [Fact]
+    public async Task A_listener_that_throws_does_not_take_the_limiter_with_it()
+    {
+        // The key is rejected either way, and everything that reads stored data
+        // still works. A socket that will not send is not worth the queue.
+        using var limiter = new RiotRateLimiter(Roomy, Clock());
+
+        limiter.KeyRejectedOnce += () => throw new InvalidOperationException("no socket");
+
+        await Assert.ThrowsAsync<RiotApiException>(
+            () => limiter.ScheduleAsync<string>(_ => throw new RiotApiException("expired", 401)));
+
+        Assert.True(limiter.KeyRejected);
+    }
+
+    [Fact]
     public async Task Resume_clears_the_latch_and_lets_work_flow_again()
     {
         using var limiter = new RiotRateLimiter(Tiny, Clock());

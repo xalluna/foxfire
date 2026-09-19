@@ -48,21 +48,59 @@ public sealed record SyncProgressEvent(
     SyncTrigger Trigger);
 
 /// <summary>
-/// Where sync progress goes.
+/// Everything this server tells the desktops connected to it.
 ///
-/// An interface rather than a direct SignalR call so the engine can be tested
-/// without a hub, and so a run triggered by something other than a person —
-/// the post-game ladder, a startup sweep — does not need a connection to exist
-/// before it can report anything.
+/// An interface rather than direct SignalR calls so the engine can be tested
+/// without a hub, and so something triggered by nobody — the post-game ladder,
+/// a startup sweep, a key that expired overnight — does not need a connection
+/// to exist before it can report anything.
+///
+/// Every method here has a counterpart the desktop already raised for itself in
+/// local-only mode, on the same channel with the same payload. That is the whole
+/// design: what changes is which process noticed, not what the renderer is told.
 /// </summary>
-public interface ISyncProgressSink
+public interface IServerEvents
 {
-    Task PublishAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default);
+    /// <summary>How far through a sync an account is.</summary>
+    Task SyncProgressAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Somebody's hand-entered LP changed.
+    ///
+    /// Raised by the server rather than by the desktop that typed it, because
+    /// the window that has to react is usually not the one that called: the LP
+    /// editor is its own renderer with its own cache, and the match list and
+    /// rank graph it just changed are in the main window — on this machine and
+    /// on everybody else's.
+    /// </summary>
+    Task RankEditedAsync(Guid riotAccountId, CancellationToken cancellationToken = default);
+
+    /// <summary>A running League client reported a rank that moved.</summary>
+    Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Riot has refused this server's key.
+    ///
+    /// Pushed the moment it happens rather than discovered by a poll, because
+    /// the moment it happens is usually the middle of the night — a personal key
+    /// expires every twenty-four hours — and the people who need to know are
+    /// asleep. The banner is waiting for them.
+    /// </summary>
+    Task RiotKeyRejectedAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>Drops everything. The default until a hub is wired in front of it.</summary>
-public sealed class NullSyncProgressSink : ISyncProgressSink
+/// <summary>Drops everything. For tests, and for anything that runs without a hub.</summary>
+public sealed class NullServerEvents : IServerEvents
 {
-    public Task PublishAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default) =>
+    public Task SyncProgressAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task RankEditedAsync(Guid riotAccountId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task RiotKeyRejectedAsync(CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 }

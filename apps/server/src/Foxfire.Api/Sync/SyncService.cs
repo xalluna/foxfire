@@ -40,7 +40,7 @@ public sealed record SyncResult(int Stored, int Failed);
 /// </summary>
 public sealed class SyncService(
     IServiceScopeFactory scopes,
-    ISyncProgressSink progress,
+    IServerEvents events,
     ILogger<SyncService> log)
 {
     private readonly Lock _gate = new();
@@ -102,7 +102,7 @@ public sealed class SyncService(
         {
             log.LogError(ex, "Sync failed for Riot account {RiotAccountId}", riotAccountId);
 
-            await progress.PublishAsync(new SyncProgressEvent(
+            await events.SyncProgressAsync(new SyncProgressEvent(
                 riotAccountId, SyncPhase.Error, 0, 0, Describe(ex), trigger));
 
             throw;
@@ -160,7 +160,7 @@ public sealed class SyncService(
         log.LogInformation(
             "Sync started for {RiotId} ({Phase}, {Trigger})", account.RiotId, phase, trigger);
 
-        await progress.PublishAsync(new SyncProgressEvent(
+        await events.SyncProgressAsync(new SyncProgressEvent(
             riotAccountId, phase, 0, 0, "Fetching match list…", trigger));
 
         var target = isBackfill ? state.BackfillTarget : RiotClient.MatchIdsPageSize;
@@ -200,7 +200,7 @@ public sealed class SyncService(
         log.LogInformation(
             "Sync finished for {RiotId}: {Stored} stored, {Failed} failed", account.RiotId, stored, failed);
 
-        await progress.PublishAsync(new SyncProgressEvent(
+        await events.SyncProgressAsync(new SyncProgressEvent(
             riotAccountId,
             SyncPhase.Complete,
             stored,
@@ -319,7 +319,7 @@ public sealed class SyncService(
             }
 
             current++;
-            await progress.PublishAsync(new SyncProgressEvent(
+            await events.SyncProgressAsync(new SyncProgressEvent(
                 account.Id, phase, current, total, null, trigger));
         }
 

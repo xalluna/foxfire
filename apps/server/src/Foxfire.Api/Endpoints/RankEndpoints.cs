@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Foxfire.Api.Reads;
+using Foxfire.Api.Sync;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -117,6 +118,7 @@ public static class RankEndpoints
         ClaimsPrincipal principal,
         FoxfireDbContext db,
         ManualRankEditor editor,
+        IServerEvents events,
         CancellationToken cancellationToken)
     {
         var account = await Ownership.MineAsync(db, principal, riotAccountId, cancellationToken);
@@ -135,9 +137,15 @@ public static class RankEndpoints
             [.. (request.Edits ?? []).Select(e => e.ToDomain())],
             cancellationToken);
 
-        return problem is null
-            ? Results.NoContent()
-            : AuthEndpoints.Problem("invalid_rank", problem);
+        if (problem is not null) return AuthEndpoints.Problem("invalid_rank", problem);
+
+        // The window that has to react is usually not the one that called: the
+        // LP editor is its own renderer with its own cache, and the match list
+        // and rank graph it just changed are in the main window — here and on
+        // everybody else's machine.
+        await events.RankEditedAsync(riotAccountId, cancellationToken);
+
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ClearManualAsync(
@@ -146,13 +154,17 @@ public static class RankEndpoints
         ClaimsPrincipal principal,
         FoxfireDbContext db,
         ManualRankEditor editor,
+        IServerEvents events,
         CancellationToken cancellationToken)
     {
         var account = await Ownership.MineAsync(db, principal, riotAccountId, cancellationToken);
         if (account is null) return Ownership.NotYours();
 
         var cleared = await editor.ClearAsync(riotAccountId, account.Puuid, matchId, cancellationToken);
-        return cleared ? Results.NoContent() : Results.NotFound();
+        if (!cleared) return Results.NotFound();
+
+        await events.RankEditedAsync(riotAccountId, cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ListSeasonsAsync(RankReads ranks, CancellationToken cancellationToken) =>
@@ -175,7 +187,7 @@ public static class RankEndpoints
     private static async Task<IResult> SaveSeasonsAsync(
         [FromBody] IReadOnlyList<SeasonRequest> seasons,
         FoxfireDbContext db,
-        Foxfire.Api.Sync.AttributionRunner attribution,
+        AttributionRunner attribution,
         ILogger<Program> logger,
         CancellationToken cancellationToken)
     {

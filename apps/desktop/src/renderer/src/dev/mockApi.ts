@@ -120,9 +120,12 @@ export type Scenario =
   | 'sync-error'
   | 'not-live'
   | 'no-obs'
-  // Signed in to a Foxfire server, and refused by one for being too old.
+  // Signed in to a Foxfire server; refused by one for being too old; and one
+  // whose own Riot key has expired, which is the state a personal key reaches
+  // every twenty-four hours and which nobody on this machine can fix.
   | 'server-connected'
   | 'server-outdated'
+  | 'server-degraded'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')
@@ -251,7 +254,7 @@ let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000
 const MOCK_SERVER_URL = 'https://foxfire.example.com'
 
 let serverState: ServerState =
-  scenario === 'server-connected'
+  scenario === 'server-connected' || scenario === 'server-degraded'
     ? {
         activeUrl: MOCK_SERVER_URL,
         servers: [
@@ -263,7 +266,8 @@ let serverState: ServerState =
           email: 'alluna@example.com',
           isAdmin: true
         },
-        upgradeRequired: null
+        upgradeRequired: null,
+        riotKeyRejected: scenario === 'server-degraded'
       }
     : scenario === 'server-outdated'
       ? {
@@ -280,9 +284,11 @@ let serverState: ServerState =
             email: 'alluna@example.com',
             isAdmin: false
           },
-          upgradeRequired: '0.14.0'
+          upgradeRequired: '0.14.0',
+          riotKeyRejected: false
         }
-      : { activeUrl: null, servers: [], session: null, upgradeRequired: null }
+      : { activeUrl: null, servers: [], session: null, upgradeRequired: null,
+        riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
@@ -466,7 +472,8 @@ export const mockApi: Api = {
               email: registration.email,
               isAdmin: false
             },
-            upgradeRequired: null
+            upgradeRequired: null,
+        riotKeyRejected: false
           })
         },
         600,
@@ -493,7 +500,8 @@ export const mockApi: Api = {
                   email: credentials.email,
                   isAdmin: true
                 },
-                upgradeRequired: null
+                upgradeRequired: null,
+        riotKeyRejected: false
               })
             },
         600,
@@ -506,7 +514,8 @@ export const mockApi: Api = {
           activeUrl: null,
           servers: serverState.servers.map((s) => ({ ...s, username: null, isActive: false })),
           session: null,
-          upgradeRequired: null
+          upgradeRequired: null,
+        riotKeyRejected: false
         }),
         300,
         false
@@ -518,7 +527,8 @@ export const mockApi: Api = {
           ...serverState,
           activeUrl: url,
           servers: serverState.servers.map((s) => ({ ...s, isActive: s.url === url })),
-          upgradeRequired: null
+          upgradeRequired: null,
+        riotKeyRejected: false
         }),
         200,
         false
@@ -530,7 +540,8 @@ export const mockApi: Api = {
           activeUrl: serverState.activeUrl === url ? null : serverState.activeUrl,
           servers: serverState.servers.filter((s) => s.url !== url),
           session: serverState.session?.url === url ? null : serverState.session,
-          upgradeRequired: null
+          upgradeRequired: null,
+        riotKeyRejected: false
         }),
         200,
         false

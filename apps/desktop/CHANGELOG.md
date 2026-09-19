@@ -108,7 +108,12 @@ Foxfire does until you point it somewhere.
   laptop, and stops two people who were in the same game from both walking it.
 - **A live connection to the server.** Sync progress, LP edits and rank changes arrive over it on
   the same channels the app already used for its own events, so nothing above the transport knows
-  which one delivered them.
+  which one delivered them. LP somebody types in one window reaches every other window, on their
+  machine and on yours.
+- **The banner about an expired Riot key now says whose key it is.** Connected to a server this PC
+  holds no key at all, so the one that offers to take you to the field would be offering something
+  that does not exist. A server whose key has expired says so plainly instead, and says that
+  everything already stored still works — which it does; what stops is anything new arriving.
 - **Your recordings and replays stop pointing into tables that are about to leave.** They are files
   on this disk and stay here, so their link to an account and to a match is now a value rather than
   a database constraint — a match id was already Riot's own and is valid anywhere, and each row

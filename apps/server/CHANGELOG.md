@@ -50,8 +50,12 @@ match history for you.
   at thirty seconds, ninety, three minutes, six and ten. That schedule belongs
   to the server now, which means it keeps going after you close your laptop, and
   two people who were in the same game do not both run it.
-- **Live progress.** A backfill of a few hundred games takes minutes on a shared
-  key, so the desktop is told how far through it is as it goes.
+- **Live progress, and three other things the server pushes.** A backfill of a few hundred games
+  takes minutes on a shared key, so the desktop is told how far through it is as it goes — and so
+  is told when somebody types an LP figure by hand, when a League client reports a rank that moved,
+  and when Riot refuses this server's key. That last one is pushed the moment it happens, because
+  the moment it happens is usually the middle of the night and the people who need to know are
+  asleep.
 - **A storage summary for whoever is paying for the disk.** Replay count and bytes as the blob
   store itself reports them, beside the database's own counts — and a warning when the two disagree
   about how many replays exist, which means a delete failed on one side. There is no "delete

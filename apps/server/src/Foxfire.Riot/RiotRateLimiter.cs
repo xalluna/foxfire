@@ -87,6 +87,20 @@ public sealed class RiotRateLimiter : IDisposable
         get { lock (_gate) { return _rejection is not null; } }
     }
 
+    /// <summary>
+    /// Raised once, the first time Riot refuses the key.
+    ///
+    /// A callback rather than a poll, because the moment it happens is usually
+    /// the middle of the night — a personal key expires every twenty-four hours
+    /// — and the people who need to know are asleep. Whoever is listening can
+    /// have the news waiting for them.
+    ///
+    /// Once per latch: <see cref="Resume"/> arms it again. Fired outside the
+    /// lock, because a handler that reached back into the queue under it would
+    /// deadlock, and this one goes out over a socket.
+    /// </summary>
+    public event Action? KeyRejectedOnce;
+
     /// <summary>The rejection itself, for the message shown to an admin.</summary>
     public RiotApiException? Rejection
     {
@@ -354,9 +368,15 @@ public sealed class RiotRateLimiter : IDisposable
     private void FailEverything(RiotApiException error)
     {
         List<Job> stranded = [];
+        bool newlyRejected;
 
         lock (_gate)
         {
+            // Only a transition, and only a real key rejection. This method also
+            // runs on shutdown and on a pump that died, and neither of those is
+            // news anybody can act on by replacing a key.
+            newlyRejected = _rejection is null && error.IsKeyRejection;
+
             _rejection = error;
             foreach (var queue in _queues)
             {
@@ -366,6 +386,21 @@ public sealed class RiotRateLimiter : IDisposable
         }
 
         foreach (var job in stranded) job.TrySetException(error);
+
+        if (newlyRejected)
+        {
+            try
+            {
+                KeyRejectedOnce?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                // A listener that throws must not take the limiter with it. The
+                // key is still rejected either way, and everything that reads
+                // stored data still works.
+                _log.LogError(ex, "A key-rejection listener threw");
+            }
+        }
     }
 
     public void Dispose()

@@ -933,6 +933,16 @@ export interface ServerState {
    * this is the one thing the UI has to say.
    */
   upgradeRequired: string | null
+
+  /**
+   * Whether Riot has refused the active server's API key.
+   *
+   * Its own flag rather than the local key's, because the two want different
+   * sentences: one is yours to fix by pasting a new key, and this one is the
+   * host's. Everything already stored still reads while it is true — what stops
+   * is anything new arriving.
+   */
+  riotKeyRejected: boolean
 }
 
 /**

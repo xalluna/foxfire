@@ -4,6 +4,7 @@ import { app } from 'electron'
 import { broadcast } from '../ipc/broadcast'
 import { CH } from '../ipc/channels'
 import { CLIENT_VERSION_HEADER } from './client'
+import { setServerRiotKeyRejected } from '../services/serverService'
 import { createLogger } from '../telemetry/logger'
 import type { SyncProgressEvent } from '@shared/types'
 
@@ -61,11 +62,12 @@ export async function connectHub(
   hub.on('rank:edited', (accountId: string) => broadcast(CH.rank.edited, accountId))
   hub.on('lcu:rankChanged', (accountId: string) => broadcast(CH.lcu.rankChanged, accountId))
 
-  // The same channel local-only mode uses for an expired key, and deliberately:
-  // there it means "yours expired, paste a new one" and here it means "the
-  // host's did". The banner text differs; that reads still work and writes have
-  // stopped does not.
-  hub.on('settings:keyInvalid', () => broadcast(CH.settings.keyInvalid))
+  // Deliberately not the channel local-only mode uses for an expired key.
+  // That one means "yours expired, paste a new one" and is wired to a banner
+  // that offers to take you to the field; this means the host's did, and there
+  // is nothing on this machine to paste. Same situation, different person to
+  // tell — so it goes into the server state and gets its own sentence.
+  hub.on('settings:keyInvalid', () => setServerRiotKeyRejected(true))
 
   hub.onreconnected(() => log.info('Reconnected to the server'))
   hub.onclose((err) => {

@@ -157,7 +157,50 @@ export function getServerState(): ServerState {
     activeUrl: active,
     servers,
     session,
-    upgradeRequired: active ? upgradeRequired : null
+    upgradeRequired: active ? upgradeRequired : null,
+    riotKeyRejected: active ? riotKeyRejected : false
+  }
+}
+
+/**
+ * Whether the active server's Riot key has been refused.
+ *
+ * Held in memory rather than stored: it is a fact about a server right now, and
+ * a restart should ask again rather than remember an answer from yesterday —
+ * the host may well have fixed it overnight, which is the ordinary case for a
+ * key that expires every twenty-four hours.
+ */
+let riotKeyRejected = false
+
+/**
+ * Records that Riot has refused the active server's key.
+ *
+ * Called by the hub, which hears it the moment it happens, and by the health
+ * check below, which covers the desktop that connects to a server already in
+ * that state and so missed the announcement.
+ */
+export function setServerRiotKeyRejected(rejected: boolean): void {
+  if (riotKeyRejected === rejected) return
+  riotKeyRejected = rejected
+  announce()
+}
+
+/**
+ * Asks the active server how it is, and records the answer.
+ *
+ * Never throws. A server that cannot be reached is not a server with a dead
+ * key, and reporting one as the other would put the wrong banner in front of
+ * somebody — the reads failing will say so on their own.
+ */
+export async function refreshServerHealth(): Promise<void> {
+  const url = readActive()
+  if (!url) return
+
+  try {
+    const health = await serverRequest<{ riotKeyRejected: boolean }>(url, '/health')
+    setServerRiotKeyRejected(health.riotKeyRejected === true)
+  } catch (err) {
+    log.debug('Could not read server health', { error: String(err) })
   }
 }
 
@@ -190,6 +233,11 @@ function syncHubConnection(state: ServerState): void {
   }
 
   void connectHub(url, () => accessTokenFor(url))
+
+  // The announcement only reaches desktops that were listening when it
+  // happened. One connecting to a server that has been degraded since last
+  // night would otherwise see nothing at all.
+  void refreshServerHealth()
 }
 
 /** Asks a server what it is. Never throws; every failure is part of the answer. */

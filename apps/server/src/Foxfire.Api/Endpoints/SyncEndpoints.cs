@@ -175,6 +175,7 @@ public static class SyncEndpoints
         FoxfireDbContext db,
         RankRecorder ranks,
         AttributionRunner attribution,
+        IServerEvents events,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -208,6 +209,11 @@ public static class SyncEndpoints
 
         var since = time.GetUtcNow().ToUnixTimeMilliseconds() - AttributionRunner.ReplayWindowMs;
         await attribution.ReplayAsync(account.Id, account.Puuid, since, cancellationToken);
+
+        // Everybody's rank views, not just this machine's. A game that just
+        // ended moved somebody's LP, and a member watching the shared history
+        // should see it without pressing anything.
+        await events.RankChangedAsync(account.Id, cancellationToken);
 
         return Results.Ok(new RankReadingResponse(true));
     }

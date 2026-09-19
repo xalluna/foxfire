@@ -53,9 +53,25 @@ public sealed class FoxfireHub : Hub
     public const string Path = "/hub";
 }
 
-/// <summary>Sends sync progress to everybody connected.</summary>
-public sealed class SignalRSyncProgressSink(IHubContext<FoxfireHub> hub) : ISyncProgressSink
+/// <summary>
+/// Sends to everybody connected.
+///
+/// Everybody, because everything on a Foxfire server is everybody's: a match
+/// list refreshing because somebody else's game landed is the shared history
+/// working. Filtering by who owns what would mean the person who was not
+/// looking at their own account saw a stale screen.
+/// </summary>
+public sealed class SignalRServerEvents(IHubContext<FoxfireHub> hub) : IServerEvents
 {
-    public Task PublishAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default) =>
+    public Task SyncProgressAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default) =>
         hub.Clients.All.SendAsync(HubEvents.SyncProgress, progress, cancellationToken);
+
+    public Task RankEditedAsync(Guid riotAccountId, CancellationToken cancellationToken = default) =>
+        hub.Clients.All.SendAsync(HubEvents.RankEdited, riotAccountId, cancellationToken);
+
+    public Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default) =>
+        hub.Clients.All.SendAsync(HubEvents.RankChanged, riotAccountId, cancellationToken);
+
+    public Task RiotKeyRejectedAsync(CancellationToken cancellationToken = default) =>
+        hub.Clients.All.SendAsync(HubEvents.KeyInvalid, cancellationToken);
 }

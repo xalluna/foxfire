@@ -160,7 +160,7 @@ builder.Services.AddScoped<MatchReads>();
 builder.Services.AddScoped<RankReads>();
 builder.Services.AddScoped<ManualRankEditor>();
 
-builder.Services.AddSingleton<ISyncProgressSink, SignalRSyncProgressSink>();
+builder.Services.AddSingleton<IServerEvents, SignalRServerEvents>();
 builder.Services.AddSingleton<SyncService>();
 builder.Services.AddSingleton<PostGameSyncScheduler>();
 
@@ -261,6 +261,19 @@ if (!smtpOptions.IsConfigured)
         "No SMTP configured, so nothing will be emailed. Invite links are still readable from the admin "
         + "section of the desktop app — copy them to your community wherever it actually talks.");
 }
+
+// The one place a key rejection becomes news. The limiter latches the moment
+// Riot refuses, which for a personal key is usually the middle of the night;
+// pushing it means the banner is waiting for whoever opens Foxfire next rather
+// than being discovered by somebody wondering why nothing synced.
+//
+// Resolved lazily inside the handler: the hub context is a singleton, but
+// resolving it here would build it before the app has finished starting.
+app.Services.GetRequiredService<RiotRateLimiter>().KeyRejectedOnce += () =>
+{
+    startup.LogWarning("Telling connected desktops that Riot has refused this server's key");
+    _ = app.Services.GetRequiredService<IServerEvents>().RiotKeyRejectedAsync();
+};
 
 // Probe the Riot key now rather than finding out from a friend that nothing
 // syncs. Not awaited: a slow or unreachable Riot is no reason to refuse to
