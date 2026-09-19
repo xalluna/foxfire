@@ -20,6 +20,12 @@ public interface IIdentityContext
     /// <summary>The Foxfire account making this request, or null.</summary>
     Guid? UserId { get; }
 
+    /// <summary>
+    /// Their display name, for the log lines that record what an admin did to
+    /// somebody. Never trusted for a decision — that is what UserId is for.
+    /// </summary>
+    string? Username { get; }
+
     /// <summary>Whether they hold a role. False when nobody is signed in.</summary>
     bool IsInRole(string role);
 }
@@ -31,6 +37,8 @@ public sealed class HttpIdentityContext(IHttpContextAccessor accessor) : IIdenti
         Guid.TryParse(accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
             ? id
             : null;
+
+    public string? Username => accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Name);
 
     public bool IsInRole(string role) => accessor.HttpContext?.User.IsInRole(role) ?? false;
 }

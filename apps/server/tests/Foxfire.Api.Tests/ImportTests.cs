@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Reads;
+using Foxfire.Api.Features.Import;
 using Foxfire.Api.Sync;
 using Foxfire.Core;
 using Foxfire.Data;
