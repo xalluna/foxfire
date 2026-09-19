@@ -12,7 +12,13 @@ namespace Foxfire.Data.Entities;
 /// Username and email are separate on purpose. You log in with your email,
 /// because that is the thing you cannot forget and the thing a reset has to be
 /// sent to anyway. Your username is what everybody else sees next to your games,
-/// and it is yours to pick.
+/// and it is yours to pick — first come, first served.
+///
+/// Both are unique. The email because RequireUniqueEmail is set; the username
+/// because Identity indexes NormalizedUserName uniquely by default. Everything
+/// on a Foxfire server is visible to every member, so a username is how people
+/// tell each other apart on a match row, and letting two of them collide would
+/// cost more than it saves the second person to register.
 ///
 /// There is no IsDisabled flag. Disabling somebody is Identity's lockout with no
 /// end date, which is already what SignInManager consults on every attempt; a

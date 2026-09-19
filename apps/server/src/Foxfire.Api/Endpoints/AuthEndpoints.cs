@@ -132,8 +132,21 @@ public static class AuthEndpoints
                 if (!created.Succeeded)
                 {
                     await transaction.RollbackAsync(ct);
+
+                    // A taken username gets its own code, because it is the one
+                    // registration failure somebody fixes by changing a single
+                    // box — and a code is what lets the desktop put the message
+                    // under that box instead of in a banner. Identity's own
+                    // English for it, "User name 'x' is already taken.", is a
+                    // sentence about a database rather than about a community.
+                    var taken = created.Errors.Any(e => e.Code == "DuplicateUserName");
+
                     return (
-                        Problem("registration_failed", string.Join(" ", created.Errors.Select(e => e.Description))),
+                        taken
+                            ? Problem("username_taken", "Somebody on this server already goes by that name.")
+                            : Problem(
+                                "registration_failed",
+                                string.Join(" ", created.Errors.Select(e => e.Description))),
                         (FoxfireUser?)null);
                 }
 

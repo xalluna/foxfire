@@ -71,8 +71,15 @@ builder.Services.AddDbContext<FoxfireDbContext>(options =>
 builder.Services
     .AddIdentityCore<FoxfireUser>(options =>
     {
-        // Email is the login, so it has to be unique. Usernames are display
-        // names and are deliberately not.
+        // Email is the login, so it has to be unique, and this is the switch
+        // for it. Usernames are unique too and have no switch here, because
+        // Identity indexes NormalizedUserName uniquely whether you ask or not.
+        //
+        // Both are wanted. Your email is what a password reset has to reach.
+        // Your username is what sits beside your games, and every member of a
+        // server can see every other member's — so a name is how people tell
+        // each other apart, and two people answering to one is a worse outcome
+        // than the second of them picking again.
         options.User.RequireUniqueEmail = true;
 
         // Length over character classes. Mandatory symbols push people towards

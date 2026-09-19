@@ -154,6 +154,37 @@ public class AuthTests(FoxfireServerFixture server)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task A_username_cannot_be_used_twice()
+    {
+        // Identity has always enforced this — it indexes NormalizedUserName
+        // uniquely by default — so what this pins is the code, not the rule.
+        // A taken name is the one registration failure somebody fixes by
+        // changing a single box, and the desktop needs to be able to tell it
+        // apart to put the message under that box.
+        using var client = server.Client();
+
+        // Kept short: the endpoint refuses anything over 32 characters, and a
+        // Unique() prefix plus a full Guid is 37.
+        var username = $"Twin{Guid.NewGuid().ToString("N")[..8]}";
+
+        await server.RegisterAsync(client, username, $"{Unique("twin-first")}@example.com");
+
+        var response = await client.PostAsJsonAsync(
+            new Uri("/auth/register", UriKind.Relative),
+            new
+            {
+                username,
+                email = $"{Unique("twin-second")}@example.com",
+                password = FoxfireServerFixture.GoodPassword
+            });
+
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("username_taken", error?.Error);
+    }
+
     [Theory]
     [InlineData("ab")]
     [InlineData("")]
