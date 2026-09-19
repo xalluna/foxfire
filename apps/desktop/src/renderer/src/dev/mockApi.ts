@@ -765,6 +765,22 @@ export const mockApi: Api = {
         },
         700
       ),
+    // Claiming, in the harness, is whichever account the fake League client is
+    // signed in to becoming yours.
+    link: (input): Promise<Account> =>
+      delay(
+        {
+          ...ACCOUNTS[0],
+          id: String(Date.now()),
+          puuid: `puuid-${input.gameName}`,
+          gameName: input.gameName,
+          tagLine: input.tagLine,
+          isHomeAccount: false,
+          isMine: true,
+          ownerUsername: 'Faker'
+        },
+        700
+      ),
     remove: (accountId: string): Promise<Account[]> =>
       delay(accounts().filter((a) => a.id !== accountId)),
     setHome: (accountId: string): Promise<Account[]> =>

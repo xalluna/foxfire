@@ -92,9 +92,20 @@ const serverReporting: LcuReporting = {
     const accounts = await authedRequest<Account[]>('/riot-accounts')
     const riotId = `${gameName}#${tagLine}`.toLowerCase()
 
-    return (
-      accounts.find((a) => `${a.gameName}#${a.tagLine}`.toLowerCase() === riotId) ?? null
-    )
+    const found = accounts.find((a) => `${a.gameName}#${a.tagLine}`.toLowerCase() === riotId)
+
+    // Yours, not merely present. Everything on a server is visible to
+    // everybody, so a list lookup finds accounts nobody has claimed and
+    // accounts somebody else has — and every write the watcher goes on to
+    // make against one is refused with not_your_account.
+    //
+    // Reported as untracked instead, which is already the state for "a client
+    // is running and this is not an account we follow". The alternative was
+    // worse than a wrong label: the watcher said connected, the first write
+    // 403'd, the poll failed, and the client was reported as disconnected —
+    // so a League client that was running looked absent, on a loop, and the
+    // one screen offering to claim the account never saw it.
+    return found?.isMine === false ? null : (found ?? null)
   },
 
   recordRank: async (accountId, reading, force) => {

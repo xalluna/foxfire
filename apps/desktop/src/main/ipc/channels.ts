@@ -51,6 +51,7 @@ export const CH = {
     list: 'accounts:list',
     getHome: 'accounts:getHome',
     add: 'accounts:add',
+    link: 'accounts:link',
     remove: 'accounts:remove',
     setHome: 'accounts:setHome'
   },

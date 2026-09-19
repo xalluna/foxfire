@@ -68,6 +68,7 @@ const api: Api = {
     list: () => ipcRenderer.invoke(CH.accounts.list),
     getHome: () => ipcRenderer.invoke(CH.accounts.getHome),
     add: (input) => ipcRenderer.invoke(CH.accounts.add, input),
+    link: (input) => ipcRenderer.invoke(CH.accounts.link, input),
     remove: (accountId) => ipcRenderer.invoke(CH.accounts.remove, accountId),
     setHome: (accountId) => ipcRenderer.invoke(CH.accounts.setHome, accountId)
   },

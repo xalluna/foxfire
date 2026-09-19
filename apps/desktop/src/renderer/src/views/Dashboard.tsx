@@ -134,7 +134,11 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
             })
           }
         }
-      })
+      },
+
+      // On a server the history is everybody's and the writes are not, so the
+      // menu has to know whose account this is.
+      { isMine: account.isMine })
     })
   }
 

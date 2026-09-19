@@ -10,11 +10,31 @@ import type { ContextMenuItem } from './ContextMenu'
  * answer, and two rows offering different menus with no explanation only makes
  * it harder to work out.
  */
-export function lpEditBlockedReason(match: MatchSummary): string | null {
+export function lpEditBlockedReason(match: MatchSummary, isMine?: boolean): string | null {
+  const notYours = lpWriteBlockedReason(isMine)
+  if (notYours) return notYours
+
   if (queueTypeForQueueId(match.queueId) === null) return 'Only ranked games move LP'
   if (match.isRemake) return 'Remakes move no LP'
   if (match.rank?.lpDelta != null) return 'Already worked out from your rank history'
   return null
+}
+
+/**
+ * Why LP on this account cannot be written at all, or null when it can.
+ *
+ * Checked before anything about the game, because it is the reason that will
+ * not change: a remake stays a remake, but so does somebody else's account, and
+ * being told "already worked out from your rank history" about a stranger's
+ * game answers a question nobody asked.
+ *
+ * Undefined means local-only, where every account in the file is yours and the
+ * question does not arise. False is a server saying somebody else claimed it —
+ * and the server refuses the write with not_your_account, so offering it here
+ * only produces a 403 somebody has to interpret.
+ */
+export function lpWriteBlockedReason(isMine?: boolean): string | null {
+  return isMine === false ? 'Only whoever claimed this account can type its LP' : null
 }
 
 /**
@@ -69,9 +89,10 @@ export function matchContextItems(
     onWatchReplay: () => void
     onDownloadReplay: () => void
   },
-  { expandable = true }: { expandable?: boolean } = {}
+  { expandable = true, isMine }: { expandable?: boolean; isMine?: boolean } = {}
 ): ContextMenuItem[] {
-  const blocked = lpEditBlockedReason(match)
+  const blocked = lpEditBlockedReason(match, isMine)
+  const notYours = lpWriteBlockedReason(isMine)
   const noRecording = recordingBlockedReason(match)
   const noReplay = replayBlockedReason(match)
   const noDownload = downloadBlockedReason(match)
@@ -107,7 +128,14 @@ export function matchContextItems(
         ]
       : []),
     match.hasManualRank
-      ? { label: 'Clear LP edit', onSelect: actions.onClearLp }
+      ? {
+          label: 'Clear LP edit',
+          onSelect: actions.onClearLp,
+          // Clearing is a write too. It was the one path with no reason
+          // checked at all, so somebody else's hand-entered figure offered
+          // itself for deletion.
+          ...(notYours ? { disabledReason: notYours } : {})
+        }
       : {
           label: 'Edit LP gain…',
           onSelect: actions.onEditLp,

@@ -175,6 +175,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.accounts.list, () => serverBacked().accounts.list())
   ipcMain.handle(CH.accounts.getHome, () => serverBacked().accounts.getHome())
   ipcMain.handle(CH.accounts.add, (_e, input: RiotIdInput) => serverBacked().accounts.add(input))
+  ipcMain.handle(CH.accounts.link, (_e, input: RiotIdInput) => serverBacked().accounts.link(input))
   ipcMain.handle(CH.accounts.remove, (_e, accountId: string) =>
     serverBacked().accounts.remove(accountId)
   )

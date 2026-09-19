@@ -111,3 +111,75 @@ describe('matchContextItems', () => {
     expect(items.some((item) => item.label === 'Download replay')).toBe(true)
   })
 })
+
+/**
+ * Who may write LP against this account.
+ *
+ * Everything on a Foxfire server is readable by every member, so the match list
+ * shows other people's games — and the menu on those rows offered to edit and
+ * to clear their LP. The server refuses both with not_your_account, so the only
+ * thing that reached the user was a 403 they had no way to interpret.
+ *
+ * Absent means local-only, where every account in the file is yours.
+ */
+describe('LP editing and whose account it is', () => {
+  const RANKED_UNATTRIBUTED: MatchSummary = { ...MATCH, rank: null, hasManualRank: false }
+
+  function labelled(items: ReturnType<typeof matchContextItems>, prefix: string) {
+    return items.find((item) => item.label.startsWith(prefix))
+  }
+
+  it('offers the edit on an account you claimed', () => {
+    const items = matchContextItems(RANKED_UNATTRIBUTED, NOTHING, { isMine: true })
+
+    expect(labelled(items, 'Edit LP gain')?.disabledReason).toBeUndefined()
+  })
+
+  it('offers the edit in local-only mode, where the question does not arise', () => {
+    const items = matchContextItems(RANKED_UNATTRIBUTED, NOTHING)
+
+    expect(labelled(items, 'Edit LP gain')?.disabledReason).toBeUndefined()
+  })
+
+  it('refuses the edit on somebody else account, and says why', () => {
+    const items = matchContextItems(RANKED_UNATTRIBUTED, NOTHING, { isMine: false })
+
+    expect(labelled(items, 'Edit LP gain')?.disabledReason).toBe(
+      'Only whoever claimed this account can type its LP'
+    )
+  })
+
+  it('gives ownership as the reason ahead of anything about the game', () => {
+    // A remake on somebody else's account is both. "Remakes move no LP" is
+    // true and useless — it suggests a different game would work.
+    const items = matchContextItems(
+      { ...RANKED_UNATTRIBUTED, isRemake: true },
+      NOTHING,
+      { isMine: false }
+    )
+
+    expect(labelled(items, 'Edit LP gain')?.disabledReason).toBe(
+      'Only whoever claimed this account can type its LP'
+    )
+  })
+
+  it('refuses clearing somebody else hand-entered figure', () => {
+    // The path that had no check at all: hasManualRank swapped the item for
+    // "Clear LP edit" and never asked whose it was.
+    const items = matchContextItems(
+      { ...MATCH, hasManualRank: true },
+      NOTHING,
+      { isMine: false }
+    )
+
+    expect(labelled(items, 'Clear LP edit')?.disabledReason).toBe(
+      'Only whoever claimed this account can type its LP'
+    )
+  })
+
+  it('still offers clearing your own', () => {
+    const items = matchContextItems({ ...MATCH, hasManualRank: true }, NOTHING, { isMine: true })
+
+    expect(labelled(items, 'Clear LP edit')?.disabledReason).toBeUndefined()
+  })
+})

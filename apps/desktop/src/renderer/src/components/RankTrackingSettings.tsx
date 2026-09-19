@@ -63,8 +63,8 @@ export function RankTrackingSettings(): JSX.Element {
             </>
           ) : status.state === 'untracked' ? (
             <>
-              {status.gameName}#{status.tagLine} is logged in but not tracked here — add the account
-              to record its rank.
+              {status.gameName}#{status.tagLine} is logged in but not tracked here. Link it under
+              Settings → Server, or add it locally, to record its rank.
             </>
           ) : (
             <>League client not detected. Start it to capture per-game LP.</>

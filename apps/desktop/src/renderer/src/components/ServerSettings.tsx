@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
+import { LinkAccountRow } from './LinkAccountRow'
 import { SettingsCard, SettingsPage } from './settings/SettingsCard'
 import { DangerRow, SettingsBlock, SettingsRow, StatusRow } from './settings/SettingsRow'
 import { ghostButtonClass, inputClass, primaryButtonClass } from './settings/controls'
@@ -83,6 +84,13 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           }
         />
         <SettingsRow label="Address" control={<Address url={state.activeUrl!} />} />
+      </SettingsCard>
+
+      <SettingsCard
+        title="Your League accounts"
+        description="A server links the account it can see you are signed in to, rather than one you type — which is what stops anybody claiming a Riot ID that is not theirs."
+      >
+        <LinkAccountRow />
       </SettingsCard>
 
       <SettingsCard

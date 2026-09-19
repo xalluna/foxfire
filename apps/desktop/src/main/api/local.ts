@@ -76,6 +76,14 @@ export const localApi: ServerBackedApi = {
       startSync(account.id)
       return wire(account)
     },
+    // Nothing to attest to: every account in this file is already yours, so
+    // claiming one and tracking one are the same act.
+    link: async (input) => {
+      const account = await addAccount(input)
+      startSync(account.id)
+      return wire(account)
+    },
+
     remove: async (accountId) => {
       removeAccount(rowId(accountId))
       return getAccounts().map(wire)

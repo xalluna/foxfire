@@ -61,6 +61,26 @@ export const httpApi: ServerBackedApi = {
       )
     },
 
+    link: async (input) => {
+      // The endpoint the whole LCU-attested design is built around, and which
+      // nothing reached until now: add refuses a typed Riot ID on purpose, and
+      // the watcher only ever looked accounts up. An account could be on a
+      // server, be visible to everybody, carry its owner's history — and have
+      // no way to become anybody's.
+      const account = await authedRequest<Account>('/riot-accounts', {
+        method: 'POST',
+        body: { gameName: input.gameName, tagLine: input.tagLine }
+      })
+
+      // Not awaited, exactly as the local path does not await its backfill.
+      void authedRequest<void>(`/sync/${account.id}`, { method: 'POST' }).catch(() => {
+        // A claim that worked is worth reporting even if the sync that follows
+        // did not start; the next launch sweep picks it up.
+      })
+
+      return account
+    },
+
     remove: async (accountId) => {
       // Gives up the claim rather than deleting anything. On a shared server the
       // games are everybody's — the same match rows are on nine other people's

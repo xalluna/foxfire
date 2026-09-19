@@ -170,6 +170,20 @@ export interface Api {
     list: () => Promise<Account[]>
     getHome: () => Promise<Account | null>
     add: (input: RiotIdInput) => Promise<Account>
+
+    /**
+     * Claims the account the running League client is signed in to.
+     *
+     * On a server this is the only way an account becomes yours: a link is
+     * attested by a client somebody is actually logged in to, which is why the
+     * Riot ID comes from the watcher rather than from a box. The server
+     * resolves it with its own key and files it, first claim wins.
+     *
+     * Locally it is `add` under the name that makes sense there — the file is
+     * yours and tracking an account is all claiming could mean.
+     */
+    link: (input: RiotIdInput) => Promise<Account>
+
     remove: (accountId: string) => Promise<Account[]>
     setHome: (accountId: string) => Promise<Account[]>
   }
