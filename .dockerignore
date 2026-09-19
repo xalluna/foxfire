@@ -1,0 +1,38 @@
+# What must not reach a Docker build context.
+#
+# The server's image is built from the repository root, because the Dockerfile
+# needs the whole apps/server tree and cannot reach above its own context. That
+# makes this file load-bearing rather than an optimisation.
+#
+# Build output is the reason. `dotnet publish --no-restore` reads
+# obj/project.assets.json, and a copy of that file written on a developer's
+# machine names an absolute NuGet path — C:\Users\someone\.nuget\packages — that
+# does not exist inside the container. The publish then fails inside
+# FallbackPackagePathResolver with a stack trace that says nothing about the
+# real cause. Without this the image builds only on a checkout nobody has ever
+# built locally, which is to say on CI and never on the machine of the person
+# who changed something.
+
+# .NET
+**/bin/
+**/obj/
+
+# Node
+**/node_modules/
+**/out/
+**/release/
+**/dist/
+
+# Never a secret, however careful the Dockerfile is
+**/.env
+**/*.pfx
+
+# Nothing here is needed to compile or run anything
+.git/
+.github/
+.claude/
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.md
+fixtures/

@@ -11,12 +11,17 @@ WORKDIR /src
 # Project files first, restored on their own. This layer is keyed only on the
 # csproj files, so editing code does not re-download every package — which on a
 # homelab's upload is the difference between a fast rebuild and a coffee.
+#
+# Every project has to be listed. Restore follows project references, so one
+# missing from here fails the restore rather than merely slowing it — and a new
+# project is exactly the change least likely to be tested against this file.
 COPY apps/server/Directory.Build.props apps/server/global.json ./apps/server/
 COPY apps/server/Foxfire.Server.slnx ./apps/server/
 COPY apps/server/src/Foxfire.Api/Foxfire.Api.csproj ./apps/server/src/Foxfire.Api/
 COPY apps/server/src/Foxfire.Core/Foxfire.Core.csproj ./apps/server/src/Foxfire.Core/
 COPY apps/server/src/Foxfire.Data/Foxfire.Data.csproj ./apps/server/src/Foxfire.Data/
 COPY apps/server/src/Foxfire.Riot/Foxfire.Riot.csproj ./apps/server/src/Foxfire.Riot/
+COPY apps/server/src/Foxfire.Storage/Foxfire.Storage.csproj ./apps/server/src/Foxfire.Storage/
 RUN dotnet restore apps/server/src/Foxfire.Api/Foxfire.Api.csproj
 
 COPY apps/server/ ./apps/server/
