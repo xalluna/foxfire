@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { selfNameSet, toRecordingEvent, toRecordingEvents, type LiveEventDto } from './eventMapping'
 
-const SELF = selfNameSet(['Alluna#NA1', 'Alluna'])
+const SELF = selfNameSet(['Faker#NA1', 'Faker'])
 
 /** The game clock at the first recorded frame — recording starts a bit in. */
 const OFFSET = 40
@@ -11,7 +11,7 @@ function event(over: Partial<LiveEventDto> = {}): LiveEventDto {
     EventID: 12,
     EventName: 'ChampionKill',
     EventTime: 140,
-    KillerName: 'Alluna',
+    KillerName: 'Faker',
     VictimName: 'Enemy',
     Assisters: [],
     ...over
@@ -20,17 +20,17 @@ function event(over: Partial<LiveEventDto> = {}): LiveEventDto {
 
 describe('selfNameSet', () => {
   it('matches a Riot ID by its game-name half, which is what the feed prints', () => {
-    const set = selfNameSet(['Alluna#NA1'])
+    const set = selfNameSet(['Faker#NA1'])
 
-    expect(set.has('alluna')).toBe(true)
-    expect(set.has('alluna#na1')).toBe(true)
+    expect(set.has('faker')).toBe(true)
+    expect(set.has('faker#na1')).toBe(true)
   })
 
   it('drops the blanks the game sometimes reports instead of a name', () => {
-    const set = selfNameSet(['', '   ', null, undefined, 'Alluna'])
+    const set = selfNameSet(['', '   ', null, undefined, 'Faker'])
 
     expect(set.size).toBe(1)
-    expect(set.has('alluna')).toBe(true)
+    expect(set.has('faker')).toBe(true)
   })
 })
 
@@ -57,7 +57,7 @@ describe('toRecordingEvent', () => {
 
   it('reads a death, and names who did it', () => {
     const mapped = toRecordingEvent(
-      event({ KillerName: 'Enemy', VictimName: 'Alluna' }),
+      event({ KillerName: 'Enemy', VictimName: 'Faker' }),
       SELF,
       OFFSET
     )
@@ -68,7 +68,7 @@ describe('toRecordingEvent', () => {
 
   it('counts an assist', () => {
     const mapped = toRecordingEvent(
-      event({ KillerName: 'Teammate', Assisters: ['Someone', 'Alluna'] }),
+      event({ KillerName: 'Teammate', Assisters: ['Someone', 'Faker'] }),
       SELF,
       OFFSET
     )
@@ -122,7 +122,7 @@ describe('toRecordingEvent', () => {
   })
 
   it('ignores case and stray whitespace in a name', () => {
-    const mapped = toRecordingEvent(event({ KillerName: '  alluna ' }), SELF, OFFSET)
+    const mapped = toRecordingEvent(event({ KillerName: '  faker ' }), SELF, OFFSET)
 
     expect(mapped?.role).toBe('kill')
   })

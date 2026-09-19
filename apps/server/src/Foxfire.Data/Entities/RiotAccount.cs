@@ -37,7 +37,7 @@ public sealed class RiotAccount
     /// </summary>
     public required string Puuid { get; set; }
 
-    /// <summary>The name half of a Riot ID — the "Alluna" in Alluna#NA1.</summary>
+    /// <summary>The name half of a Riot ID — the "Faker" in Faker#KR.</summary>
     public required string GameName { get; set; }
 
     /// <summary>The tag half, without the hash.</summary>

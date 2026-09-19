@@ -82,7 +82,7 @@ function match(matchId: string, gameCreation: number, queueId = 420): MatchDto {
       participants: [
         {
           puuid: ME,
-          riotIdGameName: 'Alluna',
+          riotIdGameName: 'Faker',
           riotIdTagline: 'NA1',
           teamId: 100,
           win: true,
@@ -123,7 +123,7 @@ describe('attributeInterval', () => {
     applyAllMigrations(db)
     db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
       ME,
-      'Alluna',
+      'Faker',
       'NA1'
     )
   })
@@ -255,7 +255,7 @@ describe('replayAttribution', () => {
     applyAllMigrations(db)
     db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
       ME,
-      'Alluna',
+      'Faker',
       'NA1'
     )
   })
@@ -406,7 +406,7 @@ describe('the ladder reset', () => {
     applyAllMigrations(db)
     db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
       ME,
-      'Alluna',
+      'Faker',
       'NA1'
     )
     // Migration 008 seeds Season 2026 only; the boundary under test is the one

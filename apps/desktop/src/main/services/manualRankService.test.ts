@@ -50,7 +50,7 @@ function match(
       participants: [
         {
           puuid: ME,
-          riotIdGameName: 'Alluna',
+          riotIdGameName: 'Faker',
           riotIdTagline: 'NA1',
           teamId: 100,
           win: true,
@@ -125,7 +125,7 @@ describe('manual LP entry', () => {
     applyAllMigrations(db)
     db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
       ME,
-      'Alluna',
+      'Faker',
       'NA1'
     )
   })

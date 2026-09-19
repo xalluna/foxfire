@@ -52,7 +52,7 @@ public static class SearchEndpoints
 
         if (gameName.Length == 0 || tagLine.Length == 0)
         {
-            return AuthEndpoints.Problem("invalid_riot_id", "A Riot ID is a name and a tag, like Alluna#NA1.");
+            return AuthEndpoints.Problem("invalid_riot_id", "A Riot ID is a name and a tag, like Faker#KR.");
         }
 
         var platform = RiotRegions.DefaultPlatform;

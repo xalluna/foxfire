@@ -27,7 +27,7 @@ import {
 /**
  * A 30-day one-trick climb, generated rather than hand-written.
  *
- * Alluna's fixture in fixtures.ts is 27 hand-tuned games chosen to break
+ * Faker's fixture in fixtures.ts is 27 hand-tuned games chosen to break
  * layouts. This one exists for the opposite reason: it is the volume case — a
  * 301-game history where the Champions screen has a real distribution to rank,
  * the match list has enough rows to page through, and the rank chart has a

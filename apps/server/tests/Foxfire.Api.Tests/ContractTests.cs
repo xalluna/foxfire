@@ -633,7 +633,7 @@ public class RiotLinkTests(FoxfireServerFixture server)
 
         var response = await client.PostAsJsonAsync(
             new Uri("/riot-accounts/", UriKind.Relative),
-            new { gameName = "Alluna", tagLine = "NA1" });
+            new { gameName = "Faker", tagLine = "KR" });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
 

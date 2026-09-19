@@ -59,7 +59,7 @@ export function ProfileHeader({
             {account.gameName}
           </h1>
           {/*
-            The tag usually already names the region ("Alluna#NA1" on na1), so
+            The tag usually already names the region ("Faker#NA1" on na1), so
             appending the platform would just repeat it. Only shown when they
             genuinely differ — an EUW-tagged account playing on NA, say.
           */}

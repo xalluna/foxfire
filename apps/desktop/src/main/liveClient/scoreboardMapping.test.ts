@@ -3,7 +3,7 @@ import { toScoreboard } from './scoreboardMapping'
 import { AllGameDataSchema, type AllGameDataDto, type LivePlayerDto } from './types'
 import type { AssetManifest } from '@shared/types'
 
-const ACCOUNT = 'Alluna#NA1'
+const ACCOUNT = 'Faker#NA1'
 
 /**
  * Enough of a manifest to exercise every lookup, including the two champions
@@ -59,7 +59,7 @@ function player(over: Partial<LivePlayerDto> = {}): LivePlayerDto {
 
 function game(allPlayers: LivePlayerDto[], over: Partial<AllGameDataDto> = {}): AllGameDataDto {
   return {
-    activePlayer: { riotId: 'Alluna#NA1', summonerName: 'Alluna' },
+    activePlayer: { riotId: 'Faker#NA1', summonerName: 'Faker' },
     allPlayers,
     gameData: { gameMode: 'CLASSIC', gameTime: 847.5, mapName: 'Map11' },
     ...over
@@ -264,7 +264,7 @@ describe('toScoreboard', () => {
       player({ riotIdGameName: '', riotIdTagLine: '' }),
       player({ riotIdGameName: '', riotIdTagLine: '' })
     ])
-    roster.activePlayer = { riotId: 'Alluna#NA1', summonerName: 'Alluna' }
+    roster.activePlayer = { riotId: 'Faker#NA1', summonerName: 'Faker' }
 
     const { players } = toScoreboard(roster, MANIFEST, ACCOUNT)
 
@@ -273,14 +273,14 @@ describe('toScoreboard', () => {
 
   it('marks the tracked account rather than whoever is at the keyboard', () => {
     const roster = fullRoster({
-      3: { riotIdGameName: 'Alluna', riotIdTagLine: 'NA1' },
+      3: { riotIdGameName: 'Faker', riotIdTagLine: 'NA1' },
       7: { riotIdGameName: 'SomebodyElse', riotIdTagLine: 'NA1' }
     })
     roster.activePlayer = { riotId: 'SomebodyElse#NA1', summonerName: 'SomebodyElse' }
 
     const { players } = toScoreboard(roster, MANIFEST, ACCOUNT)
 
-    expect(players.filter((p) => p.isSelf).map((p) => p.gameName)).toEqual(['Alluna'])
+    expect(players.filter((p) => p.isSelf).map((p) => p.gameName)).toEqual(['Faker'])
   })
 
   it('falls back to the active player when the tracked account is not in the game', () => {

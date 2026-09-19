@@ -69,7 +69,7 @@ function match(matchId: string, puuids: string[]): MatchDto {
   } as unknown as MatchDto
 }
 
-function insertAccountRow(db: DatabaseSyncType, puuid: string, gameName = 'Alluna'): number {
+function insertAccountRow(db: DatabaseSyncType, puuid: string, gameName = 'Faker'): number {
   const result = db
     .prepare(
       `INSERT INTO accounts (puuid, game_name, tag_line, platform, regional_route)

@@ -56,7 +56,7 @@ function gold(division: string, lp: number) {
 function seedAccount(db: DatabaseSyncType): number {
   db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
     ME,
-    'Alluna',
+    'Faker',
     'NA1'
   )
   return 1
@@ -75,7 +75,7 @@ function soloMatch(matchId: string, gameCreation: number, queueId = 420): MatchD
       participants: [
         {
           puuid: ME,
-          riotIdGameName: 'Alluna',
+          riotIdGameName: 'Faker',
           riotIdTagline: 'NA1',
           teamId: 100,
           win: true,
@@ -120,16 +120,16 @@ describe('getAccountByRiotId', () => {
   it('finds the account the League client reports', () => {
     // The client sends gameName/tagLine; its puuid is a canonical UUID that
     // never equals the encrypted one Riot's public API stored here.
-    expect(getAccountByRiotId(db, 'Alluna', 'NA1')?.id).toBe(1)
+    expect(getAccountByRiotId(db, 'Faker', 'NA1')?.id).toBe(1)
   })
 
   it('ignores case, which Riot IDs preserve but do not key on', () => {
-    expect(getAccountByRiotId(db, 'alluna', 'na1')?.id).toBe(1)
-    expect(getAccountByRiotId(db, 'ALLUNA', 'Na1')?.id).toBe(1)
+    expect(getAccountByRiotId(db, 'faker', 'na1')?.id).toBe(1)
+    expect(getAccountByRiotId(db, 'FAKER', 'Na1')?.id).toBe(1)
   })
 
   it('returns null for an untracked Riot ID', () => {
-    expect(getAccountByRiotId(db, 'Alluna', 'EUW')).toBeNull()
+    expect(getAccountByRiotId(db, 'Faker', 'EUW')).toBeNull()
     expect(getAccountByRiotId(db, 'SomeoneElse', 'NA1')).toBeNull()
   })
 })

@@ -65,7 +65,7 @@ public class SyncPlanningTests
     [Fact]
     public void Only_a_moved_puuid_earns_a_retry()
     {
-        var plan = SyncPlanning.AfterIdentityRepair(IdentityOutcome.Repaired, "Alluna#NA1");
+        var plan = SyncPlanning.AfterIdentityRepair(IdentityOutcome.Repaired, "Faker#KR");
 
         Assert.True(plan.Retry);
         Assert.Null(plan.Message);
@@ -80,10 +80,10 @@ public class SyncPlanningTests
         // The same request would fail the same way a second time, so a retry
         // would only spend another of the community's Riot calls to learn
         // nothing. Each of these has its own thing to tell somebody.
-        var plan = SyncPlanning.AfterIdentityRepair(outcome, "Alluna#NA1");
+        var plan = SyncPlanning.AfterIdentityRepair(outcome, "Faker#KR");
 
         Assert.False(plan.Retry);
         Assert.NotNull(plan.Message);
-        Assert.Contains("Alluna#NA1", plan.Message, StringComparison.Ordinal);
+        Assert.Contains("Faker#KR", plan.Message, StringComparison.Ordinal);
     }
 }

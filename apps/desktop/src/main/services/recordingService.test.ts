@@ -23,7 +23,7 @@ vi.mock('../db', () => ({ getDb: () => live.db }))
 // exercised rather than bypassed.
 vi.mock('../api/accountContext', () => ({
   accountContext: (accountId: string) =>
-    Promise.resolve({ accountId, riotId: 'Alluna#NA1', serverKey: null })
+    Promise.resolve({ accountId, riotId: 'Faker#NA1', serverKey: null })
 }))
 
 vi.mock('../telemetry/logger', () => ({
@@ -65,7 +65,7 @@ let db: DatabaseSyncType
 function participant(championId: number, index: number): unknown {
   return {
     puuid: index === 0 ? ME : `puuid-other-${index}`,
-    riotIdGameName: index === 0 ? 'Alluna' : `Other${index}`,
+    riotIdGameName: index === 0 ? 'Faker' : `Other${index}`,
     riotIdTagline: 'NA1',
     teamId: index < 5 ? 100 : 200,
     win: index < 5,
@@ -117,7 +117,7 @@ function finishedRecording(name = 'game'): number {
   const path = `recording-${name}.mp4`
   const id = createRecording(db, {
     accountId: ACCOUNT,
-    riotId: 'Alluna#NA1',
+    riotId: 'Faker#NA1',
     serverKey: null,
     filePath: path,
     queueId: 420,
@@ -136,7 +136,7 @@ beforeEach(() => {
   applyAllMigrations(db)
   db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
     ME,
-    'Alluna',
+    'Faker',
     'NA1'
   )
   live.db = db

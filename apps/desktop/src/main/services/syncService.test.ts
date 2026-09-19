@@ -52,7 +52,7 @@ describe('planMatchIdPages', () => {
 })
 
 describe('afterIdentityRepair', () => {
-  const RIOT_ID = 'Alluna#NA1'
+  const RIOT_ID = 'Faker#NA1'
 
   it('retries once the account has moved onto a new puuid', () => {
     expect(afterIdentityRepair('repaired', RIOT_ID)).toEqual({ retry: true })

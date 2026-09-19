@@ -28,7 +28,7 @@ vi.mock('../db', () => ({ getDb: () => live.db }))
 // exercised rather than bypassed.
 vi.mock('../api/accountContext', () => ({
   accountContext: (accountId: string) =>
-    Promise.resolve({ accountId, riotId: 'Alluna#NA1', serverKey: null })
+    Promise.resolve({ accountId, riotId: 'Faker#NA1', serverKey: null })
 }))
 vi.mock('../telemetry/logger', () => ({
   createLogger: () => ({ info: () => {}, debug: () => {}, warn: () => {}, error: () => {} })

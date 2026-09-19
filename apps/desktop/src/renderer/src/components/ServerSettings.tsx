@@ -351,7 +351,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Alluna"
+                placeholder="Faker"
                 className={clsx(inputClass, 'w-full')}
               />
             </SettingsBlock>

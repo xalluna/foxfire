@@ -258,12 +258,12 @@ let serverState: ServerState =
     ? {
         activeUrl: MOCK_SERVER_URL,
         servers: [
-          { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Alluna', isActive: true }
+          { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
         ],
         session: {
           url: MOCK_SERVER_URL,
-          username: 'Alluna',
-          email: 'alluna@example.com',
+          username: 'Faker',
+          email: 'faker@example.com',
           isAdmin: true
         },
         upgradeRequired: null,
@@ -276,12 +276,12 @@ let serverState: ServerState =
           // still real, and it is the reads that stop.
           activeUrl: MOCK_SERVER_URL,
           servers: [
-            { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Alluna', isActive: true }
+            { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
           ],
           session: {
             url: MOCK_SERVER_URL,
-            username: 'Alluna',
-            email: 'alluna@example.com',
+            username: 'Faker',
+            email: 'faker@example.com',
             isAdmin: false
           },
           upgradeRequired: '0.14.0',
@@ -303,7 +303,7 @@ const MOCK_STORED_REPLAYS: AdminReplay[] = [
     matchId: 'NA1_5312345678',
     patch: '15.16',
     fileBytes: 34_200_000,
-    uploadedBy: 'Alluna',
+    uploadedBy: 'Faker',
     uploadedAt: '2026-09-16T21:04:00.000Z'
   },
   {
@@ -339,8 +339,8 @@ function setServerState(next: ServerState): ServerState {
 let mockUsers: AdminUser[] = [
   {
     id: 'u-1',
-    username: 'Alluna',
-    email: 'alluna@example.com',
+    username: 'Faker',
+    email: 'faker@example.com',
     isAdmin: true,
     isDisabled: false,
     createdAt: '2026-06-01T10:00:00.000Z',
@@ -498,10 +498,10 @@ export const mockApi: Api = {
               error: null,
               state: setServerState({
                 activeUrl: url,
-                servers: [{ url, name: 'The Fox Den', username: 'Alluna', isActive: true }],
+                servers: [{ url, name: 'The Fox Den', username: 'Faker', isActive: true }],
                 session: {
                   url,
-                  username: 'Alluna',
+                  username: 'Faker',
                   email: credentials.email,
                   isAdmin: true
                 },
@@ -945,7 +945,7 @@ export const mockApi: Api = {
           : {
               state: 'connected',
               accountId: '1',
-              gameName: 'Alluna',
+              gameName: 'Faker',
               tagLine: 'NA1',
               // A game in progress in the default scenario, so the Live tab's
               // indicator has something to show without a client running.

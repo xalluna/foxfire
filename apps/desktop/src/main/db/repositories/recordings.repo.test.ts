@@ -38,7 +38,7 @@ import type { AccountContext } from '../accountScope'
  * id is what the store currently calls the account, and the Riot ID is what
  * still finds the row after that id changes.
  */
-const ACCOUNT: AccountContext = { accountId: '1', riotId: 'Alluna#NA1', serverKey: null }
+const ACCOUNT: AccountContext = { accountId: '1', riotId: 'Faker#NA1', serverKey: null }
 
 const ME = 'puuid-me'
 const T0 = 1_700_000_000_000
@@ -56,7 +56,7 @@ let db: DatabaseSyncType
 function seedAccount(): number {
   db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
     ME,
-    'Alluna',
+    'Faker',
     'NA1'
   )
   return 1
@@ -75,7 +75,7 @@ function match(matchId: string, gameCreation: number): MatchDto {
       participants: [
         {
           puuid: ME,
-          riotIdGameName: 'Alluna',
+          riotIdGameName: 'Faker',
           riotIdTagline: 'NA1',
           teamId: 100,
           win: true,
@@ -111,7 +111,7 @@ function match(matchId: string, gameCreation: number): MatchDto {
 function newRecording(over: Partial<Parameters<typeof createRecording>[1]> = {}): number {
   return createRecording(db, {
     accountId: '1',
-    riotId: 'Alluna#NA1',
+    riotId: 'Faker#NA1',
     serverKey: null,
     filePath: FILE,
     queueId: 420,
@@ -280,7 +280,7 @@ describe('recordings.repo', () => {
 
     const onAServer: AccountContext = {
       accountId: '0198f2c1-3f1a-7c5e-9c3b-2c0a5f1e4d77',
-      riotId: 'Alluna#NA1',
+      riotId: 'Faker#NA1',
       serverKey: 'https://foxfire.example.com'
     }
 

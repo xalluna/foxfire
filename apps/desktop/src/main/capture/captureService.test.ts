@@ -89,7 +89,7 @@ vi.mock('../db', () => ({ getDb: () => null }))
 // the server client. Capture only ever asks it for what to stamp on the row.
 vi.mock('../api/accountContext', () => ({
   accountContext: (accountId: string) =>
-    Promise.resolve({ accountId, riotId: 'Alluna#NA1', serverKey: null })
+    Promise.resolve({ accountId, riotId: 'Faker#NA1', serverKey: null })
 }))
 
 vi.mock('../db/repositories/recordings.repo', () => ({
@@ -193,7 +193,7 @@ function fireConnectionChange(): void {
 function self(): ScoreboardPlayer {
   return {
     slot: 0,
-    gameName: 'Alluna',
+    gameName: 'Faker',
     tagLine: 'NA1',
     isSelf: true,
     isBot: false,

@@ -62,12 +62,12 @@ import {
 export const ACCOUNTS: Account[] = [
   {
     id: '1',
-    puuid: 'puuid-alluna',
-    gameName: 'Alluna',
+    puuid: 'puuid-faker',
+    gameName: 'Faker',
     tagLine: 'NA1',
     platform: 'na1',
     regionalRoute: 'americas',
-    summonerId: 'sum-alluna',
+    summonerId: 'sum-faker',
     profileIconId: 6299,
     summonerLevel: 412,
     isHomeAccount: true,
@@ -77,7 +77,7 @@ export const ACCOUNTS: Account[] = [
     // Only meaningful connected to a server, where an account belongs to one
     // member and everybody else can read its games but not write its LP.
     isMine: true,
-    ownerUsername: 'Alluna'
+    ownerUsername: 'Faker'
   },
   {
     id: '2',
@@ -418,7 +418,7 @@ function buildSoloRankHistory(): {
 
 const soloHistory = buildSoloRankHistory()
 
-const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
+const FAKER_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
   RANKED_SOLO_5x5: soloHistory.snapshots,
   // Flex is deliberately sparse — the queue toggle has to stay legible when one
   // ladder has far fewer points than the other.
@@ -448,7 +448,7 @@ const ALLUNA_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
  * shows one account's climb under another's name.
  */
 export const RANK_SNAPSHOTS: Record<string, Record<QueueType, RankSnapshot[]>> = {
-  1: ALLUNA_SNAPSHOTS,
+  1: FAKER_SNAPSHOTS,
   2: {
     // Two ranked years, oldest first. The gap between them is January's reset:
     // the all-time chart has to break the line there rather than draw a
@@ -460,7 +460,7 @@ export const RANK_SNAPSHOTS: Record<string, Record<QueueType, RankSnapshot[]>> =
   }
 }
 
-const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
+const FAKER_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   matchId: matchIdAt(i),
   gameCreation: NOW - s.agoMs,
   gameDuration: s.mins * 60 + s.secs,
@@ -496,17 +496,17 @@ const ALLUNA_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   replayId: i < 5 && i !== 1 ? i + 1 : null
 }))
 
-const ALLUNA = { puuid: 'puuid-alluna', gameName: 'Alluna', tagLine: 'NA1' }
+const FAKER = { puuid: 'puuid-faker', gameName: 'Faker', tagLine: 'NA1' }
 
 /**
  * Match history per account.
  *
- * Alluna's 27 games are hand-tuned to break layouts; the second account's 301
+ * Faker's 27 games are hand-tuned to break layouts; the second account's 301
  * are generated (see climb.ts) to cover the volume case the hand-written list
  * cannot — paging, a champion pool with a real distribution, a month of rank.
  */
 export const MATCHES: Record<string, MatchSummary[]> = {
-  1: ALLUNA_MATCHES,
+  1: FAKER_MATCHES,
   // Newest first across both seasons: each block is already reversed, and the
   // prior one is wholly older, so concatenating keeps the list ordered.
   2: [...CLIMB_MATCHES, ...PRIOR_MATCHES]
@@ -514,12 +514,12 @@ export const MATCHES: Record<string, MatchSummary[]> = {
 
 /** Keyed by match id across both accounts, which is how the detail view looks them up. */
 export const MATCH_DETAILS: Record<string, MatchDetail> = {
-  ...Object.fromEntries(ALLUNA_MATCHES.map((m, i) => [m.matchId, detailFor(m, i, ALLUNA)])),
+  ...Object.fromEntries(FAKER_MATCHES.map((m, i) => [m.matchId, detailFor(m, i, FAKER)])),
   ...CLIMB_DETAILS,
   ...PRIOR_DETAILS
 }
 
-const ALLUNA_MASTERY: MasteryEntry[] = [
+const FAKER_MASTERY: MasteryEntry[] = [
   { championId: C.Viktor, championPoints: 412_886, championLevel: 7, lastPlayTime: NOW - 2 * HOUR },
   { championId: C.Ahri, championPoints: 198_204, championLevel: 7, lastPlayTime: NOW - 21 * HOUR },
   { championId: C.Zed, championPoints: 143_910, championLevel: 6, lastPlayTime: NOW - 3 * DAY },
@@ -534,7 +534,7 @@ const ALLUNA_MASTERY: MasteryEntry[] = [
 
 /** Riot mastery per account — lifetime, so never scoped to a queue. */
 export const MASTERY: Record<string, MasteryEntry[]> = {
-  1: ALLUNA_MASTERY,
+  1: FAKER_MASTERY,
   2: CLIMB_MASTERY
 }
 
@@ -629,7 +629,7 @@ export const SCOREBOARD: Scoreboard = {
   players: [
     { slot: 1, gameName: 'Runnit Downy Jr', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'TOP', teamId: 100, championId: C.Sett, championName: 'Sett', spell1Id: S.Flash, spell2Id: S.Teleport, keystoneId: K.Conqueror[0], secondaryTreeId: K.Conqueror[1], items: ITEMS_TANK, roleBoundItem: ROLE_ITEM.TOP, kills: 3, deaths: 2, assists: 4, creepScore: 121, wardScore: 9.4 },
     { slot: 2, gameName: 'phantomduval', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 10, position: 'JUNGLE', teamId: 100, championId: C.Vi, championName: 'Vi', spell1Id: S.Smite, spell2Id: S.Flash, keystoneId: K.Electrocute[0], secondaryTreeId: K.Electrocute[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.JUNGLE, kills: 5, deaths: 4, assists: 8, creepScore: 96, wardScore: 14.2 },
-    { slot: 0, gameName: 'Alluna', tagLine: 'NA1', isSelf: true, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'MIDDLE', teamId: 100, championId: C.Viktor, championName: 'Viktor', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.ArcaneComet[0], secondaryTreeId: K.ArcaneComet[1], items: ITEMS_AP, roleBoundItem: ROLE_ITEM.MIDDLE, kills: 7, deaths: 1, assists: 5, creepScore: 154, wardScore: 11.8 },
+    { slot: 0, gameName: 'Faker', tagLine: 'NA1', isSelf: true, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'MIDDLE', teamId: 100, championId: C.Viktor, championName: 'Viktor', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.ArcaneComet[0], secondaryTreeId: K.ArcaneComet[1], items: ITEMS_AP, roleBoundItem: ROLE_ITEM.MIDDLE, kills: 7, deaths: 1, assists: 5, creepScore: 154, wardScore: 11.8 },
     { slot: 3, gameName: 'Killua', tagLine: 'NA1', isSelf: false, isBot: false, isDead: true, respawnTimer: 18.4, level: 11, position: 'BOTTOM', teamId: 100, championId: C.Kaisa, championName: "Kai'Sa", spell1Id: S.Flash, spell2Id: S.Heal, keystoneId: K.PressTheAttack[0], secondaryTreeId: K.PressTheAttack[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.BOTTOM, kills: 4, deaths: 6, assists: 3, creepScore: 143, wardScore: 8.1 },
     { slot: 4, gameName: 'ward andersen', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 9, position: 'UTILITY', teamId: 100, championId: C.Thresh, championName: 'Thresh', spell1Id: S.Flash, spell2Id: S.Ignite, keystoneId: K.Grasp[0], secondaryTreeId: K.Grasp[1], items: ITEMS_SUPPORT, roleBoundItem: ROLE_ITEM.UTILITY, kills: 1, deaths: 5, assists: 12, creepScore: 24, wardScore: 41.6 },
     { slot: 5, gameName: 'cpdd Ontario', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'TOP', teamId: 200, championId: C.Aatrox, championName: 'Aatrox', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.Conqueror[0], secondaryTreeId: K.Conqueror[1], items: ITEMS_TANK, roleBoundItem: ROLE_ITEM.TOP, kills: 6, deaths: 3, assists: 2, creepScore: 138, wardScore: 7.2 },

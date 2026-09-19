@@ -128,7 +128,7 @@ public static class RiotLinkEndpoints
 
         if (gameName.Length == 0 || tagLine.Length == 0)
         {
-            return AuthEndpoints.Problem("invalid_riot_id", "A Riot ID is a name and a tag, like Alluna#NA1.");
+            return AuthEndpoints.Problem("invalid_riot_id", "A Riot ID is a name and a tag, like Faker#KR.");
         }
 
         // Region is not yet a thing a caller chooses: everything is NA. The

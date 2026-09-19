@@ -51,19 +51,19 @@ describe('repairAccountIdentity', () => {
     db = new DatabaseSync(':memory:')
     applyAllMigrations(db)
     live.db = db
-    accountId = insertAccountRow(db, OLD, 'Alluna')
+    accountId = insertAccountRow(db, OLD, 'Faker')
     resolveRiotId.mockReset()
   })
 
   it('reports nothing to do when the key resolves the same puuid', async () => {
-    resolveRiotId.mockResolvedValue({ puuid: OLD, gameName: 'Alluna', tagLine: 'NA1' })
+    resolveRiotId.mockResolvedValue({ puuid: OLD, gameName: 'Faker', tagLine: 'NA1' })
 
     expect(await repairAccountIdentity(accountId)).toBe('unchanged')
     expect(listRetiredPuuids(db, accountId)).toEqual([])
   })
 
   it('moves the account onto the puuid the new key issued', async () => {
-    resolveRiotId.mockResolvedValue({ puuid: NEW, gameName: 'Alluna', tagLine: 'NA1' })
+    resolveRiotId.mockResolvedValue({ puuid: NEW, gameName: 'Faker', tagLine: 'NA1' })
 
     expect(await repairAccountIdentity(accountId)).toBe('repaired')
     expect(getAccountById(db, accountId)?.puuid).toBe(NEW)
@@ -71,11 +71,11 @@ describe('repairAccountIdentity', () => {
   })
 
   it('asks Riot by the stored Riot ID, the one handle a key change cannot invalidate', async () => {
-    resolveRiotId.mockResolvedValue({ puuid: NEW, gameName: 'Alluna', tagLine: 'NA1' })
+    resolveRiotId.mockResolvedValue({ puuid: NEW, gameName: 'Faker', tagLine: 'NA1' })
 
     await repairAccountIdentity(accountId)
 
-    expect(resolveRiotId).toHaveBeenCalledWith('americas', 'Alluna', 'NA1')
+    expect(resolveRiotId).toHaveBeenCalledWith('americas', 'Faker', 'NA1')
   })
 
   it('reports a Riot ID Riot no longer knows, and keeps the account intact', async () => {
@@ -101,21 +101,21 @@ describe('repairAllIdentities', () => {
     db = new DatabaseSync(':memory:')
     applyAllMigrations(db)
     live.db = db
-    insertAccountRow(db, OLD, 'Alluna')
-    insertAccountRow(db, 'puuid-old-smurf', 'Alluna Smurf')
+    insertAccountRow(db, OLD, 'Faker')
+    insertAccountRow(db, 'puuid-old-smurf', 'Faker Smurf')
     resolveRiotId.mockReset()
   })
 
   it('reports every account, and one failure does not stop the rest', async () => {
     resolveRiotId
       .mockRejectedValueOnce(new RiotApiError('Riot API error 500', 500))
-      .mockResolvedValueOnce({ puuid: NEW, gameName: 'Alluna Smurf', tagLine: 'NA1' })
+      .mockResolvedValueOnce({ puuid: NEW, gameName: 'Faker Smurf', tagLine: 'NA1' })
 
     const reports = await repairAllIdentities()
 
     expect(reports).toEqual([
-      { accountId: '1', riotId: 'Alluna#NA1', outcome: 'failed' },
-      { accountId: '2', riotId: 'Alluna Smurf#NA1', outcome: 'repaired' }
+      { accountId: '1', riotId: 'Faker#NA1', outcome: 'failed' },
+      { accountId: '2', riotId: 'Faker Smurf#NA1', outcome: 'repaired' }
     ])
   })
 })

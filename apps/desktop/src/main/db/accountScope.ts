@@ -45,7 +45,7 @@ export interface AccountContext {
  * The predicate that claims a row for an account, as SQL.
  *
  * Either handle matches. A recording made in local-only mode carries `1`; the
- * same player on a server carries a GUID; both carry `Alluna#NA1`, so both come
+ * same player on a server carries a GUID; both carry `Faker#NA1`, so both come
  * back after the move that changed the id.
  */
 export function ownedBy(idColumn: string, riotColumn: string): string {
