@@ -47,6 +47,20 @@ interface StoredServer {
   url: string
   name: string
   username: string | null
+
+  /**
+   * The rest of who you are there, kept because getServerState is synchronous
+   * and callers ask it constantly — isServerMode is on the path of every read.
+   * Asking the server would make it async and every one of those an await.
+   *
+   * Refreshed from the session every time a token is renewed, which is how a
+   * promotion or a demotion arrives: the server revokes the sessions of anybody
+   * whose role changes, so the next renewal carries the new answer.
+   *
+   * Optional because a server remembered by an older build has neither.
+   */
+  email?: string
+  isAdmin?: boolean
 }
 
 /**
@@ -148,8 +162,12 @@ export function getServerState(): ServerState {
       ? {
           url: activeServer.url,
           username: activeServer.username,
-          email: '',
-          isAdmin: false
+          email: activeServer.email ?? '',
+
+          // Defaulting to false is the safe direction: a stored row from before
+          // this was kept shows no admin pages until the next token renewal
+          // fills it in, rather than offering pages whose every call 403s.
+          isAdmin: activeServer.isAdmin ?? false
         }
       : null
 
@@ -349,7 +367,9 @@ async function authenticate(
     known.push({
       url,
       name: probed.serverName ?? displayName(url),
-      username: session.user.username
+      username: session.user.username,
+      email: session.user.email,
+      isAdmin: session.user.isAdmin
     })
 
     writeKnown(known)
@@ -516,6 +536,20 @@ async function accessTokenFor(url: string): Promise<string> {
     token: session.accessToken,
     expiresAt: Date.parse(session.accessTokenExpiresAt)
   })
+
+  // A refresh re-reads the account rather than trusting the old token's claims,
+  // so this is where a change of role lands. Announced only when something
+  // actually moved, because this runs every fifteen minutes and a state event
+  // per renewal would invalidate caches all evening for nothing.
+  const stored = readKnown().find((s) => s.url === url)
+  if (stored && (stored.isAdmin !== session.user.isAdmin || stored.email !== session.user.email)) {
+    writeKnown(
+      readKnown().map((s) =>
+        s.url === url ? { ...s, email: session.user.email, isAdmin: session.user.isAdmin } : s
+      )
+    )
+    announce()
+  }
 
   return session.accessToken
 }
