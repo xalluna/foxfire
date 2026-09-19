@@ -26,6 +26,9 @@ public interface IIdentityContext
     /// </summary>
     string? Username { get; }
 
+    /// <summary>The address they signed in with.</summary>
+    string? Email { get; }
+
     /// <summary>Whether they hold a role. False when nobody is signed in.</summary>
     bool IsInRole(string role);
 }
@@ -39,6 +42,8 @@ public sealed class HttpIdentityContext(IHttpContextAccessor accessor) : IIdenti
             : null;
 
     public string? Username => accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Name);
+
+    public string? Email => accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Email);
 
     public bool IsInRole(string role) => accessor.HttpContext?.User.IsInRole(role) ?? false;
 }
