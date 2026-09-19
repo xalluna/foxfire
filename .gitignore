@@ -18,3 +18,6 @@ Thumbs.db
 bin/
 obj/
 *.user
+
+# Rider output
+**/**/.idea/
