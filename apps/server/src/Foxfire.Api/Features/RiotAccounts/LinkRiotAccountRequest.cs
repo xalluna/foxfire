@@ -1,6 +1,7 @@
 using System.Net;
 using FluentValidation;
 using Foxfire.Api.Common;
+using Foxfire.Api.Sync;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Riot;
@@ -38,6 +39,7 @@ internal sealed class LinkRiotAccountRequestHandler(
     FoxfireDbContext db,
     IIdentityContext me,
     RiotClient riot,
+    AccountProfile profile,
     TimeProvider time,
     ILogger<LinkRiotAccountRequestHandler> logger)
     : IValidatedRequestHandler<LinkRiotAccountRequest, RiotAccountResponse>
@@ -151,6 +153,23 @@ internal sealed class LinkRiotAccountRequestHandler(
         }
 
         logger.LogInformation("Linked {RiotId} to user {UserId}", account.RiotId, userId);
+
+        // The icon and level, now rather than at the end of the first sync.
+        // Claiming an account is the one moment somebody is looking straight at
+        // it, and an account that appears with an empty frame and no level
+        // reads as one that did not work.
+        //
+        // Best-effort, because it is cosmetic and the link has already
+        // happened — refusing to report a successful claim because Riot was
+        // slow to describe an avatar would be the wrong trade.
+        try
+        {
+            await profile.RefreshAsync(account, RiotRequestPriority.Interactive, cancellationToken);
+        }
+        catch (RiotApiException ex)
+        {
+            logger.LogDebug(ex, "Could not fetch the profile for {RiotId} while linking it", account.RiotId);
+        }
 
         await db.Entry(account).Reference(a => a.Owner).LoadAsync(cancellationToken);
         return RiotAccountResponse.Describe(account, userId);

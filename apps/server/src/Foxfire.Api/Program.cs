@@ -185,6 +185,7 @@ builder.Services.AddScoped<ServerSettingsService>();
 // sync outlives the request that asked for it.
 builder.Services.AddScoped<MatchIngestion>();
 builder.Services.AddScoped<RankRecorder>();
+builder.Services.AddScoped<AccountProfile>();
 builder.Services.AddScoped<AttributionRunner>();
 builder.Services.AddScoped<IdentityRepair>();
 

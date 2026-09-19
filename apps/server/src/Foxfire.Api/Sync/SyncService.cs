@@ -137,6 +137,7 @@ public sealed class SyncService(
         var riot = services.GetRequiredService<RiotClient>();
         var ingestion = services.GetRequiredService<MatchIngestion>();
         var ranks = services.GetRequiredService<RankRecorder>();
+        var profile = services.GetRequiredService<AccountProfile>();
         var attribution = services.GetRequiredService<AttributionRunner>();
         var identity = services.GetRequiredService<IdentityRepair>();
         var settings = services.GetRequiredService<ServerSettingsService>();
@@ -190,6 +191,7 @@ public sealed class SyncService(
         // and because a reading moves the boundary past those games, nothing
         // would ever come back for them.
         await SnapshotRankAsync(ranks, account, priority);
+        await RefreshProfileAsync(profile, account, priority);
         await ReplayAttributionAsync(attribution, riotAccountId, puuid);
 
         // Only advance the marker when everything landed. Leaving it alone on a
@@ -344,6 +346,26 @@ public sealed class SyncService(
             // Logged rather than truly silent: a rank call failing on every
             // single sync is a real problem that would otherwise never surface.
             log.LogDebug(ex, "Rank reading failed after syncing {RiotId}", account.RiotId);
+        }
+    }
+
+    /// <summary>
+    /// Brings the icon and level into line, on the same terms as the reading
+    /// above: one extra request on a run that already made dozens, and a
+    /// failure costs a stale icon rather than the sync.
+    /// </summary>
+    private async Task RefreshProfileAsync(
+        AccountProfile profile,
+        RiotAccount account,
+        RiotRequestPriority priority)
+    {
+        try
+        {
+            await profile.RefreshAsync(account, priority);
+        }
+        catch (Exception ex)
+        {
+            log.LogDebug(ex, "Profile refresh failed after syncing {RiotId}", account.RiotId);
         }
     }
 

@@ -159,6 +159,21 @@ public sealed class FakeRiot
             }
         }
 
+        // Cosmetic, and deliberately deterministic: the icon is derived from the
+        // puuid so a test can assert a specific number arrived without the fake
+        // needing to be told about the account first.
+        if (path.StartsWith("/lol/summoner/v4/summoners/by-puuid/", StringComparison.Ordinal))
+        {
+            var puuid = Uri.UnescapeDataString(path["/lol/summoner/v4/summoners/by-puuid/".Length..]);
+
+            return Json(
+                HttpStatusCode.OK,
+                $$"""
+                  {"puuid":"{{puuid}}","id":"summoner-{{puuid}}",
+                   "profileIconId":{{ProfileIconFor(puuid)}},"summonerLevel":312}
+                  """);
+        }
+
         if (path.StartsWith("/lol/champion-mastery/v4/", StringComparison.Ordinal))
         {
             return Json(HttpStatusCode.OK, "[]");
@@ -166,6 +181,10 @@ public sealed class FakeRiot
 
         return NotFound();
     }
+
+    /// <summary>A stable icon id for a puuid, so an assertion can name one.</summary>
+    public static int ProfileIconFor(string puuid) =>
+        1000 + (Math.Abs(StringComparer.Ordinal.GetHashCode(puuid)) % 1000);
 
     /// <summary>One number out of a query string, without pulling in a parser for it.</summary>
     private static int QueryValue(string query, string name, int fallback)
