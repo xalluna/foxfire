@@ -1,5 +1,7 @@
 using System.Text;
+using FluentValidation;
 using Foxfire.Api.Auth;
+using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Reads;
@@ -149,6 +151,30 @@ builder.Services.AddAuthorization();
 // the same way, so splitting by concern would multiply connections without
 // separating anything.
 builder.Services.AddSignalR();
+
+// Requests are handled through MediatR, one request and one handler per file,
+// following the pattern in the reference project. Validation is opt-in: the
+// behaviour runs for a request that implements IValidatedRequest and steps out
+// of the way for one that does not.
+//
+// MediatR is pinned to 12.x deliberately: 13 moved to a commercial licence and
+// 12.4.1 is the last Apache-2.0 release.
+builder.Services.AddMediatR(mediator =>
+{
+    mediator.RegisterServicesFromAssemblyContaining<Program>();
+    mediator.AddOpenBehavior(typeof(ValidationBehavior<,>));
+});
+
+// includeInternalTypes, because a validator is internal — nothing outside
+// this assembly constructs one — and the scanner skips non-public types
+// unless told. Getting this wrong is silent: the validator is simply never
+// registered, the behaviour finds nothing to run, and the request is handled.
+builder.Services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTypes: true);
+
+// A handler is not an endpoint, so nothing hands it a ClaimsPrincipal. This is
+// where it reads one from instead.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IIdentityContext, HttpIdentityContext>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ServerSettingsService>();
