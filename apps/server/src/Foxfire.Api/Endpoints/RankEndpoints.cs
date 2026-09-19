@@ -130,11 +130,18 @@ public static class RankEndpoints
             return AuthEndpoints.Problem("unknown_queue", $"{request.QueueType} is not a ranked queue.");
         }
 
+        // A tier that is not a tier is the one thing ManualRank cannot hold, so
+        // it is refused here rather than inside the editor — and refused for
+        // the batch, because a save that silently dropped the one edit it could
+        // not read would look exactly like a save that worked.
+        var edits = (request.Edits ?? []).Select(e => e.ToDomain()).ToList();
+        if (edits.Exists(e => e is null)) return AuthEndpoints.Problem("invalid_rank", "Pick a tier");
+
         var problem = await editor.SaveAsync(
             riotAccountId,
             account.Puuid,
             queue.Value,
-            [.. (request.Edits ?? []).Select(e => e.ToDomain())],
+            [.. edits.Select(e => e!)],
             cancellationToken);
 
         if (problem is not null) return AuthEndpoints.Problem("invalid_rank", problem);

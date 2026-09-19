@@ -22,8 +22,8 @@ public static class RankSources
 /// <summary>One reading, in the shape both sources deliver it.</summary>
 public sealed record RankReadingInput(
     string QueueType,
-    string? Tier,
-    string? Division,
+    RankTier? Tier,
+    RankDivision? Division,
     int? LeaguePoints,
     int? Wins,
     int? Losses);
@@ -65,6 +65,12 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
 
         foreach (var entry in entries)
         {
+            // Riot's spelling, turned into the type, once — and null when it
+            // is a tier this server has never heard of, which reads the same
+            // way an unranked account does.
+            var tier = RankTiers.FromRiotName(entry.Tier);
+            var division = RankDivisions.FromRiotName(entry.Division);
+
             var existing = await db.LeagueEntries.FirstOrDefaultAsync(
                 l => l.RiotAccountId == account.Id && l.QueueType == entry.QueueType,
                 cancellationToken);
@@ -75,8 +81,8 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
                 {
                     RiotAccountId = account.Id,
                     QueueType = entry.QueueType,
-                    Tier = entry.Tier,
-                    Division = entry.Division,
+                    Tier = tier,
+                    Division = division,
                     LeaguePoints = entry.LeaguePoints,
                     Wins = entry.Wins,
                     Losses = entry.Losses,
@@ -85,8 +91,8 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
             }
             else
             {
-                existing.Tier = entry.Tier;
-                existing.Division = entry.Division;
+                existing.Tier = tier;
+                existing.Division = division;
                 existing.LeaguePoints = entry.LeaguePoints;
                 existing.Wins = entry.Wins;
                 existing.Losses = entry.Losses;
@@ -96,7 +102,7 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
             await RecordAsync(
                 account.Id,
                 new RankReadingInput(
-                    entry.QueueType, entry.Tier, entry.Division, entry.LeaguePoints, entry.Wins, entry.Losses),
+                    entry.QueueType, tier, division, entry.LeaguePoints, entry.Wins, entry.Losses),
                 RankSources.LeagueV4,
                 now.ToUnixTimeMilliseconds(),
                 force: false,

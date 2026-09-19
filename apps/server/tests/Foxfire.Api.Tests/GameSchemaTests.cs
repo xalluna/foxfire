@@ -203,8 +203,8 @@ public class GameSchemaTests(FoxfireServerFixture server)
         {
             RiotAccountId = account.Id,
             QueueType = RankedQueue.SoloDuo.RiotName(),
-            Tier = "GOLD",
-            Division = "II",
+            Tier = RankTier.Gold,
+            Division = RankDivision.II,
             LeaguePoints = 41,
             LadderPosition = 1441,
             Source = "manual",
@@ -250,7 +250,7 @@ public class GameSchemaTests(FoxfireServerFixture server)
             CapturedAt = T0
         });
         db.SyncStates.Add(new SyncState { RiotAccountId = account.Id, BackfillTarget = 200 });
-        db.LeagueEntries.Add(new LeagueEntry { RiotAccountId = account.Id, QueueType = RankedQueue.SoloDuo.RiotName(), Tier = "GOLD" });
+        db.LeagueEntries.Add(new LeagueEntry { RiotAccountId = account.Id, QueueType = RankedQueue.SoloDuo.RiotName(), Tier = RankTier.Gold });
         db.RetiredPuuids.Add(new RetiredPuuid { RiotAccountId = account.Id, Puuid = "old-puuid", RetiredAt = DateTimeOffset.UtcNow });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -275,8 +275,8 @@ public class GameSchemaTests(FoxfireServerFixture server)
         {
             RiotAccountId = account.Id,
             QueueType = RankedQueue.Flex.RiotName(),
-            Tier = "EMERALD",
-            Division = "II",
+            Tier = RankTier.Emerald,
+            Division = RankDivision.II,
             LeaguePoints = 20,
             LadderPosition = 2220,
             Source = "league_v4",
@@ -290,10 +290,64 @@ public class GameSchemaTests(FoxfireServerFixture server)
         var reading = (await db.RankSnapshots.SingleAsync(r => r.Id == row.Id)).ToReading();
 
         Assert.Equal(RankedQueue.Flex, reading.Queue);
-        Assert.Equal("EMERALD", reading.Tier);
-        Assert.Equal("II", reading.Division);
+        Assert.Equal(RankTier.Emerald, reading.Tier);
+        Assert.Equal(RankDivision.II, reading.Division);
         Assert.Equal(2220, reading.LadderPosition);
         Assert.Equal(T0, reading.CapturedAt);
+    }
+
+    [Fact]
+    public async Task A_tier_this_server_has_never_heard_of_reads_back_as_unranked()
+    {
+        // Riot added EMERALD in 2023 and shifted everybody's tier to make room.
+        // When they do it again, the rows arrive before the code does — so what
+        // matters is what happens to the reads in between.
+        //
+        // The answer has to be "nothing dramatic", because a value converter is
+        // the worst place in the stack to throw: it runs during materialization,
+        // so a single unreadable row would not produce a single unreadable
+        // value, it would fail the whole rank history with a stack trace about
+        // expression compilation.
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var account = await AddAccountAsync(db);
+
+        var row = new RankSnapshot
+        {
+            RiotAccountId = account.Id,
+            QueueType = RankedQueue.SoloDuo.RiotName(),
+            Tier = RankTier.Gold,
+            Division = RankDivision.II,
+            LeaguePoints = 20,
+            Source = "league_v4",
+            CapturedAt = T0
+        };
+
+        db.RankSnapshots.Add(row);
+        await db.SaveChangesAsync();
+
+        // Straight past EF, because the whole point is a value the model cannot
+        // produce. This is the row a future Riot writes and this build reads.
+        await db.Database.ExecuteSqlAsync(
+            $"UPDATE RankSnapshots SET Tier = 'ASCENDANT' WHERE Id = {row.Id}");
+
+        db.ChangeTracker.Clear();
+
+        var read = await db.RankSnapshots.SingleAsync(r => r.Id == row.Id);
+
+        Assert.Null(read.Tier);
+        Assert.Null(Ladder.LadderPosition(read.ToReading()));
+
+        // And the rest of the row survives, which is the part that makes this a
+        // blank chip rather than a lost reading.
+        Assert.Equal(RankDivision.II, read.Division);
+        Assert.Equal(20, read.LeaguePoints);
+
+        // The seam this leaves, asserted rather than left to be discovered: the
+        // column is not null, so SQL still counts the row, and only the
+        // materialized value is null.
+        Assert.True(await db.RankSnapshots.AnyAsync(r => r.Id == row.Id && r.Tier != null));
     }
 
     [Fact]
@@ -327,8 +381,8 @@ public class GameSchemaTests(FoxfireServerFixture server)
             {
                 RiotAccountId = account.Id,
                 QueueType = solo.RiotName(),
-                Tier = "GOLD",
-                Division = "II",
+                Tier = RankTier.Gold,
+                Division = RankDivision.II,
                 LeaguePoints = lp,
                 LadderPosition = position,
                 Source = "lcu",

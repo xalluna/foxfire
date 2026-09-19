@@ -383,10 +383,10 @@ public class SyncTests(FoxfireServerFixture server)
             {
                 RiotAccountId = accountId,
                 QueueType = RankedQueue.SoloDuo.RiotName(),
-                Tier = "GOLD",
-                Division = "II",
+                Tier = RankTier.Gold,
+                Division = RankDivision.II,
                 LeaguePoints = 41,
-                LadderPosition = Ladder.LadderPosition(new Rank("GOLD", "II", 41)),
+                LadderPosition = Ladder.LadderPosition(new Rank(RankTier.Gold, RankDivision.II, 41)),
                 Source = RankSources.Lcu,
                 CapturedAt = T0 - 60_000
             });
@@ -405,7 +405,7 @@ public class SyncTests(FoxfireServerFixture server)
 
             Assert.NotNull(attributed);
             Assert.Equal(21, attributed.LpDelta);
-            Assert.Equal("GOLD", attributed.TierAfter);
+            Assert.Equal(RankTier.Gold, attributed.TierAfter);
             Assert.Equal(62, attributed.LpAfter);
             Assert.False(attributed.IsPromotion);
 
@@ -450,10 +450,10 @@ public class SyncTests(FoxfireServerFixture server)
             {
                 RiotAccountId = accountId,
                 QueueType = RankedQueue.SoloDuo.RiotName(),
-                Tier = "GOLD",
-                Division = "II",
+                Tier = RankTier.Gold,
+                Division = RankDivision.II,
                 LeaguePoints = 41,
-                LadderPosition = Ladder.LadderPosition(new Rank("GOLD", "II", 41)),
+                LadderPosition = Ladder.LadderPosition(new Rank(RankTier.Gold, RankDivision.II, 41)),
                 Source = RankSources.Lcu,
                 CapturedAt = T0 - 60_000
             });
@@ -483,7 +483,8 @@ public class SyncTests(FoxfireServerFixture server)
         var recorder = scope.ServiceProvider.GetRequiredService<RankRecorder>();
 
         var account = await AddAccountAsync(db);
-        var reading = new RankReadingInput("RANKED_SOLO_5x5", "SILVER", "I", 88, 10, 9);
+        var reading = new RankReadingInput(
+            "RANKED_SOLO_5x5", RankTier.Silver, RankDivision.I, 88, 10, 9);
 
         Assert.True(await recorder.RecordAsync(account.Id, reading, RankSources.Lcu, T0));
         await db.SaveChangesAsync();

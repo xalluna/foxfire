@@ -18,8 +18,8 @@ namespace Foxfire.Core;
 /// </param>
 public sealed record RankReading(
     RankedQueue Queue,
-    string? Tier,
-    string? Division,
+    RankTier? Tier,
+    RankDivision? Division,
     int? LeaguePoints,
     int? Wins,
     int? Losses,
@@ -49,11 +49,11 @@ public sealed record RankedMatch(
 public sealed record MatchRankAttribution(
     string MatchId,
     RankedQueue Queue,
-    string? TierBefore,
-    string? DivisionBefore,
+    RankTier? TierBefore,
+    RankDivision? DivisionBefore,
     int? LpBefore,
-    string? TierAfter,
-    string? DivisionAfter,
+    RankTier? TierAfter,
+    RankDivision? DivisionAfter,
     int? LpAfter,
     int LpDelta,
     bool IsPromotion,

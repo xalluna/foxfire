@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Foxfire.Core;
 using Foxfire.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,34 @@ public sealed record MatchRankSummary(
     string? RankAfter,
     bool IsPromotion,
     bool IsDemotion);
+
+/// <summary>
+/// The same thing, one step before the wire.
+///
+/// It exists because the tiers are spelled for the desktop by calling
+/// RiotName, and this is read inside an EF projection — where a method call is
+/// not a method call but something SQL Server is asked to perform. So the
+/// query materializes the types and the spelling happens afterwards, in
+/// memory, where it is an ordinary method again.
+/// </summary>
+internal sealed record MatchRankRow(
+    int LpDelta,
+    RankTier? TierBefore,
+    RankDivision? RankBefore,
+    RankTier? TierAfter,
+    RankDivision? RankAfter,
+    bool IsPromotion,
+    bool IsDemotion)
+{
+    public MatchRankSummary ToWire() =>
+        new(LpDelta,
+            TierBefore?.RiotName(),
+            RankBefore?.RiotName(),
+            TierAfter?.RiotName(),
+            RankAfter?.RiotName(),
+            IsPromotion,
+            IsDemotion);
+}
 
 /// <summary>
 /// One row of match history.
@@ -184,7 +213,7 @@ public sealed class MatchReads(FoxfireDbContext db)
                     .Sum(t => (int?)t.DamageDealtToChampions) ?? 0,
                 Rank = db.MatchRanks
                     .Where(r => r.MatchId == x.p.MatchId && r.RiotAccountId == riotAccountId)
-                    .Select(r => new MatchRankSummary(
+                    .Select(r => new MatchRankRow(
                         r.LpDelta, r.TierBefore, r.DivisionBefore, r.TierAfter, r.DivisionAfter,
                         r.IsPromotion, r.IsDemotion))
                     .FirstOrDefault(),
@@ -233,7 +262,7 @@ public sealed class MatchReads(FoxfireDbContext db)
                 x.TeamKills,
                 x.TeamDamage,
                 x.p.GameEndedInEarlySurrender,
-                x.Rank,
+                x.Rank?.ToWire(),
                 x.HasManualRank,
                 x.SharedReplay))
         ];

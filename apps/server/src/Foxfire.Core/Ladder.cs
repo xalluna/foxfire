@@ -9,17 +9,17 @@ namespace Foxfire.Core;
 /// </summary>
 public interface IRank
 {
-    /// <summary>Riot's tier name, e.g. GOLD. Null when unranked.</summary>
-    string? Tier { get; }
+    /// <summary>The tier. Null when unranked, or when Riot named one nobody knows.</summary>
+    RankTier? Tier { get; }
 
-    /// <summary>Roman division, e.g. "II". Null or "I" in the apex tiers.</summary>
-    string? Division { get; }
+    /// <summary>The division. Null or <see cref="RankDivision.I"/> in the apex tiers.</summary>
+    RankDivision? Division { get; }
 
     int? LeaguePoints { get; }
 }
 
 /// <summary>A bare rank, for callers that have no snapshot to hand.</summary>
-public sealed record Rank(string? Tier, string? Division, int? LeaguePoints) : IRank;
+public sealed record Rank(RankTier? Tier, RankDivision? Division, int? LeaguePoints) : IRank;
 
 /// <summary>Whether a step between two ranks crossed a boundary.</summary>
 public enum RankMovement
@@ -44,37 +44,19 @@ public enum RankMovement
 /// implementations answering identically. That is reachable: the division
 /// arithmetic in <see cref="RankFromLeaguePoints"/> lands exactly on .5 whenever
 /// the typed LP is 50 away from the starting position.
+///
+/// The desktop indexes parallel arrays of strings to get at a tier's position.
+/// Here a tier below Master is its own index and a division is its own offset
+/// inside one, because <see cref="RankTier"/> and <see cref="RankDivision"/> are
+/// declared in ladder order — which is why that order is load-bearing.
 /// </summary>
 public static class Ladder
 {
-    /// <summary>Tiers with four divisions each, lowest first.</summary>
-    public static readonly IReadOnlyList<string> DivisionedTiers =
-        ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND"];
-
-    /// <summary>
-    /// Master, Grandmaster and Challenger, which are decided by ladder cutoffs
-    /// rather than LP thresholds.
-    ///
-    /// A 500 LP Master and a 500 LP Grandmaster are at the same point on the
-    /// ladder, so the three share one scale and the name only drives colour and
-    /// crest art — never the position.
-    /// </summary>
-    public static readonly IReadOnlyList<string> ApexTiers = ["MASTER", "GRANDMASTER", "CHALLENGER"];
-
-    /// <summary>Lowest to highest, for comparing two ranks.</summary>
-    public static readonly IReadOnlyList<string> AllTiers = [.. DivisionedTiers, .. ApexTiers];
-
-    /// <summary>Roman division suffixes, lowest first.</summary>
-    public static readonly IReadOnlyList<string> Divisions = ["IV", "III", "II", "I"];
-
     private const int LpPerDivision = 100;
-    private static readonly int LpPerTier = Divisions.Count * LpPerDivision;
+    private static readonly int LpPerTier = RankDivisions.All.Count * LpPerDivision;
 
     /// <summary>Ladder position of Master 0 LP, which is also Diamond I 100 LP.</summary>
-    public static readonly int ApexBase = DivisionedTiers.Count * LpPerTier;
-
-    public static bool IsApex(string? tier) =>
-        tier is not null && ApexTiers.Contains(tier, StringComparer.Ordinal);
+    public static readonly int ApexBase = RankTiers.Divisioned.Count * LpPerTier;
 
     /// <summary>
     /// One number for tier, division and LP, or null when unranked.
@@ -86,20 +68,16 @@ public static class Ladder
     {
         ArgumentNullException.ThrowIfNull(rank);
 
-        if (rank.Tier is null) return null;
+        if (rank.Tier is not { } tier) return null;
         var lp = rank.LeaguePoints ?? 0;
 
-        if (IsApex(rank.Tier)) return ApexBase + lp;
-
-        var tierIndex = IndexOf(DivisionedTiers, rank.Tier);
-        if (tierIndex < 0) return null;
+        if (tier.IsApex()) return ApexBase + lp;
 
         // Apex tiers always report division "I"; a divisioned tier must name a
         // real one, and a snapshot without one cannot be placed.
-        var divisionIndex = IndexOf(Divisions, rank.Division);
-        if (divisionIndex < 0) return null;
+        if (rank.Division is not { } division) return null;
 
-        return (tierIndex * LpPerTier) + (divisionIndex * LpPerDivision) + lp;
+        return ((int)tier * LpPerTier) + ((int)division * LpPerDivision) + lp;
     }
 
     /// <summary>
@@ -112,15 +90,15 @@ public static class Ladder
     public static Rank RankAtPosition(double position)
     {
         var clamped = Math.Max(0, RoundHalfUp(position));
-        if (clamped >= ApexBase) return new Rank("MASTER", "I", clamped - ApexBase);
+        if (clamped >= ApexBase) return new Rank(RankTier.Master, RankDivision.I, clamped - ApexBase);
 
         var tierIndex = clamped / LpPerTier;
         var withinTier = clamped - (tierIndex * LpPerTier);
         var divisionIndex = withinTier / LpPerDivision;
 
         return new Rank(
-            DivisionedTiers[tierIndex],
-            Divisions[divisionIndex],
+            RankTiers.Divisioned[tierIndex],
+            RankDivisions.All[divisionIndex],
             withinTier - (divisionIndex * LpPerDivision));
     }
 
@@ -142,7 +120,7 @@ public static class Ladder
     {
         ArgumentNullException.ThrowIfNull(before);
 
-        if (before.Tier is null || IsApex(before.Tier)) return null;
+        if (before.Tier is not { } tier || tier.IsApex()) return null;
 
         var from = LadderPosition(before);
         if (from is null) return null;
@@ -166,20 +144,16 @@ public static class Ladder
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
 
-        if (before.Tier is null || after.Tier is null) return RankMovement.None;
-
-        var beforeTier = IndexOf(AllTiers, before.Tier);
-        var afterTier = IndexOf(AllTiers, after.Tier);
-        if (beforeTier < 0 || afterTier < 0) return RankMovement.None;
+        if (before.Tier is not { } beforeTier || after.Tier is not { } afterTier) return RankMovement.None;
 
         if (afterTier != beforeTier)
         {
             return afterTier > beforeTier ? RankMovement.Promotion : RankMovement.Demotion;
         }
 
-        var beforeDivision = IndexOf(Divisions, before.Division);
-        var afterDivision = IndexOf(Divisions, after.Division);
-        if (beforeDivision < 0 || afterDivision < 0 || afterDivision == beforeDivision)
+        if (before.Division is not { } beforeDivision
+            || after.Division is not { } afterDivision
+            || afterDivision == beforeDivision)
         {
             return RankMovement.None;
         }
@@ -188,24 +162,12 @@ public static class Ladder
     }
 
     /// <summary>The tier a ladder position falls in, for colouring a graph's bands.</summary>
-    public static string TierAtPosition(double position)
+    public static RankTier TierAtPosition(double position)
     {
-        if (position >= ApexBase) return "MASTER";
+        if (position >= ApexBase) return RankTier.Master;
 
         var index = (int)Math.Floor(position / LpPerTier);
-        return DivisionedTiers[Math.Clamp(index, 0, DivisionedTiers.Count - 1)];
-    }
-
-    private static int IndexOf(IReadOnlyList<string> values, string? value)
-    {
-        if (value is null) return -1;
-
-        for (var i = 0; i < values.Count; i++)
-        {
-            if (string.Equals(values[i], value, StringComparison.Ordinal)) return i;
-        }
-
-        return -1;
+        return RankTiers.Divisioned[Math.Clamp(index, 0, RankTiers.Divisioned.Count - 1)];
     }
 
     /// <summary>

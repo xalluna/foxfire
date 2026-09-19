@@ -111,7 +111,7 @@ public class LadderCorpusTests
 
         foreach (var c in Loaded.TierAtPosition)
         {
-            var mine = Ladder.TierAtPosition(c.Position);
+            var mine = Ladder.TierAtPosition(c.Position).RiotName();
             if (!string.Equals(mine, c.Tier, StringComparison.Ordinal))
             {
                 wrong.Add($"{c.Position}: desktop {c.Tier}, server {mine}");
@@ -156,8 +156,8 @@ public class LadderCorpusTests
             {
                 (null, null) => true,
                 (null, _) or (_, null) => false,
-                _ => string.Equals(mine.Tier, theirs.Tier, StringComparison.Ordinal)
-                     && string.Equals(mine.Division, theirs.Division, StringComparison.Ordinal)
+                _ => mine.Tier == theirs.Tier
+                     && mine.Division == theirs.Division
                      && mine.LeaguePoints == theirs.LeaguePoints
             };
 
@@ -191,7 +191,9 @@ public class LadderCorpusTests
     private static string Show(int? value) => value?.ToString() ?? "null";
 
     private static string Show(Rank? rank) =>
-        rank is null ? "null" : $"{rank.Tier} {rank.Division} {rank.LeaguePoints}";
+        rank is null
+            ? "null"
+            : $"{rank.Tier?.RiotName() ?? "null"} {rank.Division?.RiotName() ?? "null"} {rank.LeaguePoints}";
 
     /* ---------------------------------------------------------------- */
     /* the shapes on disk                                               */
@@ -214,7 +216,17 @@ public class LadderCorpusTests
         [property: JsonPropertyName("rank")] string? Division,
         int? LeaguePoints)
     {
-        public Rank ToRank() => new(Tier, Division, LeaguePoints);
+        /// <summary>
+        /// The corpus stays strings, and the parse happens here.
+        ///
+        /// Which is also a case the corpus tests: it carries a NOT_A_TIER, and
+        /// the desktop answers null for it because indexOf returns -1. This
+        /// server answers null because FromRiotName does. The agreement those
+        /// cases assert is therefore a real one, not an artefact of both sides
+        /// being handed something they could parse.
+        /// </summary>
+        public Rank ToRank() =>
+            new(RankTiers.FromRiotName(Tier), RankDivisions.FromRiotName(Division), LeaguePoints);
 
         public override string ToString() => $"{Tier ?? "null"} {Division ?? "null"} {Show(LeaguePoints)}";
     }

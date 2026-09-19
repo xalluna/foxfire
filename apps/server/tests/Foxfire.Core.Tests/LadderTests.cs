@@ -11,7 +11,14 @@ namespace Foxfire.Core.Tests;
 /// </summary>
 public class LadderTests
 {
-    private static Rank At(string? tier, string? division, int? lp) => new(tier, division, lp);
+    /// <summary>
+    /// A rank, spelled as Riot spells it.
+    ///
+    /// These read better as the ladder than as enum members, and RankSpelling
+    /// is strict, so a typo here fails rather than silently becoming unranked.
+    /// </summary>
+    private static Rank At(string? tier, string? division, int? lp) =>
+        new(RankSpelling.Tier(tier), RankSpelling.Division(division), lp);
 
     public class LadderPosition
     {
@@ -54,7 +61,15 @@ public class LadderTests
         {
             Assert.Null(Ladder.LadderPosition(At(null, null, null)));
             Assert.Null(Ladder.LadderPosition(At("GOLD", null, 50)));
-            Assert.Null(Ladder.LadderPosition(At("NOT_A_TIER", "I", 50)));
+
+            // A tier that is not a tier used to arrive here as a string and be
+            // turned away by this method. It cannot arrive at all now, because
+            // RankTier has no value for it — so the same guarantee is asserted
+            // one layer out, where it moved to. Whatever Riot adds next still
+            // cannot be placed on the ladder as it stands today.
+            Assert.Null(RankTiers.FromRiotName("NOT_A_TIER"));
+            Assert.Null(Ladder.LadderPosition(
+                new Rank(RankTiers.FromRiotName("NOT_A_TIER"), RankDivision.I, 50)));
         }
 
         [Fact]
@@ -122,7 +137,7 @@ public class LadderTests
         [Fact]
         public void Keeps_a_normal_result_inside_the_division_it_started_in()
         {
-            Assert.Equal(new Rank("GOLD", "I", 68), Ladder.RankFromLeaguePoints(At("GOLD", "I", 85), 68));
+            Assert.Equal(At("GOLD", "I", 68), Ladder.RankFromLeaguePoints(At("GOLD", "I", 85), 68));
         }
 
         [Fact]
@@ -130,7 +145,7 @@ public class LadderTests
         {
             // Gold I 85 to 3 LP is Platinum IV 3 (+18), not Gold I 3 (−82).
             Assert.Equal(
-                new Rank("PLATINUM", "IV", 3),
+                At("PLATINUM", "IV", 3),
                 Ladder.RankFromLeaguePoints(At("GOLD", "I", 85), 3));
         }
 
@@ -138,7 +153,7 @@ public class LadderTests
         public void Reads_a_high_number_after_a_low_one_as_a_demotion()
         {
             Assert.Equal(
-                new Rank("GOLD", "I", 91),
+                At("GOLD", "I", 91),
                 Ladder.RankFromLeaguePoints(At("PLATINUM", "IV", 8), 91));
         }
 
@@ -146,7 +161,7 @@ public class LadderTests
         public void Crosses_into_the_apex_tiers()
         {
             Assert.Equal(
-                new Rank("MASTER", "I", 5),
+                At("MASTER", "I", 5),
                 Ladder.RankFromLeaguePoints(At("DIAMOND", "I", 88), 5));
         }
 
@@ -161,7 +176,7 @@ public class LadderTests
         public void Has_nowhere_below_iron_four_to_place_a_large_jump()
         {
             Assert.Equal(
-                new Rank("IRON", "IV", 88),
+                At("IRON", "IV", 88),
                 Ladder.RankFromLeaguePoints(At("IRON", "IV", 5), 88));
         }
 
@@ -182,10 +197,10 @@ public class LadderTests
             // Gold III 0 (1300) typing 50 gives 12.5, where .NET's round-to-even
             // would say 12 and JavaScript says 13.
             Assert.Equal(
-                new Rank("GOLD", "III", 50),
+                At("GOLD", "III", 50),
                 Ladder.RankFromLeaguePoints(At("GOLD", "III", 0), 50));
             Assert.Equal(
-                new Rank("GOLD", "II", 50),
+                At("GOLD", "II", 50),
                 Ladder.RankFromLeaguePoints(At("GOLD", "II", 0), 50));
         }
     }
@@ -197,14 +212,14 @@ public class LadderTests
         [InlineData(1250, "GOLD")]
         public void Maps_a_position_back_to_its_tier(int position, string expected)
         {
-            Assert.Equal(expected, Ladder.TierAtPosition(position));
+            Assert.Equal(expected, Ladder.TierAtPosition(position).RiotName());
         }
 
         [Fact]
         public void Maps_every_apex_position_to_master()
         {
-            Assert.Equal("MASTER", Ladder.TierAtPosition(Ladder.ApexBase));
-            Assert.Equal("MASTER", Ladder.TierAtPosition(Ladder.ApexBase + 1200));
+            Assert.Equal(RankTier.Master, Ladder.TierAtPosition(Ladder.ApexBase));
+            Assert.Equal(RankTier.Master, Ladder.TierAtPosition(Ladder.ApexBase + 1200));
         }
     }
 }

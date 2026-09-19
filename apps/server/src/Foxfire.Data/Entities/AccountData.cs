@@ -1,3 +1,4 @@
+using Foxfire.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,10 +22,10 @@ public sealed class LeagueEntry
 
     public required string QueueType { get; set; }
 
-    public string? Tier { get; set; }
+    public RankTier? Tier { get; set; }
 
     /// <summary>The division. Riot calls it the rank.</summary>
-    public string? Division { get; set; }
+    public RankDivision? Division { get; set; }
 
     public int? LeaguePoints { get; set; }
     public int? Wins { get; set; }
@@ -39,8 +40,8 @@ internal sealed class LeagueEntryConfiguration : IEntityTypeConfiguration<League
     {
         builder.HasKey(l => new { l.RiotAccountId, l.QueueType });
         builder.Property(l => l.QueueType).HasMaxLength(32);
-        builder.Property(l => l.Tier).HasMaxLength(16);
-        builder.Property(l => l.Division).HasMaxLength(4);
+        builder.Property(l => l.Tier).HasConversion(RankConverters.Tier).HasMaxLength(16);
+        builder.Property(l => l.Division).HasConversion(RankConverters.Division).HasMaxLength(4);
 
         builder.HasOne(l => l.RiotAccount)
             .WithMany()

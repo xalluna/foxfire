@@ -151,11 +151,11 @@ public class ReadTests(FoxfireServerFixture server)
             MatchId = matchId,
             RiotAccountId = account.Id,
             QueueType = RankedQueue.SoloDuo.RiotName(),
-            TierBefore = "GOLD",
-            DivisionBefore = "II",
+            TierBefore = RankTier.Gold,
+            DivisionBefore = RankDivision.II,
             LpBefore = 41,
-            TierAfter = "GOLD",
-            DivisionAfter = "II",
+            TierAfter = RankTier.Gold,
+            DivisionAfter = RankDivision.II,
             LpAfter = 62,
             LpDelta = 21
         });
@@ -336,7 +336,8 @@ public class ReadTests(FoxfireServerFixture server)
             account.Id,
             account.Puuid,
             RankedQueue.SoloDuo,
-            [new ManualRankEdit(matchId, new ManualRank("GOLD", "II", 62), new ManualRank("GOLD", "II", 41))]);
+            [new ManualRankEdit(matchId, new ManualRank(RankTier.Gold, RankDivision.II, 62),
+                new ManualRank(RankTier.Gold, RankDivision.II, 41))]);
 
         Assert.Null(problem);
 
@@ -371,7 +372,7 @@ public class ReadTests(FoxfireServerFixture server)
             account.Id,
             account.Puuid,
             RankedQueue.SoloDuo,
-            [new ManualRankEdit(matchId, new ManualRank("GOLD", "II", 140), null)]);
+            [new ManualRankEdit(matchId, new ManualRank(RankTier.Gold, RankDivision.II, 140), null)]);
 
         Assert.NotNull(problem);
         Assert.Contains("LP", problem, StringComparison.Ordinal);
@@ -397,7 +398,7 @@ public class ReadTests(FoxfireServerFixture server)
             account.Id,
             account.Puuid,
             RankedQueue.SoloDuo,
-            [new ManualRankEdit(flexMatch, new ManualRank("GOLD", "II", 62), null)]);
+            [new ManualRankEdit(flexMatch, new ManualRank(RankTier.Gold, RankDivision.II, 62), null)]);
 
         Assert.NotNull(problem);
     }
@@ -416,9 +417,9 @@ public class ReadTests(FoxfireServerFixture server)
 
         foreach (var (tier, division, lp, at) in new[]
                  {
-                     ("SILVER", "I", 88, T0),
-                     ("GOLD", "IV", 12, T0 + 60_000),
-                     ("GOLD", "IV", 40, T0 + 120_000)
+                     (RankTier.Silver, RankDivision.I, 88, T0),
+                     (RankTier.Gold, RankDivision.IV, 12, T0 + 60_000),
+                     (RankTier.Gold, RankDivision.IV, 40, T0 + 120_000)
                  })
         {
             db.RankSnapshots.Add(new RankSnapshot

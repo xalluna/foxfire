@@ -35,6 +35,23 @@ public class WireShapeTests(FoxfireServerFixture server)
     private static IReadOnlyList<string> KeysOf(JsonElement element) =>
         [.. element.EnumerateObject().Select(p => p.Name)];
 
+    /// <summary>
+    /// A tier and a division, spelled the way the desktop reads them.
+    ///
+    /// The only assertion here about values rather than names, and it earns the
+    /// exception. Both are enums on this side now, and System.Text.Json
+    /// serialises an enum as a number unless somebody says otherwise — so a
+    /// forgotten conversion at one of these boundaries sends 3 where GOLD
+    /// belongs. The desktop's type says `tier: string | null`, so it would not
+    /// fail: it would look up a crest for 3, find none, and draw nothing.
+    /// </summary>
+    private static void AssertRiotSpelling(JsonElement element)
+    {
+        Assert.Equal(JsonValueKind.String, element.GetProperty("tier").ValueKind);
+        Assert.Equal("GOLD", element.GetProperty("tier").GetString());
+        Assert.Equal("II", element.GetProperty("rank").GetString());
+    }
+
     private static void AssertHasAll(JsonElement element, params string[] expected)
     {
         var actual = KeysOf(element).ToHashSet(StringComparer.Ordinal);
@@ -113,8 +130,8 @@ public class WireShapeTests(FoxfireServerFixture server)
         {
             RiotAccountId = account.Id,
             QueueType = RankedQueue.SoloDuo.RiotName(),
-            Tier = "GOLD",
-            Division = "II",
+            Tier = RankTier.Gold,
+            Division = RankDivision.II,
             LeaguePoints = 62,
             Wins = 31,
             Losses = 28,
@@ -125,10 +142,10 @@ public class WireShapeTests(FoxfireServerFixture server)
         {
             RiotAccountId = account.Id,
             QueueType = RankedQueue.SoloDuo.RiotName(),
-            Tier = "GOLD",
-            Division = "II",
+            Tier = RankTier.Gold,
+            Division = RankDivision.II,
             LeaguePoints = 62,
-            LadderPosition = Ladder.LadderPosition(new Rank("GOLD", "II", 62)),
+            LadderPosition = Ladder.LadderPosition(new Rank(RankTier.Gold, RankDivision.II, 62)),
             Source = RankSources.LeagueV4,
 
             // Before the game, not after. The editor offers the rank going
@@ -263,6 +280,8 @@ public class WireShapeTests(FoxfireServerFixture server)
 
         // "rank" and not "division": Riot's own name for it, and the desktop's.
         AssertHasAll(entry, "queueType", "tier", "rank", "leaguePoints", "wins", "losses", "fetchedAt");
+
+        AssertRiotSpelling(entry);
     }
 
     [Fact]
@@ -292,6 +311,8 @@ public class WireShapeTests(FoxfireServerFixture server)
             "source",
             "capturedAt",
             "seasonId");
+
+        AssertRiotSpelling(snapshot);
     }
 
     [Fact]

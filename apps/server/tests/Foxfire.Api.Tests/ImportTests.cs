@@ -266,11 +266,11 @@ public class ImportTests(FoxfireServerFixture server)
         var reading = await db.RankSnapshots.AsNoTracking()
             .FirstAsync(r => r.RiotAccountId == accountId && r.CapturedAt == T0 - 60_000);
 
-        Assert.Equal("GOLD", reading.Tier);
+        Assert.Equal(RankTier.Gold, reading.Tier);
 
         // Recomputed rather than trusted: the source stored a position too, and
         // a stale one would plot a graph nothing else on this server agrees with.
-        Assert.Equal(Ladder.LadderPosition(new Rank("GOLD", "II", 41)), reading.LadderPosition);
+        Assert.Equal(Ladder.LadderPosition(new Rank(RankTier.Gold, RankDivision.II, 41)), reading.LadderPosition);
     }
 
     [Fact]

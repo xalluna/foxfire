@@ -340,8 +340,12 @@ public static class ImportEndpoints
             {
                 RiotAccountId = accountId,
                 QueueType = incoming.QueueType,
-                Tier = incoming.Tier,
-                Division = incoming.Division,
+
+                // A tier out of somebody's old stats.db that this server
+                // cannot read is stored as unranked, which is what the rest
+                // of the import does with anything it cannot place.
+                Tier = RankTiers.FromRiotName(incoming.Tier),
+                Division = RankDivisions.FromRiotName(incoming.Division),
                 LeaguePoints = incoming.LeaguePoints,
                 Wins = incoming.Wins,
                 Losses = incoming.Losses,
@@ -350,8 +354,10 @@ public static class ImportEndpoints
                 // the ladder maths has moved since some of those rows were
                 // written — a stale position would plot a graph nothing else on
                 // this server agrees with.
-                LadderPosition = Ladder.LadderPosition(
-                    new Rank(incoming.Tier, incoming.Division, incoming.LeaguePoints)),
+                LadderPosition = Ladder.LadderPosition(new Rank(
+                    RankTiers.FromRiotName(incoming.Tier),
+                    RankDivisions.FromRiotName(incoming.Division),
+                    incoming.LeaguePoints)),
 
                 Source = incoming.Source,
                 CapturedAt = incoming.CapturedAt,

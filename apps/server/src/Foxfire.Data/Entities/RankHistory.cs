@@ -34,10 +34,10 @@ public sealed class RankSnapshot
     /// <summary>Riot's queue name, e.g. RANKED_SOLO_5x5.</summary>
     public required string QueueType { get; set; }
 
-    public string? Tier { get; set; }
+    public RankTier? Tier { get; set; }
 
     /// <summary>The division. Riot calls it the rank, which is why the column is named for it.</summary>
-    public string? Division { get; set; }
+    public RankDivision? Division { get; set; }
 
     public int? LeaguePoints { get; set; }
     public int? Wins { get; set; }
@@ -106,8 +106,8 @@ internal sealed class RankSnapshotConfiguration : IEntityTypeConfiguration<RankS
     {
         builder.HasKey(r => r.Id);
         builder.Property(r => r.QueueType).HasMaxLength(32);
-        builder.Property(r => r.Tier).HasMaxLength(16);
-        builder.Property(r => r.Division).HasMaxLength(4);
+        builder.Property(r => r.Tier).HasConversion(RankConverters.Tier).HasMaxLength(16);
+        builder.Property(r => r.Division).HasConversion(RankConverters.Division).HasMaxLength(4);
         builder.Property(r => r.Source).HasMaxLength(16).IsRequired();
         builder.Property(r => r.MatchId).HasMaxLength(32);
 
@@ -156,12 +156,12 @@ public sealed class MatchRank
 
     public required string QueueType { get; set; }
 
-    public string? TierBefore { get; set; }
-    public string? DivisionBefore { get; set; }
+    public RankTier? TierBefore { get; set; }
+    public RankDivision? DivisionBefore { get; set; }
     public int? LpBefore { get; set; }
 
-    public string? TierAfter { get; set; }
-    public string? DivisionAfter { get; set; }
+    public RankTier? TierAfter { get; set; }
+    public RankDivision? DivisionAfter { get; set; }
     public int? LpAfter { get; set; }
 
     /// <summary>
@@ -183,10 +183,10 @@ internal sealed class MatchRankConfiguration : IEntityTypeConfiguration<MatchRan
         builder.HasKey(r => new { r.MatchId, r.RiotAccountId });
         builder.Property(r => r.MatchId).HasMaxLength(32);
         builder.Property(r => r.QueueType).HasMaxLength(32);
-        builder.Property(r => r.TierBefore).HasMaxLength(16);
-        builder.Property(r => r.DivisionBefore).HasMaxLength(4);
-        builder.Property(r => r.TierAfter).HasMaxLength(16);
-        builder.Property(r => r.DivisionAfter).HasMaxLength(4);
+        builder.Property(r => r.TierBefore).HasConversion(RankConverters.Tier).HasMaxLength(16);
+        builder.Property(r => r.DivisionBefore).HasConversion(RankConverters.Division).HasMaxLength(4);
+        builder.Property(r => r.TierAfter).HasConversion(RankConverters.Tier).HasMaxLength(16);
+        builder.Property(r => r.DivisionAfter).HasConversion(RankConverters.Division).HasMaxLength(4);
 
         builder.HasOne(r => r.Match)
             .WithMany()

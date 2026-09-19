@@ -1,5 +1,6 @@
 using Foxfire.Api.Reads;
 using Foxfire.Api.Sync;
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Riot;
@@ -311,8 +312,8 @@ public static class DashboardEndpoints
 
     private static LeagueEntryResponse Describe(LeagueEntry entry) =>
         new(entry.QueueType,
-            entry.Tier,
-            entry.Division,
+            entry.Tier?.RiotName(),
+            entry.Division?.RiotName(),
             entry.LeaguePoints,
             entry.Wins,
             entry.Losses,

@@ -193,8 +193,12 @@ public static class SyncEndpoints
             account.Id,
             new RankReadingInput(
                 request.QueueType,
-                request.Tier,
-                request.Division,
+
+                // An unreadable tier is stored as unranked rather than
+                // refused: the desktop is relaying whatever the League client
+                // said, and a reading it cannot spell is still a reading.
+                RankTiers.FromRiotName(request.Tier),
+                RankDivisions.FromRiotName(request.Division),
                 request.LeaguePoints,
                 request.Wins,
                 request.Losses),

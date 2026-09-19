@@ -2,10 +2,10 @@ namespace Foxfire.Core;
 
 /// <summary>A rank somebody can type: a tier plus, below Master, a division and LP.</summary>
 /// <param name="Division">Null for the apex tiers, which have no divisions.</param>
-public sealed record ManualRank(string Tier, string? Division, int LeaguePoints) : IRank
+public sealed record ManualRank(RankTier Tier, RankDivision? Division, int LeaguePoints) : IRank
 {
-    string? IRank.Tier => Tier;
-    string? IRank.Division => Division;
+    RankTier? IRank.Tier => Tier;
+    RankDivision? IRank.Division => Division;
     int? IRank.LeaguePoints => LeaguePoints;
 }
 
@@ -35,19 +35,17 @@ public static class ManualRanks
     {
         ArgumentNullException.ThrowIfNull(rank);
 
-        if (!Ladder.AllTiers.Contains(rank.Tier, StringComparer.OrdinalIgnoreCase)) return "Pick a tier";
-
-        if (Ladder.IsApex(rank.Tier))
+        // No "pick a tier" any more — a ManualRank cannot hold one that is not
+        // a tier. What can still fail is the parse that produces it, and that
+        // belongs to whoever is holding the string.
+        if (rank.Tier.IsApex())
         {
             // Master and above are ranked by ladder cutoffs, so LP runs past 100
             // with no divisions to cross.
             return rank.LeaguePoints < 0 ? "LP must be 0 or more" : null;
         }
 
-        if (rank.Division is null || !Ladder.Divisions.Contains(rank.Division, StringComparer.OrdinalIgnoreCase))
-        {
-            return "Pick a division";
-        }
+        if (rank.Division is null) return "Pick a division";
 
         return rank.LeaguePoints is < 0 or > 99 ? "LP must be between 0 and 99" : null;
     }
@@ -77,9 +75,9 @@ public static class ManualRanks
     /// Apex tiers have no divisions, and Riot reports them as "I" — matched here
     /// so a hand-entered Master reading and an observed one are the same row.
     /// </summary>
-    public static string? StoredDivision(ManualRank rank)
+    public static RankDivision? StoredDivision(ManualRank rank)
     {
         ArgumentNullException.ThrowIfNull(rank);
-        return Ladder.IsApex(rank.Tier) ? "I" : rank.Division;
+        return rank.Tier.IsApex() ? RankDivision.I : rank.Division;
     }
 }

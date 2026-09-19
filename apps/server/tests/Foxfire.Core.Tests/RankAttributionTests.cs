@@ -47,7 +47,8 @@ public class RankAttributionTests
         int lp,
         long capturedAt,
         int? ladderPosition) =>
-        new(RankedQueue.SoloDuo, tier, division, lp, Wins: 10, Losses: 8, ladderPosition, "lcu", capturedAt);
+        new(RankedQueue.SoloDuo, RankSpelling.Tier(tier), RankSpelling.Division(division), lp,
+            Wins: 10, Losses: 8, ladderPosition, "lcu", capturedAt);
 
     private static RankedMatch Match(string matchId, long gameCreation, int queueId = SoloQueueId) =>
         new(matchId, gameCreation, queueId, EndedInEarlySurrender: false);
@@ -309,7 +310,8 @@ public class RankAttributionTests
             private static readonly RankedMatch[] Games = [Match("NA1_LOSS", Loss), Match("NA1_WIN", Win)];
 
             private static RankReading Plat(int lp, long capturedAt) =>
-                new(RankedQueue.SoloDuo, "PLATINUM", "IV", lp, 10, 8, 1600 + lp, "lcu", capturedAt);
+                new(RankedQueue.SoloDuo, RankTier.Platinum, RankDivision.IV, lp, 10, 8,
+                    1600 + lp, "lcu", capturedAt);
 
             [Fact]
             public void Costs_both_games_their_lp_when_the_stale_reading_is_stored()

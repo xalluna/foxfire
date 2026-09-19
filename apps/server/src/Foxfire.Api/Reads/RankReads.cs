@@ -78,8 +78,8 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
         var snapshots = rows
             .Select(r => new RankSnapshotResponse(
                 r.QueueType,
-                r.Tier,
-                r.Division,
+                r.Tier?.RiotName(),
+                r.Division?.RiotName(),
                 r.LeaguePoints,
                 r.Wins,
                 r.Losses,
@@ -105,8 +105,8 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             milestones.Add(new RankMilestoneResponse(
                 queueType,
                 movement == RankMovement.Promotion ? "promotion" : "demotion",
-                rows[i].Tier,
-                rows[i].Division,
+                rows[i].Tier?.RiotName(),
+                rows[i].Division?.RiotName(),
                 rows[i].CapturedAt));
         }
 

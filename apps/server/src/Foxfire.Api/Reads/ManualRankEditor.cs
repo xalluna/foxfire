@@ -17,16 +17,31 @@ namespace Foxfire.Api.Reads;
 /// </summary>
 public sealed record ManualRankDto(string Tier, string? Rank, int LeaguePoints)
 {
-    public ManualRank ToDomain() => new(Tier, Rank, LeaguePoints);
+    /// <summary>
+    /// The domain shape, or null when the tier is not one.
+    ///
+    /// This is where "pick a tier" moved to. ManualRank holds a RankTier and
+    /// so cannot be wrong about it, which leaves exactly one way for a typed
+    /// rank to be nonsense — the string never became a tier — and this is the
+    /// only place that reads that string.
+    /// </summary>
+    public ManualRank? ToDomain() =>
+        RankTiers.FromRiotName(Tier) is { } tier
+            ? new ManualRank(tier, RankDivisions.FromRiotName(Rank), LeaguePoints)
+            : null;
 
     public static ManualRankDto? From(ManualRank? rank) =>
-        rank is null ? null : new ManualRankDto(rank.Tier, rank.Division, rank.LeaguePoints);
+        rank is null
+            ? null
+            : new ManualRankDto(rank.Tier.RiotName(), rank.Division?.RiotName(), rank.LeaguePoints);
 }
 
 /// <summary>One hand-entered figure for one game, as the desktop sends it.</summary>
 public sealed record ManualRankEditDto(string MatchId, ManualRankDto After, ManualRankDto? Before)
 {
-    public ManualRankEdit ToDomain() => new(MatchId, After.ToDomain(), Before?.ToDomain());
+    /// <summary>Null when the rank being asserted names a tier that is not one.</summary>
+    public ManualRankEdit? ToDomain() =>
+        After?.ToDomain() is { } after ? new ManualRankEdit(MatchId, after, Before?.ToDomain()) : null;
 }
 
 /// <summary>
@@ -102,11 +117,16 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
             .ToListAsync(cancellationToken);
 
         var entered = manual
+            // The SQL above already excludes a null tier. This excludes a
+            // stored one that is no longer a tier this server knows — the
+            // converter reads it back as null, so the column is not null and
+            // the value is.
+            .Where(r => r.Tier is not null)
             .Select(r => new
             {
                 MatchId = r.MatchId!,
                 r.CapturedAt,
-                Rank = new ManualRankDto(r.Tier!, r.Division, r.LeaguePoints ?? 0)
+                Rank = new ManualRankDto(r.Tier!.Value.RiotName(), r.Division?.RiotName(), r.LeaguePoints ?? 0)
             })
             .ToList();
 
@@ -153,8 +173,9 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
                 .FirstOrDefaultAsync(cancellationToken);
 
             var before = ownBefore?.Rank
-                ?? (previous?.Tier is not null
-                    ? new ManualRankDto(previous.Tier, previous.Division, previous.LeaguePoints ?? 0)
+                ?? (previous?.Tier is { } previousTier
+                    ? new ManualRankDto(
+                        previousTier.RiotName(), previous.Division?.RiotName(), previous.LeaguePoints ?? 0)
                     : null);
 
             result.Add(new EditableMatchResponse(
