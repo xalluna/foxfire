@@ -220,7 +220,15 @@ public static class ReplayEndpoints
         if (!storage.IsConfigured) return NotOffered();
 
         var me = Ownership.UserId(principal);
-        var replay = await db.SharedReplays.FirstOrDefaultAsync(r => r.MatchId == matchId, cancellationToken);
+
+        // Including the uploader, who is the caller: this answer is a whole
+        // SharedReplayResponse and the desktop renders the row from it. Without
+        // the navigation loaded the name comes back null and the row somebody
+        // just created is the one row on the screen with a blank where every
+        // other one names who shared it.
+        var replay = await db.SharedReplays
+            .Include(r => r.UploadedBy)
+            .FirstOrDefaultAsync(r => r.MatchId == matchId, cancellationToken);
 
         if (replay is null) return Results.NotFound();
 
