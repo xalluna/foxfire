@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using Foxfire.Api.Endpoints;
+using Foxfire.Api.Features.Replays;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;

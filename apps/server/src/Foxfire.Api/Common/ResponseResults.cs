@@ -52,8 +52,8 @@ public static class ResponseResults
     }
 
     /// <summary>
-    /// The shape AuthEndpoints.Problem has always produced: one code, one
-    /// message.
+    /// One code and one message, which is the shape every route on this server
+    /// has always answered a failure with.
     ///
     /// Several errors collapse into one answer because that is what the desktop
     /// reads. The first error's code wins — a handler returning more than one

@@ -46,14 +46,4 @@ public static class AuthEndpoints
                 sender.SendAsync(new GetCurrentUserRequest(), cancellationToken))
             .RequireAuthorization();
     }
-
-    /// <summary>
-    /// The error shape every route on this server answers with.
-    ///
-    /// Still here because the routes that have not moved to MediatR yet call it.
-    /// It goes when the last of them does — Common/ResponseResults already
-    /// produces exactly this JSON for everything converted.
-    /// </summary>
-    internal static IResult Problem(string code, string message, int status = StatusCodes.Status400BadRequest) =>
-        Results.Json(new { error = code, message }, statusCode: status);
 }
