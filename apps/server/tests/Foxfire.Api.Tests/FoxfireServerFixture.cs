@@ -52,6 +52,9 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
 
     public const string ServerName = "Test Server";
 
+    /// <summary>How this test process reaches the blob store Azurite is running.</summary>
+    public string BlobConnectionString => _blob.GetConnectionString();
+
     /// <summary>The newest desktop this server serves — what a client should claim.</summary>
     public static string CurrentDesktop => DesktopCompatibility.AllowList.Recommended;
 

@@ -186,6 +186,7 @@ builder.Services.AddSingleton(sp => new RiotClient(
 // else on the server works without one.
 builder.Services.AddSingleton<IReplayStorage>(sp => new AzureBlobReplayStorage(
     builder.Configuration.GetConnectionString("Blob"),
+    builder.Configuration["Storage:PublicUrl"],
     sp.GetRequiredService<ILogger<AzureBlobReplayStorage>>()));
 
 builder.Services.AddProblemDetails();

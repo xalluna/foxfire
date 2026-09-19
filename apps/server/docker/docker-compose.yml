@@ -25,6 +25,15 @@ services:
     environment:
       ConnectionStrings__Default: "Server=db,1433;Database=Foxfire;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
       ConnectionStrings__Blob: "${BLOB_CONNECTION_STRING:-DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://blob:10000/devstoreaccount1;}"
+
+      # Where a *desktop* reaches the blob store, which is not where this
+      # server reaches it. The line above is a name on this compose network;
+      # the desktop uploading a replay is on somebody's PC and cannot resolve
+      # it. Signed URLs are put on this address instead before being handed
+      # out. Default suits a host trying the stack out on their own machine —
+      # anyone whose friends are elsewhere sets BLOB_PUBLIC_URL to a name
+      # those friends can reach.
+      Storage__PublicUrl: "${BLOB_PUBLIC_URL:-http://localhost:10000}"
       Server__PublicUrl: "${SERVER_PUBLIC_URL}"
       Server__Name: "${SERVER_NAME:-Foxfire}"
       Riot__ApiKey: "${RIOT_API_KEY}"
@@ -85,12 +94,18 @@ services:
     # and a host who would rather use actual Azure just points
     # BLOB_CONNECTION_STRING at it instead and stops this service.
     #
-    # Nothing uploads replays yet; that is Phase 3. It is here now so the
-    # storage is configured before the feature that needs it arrives, rather
-    # than asking every host to reconfigure later.
+    # A community that never uploads a replay needs none of this, and the
+    # server says so at startup and carries on without it — everything that is
+    # not a replay works either way.
     image: mcr.microsoft.com/azure-storage/azurite:latest
     restart: unless-stopped
     command: ["azurite-blob", "--blobHost", "0.0.0.0", "--location", "/data"]
+    # Published, because replays do not travel through the server — the
+    # desktop is handed a signed URL and PUTs the bytes here itself. Without
+    # this the store is reachable only by the one process that never carries
+    # a replay.
+    ports:
+      - "${BLOB_PORT:-10000}:10000"
     volumes:
       - blob-data:/data
 

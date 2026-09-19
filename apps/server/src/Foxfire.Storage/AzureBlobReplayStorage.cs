@@ -54,11 +54,42 @@ public sealed class AzureBlobReplayStorage : IReplayStorage
     private static readonly TimeSpan StartSkew = TimeSpan.FromMinutes(5);
 
     private readonly BlobContainerClient? _container;
+    private readonly Uri? _publicBase;
     private readonly ILogger _log;
 
-    public AzureBlobReplayStorage(string? connectionString, ILogger<AzureBlobReplayStorage>? logger = null)
+    /// <param name="connectionString">
+    /// How <em>this server</em> reaches the store.
+    /// </param>
+    /// <param name="publicBaseUrl">
+    /// How <em>a desktop</em> reaches the store, when that is a different
+    /// address. See <see cref="Rebase"/>.
+    /// </param>
+    public AzureBlobReplayStorage(
+        string? connectionString,
+        string? publicBaseUrl = null,
+        ILogger<AzureBlobReplayStorage>? logger = null)
     {
         _log = logger ?? NullLogger<AzureBlobReplayStorage>.Instance;
+
+        if (!string.IsNullOrWhiteSpace(publicBaseUrl))
+        {
+            if (Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var parsed)
+                && (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps))
+            {
+                _publicBase = parsed;
+            }
+            else
+            {
+                // Ignored rather than fatal, for the same reason a bad
+                // connection string is: the URLs are still minted, and a host
+                // who can see them is better placed to spot a wrong address
+                // than one whose server will not boot.
+                _log.LogError(
+                    "Storage__PublicUrl is not an http(s) URL: '{Value}'. Signed URLs will point at "
+                    + "the address this server itself uses, which a desktop may not be able to reach.",
+                    publicBaseUrl);
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(connectionString)) return;
 
@@ -228,6 +259,36 @@ public sealed class AzureBlobReplayStorage : IReplayStorage
 
         builder.SetPermissions(permissions);
 
-        return new StorageGrant(blob.GenerateSasUri(builder), blobKey, expiresAt);
+        return new StorageGrant(Rebase(blob.GenerateSasUri(builder)), blobKey, expiresAt);
+    }
+
+    /// <summary>
+    /// Puts a signed URL on the address the desktop can actually reach.
+    ///
+    /// The server and the desktop do not necessarily reach the same store by
+    /// the same name. Under docker-compose the server talks to Azurite at
+    /// <c>http://blob:10000</c>, which is a name that exists only on that
+    /// network — and the desktop uploading the replay is on somebody's PC.
+    /// Signing against the server's own view and handing the result out
+    /// unaltered mints a URL that nothing outside Docker can resolve, which is
+    /// how this was found.
+    ///
+    /// Rebasing is safe because a SAS signs the canonicalized resource — the
+    /// account, container and blob path — and not the host it is fetched from.
+    /// That is the same property every reverse-proxied blob store depends on,
+    /// and it is why the path and query are carried across untouched rather
+    /// than rebuilt. A base URL with a path of its own is honoured, so a host
+    /// with one certificate can put the store under a prefix their proxy
+    /// strips.
+    ///
+    /// Unset means the two addresses are the same, which is the case on real
+    /// Azure and on a store already reachable at the name the server uses.
+    /// </summary>
+    private Uri Rebase(Uri signed)
+    {
+        if (_publicBase is null) return signed;
+
+        var prefix = _publicBase.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        return new Uri(prefix + signed.PathAndQuery, UriKind.Absolute);
     }
 }
