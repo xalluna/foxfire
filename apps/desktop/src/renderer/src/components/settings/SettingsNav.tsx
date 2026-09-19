@@ -45,6 +45,15 @@ interface NavItem {
   icon: JSX.Element
   /** Shown only to an administrator of the server currently connected. */
   adminOnly?: boolean
+  /**
+   * Hidden while a server is answering.
+   *
+   * For the one page that is genuinely about nothing then: connected, this
+   * machine holds no Riot key at all — the server has one, shared by everybody
+   * on it — so a page offering to save one would be offering to save something
+   * nothing would read.
+   */
+  localOnly?: boolean
 }
 
 const GROUPS: NavItem[][] = [
@@ -52,7 +61,7 @@ const GROUPS: NavItem[][] = [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
     { id: 'serverAdmin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
     { id: 'serverData', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
-    { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key /> },
+    { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],
   [
@@ -68,6 +77,7 @@ const GROUPS: NavItem[][] = [
 export function SettingsNav({
   active,
   isServerAdmin,
+  isConnected,
   onSelect
 }: {
   active: SettingsCategory
@@ -79,10 +89,16 @@ export function SettingsNav({
    * shows a page whose every call is refused — which is the right way round.
    */
   isServerAdmin: boolean
+
+  /** Whether a server is currently answering, which hides the pages about this PC's key. */
+  isConnected: boolean
+
   onSelect: (category: SettingsCategory) => void
 }): JSX.Element {
   const groups = GROUPS.map((group) =>
-    group.filter((item) => !item.adminOnly || isServerAdmin)
+    group.filter(
+      (item) => (!item.adminOnly || isServerAdmin) && (!item.localOnly || !isConnected)
+    )
   ).filter((group) => group.length > 0)
 
   return (

@@ -2,9 +2,43 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { randomExampleRiotId } from '../lib/exampleRiotId'
 import { parseRiotId } from '../lib/riotId'
+import { useServerHealth } from '../hooks/useKeyStatus'
 import { useUiStore } from '../store/uiStore'
 
+/**
+ * How an account is added, which is not the same question in the two modes.
+ *
+ * Locally it is a Riot ID somebody types, resolved through their own key. On a
+ * server it is attested: the desktop reports the Riot ID the running League
+ * client says is signed in, and the server resolves that. A typed name attests
+ * to nothing, and a server that accepted one would make every claim on it worth
+ * less — so there is no box to type into, and saying why beats a form that
+ * always fails.
+ */
 export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Element {
+  const { connected } = useServerHealth()
+  return connected ? <LinkThroughTheClient /> : <TypeARiotId onAdded={onAdded} />
+}
+
+/**
+ * What to do instead, on a server.
+ *
+ * The League client is what claims an account here, and it does so on its own:
+ * the watcher notices who is signed in and offers the link. So this is an
+ * instruction rather than a control — there is nothing for a button to do that
+ * starting the client would not do better.
+ */
+function LinkThroughTheClient(): JSX.Element {
+  return (
+    <p className="text-2xs leading-relaxed text-text-mute">
+      On a server, accounts are claimed by the League client rather than typed in. Sign in to the
+      account you want in the client with Foxfire running, and it will offer to link it — which is
+      what stops anybody else claiming an account that is yours.
+    </p>
+  )
+}
+
+function TypeARiotId({ onAdded }: { onAdded?: () => void }): JSX.Element {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   // Drawn once per mount so the hint below never names a different player than

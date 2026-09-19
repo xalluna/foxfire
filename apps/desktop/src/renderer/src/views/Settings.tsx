@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Disclaimer } from '../components/Disclaimer'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
+import { useServerHealth } from '../hooks/useKeyStatus'
 import { ServerAdminSettings } from '../components/ServerAdminSettings'
 import { ServerDataSettings } from '../components/ServerDataSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
@@ -50,6 +51,7 @@ export function Settings(): JSX.Element {
   // connection change, so signing out of a server takes its admin page with it
   // rather than leaving a category whose every call now fails.
   const [isServerAdmin, setIsServerAdmin] = useState(false)
+  const { connected: isConnected } = useServerHealth()
 
   useEffect(() => {
     const read = (state: { session: { isAdmin: boolean } | null }): void =>
@@ -65,6 +67,13 @@ export function Settings(): JSX.Element {
       setCategory(FIRST_CATEGORY)
     }
   }, [isServerAdmin, category])
+
+  // Settings opens on the Riot key page, which is the right default for a PC
+  // that cannot work without one — and exactly wrong connected to a server,
+  // where this machine holds no key and the page is not in the sidebar at all.
+  useEffect(() => {
+    if (isConnected && category === 'riotKey') setCategory('server')
+  }, [isConnected, category])
   const pane = useRef<HTMLDivElement>(null)
 
   // Arriving at a page scrolled to where the last one was left is disorienting
@@ -75,7 +84,12 @@ export function Settings(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0">
-      <SettingsNav active={category} isServerAdmin={isServerAdmin} onSelect={setCategory} />
+      <SettingsNav
+        active={category}
+        isServerAdmin={isServerAdmin}
+        isConnected={isConnected}
+        onSelect={setCategory}
+      />
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
         {category === 'server' && <ServerSettings />}

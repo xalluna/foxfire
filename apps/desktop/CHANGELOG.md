@@ -110,6 +110,13 @@ Foxfire does until you point it somewhere.
   the same channels the app already used for its own events, so nothing above the transport knows
   which one delivered them. LP somebody types in one window reaches every other window, on their
   machine and on yours.
+- **Settings stops offering the Riot API key page on a server.** This PC holds no key then — the
+  server has one, shared by everybody on it — so a page that saved one would be saving something
+  nothing reads. It comes back the moment you go local-only.
+- **Adding an account on a server tells you how instead of failing.** There is no Riot ID box,
+  because a typed name proves nothing: sign in to the account in the League client with Foxfire
+  running and it offers the link, which is what stops anybody else claiming an account that is
+  yours.
 - **The banner about an expired Riot key now says whose key it is.** Connected to a server this PC
   holds no key at all, so the one that offers to take you to the field would be offering something
   that does not exist. A server whose key has expired says so plainly instead, and says that
