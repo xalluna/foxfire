@@ -1091,6 +1091,16 @@ export interface AdminInvite {
 export interface ServerAdminSettings {
   publicSignup: boolean
   backfillTarget: number
+
+  /**
+   * How many bytes of blob storage replays may take. Zero means no cap.
+   *
+   * Uncapped by default, because a cap nobody chose is a cap that surprises
+   * somebody — and what it prevents is an upload being refused, which is
+   * exactly what the cap does. What it buys a host is deciding when that
+   * starts, rather than learning it from a storage bill.
+   */
+  replayByteCap: number
 }
 
 /**

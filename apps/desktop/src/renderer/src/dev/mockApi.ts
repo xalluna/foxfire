@@ -392,7 +392,12 @@ let mockInvites: AdminInvite[] = [
   }
 ]
 
-let mockServerSettings: ServerAdminSettings = { publicSignup: true, backfillTarget: 200 }
+// Uncapped, which is the default a host has to choose away from.
+let mockServerSettings: ServerAdminSettings = {
+  publicSignup: true,
+  backfillTarget: 200,
+  replayByteCap: 0
+}
 
 export const mockApi: Api = {
   // The browser harness has no Electron and so no real path for a File.

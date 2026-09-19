@@ -213,7 +213,7 @@ public sealed record InviteInfo(
 
 public sealed record InvitePreview(bool Usable, string ServerName, string? Email, string Message);
 
-public sealed record ServerSettings(bool PublicSignup, int BackfillTarget);
+public sealed record ServerSettings(bool PublicSignup, int BackfillTarget, long ReplayByteCap);
 
 /// <summary>
 /// One server for the whole assembly.

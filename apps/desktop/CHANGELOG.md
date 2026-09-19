@@ -50,6 +50,9 @@ Foxfire does until you point it somewhere.
   rank readings and season boundaries. Recordings and Riot replays stay on the PC they are on,
   because that is where the files are. The old file is opened read-only and never modified, and
   running the import twice is safe — nothing is imported over itself.
+- **A replay storage cap, in gigabytes, on the same page.** Leave it blank for no cap, which is
+  the default; set one and uploads stop once replays reach it, with everything already uploaded
+  still working.
 - **What the server is holding, on the same page.** Replays and how much space they take, matches
   and the player rows behind them, rank readings, and how many League accounts are still unclaimed
   — plus the shared replay library itself, biggest first, with a way to remove one. Biggest first

@@ -7,10 +7,17 @@ namespace Foxfire.Api.Endpoints;
 /// <summary>What an admin may change while the server is running.</summary>
 /// <param name="PublicSignup">Null leaves it alone.</param>
 /// <param name="BackfillTarget">Null leaves it alone.</param>
-public sealed record UpdateServerSettingsRequest(bool? PublicSignup, int? BackfillTarget);
+/// <param name="ReplayByteCap">Null leaves it alone. Zero removes the cap.</param>
+public sealed record UpdateServerSettingsRequest(
+    bool? PublicSignup,
+    int? BackfillTarget,
+    long? ReplayByteCap);
 
 /// <summary>The current state of those switches.</summary>
-public sealed record ServerSettingsResponse(bool PublicSignup, int BackfillTarget);
+public sealed record ServerSettingsResponse(
+    bool PublicSignup,
+    int BackfillTarget,
+    long ReplayByteCap);
 
 /// <summary>
 /// The switches behind the server management section of the desktop's settings.
@@ -31,7 +38,8 @@ public static class AdminSettingsEndpoints
         admin.MapGet("/", async (ServerSettingsService settings, CancellationToken cancellationToken) =>
             Results.Ok(new ServerSettingsResponse(
                 await settings.IsPublicSignupEnabledAsync(cancellationToken),
-                await settings.GetBackfillTargetAsync(cancellationToken))));
+                await settings.GetBackfillTargetAsync(cancellationToken),
+                await settings.GetReplayByteCapAsync(cancellationToken))));
 
         admin.MapPatch("/", async (
             [FromBody] UpdateServerSettingsRequest request,
@@ -39,6 +47,18 @@ public static class AdminSettingsEndpoints
             ILogger<Program> logger,
             CancellationToken cancellationToken) =>
         {
+            if (request.ReplayByteCap is { } cap && cap < 0)
+            {
+                return AuthEndpoints.Problem(
+                    "invalid_replay_cap",
+                    "A storage cap is a number of bytes, or zero for no cap.");
+            }
+
+            if (request.ReplayByteCap is { } replayCap)
+            {
+                await settings.SetReplayByteCapAsync(replayCap, cancellationToken);
+            }
+
             if (request.BackfillTarget is { } target && target is < 1 or > 1000)
             {
                 return AuthEndpoints.Problem(
@@ -62,7 +82,8 @@ public static class AdminSettingsEndpoints
 
             return Results.Ok(new ServerSettingsResponse(
                 await settings.IsPublicSignupEnabledAsync(cancellationToken),
-                await settings.GetBackfillTargetAsync(cancellationToken)));
+                await settings.GetBackfillTargetAsync(cancellationToken),
+                await settings.GetReplayByteCapAsync(cancellationToken)));
         });
     }
 }

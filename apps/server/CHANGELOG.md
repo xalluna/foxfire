@@ -135,6 +135,11 @@ match history for you.
   game have the same file and will all offer it; one wins and the rest are told
   it is covered. A claim that never completes goes stale after half an hour, so
   somebody closing their laptop mid-upload does not lock the game out forever.
+- **A storage cap for replays, off by default.** A host can say how much of the blob store
+  replays may take, and a claim past it is refused before any bytes move — so a refused replay
+  costs a request rather than thirty megabytes of somebody's upstream. Off by default because a cap
+  nobody chose is a cap that surprises somebody, and what it prevents is an upload being refused,
+  which is exactly what it does.
 - **Blob storage is optional**, and the server says so at startup when it is
   absent. Everything that is not a replay works without it.
 - **SMTP is optional**, and the server says so at startup when it is absent.

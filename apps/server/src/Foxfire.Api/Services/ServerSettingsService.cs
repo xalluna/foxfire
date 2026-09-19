@@ -44,6 +44,26 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
     public Task SetBackfillTargetAsync(int matches, CancellationToken cancellationToken = default) =>
         WriteAsync(ServerSettingKeys.BackfillTarget, matches.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
 
+    /// <summary>
+    /// How much of the blob store replays may take, in bytes. Zero means no cap.
+    ///
+    /// Uncapped by default, because a cap nobody chose is a cap that surprises
+    /// somebody — and the failure it prevents is an upload being refused, which
+    /// is exactly what the cap itself does. What it buys a host is choosing
+    /// *when* that starts happening, rather than finding out from their storage
+    /// bill or a full volume.
+    /// </summary>
+    public const long ReplayByteCapDefault = 0;
+
+    public Task SetReplayByteCapAsync(long bytes, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.ReplayByteCap, bytes.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    public async Task<long> GetReplayByteCapAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.ReplayByteCap, cancellationToken);
+        return long.TryParse(raw, out var value) && value >= 0 ? value : ReplayByteCapDefault;
+    }
+
     public async Task<int> GetBackfillTargetAsync(CancellationToken cancellationToken = default)
     {
         var raw = await ReadAsync(ServerSettingKeys.BackfillTarget, cancellationToken);

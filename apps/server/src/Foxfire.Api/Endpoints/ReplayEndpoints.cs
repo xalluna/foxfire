@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Foxfire.Api.Services;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Storage;
@@ -90,6 +91,7 @@ public static class ReplayEndpoints
         ClaimsPrincipal principal,
         FoxfireDbContext db,
         IReplayStorage storage,
+        ServerSettingsService settings,
         TimeProvider time,
         ILogger<Program> logger,
         CancellationToken cancellationToken)
@@ -103,6 +105,28 @@ public static class ReplayEndpoints
         if (matchId.Length == 0)
         {
             return AuthEndpoints.Problem("invalid_match", "A replay has to name the game it is of.");
+        }
+
+        // Checked before the claim rather than after the upload, so a refused
+        // replay costs a request rather than thirty megabytes of somebody's
+        // upstream. Against what the rows say rather than what the store says:
+        // this runs on every claim, and listing a container of thousands of
+        // blobs to answer it would make the common case pay for the rare one.
+        var cap = await settings.GetReplayByteCapAsync(cancellationToken);
+        if (cap > 0)
+        {
+            var held = await db.SharedReplays
+                .Where(r => r.UploadedAt != null)
+                .SumAsync(r => (long?)r.FileBytes, cancellationToken) ?? 0;
+
+            if (held + Math.Max(request.FileBytes, 0) > cap)
+            {
+                return AuthEndpoints.Problem(
+                    "storage_full",
+                    "This server has reached the storage its administrator set aside for replays. "
+                    + "Everything already uploaded still works.",
+                    StatusCodes.Status507InsufficientStorage);
+            }
         }
 
         var now = time.GetUtcNow();

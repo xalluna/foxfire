@@ -50,4 +50,14 @@ public static class ServerSettingKeys
     /// does not arrive late and surprise anybody.
     /// </summary>
     public const string BackfillTarget = "sync.backfillTarget";
+
+    /// <summary>
+    /// How many bytes of blob storage replays may take. "0" means no cap.
+    ///
+    /// Uncapped by default, because a cap nobody chose is a cap that surprises
+    /// somebody — and what it prevents is an upload being refused, which is
+    /// exactly what the cap does. What it buys a host is deciding *when* that
+    /// starts, rather than finding out from a storage bill or a full volume.
+    /// </summary>
+    public const string ReplayByteCap = "replays.byteCap";
 }

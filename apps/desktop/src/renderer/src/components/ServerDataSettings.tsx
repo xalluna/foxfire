@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import clsx from 'clsx'
 import type { Account, AdminReplay, ImportProgress, ImportResult } from '@shared/types'
+import { inputClass } from './settings/controls'
 import { SettingsCard, SettingsPage } from './settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from './settings/SettingsRow'
 import { ghostButtonClass, primaryButtonClass } from './settings/controls'
@@ -56,20 +58,21 @@ export function ServerDataSettings(): JSX.Element {
   return (
     <SettingsPage
       title="Data & storage"
+      // SettingsPage puts this inside a <p>, so a paragraph break is a <br />
+      // pair rather than a second one. Nested paragraphs are invalid HTML and
+      // React says so at runtime.
       intro={
         <>
-          <p>
-            Bring an existing Foxfire database onto this server — everything in a{' '}
-            <code className="text-text">stats.db</code> except the parts that belong to one machine.
-            Accounts, match history, rank readings and season boundaries come across; recordings and
-            Riot replays stay on the PC they are on.
-          </p>
-          <p>
-            Imported League accounts arrive unclaimed. The file says which accounts its owner
-            played; it does not say who on this server they are, and on a server that is something
-            the League client attests to rather than something an import can assert. The history is
-            here either way, and claiming an account is the ordinary link.
-          </p>
+          Bring an existing Foxfire database onto this server — everything in a{' '}
+          <code className="text-text">stats.db</code> except the parts that belong to one machine.
+          Accounts, match history, rank readings and season boundaries come across; recordings and
+          Riot replays stay on the PC they are on.
+          <br />
+          <br />
+          Imported League accounts arrive unclaimed. The file says which accounts its owner played;
+          it does not say who on this server they are, and on a server that is something the League
+          client attests to rather than something an import can assert. The history is here either
+          way, and claiming an account is the ordinary link.
         </>
       }
     >
@@ -270,9 +273,82 @@ function StorageCard(): JSX.Element {
           </span>
         }
       />
+
+      <ReplayCapRow used={data.replayBytes} />
     </SettingsCard>
   )
 }
+
+/**
+ * How much of the store replays may take.
+ *
+ * In gigabytes, because that is the unit a volume or a storage bill is thought
+ * about in, and nobody wants to count zeroes. Blank or zero means no cap, which
+ * is the default: what a cap prevents is an upload being refused, and a cap is
+ * how an upload gets refused — so it only earns its place when a host would
+ * rather choose the moment themselves.
+ */
+function ReplayCapRow({ used }: { used: number }): JSX.Element {
+  const queryClient = useQueryClient()
+  const [draft, setDraft] = useState<string | null>(null)
+
+  const settings = useQuery({
+    queryKey: ['adminServerSettings'],
+    queryFn: () => window.api.serverAdmin.getSettings()
+  })
+
+  const save = useMutation({
+    mutationFn: (bytes: number) => window.api.serverAdmin.setSettings({ replayByteCap: bytes }),
+    onSuccess: () => {
+      setDraft(null)
+      void queryClient.invalidateQueries({ queryKey: ['adminServerSettings'] })
+    }
+  })
+
+  const cap = settings.data?.replayByteCap ?? 0
+  const shown = draft ?? (cap === 0 ? '' : (cap / GIGABYTE).toString())
+
+  function commit(): void {
+    const typed = shown.trim()
+    const gigabytes = typed === '' ? 0 : Number(typed)
+
+    if (!Number.isFinite(gigabytes) || gigabytes < 0) {
+      setDraft(null)
+      return
+    }
+
+    save.mutate(Math.round(gigabytes * GIGABYTE))
+  }
+
+  return (
+    <SettingsRow
+      label="Replay storage cap"
+      description={
+        cap === 0
+          ? 'No cap. Uploads are refused only when the store itself fills up.'
+          : `Uploads stop once replays reach this. ${gigabytes(used)} of ${gigabytes(cap)} used.`
+      }
+      control={
+        <div className="flex items-center gap-2">
+          <input
+            value={shown}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+            }}
+            placeholder="none"
+            inputMode="decimal"
+            className={clsx(inputClass, 'w-20 text-right tabular-nums')}
+          />
+          <span className="text-sm text-text-mute">GB</span>
+        </div>
+      }
+    />
+  )
+}
+
+const GIGABYTE = 1024 * 1024 * 1024
 
 /**
  * The library, biggest first, with a way to remove one.
