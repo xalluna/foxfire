@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -73,4 +76,38 @@ public sealed class RiotAccount
 
     /// <summary>The Riot ID as a person writes it.</summary>
     public string RiotId => $"{GameName}#{TagLine}";
+}
+
+internal sealed class RiotAccountConfiguration : IEntityTypeConfiguration<RiotAccount>
+{
+    public void Configure(EntityTypeBuilder<RiotAccount> builder)
+    {
+        builder.HasKey(a => a.Id);
+
+        builder.Property(a => a.Puuid).HasMaxLength(78).IsRequired();
+        builder.HasIndex(a => a.Puuid).IsUnique();
+
+        builder.Property(a => a.GameName).HasMaxLength(64).IsRequired();
+        builder.Property(a => a.TagLine).HasMaxLength(16).IsRequired();
+        builder.Property(a => a.Platform).HasMaxLength(8).IsRequired();
+        builder.Property(a => a.RegionalRoute).HasMaxLength(16).IsRequired();
+        builder.Property(a => a.SummonerId).HasMaxLength(64);
+
+        // The identity that survives a key change, and what a link request
+        // arrives as. Case-insensitive already, since SQL Server's default
+        // collation is — Riot IDs are not case-sensitive either.
+        builder.HasIndex(a => new { a.GameName, a.TagLine }).IsUnique();
+
+        // At most one owner is guaranteed by this being a column rather than
+        // a join. SET NULL because deleting a person releases their claim;
+        // it does not delete a League account or the games played on it.
+        builder.HasOne(a => a.Owner)
+            .WithMany(u => u.RiotAccounts)
+            .HasForeignKey(a => a.OwnerId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(a => a.OwnerId);
+
+        builder.Ignore(a => a.RiotId);
+    }
 }

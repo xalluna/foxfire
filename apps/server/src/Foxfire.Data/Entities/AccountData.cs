@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -30,6 +33,22 @@ public sealed class LeagueEntry
     public DateTimeOffset FetchedAt { get; set; }
 }
 
+internal sealed class LeagueEntryConfiguration : IEntityTypeConfiguration<LeagueEntry>
+{
+    public void Configure(EntityTypeBuilder<LeagueEntry> builder)
+    {
+        builder.HasKey(l => new { l.RiotAccountId, l.QueueType });
+        builder.Property(l => l.QueueType).HasMaxLength(32);
+        builder.Property(l => l.Tier).HasMaxLength(16);
+        builder.Property(l => l.Division).HasMaxLength(4);
+
+        builder.HasOne(l => l.RiotAccount)
+            .WithMany()
+            .HasForeignKey(l => l.RiotAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 /// <summary>
 /// Riot's mastery figure for one champion on one account.
 ///
@@ -51,6 +70,19 @@ public sealed class ChampionMastery
     public long? LastPlayTime { get; set; }
 
     public DateTimeOffset FetchedAt { get; set; }
+}
+
+internal sealed class ChampionMasteryConfiguration : IEntityTypeConfiguration<ChampionMastery>
+{
+    public void Configure(EntityTypeBuilder<ChampionMastery> builder)
+    {
+        builder.HasKey(m => new { m.RiotAccountId, m.ChampionId });
+
+        builder.HasOne(m => m.RiotAccount)
+            .WithMany()
+            .HasForeignKey(m => m.RiotAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
 }
 
 /// <summary>
@@ -87,6 +119,20 @@ public sealed class SyncState
     public DateTimeOffset? LastDeltaSyncAt { get; set; }
 }
 
+internal sealed class SyncStateConfiguration : IEntityTypeConfiguration<SyncState>
+{
+    public void Configure(EntityTypeBuilder<SyncState> builder)
+    {
+        builder.HasKey(s => s.RiotAccountId);
+        builder.Property(s => s.MostRecentMatchId).HasMaxLength(32);
+
+        builder.HasOne(s => s.RiotAccount)
+            .WithMany()
+            .HasForeignKey(s => s.RiotAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 /// <summary>
 /// A puuid an account used to have.
 ///
@@ -112,4 +158,18 @@ public sealed class RetiredPuuid
     public required string Puuid { get; set; }
 
     public DateTimeOffset RetiredAt { get; set; }
+}
+
+internal sealed class RetiredPuuidConfiguration : IEntityTypeConfiguration<RetiredPuuid>
+{
+    public void Configure(EntityTypeBuilder<RetiredPuuid> builder)
+    {
+        builder.HasKey(r => new { r.RiotAccountId, r.Puuid });
+        builder.Property(r => r.Puuid).HasMaxLength(78);
+
+        builder.HasOne(r => r.RiotAccount)
+            .WithMany()
+            .HasForeignKey(r => r.RiotAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
 }

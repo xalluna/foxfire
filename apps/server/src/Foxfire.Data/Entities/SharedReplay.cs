@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -83,4 +86,32 @@ public sealed class SharedReplay
     /// than no blob at all, because the failure happens after the download.
     /// </summary>
     public bool IsAvailable => UploadedAt is not null && BlobKey is not null;
+}
+
+internal sealed class SharedReplayConfiguration : IEntityTypeConfiguration<SharedReplay>
+{
+    public void Configure(EntityTypeBuilder<SharedReplay> builder)
+    {
+        // Riot's match id is the key and the dedup rule at once: the same
+        // file is produced for all ten players, so a second copy would be
+        // the same bytes under a different name.
+        builder.HasKey(r => r.MatchId);
+
+        builder.Property(r => r.MatchId).HasMaxLength(32);
+        builder.Property(r => r.BlobKey).HasMaxLength(128);
+        builder.Property(r => r.GameVersion).HasMaxLength(32);
+        builder.Property(r => r.Patch).HasMaxLength(16);
+
+        // SET NULL, because the replay belongs to the community once it is
+        // uploaded. Deleting somebody must not take the only copy of a game
+        // nine other people were also in.
+        builder.HasOne(r => r.UploadedBy)
+            .WithMany()
+            .HasForeignKey(r => r.UploadedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // The match list asks "is there one of these" for a page of games at
+        // a time, and an abandoned claim must not answer yes.
+        builder.HasIndex(r => r.UploadedAt);
+    }
 }

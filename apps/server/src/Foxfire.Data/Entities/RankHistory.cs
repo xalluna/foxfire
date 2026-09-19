@@ -1,4 +1,6 @@
 using Foxfire.Core;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Foxfire.Data.Entities;
 
@@ -98,6 +100,43 @@ public sealed class RankSnapshot
             CapturedAt);
 }
 
+internal sealed class RankSnapshotConfiguration : IEntityTypeConfiguration<RankSnapshot>
+{
+    public void Configure(EntityTypeBuilder<RankSnapshot> builder)
+    {
+        builder.HasKey(r => r.Id);
+        builder.Property(r => r.QueueType).HasMaxLength(32);
+        builder.Property(r => r.Tier).HasMaxLength(16);
+        builder.Property(r => r.Division).HasMaxLength(4);
+        builder.Property(r => r.Source).HasMaxLength(16).IsRequired();
+        builder.Property(r => r.MatchId).HasMaxLength(32);
+
+        builder.HasOne(r => r.RiotAccount)
+            .WithMany()
+            .HasForeignKey(r => r.RiotAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A manual edit names the game it describes. Cascade would be wrong
+        // here and is not merely unnecessary: SQL Server refuses a second
+        // cascade path into this table anyway, since the account already has
+        // one, so deleting a match clears the link and leaves the reading.
+        builder.HasOne(r => r.Match)
+            .WithMany()
+            .HasForeignKey(r => r.MatchId)
+            .OnDelete(DeleteBehavior.ClientSetNull);
+
+        // Every read walks one account's readings for one queue in time
+        // order. This is the index attribution lives on, and Id is on the
+        // end of it because the walk is over adjacent pairs: two readings
+        // sharing a millisecond have to come back in the same order every
+        // time, or the pair between them changes.
+        builder.HasIndex(r => new { r.RiotAccountId, r.QueueType, r.CapturedAt, r.Id });
+
+        // Clearing a manual edit is a targeted delete by match.
+        builder.HasIndex(r => r.MatchId);
+    }
+}
+
 /// <summary>
 /// What one game was worth.
 ///
@@ -135,6 +174,35 @@ public sealed class MatchRank
 
     public bool IsPromotion { get; set; }
     public bool IsDemotion { get; set; }
+}
+
+internal sealed class MatchRankConfiguration : IEntityTypeConfiguration<MatchRank>
+{
+    public void Configure(EntityTypeBuilder<MatchRank> builder)
+    {
+        builder.HasKey(r => new { r.MatchId, r.RiotAccountId });
+        builder.Property(r => r.MatchId).HasMaxLength(32);
+        builder.Property(r => r.QueueType).HasMaxLength(32);
+        builder.Property(r => r.TierBefore).HasMaxLength(16);
+        builder.Property(r => r.DivisionBefore).HasMaxLength(4);
+        builder.Property(r => r.TierAfter).HasMaxLength(16);
+        builder.Property(r => r.DivisionAfter).HasMaxLength(4);
+
+        builder.HasOne(r => r.Match)
+            .WithMany()
+            .HasForeignKey(r => r.MatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ClientSetNull rather than Cascade: SQL Server allows only one
+        // cascade path between a pair of tables, and the match already has
+        // it. Deleting an account is rare and goes through EF, which clears
+        // these first; the rows are derived and a lost one costs an
+        // attribution pass.
+        builder.HasOne(r => r.RiotAccount)
+            .WithMany()
+            .HasForeignKey(r => r.RiotAccountId)
+            .OnDelete(DeleteBehavior.ClientSetNull);
+    }
 }
 
 /// <summary>
@@ -187,4 +255,18 @@ public sealed class RankedSeason
     public bool ResetsRank { get; set; }
 
     public Season ToDomain() => new(Id, Label, StartsAt, IsPreseason, ResetsRank);
+}
+
+internal sealed class RankedSeasonConfiguration : IEntityTypeConfiguration<RankedSeason>
+{
+    public void Configure(EntityTypeBuilder<RankedSeason> builder)
+    {
+        builder.HasKey(s => s.Id);
+        builder.Property(s => s.Label).HasMaxLength(64).IsRequired();
+
+        // Two seasons opening at the same instant has no meaning and would
+        // make the ordering — which is the whole of how a season is read —
+        // ambiguous.
+        builder.HasIndex(s => s.StartsAt).IsUnique();
+    }
 }

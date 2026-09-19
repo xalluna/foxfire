@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -23,6 +26,16 @@ public sealed class ServerSetting
     public required string Value { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+internal sealed class ServerSettingConfiguration : IEntityTypeConfiguration<ServerSetting>
+{
+    public void Configure(EntityTypeBuilder<ServerSetting> builder)
+    {
+        builder.HasKey(s => s.Key);
+        builder.Property(s => s.Key).HasMaxLength(64);
+        builder.Property(s => s.Value).HasMaxLength(512).IsRequired();
+    }
 }
 
 /// <summary>The keys this server actually reads, spelled once.</summary>

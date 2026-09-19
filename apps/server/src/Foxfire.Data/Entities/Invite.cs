@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -64,4 +67,45 @@ public sealed class Invite
 
     public bool IsOpen(DateTimeOffset now) =>
         RedeemedAt is null && RevokedAt is null && ExpiresAt > now;
+}
+
+internal sealed class InviteConfiguration : IEntityTypeConfiguration<Invite>
+{
+    public void Configure(EntityTypeBuilder<Invite> builder)
+    {
+        builder.HasKey(i => i.Id);
+        builder.Property(i => i.Email).HasMaxLength(256).IsRequired();
+
+        // The admin list opens on outstanding invites for an address, and
+        // registration looks one up by the email it was offered.
+        builder.HasIndex(i => i.Email);
+
+        // Deleting an admin must not take their invites with them, and
+        // deleting somebody must not delete the record of how they got in.
+        builder.HasOne(i => i.CreatedBy)
+            .WithMany()
+            .HasForeignKey(i => i.CreatedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // ClientSetNull, not SetNull, and that is forced rather than chosen.
+        // SQL Server refuses two cascading paths between the same pair of
+        // tables (error 1785), and CreatedBy already has the one. So EF nulls
+        // this in memory when a tracked user is deleted and the constraint
+        // itself is NO ACTION.
+        //
+        // Nothing is lost by it: whether an invite was spent is RedeemedAt,
+        // which is never cleared. This column only says who, and "an account
+        // that no longer exists" is a fair answer.
+        builder.HasOne(i => i.RedeemedBy)
+            .WithMany()
+            .HasForeignKey(i => i.RedeemedByUserId)
+            .OnDelete(DeleteBehavior.ClientSetNull);
+
+        // Not unique. A unique index here would say one person may only ever
+        // redeem one invite, which is a different rule and not one anybody
+        // asked for — somebody who leaves and is invited back should be able
+        // to. What makes an invite single-use is the conditional UPDATE on
+        // RedeemedAt in the registration transaction.
+        builder.HasIndex(i => i.RedeemedByUserId);
+    }
 }

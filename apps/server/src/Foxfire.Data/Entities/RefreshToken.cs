@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -52,4 +55,30 @@ public sealed class RefreshToken
     public string? DeviceLabel { get; set; }
 
     public bool IsLive(DateTimeOffset now) => RevokedAt is null && ExpiresAt > now;
+}
+
+internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
+{
+    public void Configure(EntityTypeBuilder<RefreshToken> builder)
+    {
+        builder.HasKey(t => t.Id);
+
+        // The lookup key, so it is indexed — and unique, because two live
+        // sessions hashing to one row would mean a collision nobody would
+        // ever diagnose.
+        builder.Property(t => t.TokenHash).HasMaxLength(32).IsRequired();
+        builder.HasIndex(t => t.TokenHash).IsUnique();
+
+        builder.Property(t => t.DeviceLabel).HasMaxLength(128);
+
+        // Signing out everywhere, and deleting an account, both mean every
+        // session goes with it. Nothing outside the session refers to these.
+        builder.HasOne(t => t.User)
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The sweep that clears dead sessions reads exactly this.
+        builder.HasIndex(t => new { t.UserId, t.ExpiresAt });
+    }
 }

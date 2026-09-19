@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Foxfire.Data.Entities;
 
 /// <summary>
@@ -47,6 +50,33 @@ public sealed class Match
     public DateTimeOffset FetchedAt { get; set; }
 
     public ICollection<MatchParticipant> Participants { get; } = [];
+}
+
+internal sealed class MatchConfiguration : IEntityTypeConfiguration<Match>
+{
+    public void Configure(EntityTypeBuilder<Match> builder)
+    {
+        builder.HasKey(m => m.MatchId);
+        builder.Property(m => m.MatchId).HasMaxLength(32);
+        builder.Property(m => m.GameMode).HasMaxLength(32);
+        builder.Property(m => m.GameType).HasMaxLength(32);
+        builder.Property(m => m.PlatformId).HasMaxLength(8);
+
+        // nvarchar(max). A match payload is 100-200 KB of UTF-16 once SQL
+        // Server has it, and there is no length short of max that would not
+        // eventually truncate one.
+        builder.Property(m => m.RawJson).IsRequired();
+
+        // History pages walk backwards through time.
+        builder.HasIndex(m => m.GameCreation);
+
+        // For attribution, which looks up the ranked games between two
+        // readings and has no player-shaped entry point to start from. The
+        // match list and champion stats deliberately do NOT use it — both
+        // start from a participant row and reach the match by key, which is
+        // already the better plan.
+        builder.HasIndex(m => m.QueueId);
+    }
 }
 
 /// <summary>
@@ -129,4 +159,42 @@ public sealed class MatchParticipant
     /// was enough to make the desktop's numbers disagree with op.gg.
     /// </summary>
     public bool GameEndedInEarlySurrender { get; set; }
+}
+
+internal sealed class MatchParticipantConfiguration : IEntityTypeConfiguration<MatchParticipant>
+{
+    public void Configure(EntityTypeBuilder<MatchParticipant> builder)
+    {
+        // The desktop carries a surrogate key here plus a unique constraint
+        // on this pair. The key was never used for anything, so the
+        // constraint is simply the key.
+        builder.HasKey(p => new { p.MatchId, p.Puuid });
+
+        builder.Property(p => p.MatchId).HasMaxLength(32);
+        builder.Property(p => p.Puuid).HasMaxLength(78);
+        builder.Property(p => p.GameName).HasMaxLength(64);
+        builder.Property(p => p.TagLine).HasMaxLength(16);
+        builder.Property(p => p.ChampionName).HasMaxLength(32);
+        builder.Property(p => p.TeamPosition).HasMaxLength(16);
+        builder.Property(p => p.ItemsJson).HasMaxLength(256);
+        builder.Property(p => p.PerksJson).HasMaxLength(2048);
+
+        builder.HasOne(p => p.Match)
+            .WithMany(m => m.Participants)
+            .HasForeignKey(p => p.MatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Every screen that is about one player starts here.
+        builder.HasIndex(p => p.Puuid);
+
+        // Team totals — kills, damage share — are aggregated per match on
+        // every page of history, and without this the join degrades to a
+        // scan of the whole table.
+        builder.HasIndex(p => new { p.MatchId, p.TeamId });
+
+        // Champion stats and attribution both filter remakes out, and the
+        // column is overwhelmingly false, so this keeps them from
+        // re-scanning to find the handful that are not.
+        builder.HasIndex(p => new { p.Puuid, p.GameEndedInEarlySurrender });
+    }
 }

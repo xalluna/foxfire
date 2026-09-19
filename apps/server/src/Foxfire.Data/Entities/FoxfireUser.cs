@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Foxfire.Data.Entities;
 
@@ -32,6 +34,18 @@ public sealed class FoxfireUser : IdentityUser<Guid>
 
     /// <summary>Riot accounts this person has claimed. Empty is normal and fine.</summary>
     public ICollection<RiotAccount> RiotAccounts { get; } = [];
+}
+
+/// <summary>
+/// Identity owns most of this table; all that is added is when somebody joined.
+/// </summary>
+internal sealed class FoxfireUserConfiguration : IEntityTypeConfiguration<FoxfireUser>
+{
+    public void Configure(EntityTypeBuilder<FoxfireUser> builder)
+    {
+        builder.ToTable("Users");
+        builder.Property(u => u.CreatedAt).IsRequired();
+    }
 }
 
 /// <summary>Role names, spelled once.</summary>
