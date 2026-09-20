@@ -21,3 +21,5 @@ obj/
 
 # Rider output
 **/**/.idea/
+# Local compose tweaks — publishing the database to the host, and so on.
+docker-compose.override.yml
