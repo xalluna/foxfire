@@ -220,7 +220,7 @@ jobs:
 
           gh release create "$GITHUB_REF_NAME" \
             --draft \
-            --title "Foxfire Server $VERSION" \
+            --title "Server v$VERSION" \
             --notes-file body.md \
             artifacts/*
 

@@ -14,14 +14,23 @@ name: Release
 on:
   push:
     tags:
+      # Named for the app, because two things release out of this repo and a
+      # page listing v0.12.0 beside server-v0.1.0 makes the reader work out
+      # which is which from the number.
+      - 'desktop-v*'
+
+      # The old spelling, still accepted so that pushing one fails loudly.
+      # Left out entirely it would match no workflow at all, and a tag that
+      # lands on the remote and does nothing is the worst of the outcomes:
+      # there is no run to look at and nothing to say why.
       - 'v*'
   # Builds the installer and hands it back as a workflow artifact, touching no
   # releases at all. This is here so the build half can be exercised — after a
   # dependency bump, or a change to electron-builder.yml — without cutting a
   # release to find out whether it still works. Every step that can write to a
   # release is gated on `github.event_name == 'push'`, and the only push this
-  # workflow accepts is a v* tag, so a dispatched run cannot publish anything
-  # even when it is dispatched from a tag.
+  # workflow accepts is a desktop tag, so a dispatched run cannot publish
+  # anything even when it is dispatched from a tag.
   workflow_dispatch:
 
 permissions:
@@ -68,7 +77,18 @@ jobs:
       - name: Check the tag matches package.json
         if: github.event_name == 'push'
         run: |
-          tagged="${GITHUB_REF_NAME#v}"
+          # The bare v0.12.0 form, from before tags named their app. Caught
+          # on its own so the error says what to do, rather than reporting a
+          # version mismatch against a tag that looks perfectly correct.
+          case "$GITHUB_REF_NAME" in
+            desktop-v*) ;;
+            *)
+              echo "::error::$GITHUB_REF_NAME uses the old tag scheme. Desktop releases are tagged desktop-v$VERSION now - delete this tag and run: npm run tag-release -- --push"
+              exit 1
+              ;;
+          esac
+
+          tagged="${GITHUB_REF_NAME#desktop-v}"
           if [ "$tagged" != "$VERSION" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $VERSION"
             exit 1
@@ -231,7 +251,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --draft \
-            --title "Foxfire $VERSION" \
+            --title "Desktop v$VERSION" \
             --notes-file notes.md \
             "release/Foxfire-$VERSION-setup.exe" \
             "release/Foxfire-$VERSION-setup.exe.blockmap" \

@@ -7,9 +7,18 @@ in `apps/server`. The repo root holds only the npm workspace (`package.json` + t
 `package-lock.json` for the whole tree), this file, the README, and `.github/`.
 
 Each app carries its own version and its own `CHANGELOG.md`, and each releases on its own tag
-prefix: `v*` for the desktop, `server-v*` for the server. Nothing about the two version numbers
-is coupled — they move independently, and the compatibility contract between them is a separate
+prefix that names it: `desktop-v*` and `server-v*`. Nothing about the two version numbers is
+coupled — they move independently, and the compatibility contract between them is a separate
 `apiVersion` integer that the server publishes and gates on.
+
+A tag cannot hold a space, so the prefix carries the name and the Release title spells it out:
+`desktop-v0.12.0` is published as **Desktop v0.12.0**, `server-v0.1.0` as **Server v0.1.0**.
+
+The desktop's tags used to be a bare `v0.12.0`, from when it was the only thing that released out
+of this repo. The nineteen cut that way keep their names — renaming a tag moves a Release somebody
+may already have a link to, and the compare links at the bottom of the changelog point at the old
+ones. So the scheme changes forwards, and the first desktop entry after it has a compare link
+spanning both spellings (`compare/v0.12.0...desktop-v0.13.0`). Only that one.
 
 ## Patch notes
 
@@ -63,9 +72,9 @@ npm run tag-release -- --target server --push    # the server
 
 Both run from the repo root. The desktop is the default because that is what a
 Foxfire release meant for every release before there was a server, and the common case
-should not be the one you have to spell out. The desktop tags `v0.12.0` and the server
-tags `server-v0.1.0`; the two patterns never collide, so each triggers only its own
-workflow.
+should not be the one you have to spell out. The desktop tags `desktop-v0.12.0` and the
+server tags `server-v0.1.0`; the two patterns never collide, so each triggers only its
+own workflow.
 
 That tags the current commit as whatever version the app being released already names —
 `apps/desktop/package.json` for the desktop, `<VersionPrefix>` in
@@ -74,7 +83,10 @@ than typed, since typing it means typing it twice and the workflow rejects a tag
 the file. Leave off `--push` to create the tag and stop, and it prints the command to push it.
 
 It refuses rather than tagging when the tree is dirty, when the tag already exists here or on origin,
-when that app's `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`. That last
+when that app's `CHANGELOG.md` has no section for that version, or when HEAD is not on `origin/main`.
+It also refuses a desktop version that was already released under the old bare-`v` name, because
+every other guard would pass — `desktop-v0.12.0` does not exist — and the result would be one
+version wearing two tags and two Releases. That last
 one is easy to get wrong: a squash merge rewrites the branch commit, so the commit a PR was developed
 on never lands on main, and tagging it gives you a Release pointing at a commit reachable from
 nothing.
