@@ -37,6 +37,16 @@ function RankChip({ entry }: { entry: LeagueEntry | undefined }): JSX.Element | 
  * than degrade the row, the rail folds into this strip and gives the full
  * width back to the match list.
  */
+/**
+ * Why syncing somebody else's account is not offered.
+ *
+ * A sync spends the community's shared Riot budget on history that is not
+ * yours to fetch, and the server refuses it with not_your_account — so the
+ * button could only ever produce a 403 with nothing to act on. Undefined is
+ * local-only, where every account in the file is yours.
+ */
+const NOT_YOURS = 'Only whoever claimed this account can sync it'
+
 export function ProfileStrip({
   account,
   leagueEntries,
@@ -48,6 +58,7 @@ export function ProfileStrip({
   onRefresh: () => void
   refreshing: boolean
 }): JSX.Element {
+  const notYours = account.isMine === false
   const assets = useAssets()
 
   return (
@@ -84,7 +95,8 @@ export function ProfileStrip({
 
         <button
           onClick={onRefresh}
-          disabled={refreshing}
+          disabled={refreshing || notYours}
+          title={notYours ? NOT_YOURS : undefined}
           className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
           <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />

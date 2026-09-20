@@ -19,6 +19,16 @@ import * as Icon from './icons'
  * block above the match list, so the two never show the same champion with two
  * different numbers.
  */
+/**
+ * Why syncing somebody else's account is not offered.
+ *
+ * A sync spends the community's shared Riot budget on history that is not
+ * yours to fetch, and the server refuses it with not_your_account — so the
+ * button could only ever produce a 403 with nothing to act on. Undefined is
+ * local-only, where every account in the file is yours.
+ */
+const NOT_YOURS = 'Only whoever claimed this account can sync it'
+
 export function ProfileHeader({
   account,
   leagueEntries,
@@ -30,6 +40,7 @@ export function ProfileHeader({
   onRefresh: () => void
   refreshing: boolean
 }): JSX.Element {
+  const notYours = account.isMine === false
   const assets = useAssets()
 
   const solo =
@@ -71,7 +82,8 @@ export function ProfileHeader({
 
           <button
             onClick={onRefresh}
-            disabled={refreshing}
+            disabled={refreshing || notYours}
+            title={notYours ? NOT_YOURS : undefined}
             className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
           >
             <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
