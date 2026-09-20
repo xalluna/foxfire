@@ -8,8 +8,16 @@
 // Two things release out of this repo, on their own tags and their own
 // schedules, so the script takes which one:
 //
-//   npm run tag-release                    the desktop app  ->  desktop-v0.12.0
-//   npm run tag-release -- --target server the server       ->  server-v0.1.0
+//   node scripts/tag-release.mjs                the desktop  ->  desktop-v0.12.0
+//   node scripts/tag-release.mjs server         the server   ->  server-v0.1.0
+//
+// Invoked directly rather than through npm, and the target named as a bare
+// word, because both npm and PowerShell take an interest in anything that
+// starts with a dash. PowerShell eats the `--` separator as its own
+// end-of-parameters token, npm then claims `--target` and `--push` as its own
+// config, and what reaches the script is neither what was typed nor an error.
+// `npm run tag-release` still works for the desktop, which needs no arguments
+// at all.
 //
 // Both tags name the app they belong to. The desktop's used to be a bare
 // v0.12.0, from when it was the only thing that released out of this repo — and
@@ -132,15 +140,58 @@ function fail(message, hint) {
   process.exit(1)
 }
 
-const push = process.argv.includes('--push')
+const args = process.argv.slice(2)
 
-const targetFlag = process.argv.indexOf('--target')
-const targetName = targetFlag === -1 ? 'desktop' : process.argv[targetFlag + 1]
+// Anything flag-shaped that is not ours. Worth refusing rather than ignoring:
+// a typo in --push is a release that was meant to be published and quietly was
+// not, and the only sign would be the tag sitting on the machine.
+const KNOWN_FLAGS = new Set(['--push', '--target'])
+const stray = args.find((arg) => arg.startsWith('-') && !KNOWN_FLAGS.has(arg))
+
+if (stray) {
+  fail(
+    `Unknown option "${stray}".`,
+    `Use: node scripts/tag-release.mjs [${Object.keys(TARGETS).join('|')}] [--push]`
+  )
+}
+
+const push = args.includes('--push')
+
+// The target can be named either way, and the positional form is not a
+// convenience — it is the only one that survives every shell.
+//
+// PowerShell treats `--` as its own end-of-parameters token and eats it, so
+// `npm run tag-release -- --target server` reaches npm as
+// `npm run tag-release --target server`; npm then reads --target as one of its
+// own config flags, warns that it does not know it, and passes only `server`
+// through. The script used to see no --target, fall back to the default, and
+// go and tag the desktop — which is a silent wrong answer to a question that
+// was asked correctly.
+const flagIndex = args.indexOf('--target')
+const valueIndex = flagIndex === -1 ? -1 : flagIndex + 1
+const named = flagIndex === -1 ? null : args[valueIndex]
+
+if (flagIndex !== -1 && (named === undefined || named.startsWith('-'))) {
+  fail('--target was given with nothing after it.', `Name one of: ${Object.keys(TARGETS).join(', ')}.`)
+}
+
+const loose = args.filter((arg, i) => !arg.startsWith('-') && i !== valueIndex)
+
+// Two names is a question with two answers, and guessing which was meant is
+// exactly the behaviour being removed.
+if (named !== null && loose.length > 0) {
+  fail(`Two targets named: "${named}" and "${loose[0]}".`, 'Pass one.')
+}
+if (loose.length > 1) {
+  fail(`More than one target named: ${loose.join(', ')}.`, 'Pass one.')
+}
+
+const targetName = named ?? loose[0] ?? 'desktop'
 const target = TARGETS[targetName]
 
 if (!target) {
   fail(
-    `Unknown release target "${targetName ?? ''}".`,
+    `Unknown release target "${targetName}".`,
     `Use one of: ${Object.keys(TARGETS).join(', ')}.`
   )
 }

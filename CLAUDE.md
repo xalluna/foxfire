@@ -68,13 +68,22 @@ Pre-1.0, so nothing bumps major yet.
 The PR already carries the version bump and the changelog section, so releasing is just:
 
 ```bash
-npm run tag-release -- --push                    # the desktop app
-npm run tag-release -- --target server --push    # the server
+node scripts/tag-release.mjs --push           # the desktop app
+node scripts/tag-release.mjs server --push    # the server
 ```
 
-Both run from the repo root. The desktop is the default because that is what a
-Foxfire release meant for every release before there was a server, and the common case
-should not be the one you have to spell out. The desktop tags `desktop-v0.12.0` and the
+Both run from the repo root, and both go straight to node rather than through
+`npm run`. That is not fussiness. PowerShell eats `--` as its own end-of-parameters
+token, so `npm run tag-release -- --target server` reaches npm as
+`npm run tag-release --target server`; npm then claims `--target` and `--push` as its
+own config, warns about them, and passes neither on. What the script used to receive was
+a bare `server` and no flags — so it fell back to the desktop and tagged the wrong app
+without saying so. It refuses to guess now, and the target is a bare word because that is
+the one form nothing along the way takes an interest in.
+
+The desktop is the default because that is what a Foxfire release meant for every
+release before there was a server, and the common case should not be the one you have to
+spell out. The desktop tags `desktop-v0.12.0` and the
 server tags `server-v0.1.0`; the two patterns never collide, so each triggers only its
 own workflow.
 
