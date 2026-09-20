@@ -6,6 +6,46 @@ directories:
 files:
   - out/**/*
   - package.json
+
+# Skip the "installing production dependencies" step, which here does nothing
+# useful and one very harmful thing.
+#
+# Nothing useful, because electron-vite bundles everything the app runs into
+# out/, `files` above ships only that and package.json, and no node_modules
+# reach the installer. There are no production dependencies to collect and no
+# native modules to rebuild — every runtime dependency is plain JavaScript and
+# the database is node:sqlite, which is part of Electron already.
+#
+# The harm is that the step runs a production install inside apps/desktop. npm
+# sees a workspace member, reifies the whole workspace, and prunes every
+# devDependency from the shared root node_modules — including the app-builder
+# binary electron-builder is about to spawn, and electron-builder itself. The
+# build deletes its own tooling and then fails with ENOENT on it. That is what
+# broke the 0.12.0 release, and it only appeared when the desktop moved into
+# a workspace; before that there was no other package.json for npm to reify.
+npmRebuild: false
+# Where the updater metadata says updates come from.
+#
+# electron-builder writes latest.yml — which electron-updater reads to decide
+# whether a newer build exists — only when it can work out which repository
+# this is. It looks in the project directory for a package.json `repository`
+# field or a .git to read a remote from, and the project directory is
+# apps/desktop, which has neither: the remote lives at the repo root, one level
+# up, and this package.json has never carried a repository field.
+#
+# At v0.11.0 it did not need one. The app was the repo root then, so .git was
+# right there and the inference worked. After the monorepo move it silently
+# stopped, the build produced no latest.yml, and the workflow's own check is
+# what caught it.
+#
+# Stated outright rather than restoring the inference, because a release that
+# quietly stops shipping update metadata is the kind of thing nobody notices
+# until auto-update is turned on and does not work.
+publish:
+  provider: github
+  owner: xalluna
+  repo: foxfire
+
 win:
   target: nsis
   artifactName: ${productName}-${version}-setup.${ext}
