@@ -13,3 +13,13 @@ Thumbs.db
 
 # .claude/launch.json is tracked; the worktree checkouts beneath it are not.
 .claude/worktrees
+
+# .NET build output (apps/server)
+bin/
+obj/
+*.user
+
+# Rider output
+**/**/.idea/
+# Local compose tweaks — publishing the database to the host, and so on.
+docker-compose.override.yml

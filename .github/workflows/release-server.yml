@@ -1,0 +1,242 @@
+name: Release server
+
+# Publishes a GitHub Release for the Foxfire Server, with that version's
+# apps/server/CHANGELOG.md section as the body, a container image on GHCR, and
+# self-contained builds for people who would rather not run Docker.
+#
+# A sibling of release.yml rather than a branch inside it. The two release on
+# their own tags and their own schedules — nothing about the desktop's version
+# is coupled to the server's — and a workflow that had to ask which half it was
+# building would be harder to read than two that each know.
+#
+# It keeps the same guarantee the desktop workflow was rewritten to give: the
+# release is created as a draft, and only becomes visible once its assets have
+# been read back off the API at the size that was actually built. A release
+# anybody can see has its downloads on it.
+on:
+  push:
+    tags:
+      - 'server-v*'
+  # Builds everything and attaches nothing, so the build half can be exercised
+  # after a dependency bump without cutting a release to find out whether it
+  # still works. Every step that can write to a release or a registry is gated
+  # on the event being a push, and the only push this accepts is a server-v tag.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    # Linux, unlike the desktop's Windows-only job. Nothing here needs Windows —
+    # the win-x64 build is cross-compiled, which .NET does natively, and the
+    # container image has to be built on Linux anyway.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      # Directory.Build.props is the version of record: every assembly in the
+      # solution is stamped from it, and tag-release.mjs reads the same file.
+      # Reading it here rather than deriving it from the tag is what gives a
+      # dispatched run a version too, since that run has no tag.
+      - name: Read the version from Directory.Build.props
+        run: |
+          VERSION="$(grep -oP '(?<=<VersionPrefix>)[^<]+' apps/server/Directory.Build.props)"
+          if [ -z "$VERSION" ]; then
+            echo "::error::apps/server/Directory.Build.props has no VersionPrefix"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Check the tag matches
+        if: github.event_name == 'push'
+        run: |
+          tagged="${GITHUB_REF_NAME#server-v}"
+          if [ "$tagged" != "$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match VersionPrefix $VERSION"
+            exit 1
+          fi
+
+      # Matched by exact string so the version's dots are never read as
+      # wildcards. A section ends at the next heading, or at the link
+      # definitions that close the file.
+      - name: Extract the changelog section
+        if: github.event_name == 'push'
+        run: |
+          awk -v v="$VERSION" '
+            BEGIN { heading = "## [" v "]" }
+            index($0, heading) == 1 { found = 1; next }
+            found && index($0, "## [") == 1 { exit }
+            found && /^\[[0-9]+\.[0-9]+\.[0-9]+\]:/ { exit }
+            found { print }
+          ' apps/server/CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::apps/server/CHANGELOG.md has no section for $VERSION"
+            exit 1
+          fi
+          cat notes.md
+
+      # The cheapest place to find out the run cannot finish. A published
+      # release means the tag was pushed twice and the first run did the job;
+      # overwriting it would swap a download people may already have for an
+      # identical rebuild. A draft is an earlier run that died between creating
+      # the release and publishing it, and is safe to clear.
+      - name: Refuse to overwrite an existing release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$state" = "false" ]; then
+            echo "::error::$GITHUB_REF_NAME is already published. Delete that release first if you meant to rebuild it."
+            exit 1
+          fi
+          if [ "$state" = "true" ]; then
+            echo "Clearing the draft release an earlier run left behind."
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # From the same global.json a developer builds against, so CI cannot
+          # drift onto a different SDK than the one the code was written on.
+          global-json-file: apps/server/global.json
+
+      - name: Restore
+        working-directory: apps/server
+        run: dotnet restore
+
+      - name: Test
+        working-directory: apps/server
+        # Testcontainers needs a Docker daemon, which ubuntu-latest has. These
+        # are the tests that run the server against a real SQL Server, so a
+        # release cannot go out on a schema that does not migrate.
+        run: dotnet test --no-restore --verbosity minimal
+
+      # Self-contained and single-file, so a host who would rather not run
+      # Docker needs no .NET installed at all. Deliberately not trimmed: EF Core
+      # and Identity resolve a great deal by reflection, and a trimmed build
+      # fails at runtime in ways that do not show up until somebody registers.
+      - name: Build the standalone servers
+        run: |
+          for rid in linux-x64 win-x64; do
+            dotnet publish apps/server/src/Foxfire.Api/Foxfire.Api.csproj \
+              --configuration Release \
+              --runtime "$rid" \
+              --self-contained true \
+              -p:PublishSingleFile=true \
+              -p:Version="$VERSION" \
+              --output "publish/$rid"
+          done
+
+      - name: Package them
+        run: |
+          mkdir -p artifacts
+          cp apps/server/docker/.env.example publish/linux-x64/
+          cp apps/server/docker/.env.example publish/win-x64/
+          tar -czf "artifacts/foxfire-server-$VERSION-linux-x64.tar.gz" -C publish/linux-x64 .
+          (cd publish/win-x64 && zip -qr "../../artifacts/foxfire-server-$VERSION-win-x64.zip" .)
+          ls -l artifacts
+
+      # The same shape of check the desktop workflow makes about its installer:
+      # name the files that should exist and assert a floor, so a change to how
+      # they are built fails against a listing rather than being discovered as an
+      # empty release page. A self-contained ASP.NET build is tens of megabytes;
+      # anything under twenty is not one.
+      - name: Check the archives are really there
+        run: |
+          linux="artifacts/foxfire-server-$VERSION-linux-x64.tar.gz"
+          windows="artifacts/foxfire-server-$VERSION-win-x64.zip"
+          for archive in "$linux" "$windows"; do
+            if [ ! -f "$archive" ]; then
+              echo "::error::Expected $archive, which the build did not produce"
+              exit 1
+            fi
+            size="$(stat -c %s "$archive")"
+            if [ "$size" -lt 20000000 ]; then
+              echo "::error::$archive is only $size bytes, which is too small to be a build of this server"
+              exit 1
+            fi
+          done
+          echo "LINUX_SIZE=$(stat -c %s "$linux")" >> "$GITHUB_ENV"
+
+      - name: Build the container image
+        run: |
+          docker build \
+            --file apps/server/docker/Dockerfile \
+            --tag "foxfire-server:$VERSION" \
+            .
+
+      # Dispatched runs stop here: the image is built and thrown away, which is
+      # the point — proving it still builds without publishing anything.
+      - name: Push the container image
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/foxfire-server"
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker tag "foxfire-server:$VERSION" "$registry:$VERSION"
+          docker tag "foxfire-server:$VERSION" "$registry:latest"
+          docker push "$registry:$VERSION"
+          docker push "$registry:latest"
+          echo "IMAGE=$registry:$VERSION" >> "$GITHUB_ENV"
+
+      - name: Hand the archives back
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: foxfire-server
+          path: artifacts/*
+          # Already compressed; zipping again buys nothing and costs minutes.
+          compression-level: 0
+          retention-days: 7
+
+      # Created after everything is built, and created as a draft: off the
+      # releases page, not served as the repository's latest, visible only to
+      # people who can write here. Publishing is the separate step below.
+      - name: Create the release as a draft
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            cat notes.md
+            echo
+            echo "---"
+            echo
+            echo "**Container image:** \`$IMAGE\`"
+            echo
+            echo "Or take one of the archives below, which need no .NET installed. Either way, copy"
+            echo "\`.env.example\` to \`.env\` and fill it in — the server refuses to start until you have,"
+            echo "and tells you everything that is missing at once."
+          } > body.md
+
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "Server v$VERSION" \
+            --notes-file body.md \
+            artifacts/*
+
+      # One API read against the size that was actually built is all that stands
+      # between a truncated upload and a published release.
+      - name: Publish the release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="foxfire-server-$VERSION-linux-x64.tar.gz"
+          uploaded="$(gh release view "$GITHUB_REF_NAME" --json assets \
+            --jq ".assets[] | select(.name == \"$name\") | .size")"
+          if [ "$uploaded" != "$LINUX_SIZE" ]; then
+            echo "::error::$name on the draft is ${uploaded:-absent}, not the $LINUX_SIZE bytes that were built"
+            exit 1
+          fi
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+          echo "Published $GITHUB_REF_NAME."

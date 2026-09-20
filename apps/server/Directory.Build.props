@@ -1,0 +1,35 @@
+<Project>
+
+  <!--
+    Shared settings for every project in the server solution.
+
+    VersionPrefix is the single source of truth for the server's version, the
+    way apps/desktop/package.json is for the desktop's. The release workflow
+    reads it and refuses a server-v* tag that disagrees, and apps/server's own
+    CHANGELOG.md must carry a section for it — the same doctrine the desktop
+    follows, applied to the half of the repo that releases on its own tags.
+
+    It starts at 0.1.0 rather than 1.0.0 because the server cannot yet do the
+    thing it exists for. Pre-1.0 is honest and, as on the desktop, nothing
+    bumps major.
+  -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      The desktop half of this repo runs a clean eslint and a strict tsc, and a
+      warning nobody has to act on is a warning everybody learns to scroll past.
+      Same bar here.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

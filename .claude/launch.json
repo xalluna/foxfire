@@ -4,7 +4,12 @@
     {
       "name": "renderer-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:web"],
+      "runtimeArgs": [
+        "run",
+        "dev:web",
+        "--workspace",
+        "apps/desktop"
+      ],
       "port": 5199
     }
   ]

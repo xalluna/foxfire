@@ -1,6 +1,8 @@
 # Foxfire
 
-A personal, ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts. Foxfire records your ranked games, keeps the LP ledger for every season you have played, and never asks anyone else about them.
+An ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts. Foxfire records your ranked games and keeps the LP ledger for every season you have played.
+
+It runs entirely on your own machine by default. It can also read from a **Foxfire Server** that you or your community hosts, so match history, rank and LP are shared rather than kept per PC. There is no central Foxfire service — anyone can run one, and recordings, Riot replays and the League client connection always stay on your machine either way. See [apps/server](apps/server) to host one.
 
 Built with Electron, React, and TypeScript. All data comes from **Riot's official Developer API** (op.gg's Terms of Use prohibit scraping their site, and everything here is available from Riot directly).
 
@@ -9,11 +11,15 @@ Built with Electron, React, and TypeScript. All data comes from **Riot's officia
 - **Multi-account tracking** — add your main and alt accounts, switch between them in the sidebar
 - **Profile & rank** — solo/duo and flex tier, LP, win/loss, win rate
 - **Match history** — expandable rows showing all 10 participants with items, runes, summoner spells, CS, gold, and damage
-- **Live game** — manual check for the current match with progressively-loading ranks for all 10 players
+- **Live game** — the live scoreboard of the match running on this PC: levels, items, runes, KDA, CS and vision, updated as it plays. Read from the game itself over the Live Client Data API, so it costs no Riot call and works without an API key
 - **Champions** — Riot's mastery points/levels alongside win rates computed locally from your synced games
 - **Ad-hoc search** — look up any summoner without saving them
+- **Optional server** — join one your community hosts to share match history, rank and LP; local-only stays a first-class mode
 
 ## Setup
+
+This is a monorepo — `npm install` from the repo root installs the whole workspace and hoists into
+the root `node_modules`.
 
 ```bash
 npm install
@@ -46,6 +52,16 @@ Note that Riot's match-v5 endpoint only exposes a rolling window of history, so 
 
 ## Architecture
 
+The desktop app is one workspace in a monorepo:
+
+```
+apps/
+  desktop/      this app
+  server/       the Foxfire Server (.NET) — not yet present
+```
+
+Inside `apps/desktop`:
+
 ```
 src/
   main/         Electron main process — the only place that touches Riot's API or SQLite
@@ -59,21 +75,24 @@ src/
   shared/       types shared across processes
 ```
 
-The renderer has `contextIsolation: true` and `nodeIntegration: false`; it can never reach the network or disk directly. Every Riot call passes through a single app-wide rate limiter, so backfill, live-game checks, and search share one fair queue.
+The renderer has `contextIsolation: true` and `nodeIntegration: false`; it can never reach the network or disk directly. Every Riot call passes through a single app-wide rate limiter, so backfill and search share one fair queue.
 
 Storage uses Node 24's built-in `node:sqlite` (bundled with Electron 43) rather than `better-sqlite3` — same synchronous API with no native compilation step, which keeps builds and packaging simple.
 
 ## Scripts
 
+Run these from the repo root, where they delegate into the `foxfire` workspace, or from
+`apps/desktop` directly.
+
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Run in development with hot reload |
 | `npm run build` | Type-check and bundle |
-| `npm run build:win` | Produce a Windows NSIS installer in `release/` |
+| `npm run build:win` | Produce a Windows NSIS installer in `apps/desktop/release/` |
 | `npm test` | Run unit tests |
 | `npm run typecheck` | Type-check both processes |
 | `npm run lint` | Lint |
-| `npm run make-mark` | Regenerate the logo geometry in `src/shared/logoMark.json` |
+| `npm run make-mark` | Regenerate the logo geometry in `apps/desktop/src/shared/logoMark.json` |
 | `npm run make-icon` | Redraw the app icon, tray icon and favicon from that geometry |
 
 ## Disclaimer
