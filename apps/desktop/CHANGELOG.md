@@ -929,7 +929,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
-[0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...v0.12.0
+[0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0
 [0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/xalluna/foxfire/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/xalluna/foxfire/compare/v0.10.1...v0.10.2

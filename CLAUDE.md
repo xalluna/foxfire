@@ -17,8 +17,10 @@ A tag cannot hold a space, so the prefix carries the name and the Release title 
 The desktop's tags used to be a bare `v0.12.0`, from when it was the only thing that released out
 of this repo. The nineteen cut that way keep their names — renaming a tag moves a Release somebody
 may already have a link to, and the compare links at the bottom of the changelog point at the old
-ones. So the scheme changes forwards, and the first desktop entry after it has a compare link
-spanning both spellings (`compare/v0.12.0...desktop-v0.13.0`). Only that one.
+ones. So the scheme changes forwards. 0.12.0 is not out yet, which makes it the first tag under
+the new name and gives it the one compare link that spans both spellings —
+`compare/v0.11.0...desktop-v0.12.0`, already written that way. Every entry after it is
+`desktop-v` on both sides.
 
 ## Patch notes
 
