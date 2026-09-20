@@ -6,6 +6,24 @@ directories:
 files:
   - out/**/*
   - package.json
+
+# Skip the "installing production dependencies" step, which here does nothing
+# useful and one very harmful thing.
+#
+# Nothing useful, because electron-vite bundles everything the app runs into
+# out/, `files` above ships only that and package.json, and no node_modules
+# reach the installer. There are no production dependencies to collect and no
+# native modules to rebuild — every runtime dependency is plain JavaScript and
+# the database is node:sqlite, which is part of Electron already.
+#
+# The harm is that the step runs a production install inside apps/desktop. npm
+# sees a workspace member, reifies the whole workspace, and prunes every
+# devDependency from the shared root node_modules — including the app-builder
+# binary electron-builder is about to spawn, and electron-builder itself. The
+# build deletes its own tooling and then fails with ENOENT on it. That is what
+# broke the 0.12.0 release, and it only appeared when the desktop moved into
+# a workspace; before that there was no other package.json for npm to reify.
+npmRebuild: false
 win:
   target: nsis
   artifactName: ${productName}-${version}-setup.${ext}
