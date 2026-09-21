@@ -1,4 +1,4 @@
-import { QUEUE_FILTER_OPTIONS } from '@shared/queues'
+import { QUEUE_FILTER_OPTIONS } from '@foxfire/core'
 
 /**
  * The queue selector shared by match history and champion stats.

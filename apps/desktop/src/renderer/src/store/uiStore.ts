@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { SyncProgressEvent } from '@shared/types'
-import { DEFAULT_QUEUE_FILTER } from '@shared/queues'
+import { DEFAULT_QUEUE_FILTER } from '@foxfire/core'
 
 export type View =
   | 'dashboard'

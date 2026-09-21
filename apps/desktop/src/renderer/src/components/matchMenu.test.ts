@@ -38,9 +38,7 @@ const MATCH: MatchSummary = {
   teamDamage: 80_000,
   isRemake: false,
   rank: null,
-  hasManualRank: false,
-  recordingId: null,
-  replayId: null
+  hasManualRank: false
 }
 
 const NOTHING = {
@@ -70,7 +68,7 @@ describe('downloadBlockedReason', () => {
     expect(
       downloadBlockedReason({
         ...MATCH,
-        replayId: 7,
+        local: { recordingId: null, replayId: 7 },
         sharedReplay: { patch: '15.16', fileBytes: 31_000_000 }
       })
     ).toBe('Already downloaded')

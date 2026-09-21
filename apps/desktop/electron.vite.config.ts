@@ -37,6 +37,17 @@ function dependencyRoot(from: string): string {
   return dir
 }
 
+/**
+ * Why @foxfire/core ends up inside the main and preload bundles.
+ *
+ * externalizeDepsPlugin leaves every package in `dependencies` to be required
+ * at runtime from app.asar/node_modules, and bundles everything else. The
+ * workspace packages are TypeScript source with no build of their own, so a
+ * runtime require of one would load a .ts file and fail — which is why they
+ * are listed under devDependencies in package.json, and bundled. What they
+ * depend on at runtime (@microsoft/signalr) stays in `dependencies` here, so
+ * it goes on being external and packaged exactly as before.
+ */
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],

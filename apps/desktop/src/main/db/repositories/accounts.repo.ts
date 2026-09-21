@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Account, LeagueEntry, QueueType } from '@shared/types'
-import { TRACKED_QUEUES } from '@shared/queues'
+import { TRACKED_QUEUES } from '@foxfire/core'
 
 interface AccountRow {
   id: number

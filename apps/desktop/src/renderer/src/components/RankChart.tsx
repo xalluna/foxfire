@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { format } from 'date-fns'
 import type { RankSnapshot } from '@shared/types'
-import { tierBandBoundaries } from '@shared/ladder'
+import { tierBandBoundaries } from '@foxfire/core'
 import { roundedPath } from '../lib/curve'
 import { tierColor, tierLabel } from '../lib/rank'
 

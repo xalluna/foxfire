@@ -1,4 +1,4 @@
-import { isPosition, type Position } from '@shared/positions'
+import { isPosition, type Position } from '@foxfire/core'
 import top from '../assets/positions/top.svg'
 import jungle from '../assets/positions/jungle.svg'
 import middle from '../assets/positions/middle.svg'
@@ -22,7 +22,7 @@ const POSITIONS: Record<Position, { icon: string; label: string }> = {
   UTILITY: { icon: utility, label: 'Support' }
 }
 
-export { isPosition, POSITION_ORDER, type Position } from '@shared/positions'
+export { isPosition, POSITION_ORDER, type Position } from '@foxfire/core'
 
 export function positionIcon(position: string | null): string | null {
   return isPosition(position) ? POSITIONS[position].icon : null

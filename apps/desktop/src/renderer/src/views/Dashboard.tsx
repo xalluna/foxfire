@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
 import type { Account, MatchSummary, QueueType } from '@shared/types'
-import { queueFilterLabel, queueTypeForQueueId } from '@shared/queues'
+import { queueFilterLabel, queueTypeForQueueId } from '@foxfire/core'
 import { ContextMenu, type ContextMenuState } from '../components/ContextMenu'
 import { matchContextItems } from '../components/matchMenu'
 import { ProfileHeader } from '../components/ProfileHeader'
@@ -114,7 +114,8 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
         onCopyId: () => void navigator.clipboard.writeText(match.matchId),
         onOpenDetails: () => setExpandedMatchId(match.matchId),
         onWatchRecording: () => {
-          if (match.recordingId !== null) void window.api.recordings.open(match.recordingId)
+          const recordingId = match.local?.recordingId ?? null
+          if (recordingId !== null) void window.api.recordings.open(recordingId)
         },
         onDownloadReplay: () => {
           // The list refreshes off the replays:changed broadcast the download
@@ -128,8 +129,9 @@ export function Dashboard({ account }: { account: Account }): JSX.Element {
           // Unlike a recording, opening this can fail for a reason the user can
           // act on — no installed client still plays that patch. The menu is
           // gone by then, so the answer is surfaced here.
-          if (match.replayId !== null) {
-            void window.api.replays.open(match.replayId).then((result) => {
+          const replayId = match.local?.replayId ?? null
+          if (replayId !== null) {
+            void window.api.replays.open(replayId).then((result) => {
               if (!result.ok && result.reason !== undefined) setReplayError(result.reason)
             })
           }

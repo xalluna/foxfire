@@ -10,8 +10,7 @@ import {
   type SnapshotInput
 } from '../db/repositories/rankHistory.repo'
 import { replayAttribution } from './rankAttribution'
-import { ALL_TIERS, APEX_TIERS, DIVISIONS } from '@shared/ladder'
-import { queueIdForQueueType } from '@shared/queues'
+import { ALL_TIERS, APEX_TIERS, DIVISIONS, queueIdForQueueType } from '@foxfire/core'
 import type { EditableMatch, ManualRank, ManualRankEdit, QueueType } from '@shared/types'
 
 /**

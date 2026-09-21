@@ -334,14 +334,14 @@ describe('recordings.repo', () => {
     bindRecording(db, id, 'NA1_1')
 
     const [summary] = getMatchSummaries(db, ME, 10, 0)
-    expect(summary?.recordingId).toBe(id)
+    expect(summary?.local?.recordingId).toBe(id)
   })
 
   it('leaves recordingId null on a match nothing recorded', () => {
     insertMatch(db, match('NA1_1', T0))
 
     const [summary] = getMatchSummaries(db, ME, 10, 0)
-    expect(summary?.recordingId).toBeNull()
+    expect(summary?.local?.recordingId).toBeNull()
   })
 
   it('totals disk use and counts what never found a match', () => {

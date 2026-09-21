@@ -1,0 +1,39 @@
+/**
+ * Who a client says it is, which the server's version gate judges.
+ *
+ * Two kinds, judged two ways. A desktop sends its own version, and the server
+ * holds an exact allow list of the builds it serves — there is no auto-update,
+ * so which build somebody is running is the thing that decides whether the two
+ * can talk. The web client ships inside the server that serves it, so its
+ * version is never in doubt; what can go stale is a tab left open across an
+ * upgrade, and that is caught by the API version the page was built against.
+ */
+export type ClientIdentity =
+  | { kind: 'desktop'; version: string }
+  | { kind: 'web'; apiVersion: number }
+
+/** What every request says the caller is. */
+export const CLIENT_HEADER = 'X-Foxfire-Client'
+
+/** Sent beside `X-Foxfire-Client: web`: the API version the page was built against. */
+export const API_VERSION_HEADER = 'X-Foxfire-Api-Version'
+
+/** The headers that name a client, sent on every request including the unauthenticated ones. */
+export function identityHeaders(identity: ClientIdentity): Record<string, string> {
+  return identity.kind === 'desktop'
+    ? { [CLIENT_HEADER]: identity.version }
+    : { [CLIENT_HEADER]: 'web', [API_VERSION_HEADER]: String(identity.apiVersion) }
+}
+
+/**
+ * The same, for the one connection that cannot carry headers.
+ *
+ * A browser cannot put a header on a WebSocket or an EventSource, so the web
+ * client names itself in the hub's query string instead. A desktop's socket is
+ * opened by Node, which can, so it has nothing to add here.
+ */
+export function identityQuery(identity: ClientIdentity): Record<string, string> {
+  return identity.kind === 'desktop'
+    ? {}
+    : { client: 'web', apiVersion: String(identity.apiVersion) }
+}

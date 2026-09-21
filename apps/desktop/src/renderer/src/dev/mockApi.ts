@@ -56,8 +56,7 @@ import type {
   TelemetryState,
   TelemetrySummary
 } from '@shared/telemetry'
-import { rankMovement } from '@shared/ladder'
-import { rangeBounds, resetsBetween, seasonsSpanning } from '@shared/seasons'
+import { rankMovement, rangeBounds, resetsBetween, seasonsSpanning } from '@foxfire/core'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {

@@ -210,18 +210,14 @@ export function MatchListRow({
         and the menu is where the two are told apart.
       */}
       <span className="ml-2 w-3.5 shrink-0" title={watchableTitle(match)}>
-        {(match.recordingId !== null || match.replayId !== null || match.sharedReplay) && (
+        {(holdsLocally(match) || match.sharedReplay) && (
           <Icon.Film
             width={14}
             height={14}
             // Dimmer for a replay that is on the server rather than on this
             // disk. It is still a game with something to watch, which is what
             // the marker promises — one click further away than the others.
-            className={
-              match.recordingId === null && match.replayId === null
-                ? 'text-text-mute/50'
-                : 'text-accent/60'
-            }
+            className={holdsLocally(match) ? 'text-accent/60' : 'text-text-mute/50'}
           />
         )}
       </span>
@@ -240,10 +236,20 @@ export function MatchListRow({
   )
 }
 
+/**
+ * Whether this machine has something of its own to watch for the game.
+ *
+ * `local` is absent wherever there is no disk to ask — a server's search
+ * result, a browser — and absent means no, not "not yet known".
+ */
+function holdsLocally(match: MatchSummary): boolean {
+  return (match.local?.recordingId ?? null) !== null || (match.local?.replayId ?? null) !== null
+}
+
 /** What the row marker promises, which depends on which artefacts exist. */
 function watchableTitle(match: MatchSummary): string | undefined {
-  const hasRecording = match.recordingId !== null
-  const hasReplay = match.replayId !== null
+  const hasRecording = (match.local?.recordingId ?? null) !== null
+  const hasReplay = (match.local?.replayId ?? null) !== null
 
   if (hasRecording && hasReplay) return 'Recording and Riot replay — right-click to watch'
   if (hasRecording) return 'Recording available — right-click to watch'

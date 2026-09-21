@@ -1,5 +1,4 @@
-import { ladderPosition, rankMovement } from '@shared/ladder'
-import { queueIdForQueueType } from '@shared/queues'
+import { ladderPosition, rankMovement, queueIdForQueueType } from '@foxfire/core'
 import type {
   EditableMatch,
   ManualRank,

@@ -5,7 +5,7 @@ import type {
   MatchSummary,
   RankSnapshot
 } from '@shared/types'
-import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
+import { ladderPosition, rankAtPosition, rankMovement } from '@foxfire/core'
 import { devSeasonIdAt } from './seasons'
 import {
   C,
@@ -326,9 +326,7 @@ function summaryFor(game: Game, index: number): MatchSummary {
     teamDamage,
     isRemake: false,
     rank: null,
-    hasManualRank: false,
-    recordingId: null,
-    replayId: null
+    hasManualRank: false
   }
 }
 

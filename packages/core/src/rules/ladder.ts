@@ -2,8 +2,9 @@
  * Mapping tier + division + LP onto a single continuous number, so a rank graph
  * draws one smooth line across promotions instead of resetting at every tier.
  *
- * Lives in shared/ because both sides need it: main stamps `ladder_position`
- * onto every snapshot as it is written, and the renderer plots it.
+ * Lives in @foxfire/core because everything needs it: the desktop's main
+ * process stamps `ladder_position` onto every snapshot as it is written, and
+ * both clients plot it.
  */
 
 /** Tiers with four divisions each, lowest first. */

@@ -1,12 +1,8 @@
-import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
-import type { HubConnection } from '@microsoft/signalr'
-import { app } from 'electron'
+import { createHub, type ClientIdentity, type ServerHub } from '@foxfire/core/server'
 import { broadcast } from '../ipc/broadcast'
 import { CH } from '../ipc/channels'
-import { CLIENT_VERSION_HEADER } from './client'
 import { setServerRiotKeyRejected } from '../services/serverService'
 import { createLogger } from '../telemetry/logger'
-import type { SyncProgressEvent } from '@shared/types'
 
 const log = createLogger('hub')
 
@@ -19,11 +15,10 @@ const log = createLogger('hub')
  * with the same payload, so everything above the transport is unchanged. That
  * is what Phase 0's broadcast module was extracted for.
  *
- * Nothing is subscribed to. Every member of a server sees every account's data,
- * so there are no groups to join and nothing to filter: an event carries the
- * account it is about, which is what the renderer already keys on.
+ * The connection itself is @foxfire/core's, shared with the web client; what is
+ * here is where each event goes on this machine, and which server to listen to.
  */
-let connection: HubConnection | null = null
+let connection: ServerHub | null = null
 
 /** The server this connection belongs to, so a switch can be told from a reconnect. */
 let connectedTo: string | null = null
@@ -37,54 +32,42 @@ let connectedTo: string | null = null
  */
 export async function connectHub(
   serverUrl: string,
+  basePath: string,
+  identity: ClientIdentity,
   accessTokenFactory: () => string | Promise<string>
 ): Promise<void> {
-  if (connectedTo === serverUrl && connection?.state === HubConnectionState.Connected) return
+  if (connectedTo === serverUrl && connection?.connected) return
 
   await disconnectHub()
 
-  const hub = new HubConnectionBuilder()
-    .withUrl(`${serverUrl}/hub`, {
-      // The token goes in the query string, which is the one place a WebSocket
-      // handshake can carry it — the server reads it there for this path only.
-      accessTokenFactory,
+  const hub = createHub({
+    baseUrl: serverUrl,
+    basePath,
+    identity,
+    accessTokenFactory,
+    log,
+    handlers: {
+      onSyncProgress: (event) => broadcast(CH.sync.progress, event),
+      onRankEdited: (accountId) => broadcast(CH.rank.edited, accountId),
+      onRankChanged: (accountId) => broadcast(CH.lcu.rankChanged, accountId),
 
-      // The negotiate request is an ordinary HTTP call and passes the version
-      // gate like every other, so a build the server will not serve is refused
-      // here too rather than getting a live connection it cannot use.
-      headers: { [CLIENT_VERSION_HEADER]: app.getVersion() }
-    })
-    .withAutomaticReconnect()
-    .configureLogging(LogLevel.Warning)
-    .build()
-
-  hub.on('sync:progress', (event: SyncProgressEvent) => broadcast(CH.sync.progress, event))
-  hub.on('rank:edited', (accountId: string) => broadcast(CH.rank.edited, accountId))
-  hub.on('lcu:rankChanged', (accountId: string) => broadcast(CH.lcu.rankChanged, accountId))
-
-  // Deliberately not the channel local-only mode uses for an expired key.
-  // That one means "yours expired, paste a new one" and is wired to a banner
-  // that offers to take you to the field; this means the host's did, and there
-  // is nothing on this machine to paste. Same situation, different person to
-  // tell — so it goes into the server state and gets its own sentence.
-  hub.on('settings:keyInvalid', () => setServerRiotKeyRejected(true))
-
-  hub.onreconnected(() => log.info('Reconnected to the server'))
-  hub.onclose((err) => {
-    if (err) log.debug('Hub connection closed', { error: String(err) })
+      // Deliberately not the channel local-only mode uses for an expired key.
+      // That one means "yours expired, paste a new one" and is wired to a
+      // banner that offers to take you to the field; this means the host's did,
+      // and there is nothing on this machine to paste. Same situation, different
+      // person to tell — so it goes into the server state and gets its own
+      // sentence.
+      onKeyInvalid: () => setServerRiotKeyRejected(true)
+    }
   })
 
-  try {
-    await hub.start()
-    connection = hub
-    connectedTo = serverUrl
-    log.info('Listening to the server for updates')
-  } catch (err) {
-    // Never fatal. Everything the hub carries is a refresh of something the
-    // renderer can also ask for, so a server whose socket will not open is a
-    // server that works with a stale screen rather than one that does not work.
-    log.debug('Could not open the hub connection', { error: String(err) })
-  }
+  await hub.start()
+
+  // Kept even when it did not open, so the next announcement tries again: an
+  // unopened connection reports itself as not connected, which is exactly the
+  // condition the guard above retries on.
+  connection = hub
+  connectedTo = serverUrl
 }
 
 /** Closes the connection, if there is one. Safe to call when there is not. */
@@ -93,16 +76,10 @@ export async function disconnectHub(): Promise<void> {
   connection = null
   connectedTo = null
 
-  if (!open) return
-
-  try {
-    await open.stop()
-  } catch {
-    // Stopping a connection that was already broken is not worth reporting.
-  }
+  if (open) await open.stop()
 }
 
 /** Whether the desktop currently has a live connection to its server. */
 export function isHubConnected(): boolean {
-  return connection?.state === HubConnectionState.Connected
+  return connection?.connected ?? false
 }

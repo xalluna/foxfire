@@ -16,8 +16,7 @@ import type {
   RoflSettings,
   Scoreboard
 } from '@shared/types'
-import { ladderPosition, rankAtPosition, rankMovement } from '@shared/ladder'
-import { rangeBounds } from '@shared/seasons'
+import { ladderPosition, rankAtPosition, rankMovement, rangeBounds } from '@foxfire/core'
 import { devSeasonIdAt } from './seasons'
 import {
   C,
@@ -488,12 +487,14 @@ const FAKER_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
   isRemake: s.remake ?? false,
   rank: soloHistory.byMatchId.get(matchIdAt(i)) ?? null,
   hasManualRank: false,
-  // The first three games were recorded; the rest were not, so the context menu
-  // is exercised both enabled and disabled without switching scenario.
-  recordingId: i < 3 ? i + 1 : null,
-  // Overlaps the recordings deliberately: the mock has to exercise a row with
-  // both artefacts, one with each, and one with neither.
-  replayId: i < 5 && i !== 1 ? i + 1 : null
+  local: {
+    // The first three games were recorded; the rest were not, so the context
+    // menu is exercised both enabled and disabled without switching scenario.
+    recordingId: i < 3 ? i + 1 : null,
+    // Overlaps the recordings deliberately: the mock has to exercise a row with
+    // both artefacts, one with each, and one with neither.
+    replayId: i < 5 && i !== 1 ? i + 1 : null
+  }
 }))
 
 const FAKER = { puuid: 'puuid-faker', gameName: 'Faker', tagLine: 'NA1' }

@@ -1,5 +1,5 @@
 import type { Season } from '@shared/types'
-import { seasonAt } from '@shared/seasons'
+import { seasonAt } from '@foxfire/core'
 import { NOW } from './catalog'
 
 /**

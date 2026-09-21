@@ -1,314 +1,63 @@
-import type { Position } from './positions'
+import type { Position } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
 
-export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
-
-export interface Account {
-  /**
-   * Opaque. Whoever owns accounts chose it, and nothing here may take it apart.
-   *
-   * In local-only mode it is this machine's SQLite rowid written as text; on a
-   * Foxfire Server it is that server's own id, which is a GUID. The renderer
-   * passes it back through `window.api` and never reads it, which is what lets
-   * the same screens work against either store.
-   *
-   * What crosses between the two is `gameName#tagLine`, not this. An id from
-   * one server means nothing on another, and nothing at all locally.
-   */
-  id: string
-  puuid: string
-  gameName: string
-  tagLine: string
-  platform: string
-  regionalRoute: string
-  summonerId: string | null
-  profileIconId: number | null
-  summonerLevel: number | null
-  isHomeAccount: boolean
-  createdAt: string
-  updatedAt: string
-
-  /**
-   * Whether this is an account you have claimed, on a server where others have
-   * claimed their own.
-   *
-   * Absent in local-only mode, where the question does not arise: every account
-   * in the file is yours. On a server it decides what is writable — you can see
-   * everybody's history and edit only your own LP.
-   */
-  isMine?: boolean
-
-  /** Who claimed it, on a server. Absent in local-only mode, and null for unclaimed. */
-  ownerUsername?: string | null
-}
-
-export interface LeagueEntry {
-  queueType: QueueType
-  tier: string | null
-  rank: string | null
-  leaguePoints: number | null
-  wins: number | null
-  losses: number | null
-  fetchedAt: string
-}
-
-
 /**
- * One row of match history.
+ * The League and server shapes both clients read, which live in @foxfire/core.
  *
- * Everything here is read from the local `match_participants` table in a
- * single query — no Riot call is made to render a list. The team totals are
- * aggregates over the row's own team, needed for kill participation and
- * damage share, which are ratios rather than raw stats.
+ * Re-exported rather than imported from there everywhere, so the hundred-odd
+ * places in this app that read them from @shared/types go on doing so. What is
+ * declared below this is the desktop's alone: the League client, the live
+ * game, OBS, recordings and replays on this disk, and which servers this
+ * install has joined.
  */
-/**
- * A replay the active server holds, as a match row advertises it.
- *
- * The patch and nothing else that matters: a .rofl only runs on the build that
- * produced it, and whether this machine has that build is decided here rather
- * than by the server, against the League installs it knows about.
- */
-export interface SharedReplaySummary {
-  patch: string | null
-  fileBytes: number | null
-}
-
-export interface MatchSummary {
-  matchId: string
-  gameCreation: number
-  gameDuration: number
-  gameMode: string | null
-  queueId: number | null
-  win: boolean
-  championId: number
-  championName: string | null
-  champLevel: number | null
-  kills: number
-  deaths: number
-  assists: number
-  cs: number | null
-  goldEarned: number | null
-  damageDealtToChampions: number | null
-  /** Highest multi-kill in the game: 2 = double, 3 = triple, 4 = quadra, 5 = penta. */
-  largestMultiKill: number | null
-  items: number[]
-  /**
-   * The role quest reward, which match-v5 reports in its own slot.
-   *
-   * Kept out of `items` deliberately: it is granted by the lane rather than
-   * bought, and it never appears among item0-6, so folding it in would redefine
-   * what an inventory slot means for the sake of one array. 0 for modes without
-   * lanes, and for matches played before the field existed.
-   */
-  roleBoundItem: number
-  summoner1Id: number | null
-  summoner2Id: number | null
-  perks: unknown
-  /** '' for modes without lanes (ARAM, Arena). */
-  teamPosition: string | null
-  /** Sum over the player's own team — the denominator for kill participation. */
-  teamKills: number
-  /** Sum over the player's own team — the denominator for damage share. */
-  teamDamage: number
-  /**
-   * Voided a few minutes in because someone failed to connect. Still listed in
-   * match history, but excluded from win rates, recent form and LP attribution
-   * — no LP moves and the result says nothing about the champion.
-   */
-  isRemake: boolean
-  /** Null for unranked queues, and for any game LP could not be attributed to. */
-  rank: MatchRankInfo | null
-  /**
-   * Whether the user has hand-entered the rank after this game.
-   *
-   * Read only to decide which action a row's context menu offers — the LP it
-   * produces renders identically to a derived one, so nothing else looks at it.
-   */
-  hasManualRank: boolean
-  /**
-   * The replay this server holds of the game, when it holds one.
-   *
-   * Null in local-only mode, where there is no server to hold one, and null on
-   * a server nobody has uploaded this game to yet. Distinct from `replayId`,
-   * which is a .rofl already on this disk: a row can have one, both or neither,
-   * and the pair is what the context menu reads to decide between offering a
-   * download and offering to watch.
-   */
-  sharedReplay?: SharedReplaySummary | null
-
-  /**
-   * The recording of this game, when one exists.
-   *
-   * Read only to decide whether the row's context menu can offer to watch it,
-   * so it is a bare id rather than the whole recording.
-   */
-  recordingId: number | null
-  /**
-   * Riot's own replay for this game, when Foxfire has a copy.
-   *
-   * Unlike recordingId this is not scoped to the account: a .rofl is one file
-   * per game on this machine, and the same file serves whoever played it.
-   */
-  replayId: number | null
-}
-
-/**
- * What a single game was worth on the ladder.
- *
- * Riot exposes no per-match LP, so this is derived by diffing rank snapshots.
- * It exists only when exactly one ranked game sat between two consecutive
- * snapshots — every other match carries null and renders no chip at all.
- */
-export interface MatchRankInfo {
-  lpDelta: number | null
-  tierBefore: string | null
-  rankBefore: string | null
-  tierAfter: string | null
-  rankAfter: string | null
-  isPromotion: boolean
-  isDemotion: boolean
-}
-
-/** One reading of a ladder position, appended rather than overwritten. */
-export interface RankSnapshot {
-  queueType: QueueType
-  tier: string | null
-  rank: string | null
-  leaguePoints: number | null
-  wins: number | null
-  losses: number | null
-  /** Precomputed by shared/ladder.ts so the graph plots without recomputing. */
-  ladderPosition: number | null
-  /**
-   * Which season this reading falls in, stamped on the way out.
-   *
-   * Sent rather than derived so the renderer needs no copy of the season table
-   * and cannot paint a chart before one has loaded. Null only when no seasons
-   * are defined at all.
-   */
-  seasonId: number | null
-  /**
-   * Where the reading came from: the running client, the public API, or the
-   * user. A 'manual' row is an assertion rather than a measurement, and is
-   * dropped as soon as a real reading measures the same interval — see
-   * manualRankService.
-   */
-  source: SnapshotSource
-  /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
-  capturedAt: number
-}
-
-export type SnapshotSource = 'lcu' | 'league_v4' | 'manual'
-
-/** A rank the user can type: tier plus, below Master, a division and LP. */
-export interface ManualRank {
-  tier: string
-  /** Null for the apex tiers, which have no divisions. */
-  rank: string | null
-  leaguePoints: number
-}
-
-/**
- * A ranked game with no attributed LP, offered for hand-entry.
- *
- * Carries enough of the match to recognise it in a list, plus the rank going
- * in, so the editor can show what the game moved from without a second query.
- */
-export interface EditableMatch {
-  matchId: string
-  gameCreation: number
-  gameDuration: number
-  win: boolean
-  championId: number
-  championName: string | null
-  kills: number
-  deaths: number
-  assists: number
-  /** The most recent reading before this game, or null if there is none. */
-  before: ManualRank | null
-  /**
-   * When that reading was taken, or null if there is none.
-   *
-   * Identifies the interval a game sits in: consecutive games sharing this
-   * value are the ones a single ambiguous stretch swallowed. The editor uses it
-   * to chain a preview — once the rank after one game is entered, that is what
-   * the next game in the same stretch actually starts from.
-   */
-  beforeAt: number | null
-  /**
-   * Whether `before` can anchor a delta. False when nothing precedes the game
-   * or the reading was unranked — attributeInterval bails on a null ladder
-   * position, so the editor must collect the before state too rather than
-   * saving to no visible effect.
-   */
-  beforeUsable: boolean
-  /** The user's existing entry for this game, if they have already made one. */
-  manual: ManualRank | null
-}
-
-/** One row of the editor, as submitted. */
-export interface ManualRankEdit {
-  matchId: string
-  after: ManualRank
-  /** Only sent for a game whose preceding reading is unusable. */
-  before?: ManualRank | null
-}
-
-/** A crossed tier or division boundary, for the climb summary. */
-export interface RankMilestone {
-  queueType: QueueType
-  movement: 'promotion' | 'demotion'
-  tier: string | null
-  rank: string | null
-  capturedAt: number
-}
-
-export interface RankHistory {
-  snapshots: RankSnapshot[]
-  milestones: RankMilestone[]
-}
-
-/**
- * One hand-entered ranked season.
- *
- * Riot exposes no way to ask which season is current, and the calendar is not a
- * stand-in for one — 2026 opened on 8 January and a preseason can run into
- * February — so these are edited in Settings. See migration 008.
- *
- * A season runs from `startsAt` until the next one starts. The newest reaches
- * forwards forever and the oldest backwards forever, so no game can fall
- * outside every season and a boundary nobody has entered yet cannot cut the
- * current season short.
- */
-export interface Season {
-  id: number
-  label: string
-  /** Epoch milliseconds, matching game_creation and captured_at. */
-  startsAt: number
-  /** Labelled distinctly, but still catches games — rank carries into it. */
-  isPreseason: boolean
-  /**
-   * Whether the ladder reset when this season opened.
-   *
-   * Distinct from the boundary itself: a season that carries rank forward must
-   * keep attributing LP across its own start, and only a reset may suppress it.
-   */
-  resetsRank: boolean
-}
-
-/** A season on its way back from the editor. No id means a row being added. */
-export type SeasonInput = Omit<Season, 'id'> & { id?: number }
-
-/**
- * A window over rank history.
- *
- * `7d` and `30d` are relative to now; `season:12` names a season by its row id,
- * whose bounds come from shared/seasons.ts. They share one union because the
- * Rank screen offers them from a single control — see views/RankHistory.tsx.
- */
-export type RankRange = '7d' | '30d' | 'all' | `season:${number}`
+export type {
+  QueueType,
+  Account,
+  LeagueEntry,
+  SharedReplaySummary,
+  LocalArtefacts,
+  MatchSummary,
+  MatchRankInfo,
+  RankSnapshot,
+  SnapshotSource,
+  ManualRank,
+  EditableMatch,
+  ManualRankEdit,
+  RankMilestone,
+  RankHistory,
+  Season,
+  SeasonInput,
+  RankRange,
+  MatchParticipant,
+  MatchDetail,
+  MasteryEntry,
+  ChampionStats,
+  SyncState,
+  SyncTrigger,
+  SyncProgressEvent,
+  AdHocSummonerResult,
+  RiotIdInput,
+  AssetManifest,
+  DashboardData,
+  MasteryData,
+  ServerProbe,
+  VersionInfo,
+  SessionUser,
+  ServerStorageUsage,
+  AdminReplay,
+  ImportProgress,
+  ImportResult,
+  ServerCredentials,
+  ServerRegistration,
+  InvitePreview,
+  AdminUser,
+  AdminUserPatch,
+  AdminInvite,
+  ServerAdminSettings,
+  AdminActionResult
+} from '@foxfire/core'
 
 /**
  * Whether the League client is reachable and whose account is logged into it.
@@ -342,99 +91,6 @@ export interface BackgroundSettings {
   launchAtStartup: boolean
   /** Overrides League client auto-detection when the install is somewhere unusual. */
   lcuInstallPath: string | null
-}
-
-export interface MatchParticipant {
-  puuid: string
-  gameName: string | null
-  tagLine: string | null
-  teamId: number
-  win: boolean
-  championId: number
-  championName: string | null
-  champLevel: number | null
-  kills: number
-  deaths: number
-  assists: number
-  goldEarned: number | null
-  cs: number | null
-  damageDealtToChampions: number | null
-  damageTaken: number | null
-  items: number[]
-  /** The lane's quest reward — see MatchSummary.roleBoundItem. */
-  roleBoundItem: number
-  summoner1Id: number | null
-  summoner2Id: number | null
-  perks: unknown
-  teamPosition: string | null
-  largestMultiKill: number | null
-}
-
-export interface MatchDetail {
-  matchId: string
-  gameCreation: number
-  gameDuration: number
-  gameMode: string | null
-  gameType: string | null
-  queueId: number | null
-  participants: MatchParticipant[]
-}
-
-export interface MasteryEntry {
-  championId: number
-  championPoints: number
-  championLevel: number
-  lastPlayTime: number | null
-}
-
-/**
- * One champion's record over the synced matches, scoped to the selected queue.
- *
- * Deliberately ships totals rather than pre-divided averages: the view needs
- * both a per-game figure and a per-minute rate from the same sums, and sending
- * the totals keeps the two from disagreeing by a rounding step.
- */
-export interface ChampionStats {
-  championId: number
-  games: number
-  wins: number
-  kills: number
-  deaths: number
-  assists: number
-  cs: number
-  damageToChampions: number
-  /** Summed across the counted games — the denominator for CS/min and DPM. */
-  durationSeconds: number
-  /** Mean of the per-game shares. Null when every counted game had a shut-out team. */
-  damageShare: number | null
-  killParticipation: number | null
-}
-
-export interface SyncState {
-  accountId: string
-  mostRecentMatchId: string | null
-  backfillComplete: boolean
-  backfillTarget: number
-  lastFullSyncAt: string | null
-  lastDeltaSyncAt: string | null
-}
-
-/**
- * Who asked for a sync.
- *
- * 'auto' covers the launch sweep and the post-game retries — work the user did
- * not initiate and should not have to watch. The events still fire either way;
- * only their presentation differs.
- */
-export type SyncTrigger = 'manual' | 'auto'
-
-export interface SyncProgressEvent {
-  accountId: string
-  phase: 'backfill' | 'delta' | 'complete' | 'error'
-  current: number
-  total: number
-  message?: string
-  trigger: SyncTrigger
 }
 
 /**
@@ -483,23 +139,6 @@ export interface Scoreboard {
   /** Seconds elapsed. */
   gameTime: number
   players: ScoreboardPlayer[]
-}
-
-export interface AdHocSummonerResult {
-  profile: {
-    puuid: string
-    gameName: string
-    tagLine: string
-    profileIconId: number
-    summonerLevel: number
-  }
-  leagueEntries: LeagueEntry[]
-  recentMatches: MatchSummary[]
-}
-
-export interface RiotIdInput {
-  gameName: string
-  tagLine: string
 }
 
 /**
@@ -557,14 +196,6 @@ export interface IdentityReport {
   /** `gameName#tagLine`, so a message about it can name the account. */
   riotId: string
   outcome: IdentityOutcome
-}
-
-export interface AssetManifest {
-  version: string
-  cdn: string
-  championById: Record<number, { id: string; name: string }>
-  spellById: Record<number, { id: string; name: string }>
-  runeById: Record<number, { icon: string; name: string }>
 }
 
 /**
@@ -868,36 +499,6 @@ export interface ArchiveResult {
 /* Foxfire Server                                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * What a server said about itself when asked, before anybody typed a password.
- *
- * Answered by the one endpoint that needs no authentication and no version
- * header, which is the whole point of it: a desktop too old to be served has to
- * be able to find that out and say so. `error` is filled in and `reachable` is
- * false for every kind of not-working — wrong address, server down, a
- * certificate this machine will not trust — because all of them are things to
- * render in the connect form rather than exceptions to handle.
- */
-export interface ServerProbe {
-  url: string
-  reachable: boolean
-  error: string | null
-  serverName: string | null
-  serverVersion: string | null
-  apiVersion: number | null
-  minimumDesktop: string | null
-  recommendedDesktop: string | null
-  /** Whether anybody may register, or an invite is needed. */
-  publicSignup: boolean | null
-  /**
-   * How this build stands against that server's stated range. Advisory only:
-   * the server's allow list is a set rather than a range, so a version between
-   * the minimum and the newest can still be absent from it. This decides what
-   * the connect screen says, never whether to proceed.
-   */
-  compatibility: 'ok' | 'outdated' | 'unsupported' | 'unknown'
-}
-
 /** Who you are on a server. */
 export interface ServerSession {
   url: string
@@ -946,86 +547,6 @@ export interface ServerState {
 }
 
 /**
- * What a server is holding, and where.
- *
- * The two halves are not symmetrical and the panel says so: a deduplicated
- * match history takes a long time to trouble a 10 GB database, while replays
- * are tens of megabytes each and are what will fill a volume.
- */
-export interface ServerStorageUsage {
-  /** False when no blob store is set up, which is a different thing from an empty one. */
-  replaysConfigured: boolean
-  /** Blobs actually in the store, as the store counts them. */
-  replayCount: number
-  replayBytes: number
-  /** Rows saying a replay was uploaded. Disagreeing with replayCount means a delete failed. */
-  replayRecords: number
-  matches: number
-  matchParticipants: number
-  riotAccounts: number
-  unclaimedAccounts: number
-  rankReadings: number
-}
-
-/** A shared replay, as an admin deciding what to delete sees one. */
-export interface AdminReplay {
-  matchId: string
-  patch: string | null
-  fileBytes: number | null
-  uploadedBy: string | null
-  uploadedAt: string | null
-}
-
-/**
- * How far through importing a stats.db the server is.
- *
- * Reported rather than returned because the run is minutes long: a Riot lookup
- * per account and a page of matches per request, and a panel sitting on one
- * promise would have nothing to say for any of it.
- */
-export interface ImportProgress {
-  phase: 'accounts' | 'matches' | 'readings' | 'finishing' | 'done'
-  current: number
-  /** Zero while finishing, which has no countable work. */
-  total: number
-}
-
-/** What an import came to. */
-export interface ImportResult {
-  ok: boolean
-  /** Why it could not run, when it could not. Null on success. */
-  message: string | null
-  accounts: number
-  matches: number
-  readings: number
-  seasons: number
-  /** Games the server worked LP out for once everything had arrived. */
-  attributed: number
-  /**
-   * Riot IDs the server could not resolve, almost always renames.
-   *
-   * Named rather than counted: the fix is to re-add each under the name it
-   * plays under now, and that is not something a number can tell anybody.
-   */
-  unresolved: string[]
-}
-
-/** Credentials for signing in to a server. */
-export interface ServerCredentials {
-  email: string
-  password: string
-}
-
-/** Everything needed to make an account on a server. */
-export interface ServerRegistration {
-  username: string
-  email: string
-  password: string
-  /** Required when the server has public signup switched off. */
-  inviteToken?: string
-}
-
-/**
  * The outcome of connecting, registering or signing in.
  *
  * Carries the whole new state rather than just a flag, so the settings page
@@ -1035,83 +556,4 @@ export interface ServerAuthResult {
   ok: boolean
   error: string | null
   state: ServerState
-}
-
-/** What a server will say about an invite code without anybody signing in. */
-export interface InvitePreview {
-  usable: boolean
-  serverName: string
-  /** The address the invite was sent to, so the form can fill it in. */
-  email: string | null
-  message: string
-}
-
-/* -------------------------------------------------------------------------- */
-/* Server administration                                                      */
-/* -------------------------------------------------------------------------- */
-
-/** Somebody on the active server, as an admin sees them. */
-export interface AdminUser {
-  id: string
-  username: string
-  email: string
-  isAdmin: boolean
-  /** Cannot sign in. Nothing of theirs is deleted. */
-  isDisabled: boolean
-  createdAt: string
-  linkedRiotAccounts: number
-  /** Live sessions — roughly, machines signed in. */
-  activeSessions: number
-}
-
-/** What to change about somebody. Undefined leaves a field alone. */
-export interface AdminUserPatch {
-  isAdmin?: boolean
-  isDisabled?: boolean
-}
-
-/** An invite, with the link an admin can copy. */
-export interface AdminInvite {
-  id: string
-  email: string
-  /**
-   * The whole point of the admin-facing shape. SMTP is optional, so every link
-   * the server would have emailed is also copyable — paste it wherever your
-   * community actually talks.
-   */
-  link: string
-  createdAt: string
-  expiresAt: string
-  redeemedAt: string | null
-  redeemedBy: string | null
-  isOpen: boolean
-}
-
-/** The switches an admin can change while the server runs. */
-export interface ServerAdminSettings {
-  publicSignup: boolean
-  backfillTarget: number
-
-  /**
-   * How many bytes of blob storage replays may take. Zero means no cap.
-   *
-   * Uncapped by default, because a cap nobody chose is a cap that surprises
-   * somebody — and what it prevents is an upload being refused, which is
-   * exactly what the cap does. What it buys a host is deciding when that
-   * starts, rather than learning it from a storage bill.
-   */
-  replayByteCap: number
-}
-
-/**
- * The outcome of an administrative action.
- *
- * A result rather than a thrown error, because every one of these can be
- * refused for a reason worth showing — the last administrator cannot be
- * demoted, an invite that has been used cannot be withdrawn — and the caller
- * needs the message, not a stack.
- */
-export interface AdminActionResult {
-  ok: boolean
-  error: string | null
 }

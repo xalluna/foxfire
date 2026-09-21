@@ -4,10 +4,11 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { ladderPosition, rankFromLeaguePoints, rankMovement, tierAtPosition } from './ladder'
 import { resetsBetween } from './seasons'
-import type { Season } from './types'
+import type { Season } from '../types'
 
 /**
- * The desktop's half of the golden corpus that pins it to the server.
+ * The TypeScript half of the golden corpus that pins it to the server — the
+ * half both the desktop and the web client run.
  *
  * Foxfire computes LP twice now, in two languages, and shows both answers to the
  * same person — a disagreement between them would read as lost history rather

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // DOM for fetch, URL and AbortSignal, which Node has too. Nothing here may
+    // use what only one of them has — no navigator, no Buffer — and the lint
+    // config forbids the globals that would sneak it in. The same source is
+    // also checked inside the desktop's main-process program, which has no DOM
+    // library at all, so a slip fails there as well.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts"]
+}

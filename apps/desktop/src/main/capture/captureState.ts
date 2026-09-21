@@ -1,4 +1,4 @@
-import { shouldCapture } from '@shared/queues'
+import { shouldCapture } from '@shared/captureQueues'
 
 /**
  * When a recording starts and stops, as a pure reducer.

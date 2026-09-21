@@ -1,4 +1,4 @@
-import { queueTypeForQueueId } from '@shared/queues'
+import { queueTypeForQueueId } from '@foxfire/core'
 import type { MatchSummary } from '@shared/types'
 import type { ContextMenuItem } from './ContextMenu'
 
@@ -45,7 +45,7 @@ export function lpWriteBlockedReason(isMine?: boolean): string | null {
  * disappears from half the rows cannot answer it.
  */
 export function recordingBlockedReason(match: MatchSummary): string | null {
-  if (match.recordingId === null) return 'No recording for this game'
+  if ((match.local?.recordingId ?? null) === null) return 'No recording for this game'
   return null
 }
 
@@ -59,7 +59,7 @@ export function recordingBlockedReason(match: MatchSummary): string | null {
  * full.
  */
 export function replayBlockedReason(match: MatchSummary): string | null {
-  if (match.replayId === null) return 'No Riot replay for this game'
+  if ((match.local?.replayId ?? null) === null) return 'No Riot replay for this game'
   return null
 }
 
@@ -73,7 +73,7 @@ export function replayBlockedReason(match: MatchSummary): string | null {
  * sentence.
  */
 export function downloadBlockedReason(match: MatchSummary): string | null {
-  if (match.replayId !== null) return 'Already downloaded'
+  if ((match.local?.replayId ?? null) !== null) return 'Already downloaded'
   if (!match.sharedReplay) return 'Nobody has uploaded this game'
   return null
 }

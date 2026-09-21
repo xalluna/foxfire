@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ALL_TIERS, APEX_TIERS, DIVISIONS, rankFromLeaguePoints } from '@shared/ladder'
+import { ALL_TIERS, APEX_TIERS, DIVISIONS, rankFromLeaguePoints } from '@foxfire/core'
 import type { ManualRank } from '@shared/types'
 
 const APEX = APEX_TIERS as readonly string[]

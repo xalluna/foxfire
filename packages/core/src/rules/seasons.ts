@@ -8,14 +8,14 @@
  *
  * Everything here is a pure function of a season list plus a timestamp. No
  * ambient state and no database access, so the same code answers the same way
- * in the main process, in a test against a literal list, and in the dev
- * harness. The renderer never calls most of it — snapshots arrive already
+ * in the desktop's main process, in a test against a literal list, and in the
+ * dev harness. The screens never call most of it — snapshots arrive already
  * stamped with a seasonId — but the range helpers are shared.
  *
  * Every list passed in must be ordered oldest first. listSeasons guarantees it.
  */
 
-import type { RankRange, Season } from './types'
+import type { RankRange, Season } from '../types'
 
 const DAY_MS = 86_400_000
 
@@ -78,7 +78,7 @@ export function resetsBetween(seasons: Season[], afterMs: number, untilMs: numbe
   return seasons.some((s) => s.resetsRank && s.startsAt > afterMs && s.startsAt <= untilMs)
 }
 
-/** A season as a RankRange, which is how a selected period crosses IPC. */
+/** A season as a RankRange, which is how a selected period travels to whichever client answers. */
 export function seasonRange(id: number): RankRange {
   return `${SEASON_PREFIX}${id}`
 }

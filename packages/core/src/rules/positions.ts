@@ -1,8 +1,8 @@
 /**
  * The five lanes, and the order a scoreboard reads them in.
  *
- * Lives in shared rather than beside the icons in the renderer because the main
- * process sorts live rosters by it, and the renderer's position module imports
+ * Lives in @foxfire/core rather than beside the icons in @foxfire/ui because the
+ * desktop's main process sorts live rosters by it, and the icon module imports
  * SVGs — which main cannot.
  *
  * The keys are the values match-v5 reports as `teamPosition` and the Live

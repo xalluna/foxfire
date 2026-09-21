@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { CAPTURE_QUEUE_OPTIONS } from '@shared/queues'
+import { CAPTURE_QUEUE_OPTIONS } from '@shared/captureQueues'
 import { CAPTURE_QUALITY_OPTIONS } from '@shared/captureQuality'
 import { SettingsCard, SettingsPage } from './settings/SettingsCard'
 import {

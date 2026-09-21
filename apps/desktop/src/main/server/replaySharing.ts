@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import { Readable } from 'node:stream'
-import { authedRequest, isServerMode } from '../services/serverService'
-import { ServerError } from './client'
+import { ServerError, type ReplayDownloadGrant } from '@foxfire/core/server'
+import { authedRequest, isServerMode, serverApi } from '../services/serverService'
 import { createLogger } from '../telemetry/logger'
 
 const log = createLogger('replay-sharing')
@@ -38,12 +38,6 @@ export interface SharedReplayInfo {
   durationSeconds: number | null
   uploadedBy: string | null
   uploadedAt: string | null
-}
-
-interface DownloadGrant {
-  matchId: string
-  downloadUrl: string
-  expiresAt: string
 }
 
 /**
@@ -118,9 +112,9 @@ export async function shareReplay(
 export async function fetchSharedReplay(matchId: string): Promise<Buffer | null> {
   if (!isServerMode()) return null
 
-  let grant: DownloadGrant
+  let grant: ReplayDownloadGrant
   try {
-    grant = await authedRequest<DownloadGrant>(`/replays/${encodeURIComponent(matchId)}/download`)
+    grant = await serverApi().replays.downloadGrant(matchId)
   } catch (err) {
     log.debug('No shared replay to download', { matchId, error: String(err) })
     return null

@@ -1,3 +1,17 @@
+import { app } from 'electron'
+import {
+  ServerError,
+  createServerApi,
+  createServerSession,
+  createTransport,
+  displayName,
+  inviteTokenFrom,
+  normaliseServerUrl,
+  probeServer,
+  type ClientIdentity,
+  type ServerApi,
+  type ServerSession
+} from '@foxfire/core/server'
 import { getDb } from '../db'
 import { getSetting, setSetting } from '../db/repositories/appSettings.repo'
 import { clearSecret, loadSecret, saveSecret } from '../security/keyStore'
@@ -5,8 +19,6 @@ import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { connectHub, disconnectHub } from '../server/hub'
 import { createLogger } from '../telemetry/logger'
-import { ServerError, probeServer, serverRequest } from '../server/client'
-import { displayName, inviteTokenFrom, normaliseServerUrl } from '../server/url'
 import type {
   InvitePreview,
   KnownServer,
@@ -14,7 +26,7 @@ import type {
   ServerCredentials,
   ServerProbe,
   ServerRegistration,
-  ServerSession,
+  ServerSession as ServerSessionState,
   ServerState
 } from '@shared/types'
 
@@ -24,23 +36,14 @@ const ACTIVE_SETTING = 'server.active'
 const KNOWN_SETTING = 'server.known'
 
 /**
- * How early to renew an access token.
+ * Where a server's API sits beneath its address.
  *
- * The token lives fifteen minutes and the server allows thirty seconds of clock
- * skew, so renewing a minute out means a request is never sent with one that
- * expires in flight — which would be a spurious sign-in prompt in the middle of
- * somebody's evening.
+ * The root, for now, and so for every server this build has spoken to. Kept as
+ * one constant because it is exactly the kind of thing that moves: every route
+ * below is written relative to it, and `/version` and `/health` — which never
+ * move — are asked for at the root regardless.
  */
-const RENEW_BEFORE_MS = 60_000
-
-/** What a server hands back after registering or signing in. */
-interface SessionResponse {
-  accessToken: string
-  accessTokenExpiresAt: string
-  refreshToken: string
-  refreshTokenExpiresAt: string
-  user: { id: string; username: string; email: string; isAdmin: boolean }
-}
+const API_BASE = ''
 
 /** One remembered server, as stored. */
 interface StoredServer {
@@ -73,8 +76,9 @@ interface StoredServer {
  * encrypted store as the Riot API key and the OBS password rather than to
  * app_settings — `stats.db` is a file somebody might reasonably copy or attach
  * to a bug report, and it should not carry a credential when they do. The
- * access token lives in memory for its fifteen minutes and is never persisted
- * at all: it cannot be revoked, so the less time it exists the better.
+ * access token lives in memory, inside the session, for its fifteen minutes.
+ * The renewing itself — and the care it takes never to spend one refresh token
+ * twice — is @foxfire/core's, which the web client shares.
  *
  * All of this stays in the main process. The renderer is sandboxed, has no
  * network access and a `default-src 'self'` policy, and there is no reason to
@@ -82,8 +86,8 @@ interface StoredServer {
  * learn where the answers come from.
  */
 
-/** Access tokens, in memory only, by server URL. */
-const accessTokens = new Map<string, { token: string; expiresAt: number }>()
+/** One session per server, created on first use and kept for the life of the process. */
+const sessions = new Map<string, ServerSession>()
 
 /**
  * Set when the active server refuses this build.
@@ -97,6 +101,61 @@ let upgradeRequired: string | null = null
 
 function secretName(url: string): string {
   return `server-${url}`
+}
+
+/** What this build tells every server it is. The server's allow list judges it. */
+function identity(): ClientIdentity {
+  return { kind: 'desktop', version: app.getVersion() }
+}
+
+function sessionFor(url: string): ServerSession {
+  const existing = sessions.get(url)
+  if (existing) return existing
+
+  const session = createServerSession({
+    baseUrl: url,
+    basePath: API_BASE,
+    identity: identity(),
+    tokenTransport: 'body',
+    store: {
+      load: () => loadSecret(secretName(url)),
+      save: (refreshToken) => saveSecret(secretName(url), refreshToken),
+      clear: () => clearSecret(secretName(url))
+    },
+    deviceLabel: deviceLabel(),
+    log,
+
+    // A refresh re-reads the account rather than trusting the old token's
+    // claims, so this is where a change of role lands. Announced only when
+    // something actually moved, because this runs every fifteen minutes and a
+    // state event per renewal would invalidate caches all evening for nothing.
+    onUserRefreshed: (user) => {
+      const stored = readKnown().find((s) => s.url === url)
+      if (stored && (stored.isAdmin !== user.isAdmin || stored.email !== user.email)) {
+        writeKnown(
+          readKnown().map((s) =>
+            s.url === url ? { ...s, email: user.email, isAdmin: user.isAdmin } : s
+          )
+        )
+        announce()
+      }
+    },
+
+    // The session is over for good. The credential is already gone; forgetting
+    // the name as well is what makes the UI offer a sign-in rather than retry.
+    onSignedOut: () => {
+      writeKnown(readKnown().map((s) => (s.url === url ? { ...s, username: null } : s)))
+      announce()
+    },
+
+    onUpgradeRequired: (upgradeTo) => {
+      upgradeRequired = upgradeTo
+      announce()
+    }
+  })
+
+  sessions.set(url, session)
+  return session
 }
 
 function readKnown(): StoredServer[] {
@@ -157,7 +216,7 @@ export function getServerState(): ServerState {
   }))
 
   const activeServer = active ? known.find((s) => s.url === active) : undefined
-  const session: ServerSession | null =
+  const session: ServerSessionState | null =
     activeServer && hasCredentials(activeServer.url) && activeServer.username
       ? {
           url: activeServer.url,
@@ -215,7 +274,7 @@ export async function refreshServerHealth(): Promise<void> {
   if (!url) return
 
   try {
-    const health = await serverRequest<{ riotKeyRejected: boolean }>(url, '/health')
+    const health = await sessionFor(url).transport.request<{ riotKeyRejected: boolean }>('/health')
     setServerRiotKeyRejected(health.riotKeyRejected === true)
   } catch (err) {
     log.debug('Could not read server health', { error: String(err) })
@@ -250,7 +309,7 @@ function syncHubConnection(state: ServerState): void {
     return
   }
 
-  void connectHub(url, () => accessTokenFor(url))
+  void connectHub(url, API_BASE, identity(), () => sessionFor(url).accessToken())
 
   // The announcement only reaches desktops that were listening when it
   // happened. One connecting to a server that has been degraded since last
@@ -277,7 +336,7 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
     }
   }
 
-  return probeServer(normalised.url)
+  return probeServer(normalised.url, identity())
 }
 
 /** What a server will say about an invite code, before anybody has an account. */
@@ -296,9 +355,10 @@ export async function previewInvite(rawUrl: string, pasted: string): Promise<Inv
   if (!token) return unusable('Paste the invite code, or the whole link you were sent.')
 
   try {
-    return await serverRequest<InvitePreview>(
-      normalised.url,
-      `/invites/${encodeURIComponent(token)}/preview`
+    // A server this install may never have joined, so no session: an invite is
+    // readable by anybody who has the code, which is the point of it.
+    return await createTransport({ baseUrl: normalised.url, identity: identity() }).request<InvitePreview>(
+      `${API_BASE}/invites/${encodeURIComponent(token)}/preview`
     )
   } catch (err) {
     return unusable(err instanceof Error ? err.message : String(err))
@@ -309,24 +369,14 @@ export async function register(
   rawUrl: string,
   registration: ServerRegistration
 ): Promise<ServerAuthResult> {
-  return authenticate(rawUrl, '/auth/register', {
-    username: registration.username,
-    email: registration.email,
-    password: registration.password,
-    inviteToken: registration.inviteToken ? inviteTokenFrom(registration.inviteToken) : undefined,
-    deviceLabel: deviceLabel()
-  })
+  return authenticate(rawUrl, (session) => session.register(registration))
 }
 
 export async function login(
   rawUrl: string,
   credentials: ServerCredentials
 ): Promise<ServerAuthResult> {
-  return authenticate(rawUrl, '/auth/login', {
-    email: credentials.email,
-    password: credentials.password,
-    deviceLabel: deviceLabel()
-  })
+  return authenticate(rawUrl, (session) => session.login(credentials))
 }
 
 /**
@@ -340,8 +390,7 @@ export async function login(
  */
 async function authenticate(
   rawUrl: string,
-  path: string,
-  body: unknown
+  signIn: (session: ServerSession) => Promise<{ username: string; email: string; isAdmin: boolean }>
 ): Promise<ServerAuthResult> {
   const normalised = normaliseServerUrl(rawUrl)
   if ('error' in normalised) {
@@ -351,32 +400,26 @@ async function authenticate(
   const url = normalised.url
 
   try {
-    const session = await serverRequest<SessionResponse>(url, path, { method: 'POST', body })
-
-    saveSecret(secretName(url), session.refreshToken)
-    accessTokens.set(url, {
-      token: session.accessToken,
-      expiresAt: Date.parse(session.accessTokenExpiresAt)
-    })
+    const user = await signIn(sessionFor(url))
 
     // The name is worth a round trip only here: it is what the server calls
     // itself, and it is what the sidebar shows from now on.
-    const probed = await probeServer(url)
+    const probed = await probeServer(url, identity())
 
     const known = readKnown().filter((s) => s.url !== url)
     known.push({
       url,
       name: probed.serverName ?? displayName(url),
-      username: session.user.username,
-      email: session.user.email,
-      isAdmin: session.user.isAdmin
+      username: user.username,
+      email: user.email,
+      isAdmin: user.isAdmin
     })
 
     writeKnown(known)
     writeActive(url)
     upgradeRequired = null
 
-    log.info('Signed in to a Foxfire server', { url, username: session.user.username })
+    log.info('Signed in to a Foxfire server', { url, username: user.username })
     return { ok: true, error: null, state: announce() }
   } catch (err) {
     if (err instanceof ServerError && err.isUnsupportedClient) {
@@ -402,18 +445,7 @@ export async function logout(): Promise<ServerState> {
   const url = readActive()
   if (!url) return getServerState()
 
-  const refreshToken = loadSecret(secretName(url))
-
-  if (refreshToken) {
-    try {
-      await serverRequest(url, '/auth/logout', { method: 'POST', body: { refreshToken } })
-    } catch (err) {
-      log.debug('The server could not be told about a sign-out', { error: String(err) })
-    }
-  }
-
-  clearSecret(secretName(url))
-  accessTokens.delete(url)
+  await sessionFor(url).logout()
 
   writeKnown(readKnown().map((s) => (s.url === url ? { ...s, username: null } : s)))
   writeActive(null)
@@ -449,7 +481,8 @@ export function setActiveServer(url: string | null): ServerState {
 /** Forgets a server and the credential for it. */
 export function forgetServer(url: string): ServerState {
   clearSecret(secretName(url))
-  accessTokens.delete(url)
+  sessions.get(url)?.reset()
+  sessions.delete(url)
   writeKnown(readKnown().filter((s) => s.url !== url))
   if (readActive() === url) writeActive(null)
   return announce()
@@ -458,14 +491,10 @@ export function forgetServer(url: string): ServerState {
 /**
  * A request to the active server, with a live access token on it.
  *
- * This is what the HTTP half of the data layer will call once matches move
- * server-side — it is the reason the token handling is a service rather than
- * something the settings page does for itself.
- *
- * Renewal happens before the request rather than in response to a 401, so an
- * expiry does not cost a round trip. The 401 path is still there, because a
- * token can also stop meaning something for reasons no clock predicts: an admin
- * revoking a session, or a server that lost its signing key.
+ * What everything that reads from or reports to a server goes through. The
+ * path is relative to the server's API base; the session supplies the token,
+ * renews it when it is about to lapse, and retries once if the server refuses
+ * one that looked live.
  */
 export async function authedRequest<T>(
   path: string,
@@ -474,84 +503,21 @@ export async function authedRequest<T>(
   const url = readActive()
   if (!url) throw new ServerError('Not connected to a Foxfire server.', 0)
 
-  try {
-    return await withToken<T>(url, path, options, await accessTokenFor(url))
-  } catch (err) {
-    if (!(err instanceof ServerError) || !err.isUnauthorized) throw err
-
-    // Refused despite a token that looked live. Force one renewal and try once.
-    accessTokens.delete(url)
-    return withToken<T>(url, path, options, await accessTokenFor(url))
-  }
+  return sessionFor(url).request<T>(path, options)
 }
 
-async function withToken<T>(
-  url: string,
-  path: string,
-  options: { method?: string; body?: unknown },
-  accessToken: string
-): Promise<T> {
-  try {
-    return await serverRequest<T>(url, path, { ...options, accessToken })
-  } catch (err) {
-    if (err instanceof ServerError && err.isUnsupportedClient) {
-      upgradeRequired = err.upgradeTo
-      announce()
-    }
-    throw err
-  }
-}
+let api: ServerApi | null = null
 
-/** A live access token for a server, renewing it from the refresh token if needed. */
-async function accessTokenFor(url: string): Promise<string> {
-  const held = accessTokens.get(url)
-  if (held && held.expiresAt - Date.now() > RENEW_BEFORE_MS) return held.token
-
-  const refreshToken = loadSecret(secretName(url))
-  if (!refreshToken) throw new ServerError('Not signed in to this server.', 401)
-
-  let session: SessionResponse
-  try {
-    session = await serverRequest<SessionResponse>(url, '/auth/refresh', {
-      method: 'POST',
-      body: { refreshToken }
-    })
-  } catch (err) {
-    if (err instanceof ServerError && err.isUnauthorized) {
-      // The session is over for good — expired, revoked, or the chain was cut
-      // because a spent token was replayed. Drop the credential so the UI shows
-      // a sign-in rather than retrying something that cannot work.
-      clearSecret(secretName(url))
-      accessTokens.delete(url)
-      writeKnown(readKnown().map((s) => (s.url === url ? { ...s, username: null } : s)))
-      announce()
-    }
-    throw err
-  }
-
-  // Rotating: the server just invalidated the one that was used, so the
-  // replacement has to be written before anything else can go wrong.
-  saveSecret(secretName(url), session.refreshToken)
-  accessTokens.set(url, {
-    token: session.accessToken,
-    expiresAt: Date.parse(session.accessTokenExpiresAt)
-  })
-
-  // A refresh re-reads the account rather than trusting the old token's claims,
-  // so this is where a change of role lands. Announced only when something
-  // actually moved, because this runs every fifteen minutes and a state event
-  // per renewal would invalidate caches all evening for nothing.
-  const stored = readKnown().find((s) => s.url === url)
-  if (stored && (stored.isAdmin !== session.user.isAdmin || stored.email !== session.user.email)) {
-    writeKnown(
-      readKnown().map((s) =>
-        s.url === url ? { ...s, email: session.user.email, isAdmin: session.user.isAdmin } : s
-      )
-    )
-    announce()
-  }
-
-  return session.accessToken
+/**
+ * The routes both clients share, bound to whichever server is active.
+ *
+ * Built once over `authedRequest`, which looks the active server up per call,
+ * so switching servers changes where the next request goes rather than needing
+ * a new object.
+ */
+export function serverApi(): ServerApi {
+  api ??= createServerApi(authedRequest, { log })
+  return api
 }
 
 /** Which machine this session belongs to, for the server's own session list. */

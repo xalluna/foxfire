@@ -7,8 +7,7 @@ import type {
   Season,
   SnapshotSource
 } from '@shared/types'
-import { ladderPosition, rankMovement } from '@shared/ladder'
-import { resetsBetween, seasonAt } from '@shared/seasons'
+import { ladderPosition, rankMovement, resetsBetween, seasonAt } from '@foxfire/core'
 
 interface SnapshotRow {
   queue_type: string
