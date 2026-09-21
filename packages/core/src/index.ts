@@ -13,7 +13,7 @@
  * an old stats.db onto a server).
  */
 export type * from './types'
-export type { FoxfireData } from './client'
+export type { ConnectionState, FoxfireClient, FoxfireData, Unsubscribe } from './client'
 export type { Logger } from './log'
 export { silentLogger } from './log'
 export * from './rules/ladder'

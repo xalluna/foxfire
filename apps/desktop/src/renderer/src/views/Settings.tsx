@@ -1,30 +1,98 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Disclaimer } from '../components/Disclaimer'
+import {
+  DangerRow,
+  Disclaimer,
+  Icon,
+  Logo,
+  SettingsBlock,
+  SettingsCard,
+  SettingsNav,
+  SettingsPage,
+  SettingsRow,
+  StatusRow,
+  checkboxClass,
+  inputClass,
+  primaryButtonClass,
+  type SettingsNavItem
+} from '@foxfire/ui'
+import { ServerDataScreen, ServerManagementScreen, useIsServerAdmin } from '@foxfire/screens'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { useServerHealth } from '../hooks/useKeyStatus'
-import { ServerAdminSettings } from '../components/ServerAdminSettings'
-import { ServerDataSettings } from '../components/ServerDataSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
-import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
-import {
-  DangerRow,
-  SettingsBlock,
-  SettingsRow,
-  StatusRow
-} from '../components/settings/SettingsRow'
-import {
-  FIRST_CATEGORY,
-  SettingsNav,
-  type SettingsCategory
-} from '../components/settings/SettingsNav'
-import { checkboxClass, inputClass, primaryButtonClass } from '../components/settings/controls'
-import { Logo } from '../components/Logo'
 import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
+
+/**
+ * Which settings page is on screen.
+ *
+ * Ranked seasons is not one of these. It was its own top-level section when
+ * every section was a fold, but it exists to serve rank history — the dates
+ * decide which games belong to which season — so it is now a card on the Rank
+ * tracking page rather than a sibling of it.
+ */
+type SettingsCategory =
+  | 'server'
+  | 'serverAdmin'
+  | 'serverData'
+  | 'riotKey'
+  | 'rank'
+  | 'capture'
+  | 'replays'
+  | 'telemetry'
+  | 'about'
+
+/**
+ * The first category, and where Settings always opens.
+ *
+ * Still the Riot key rather than Server, because the key is what the app cannot
+ * work without and both of App's key banners land here. Server sits above it in
+ * the sidebar — it is the bigger decision, and it decides whether the key page
+ * applies at all — but it is not where somebody with a problem needs to arrive.
+ */
+const FIRST_CATEGORY: SettingsCategory = 'riotKey'
+
+interface NavItem extends SettingsNavItem<SettingsCategory> {
+  /** Shown only to an administrator of the server currently connected. */
+  adminOnly?: boolean
+  /**
+   * Hidden while a server is answering.
+   *
+   * For the one page that is genuinely about nothing then: connected, this
+   * machine holds no Riot key at all — the server has one, shared by everybody
+   * on it — so a page offering to save one would be offering to save something
+   * nothing would read.
+   */
+  localOnly?: boolean
+}
+
+/**
+ * The sidebar, in groups.
+ *
+ * Grouped the way the app is: where its data comes from, what it records off
+ * your machine, and the two pages that are about Foxfire itself rather than
+ * about League.
+ */
+const GROUPS: NavItem[][] = [
+  [
+    { id: 'server', label: 'Server', icon: <Icon.Server /> },
+    { id: 'serverAdmin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
+    { id: 'serverData', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
+    { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
+    { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
+  ],
+  [
+    { id: 'capture', label: 'Game capture', icon: <Icon.Film /> },
+    { id: 'replays', label: 'Riot replays', icon: <Icon.Replay /> }
+  ],
+  [
+    { id: 'telemetry', label: 'Developer telemetry', icon: <Icon.Activity /> },
+    { id: 'about', label: 'About', icon: <Icon.Info /> }
+  ]
+]
 
 // Only ever shown before the first settings load answers; the main process owns
 // the real defaults (rateLimiter's APPLICATION_KEY_LIMITS).
@@ -47,19 +115,19 @@ const DEFAULT_APPLICATION_LIMITS: RiotKeyLimits = { burstLimit: 500, sustainedLi
 export function Settings(): JSX.Element {
   const [category, setCategory] = useState<SettingsCategory>(FIRST_CATEGORY)
 
-  // Drives whether the management page is offered at all. Refetched on every
+  // Drives whether the management page is offered at all. Follows every
   // connection change, so signing out of a server takes its admin page with it
   // rather than leaving a category whose every call now fails.
-  const [isServerAdmin, setIsServerAdmin] = useState(false)
+  //
+  // Decides what to draw and nothing else. The server checks the role on every
+  // request it serves, so a window belonging to somebody demoted a minute ago
+  // shows a page whose every call is refused — which is the right way round.
+  const isServerAdmin = useIsServerAdmin()
   const { connected: isConnected } = useServerHealth()
 
-  useEffect(() => {
-    const read = (state: { session: { isAdmin: boolean } | null }): void =>
-      setIsServerAdmin(state.session?.isAdmin ?? false)
-
-    void window.api.server.getState().then(read)
-    return window.api.server.onChanged(read)
-  }, [])
+  const groups = GROUPS.map((group) =>
+    group.filter((item) => (!item.adminOnly || isServerAdmin) && (!item.localOnly || !isConnected))
+  )
 
   // Somebody demoted, or signed out, while looking at the page that is now gone.
   useEffect(() => {
@@ -84,17 +152,12 @@ export function Settings(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0">
-      <SettingsNav
-        active={category}
-        isServerAdmin={isServerAdmin}
-        isConnected={isConnected}
-        onSelect={setCategory}
-      />
+      <SettingsNav groups={groups} active={category} onSelect={setCategory} />
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
         {category === 'server' && <ServerSettings />}
-        {category === 'serverAdmin' && <ServerAdminSettings />}
-        {category === 'serverData' && <ServerDataSettings />}
+        {category === 'serverAdmin' && <ServerManagementScreen />}
+        {category === 'serverData' && <ServerDataScreen />}
         {category === 'riotKey' && <RiotKeySettings />}
         {category === 'rank' && <RankTrackingSettings />}
         {category === 'capture' && <CaptureSettings />}

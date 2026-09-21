@@ -1,10 +1,11 @@
 // Downloads the rank crests and position icons the UI needs from Community
-// Dragon into src/renderer/src/assets/.
+// Dragon into packages/ui/src/assets/.
 //
-// These live in the renderer source tree (not resources/) so Vite emits them
-// into the renderer bundle. They then load from the 'self' origin, which the
-// CSP in src/renderer/index.html already allows — no policy change needed.
-// Files under resources/ would resolve over file:// and break in dev.
+// These live in the UI package's source tree (not resources/) so each client's
+// Vite build emits them into its own bundle. They then load from the 'self'
+// origin, which both clients' content security policies already allow — no
+// policy change needed. Files under resources/ would resolve over file:// and
+// break in dev.
 //
 // Run with: node scripts/fetch-assets.mjs
 // Re-run when Riot changes tier art (a new tier, a visual refresh).
@@ -15,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const ASSETS = join(ROOT, 'src', 'renderer', 'src', 'assets')
+const ASSETS = join(ROOT, '..', '..', 'packages', 'ui', 'src', 'assets')
 
 const CDRAGON = 'https://raw.communitydragon.org/latest/plugins'
 
@@ -43,7 +44,7 @@ const TIERS = [
 
 // Riot's own champ-select icons. They ship already filled with Riot's #785a28
 // and #c8aa6e, and are left that way — the app's own accent moved off gold in
-// 0.8.0, but Riot's art keeps Riot's palette. See src/renderer/src/lib/positions.ts.
+// 0.8.0, but Riot's art keeps Riot's palette. See packages/ui/src/lib/positions.ts.
 const POSITIONS = ['top', 'jungle', 'middle', 'bottom', 'utility']
 
 /** Smallest plausible download per type — guards against a 404 page or empty body being written as an asset. */

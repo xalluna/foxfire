@@ -1,6 +1,6 @@
 import { useCaptureStatus } from './CaptureIndicator'
 import { useLcuStatus } from '../hooks/useLcuStatus'
-import * as Icon from './icons'
+import { Icon } from '@foxfire/ui'
 
 /**
  * The Live game tab's mark, coloured by what is actually happening.

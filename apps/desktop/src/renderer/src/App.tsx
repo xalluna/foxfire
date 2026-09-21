@@ -1,26 +1,16 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { AccountRail } from './components/AccountRail'
-import { Dashboard } from './views/Dashboard'
+import { EmptyState, Icon, Logo } from '@foxfire/ui'
+import { SearchScreen, queryKeys, useClient } from '@foxfire/screens'
+import { AccountSwitcher } from './components/AccountSwitcher'
+import { ChampionsView, DashboardView, RankView } from './views/AccountViews'
 import { LiveGame } from './views/LiveGame'
 import { Captures } from './views/Captures'
-import { Mastery } from './views/Mastery'
-import { RankHistory } from './views/RankHistory'
-import { Search } from './views/Search'
 import { Settings } from './views/Settings'
-import { EmptyState } from './components/EmptyState'
-import { Logo } from './components/Logo'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { LiveNavIcon } from './components/LiveNavIcon'
-import * as Icon from './components/icons'
-import {
-  useLcuRankUpdates,
-  useManualRankUpdates,
-  useRecordingUpdates,
-  useReplayUpdates,
-  useSyncProgress
-} from './hooks/useSyncProgress'
+import { useRecordingUpdates, useReplayUpdates } from './hooks/useDesktopUpdates'
 import { useKeyRejected, useServerHealth } from './hooks/useKeyStatus'
 import { useUiStore, type View } from './store/uiStore'
 
@@ -38,10 +28,6 @@ const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
 /** Views that operate on the selected account and need the rail alongside them. */
 const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'captures', 'mastery', 'rank']
 
-/**
- * A full-width strip under the title bar. Used for the two Riot key states,
- * which are routine rather than exceptional: personal keys expire every 24h.
- */
 /**
  * A strip across the top of the app.
  *
@@ -83,9 +69,7 @@ function Banner({
 }
 
 function App(): JSX.Element {
-  useSyncProgress()
-  useLcuRankUpdates()
-  useManualRankUpdates()
+  const client = useClient()
   useRecordingUpdates()
   useReplayUpdates()
   const [keyRejected, clearRejected] = useKeyRejected()
@@ -96,8 +80,8 @@ function App(): JSX.Element {
   const setActiveAccount = useUiStore((s) => s.setActiveAccount)
 
   const accounts = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => window.api.accounts.list()
+    queryKey: queryKeys.accounts(),
+    queryFn: () => client.accounts.list()
   })
 
   const settings = useQuery({
@@ -167,7 +151,7 @@ function App(): JSX.Element {
         </div>
       </header>
 
-{/*
+      {/*
         Three banners about one situation, and which one shows depends entirely
         on whose key it is. Connected to a server this machine holds no key at
         all, so neither of the local two can be right — and the server's has no
@@ -200,17 +184,17 @@ function App(): JSX.Element {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {showRail && <AccountRail accounts={accounts.data ?? []} />}
+        {showRail && <AccountSwitcher accounts={accounts.data ?? []} />}
 
         <main className="min-w-0 flex-1 overflow-y-auto">
           {showRail ? (
             activeAccount ? (
               <>
-                {view === 'dashboard' && <Dashboard key={activeAccount.id} account={activeAccount} />}
+                {view === 'dashboard' && <DashboardView key={activeAccount.id} account={activeAccount} />}
                 {view === 'liveGame' && <LiveGame key={activeAccount.id} account={activeAccount} />}
                 {view === 'captures' && <Captures key={activeAccount.id} account={activeAccount} />}
-                {view === 'mastery' && <Mastery key={activeAccount.id} account={activeAccount} />}
-                {view === 'rank' && <RankHistory key={activeAccount.id} account={activeAccount} />}
+                {view === 'mastery' && <ChampionsView key={activeAccount.id} account={activeAccount} />}
+                {view === 'rank' && <RankView key={activeAccount.id} account={activeAccount} />}
               </>
             ) : (
               <EmptyState
@@ -221,7 +205,7 @@ function App(): JSX.Element {
             )
           ) : (
             <>
-              {view === 'search' && <Search />}
+              {view === 'search' && <SearchScreen />}
               {view === 'settings' && <Settings />}
             </>
           )}

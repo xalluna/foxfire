@@ -1,15 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { Account, Scoreboard, ScoreboardPlayer } from '@shared/types'
-import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, championName, runeIconUrl, spellIconUrl } from '../lib/assets'
-import { formatClock } from '../lib/matchStats'
-import { positionIcon, positionLabel } from '../lib/positions'
-import { Asset } from '../components/Asset'
-import { EmptyState } from '../components/EmptyState'
-import { ItemStrip } from '../components/ItemStrip'
-import { Skeleton } from '../components/Skeleton'
-import * as Icon from '../components/icons'
+import { useAssetManifest, championIconUrl, championName, runeIconUrl, spellIconUrl, formatClock, positionIcon, positionLabel, Asset, EmptyState, ItemStrip, Skeleton, Icon } from '@foxfire/ui'
 import { CaptureBanner } from '../components/CaptureIndicator'
 
 /** How often the board asks the game where things stand. */
@@ -23,7 +15,7 @@ const POLL_MS = 1000
  * state here that changes what a row means rather than just what it says.
  */
 function PlayerRow({ p }: { p: ScoreboardPlayer }): JSX.Element {
-  const assets = useAssets()
+  const assets = useAssetManifest()
   const champion =
     assets && p.championId !== null ? championName(assets, p.championId) : (p.championName ?? '')
   const icon = positionIcon(p.position)

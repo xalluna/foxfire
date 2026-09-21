@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import clsx from 'clsx'
-import { roundedPath, type Point } from '../lib/curve'
+import { roundedPath, type Point } from '@foxfire/ui'
 import { formatClock } from './format'
 
 const WIDTH = 720

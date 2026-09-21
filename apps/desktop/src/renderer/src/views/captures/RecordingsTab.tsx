@@ -1,13 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Asset } from '../../components/Asset'
-import { EmptyState } from '../../components/EmptyState'
-import * as Icon from '../../components/icons'
-import { MatchListSkeleton } from '../../components/Skeleton'
-import { useAssets } from '../../hooks/useAssets'
-import { championIconUrl, championName } from '../../lib/assets'
-import { formatAge, formatClock, kdaRatio } from '../../lib/matchStats'
-import { queueName } from '../../lib/queues'
+import { Asset, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
 import type { Account, Recording } from '@shared/types'
 
 /**
@@ -139,7 +132,7 @@ function RecordingRow({
   recording: Recording
   onDelete: () => void
 }): JSX.Element {
-  const assets = useAssets()
+  const assets = useAssetManifest()
   const match = recording.match
   const championId = match?.championId ?? recording.selfChampionId
   const playable = recording.fileExists

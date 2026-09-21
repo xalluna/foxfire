@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { SyncProgressEvent } from '@shared/types'
 import { DEFAULT_QUEUE_FILTER } from '@foxfire/core'
 
 export type View =
@@ -14,7 +13,6 @@ export type View =
 interface UiState {
   activeAccountId: string | null
   view: View
-  syncProgress: Record<string, SyncProgressEvent>
   /**
    * Queue filters, held per page rather than globally so browsing ARAM history
    * does not silently rescope champion stats.
@@ -27,7 +25,6 @@ interface UiState {
   championQueueFilter: number | null
   setActiveAccount: (id: string | null) => void
   setView: (view: View) => void
-  setSyncProgress: (event: SyncProgressEvent) => void
   setMatchQueueFilter: (queueId: number | null) => void
   setChampionQueueFilter: (queueId: number | null) => void
 }
@@ -35,13 +32,10 @@ interface UiState {
 export const useUiStore = create<UiState>((set) => ({
   activeAccountId: null,
   view: 'dashboard',
-  syncProgress: {},
   matchQueueFilter: DEFAULT_QUEUE_FILTER,
   championQueueFilter: DEFAULT_QUEUE_FILTER,
   setActiveAccount: (id) => set({ activeAccountId: id }),
   setView: (view) => set({ view }),
-  setSyncProgress: (event) =>
-    set((state) => ({ syncProgress: { ...state.syncProgress, [event.accountId]: event } })),
   setMatchQueueFilter: (queueId) => set({ matchQueueFilter: queueId }),
   setChampionQueueFilter: (queueId) => set({ championQueueFilter: queueId })
 }))

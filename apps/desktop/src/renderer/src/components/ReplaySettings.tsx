@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { RoflSettings } from '@shared/types'
-import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import { ByteCapRow, LinkRow, PathRow, StatusRow, ToggleRow } from './settings/SettingsRow'
+import { SettingsCard, SettingsPage, ByteCapRow, LinkRow, PathRow, StatusRow, ToggleRow } from '@foxfire/ui'
 
 /**
  * Riot replays, and the clients that can play them back.

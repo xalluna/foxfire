@@ -1,8 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import type { Account, LcuStatus } from '@shared/types'
-import { SettingsRow } from './settings/SettingsRow'
-import { primaryButtonClass } from './settings/controls'
+import { SettingsRow, primaryButtonClass } from '@foxfire/ui'
 
 /**
  * Claiming the League account this machine is signed in to.

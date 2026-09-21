@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { randomExampleRiotId } from '../lib/exampleRiotId'
-import { parseRiotId } from '../lib/riotId'
+import { randomExampleRiotId, parseRiotId } from '@foxfire/ui'
 import { useServerHealth } from '../hooks/useKeyStatus'
 import { useUiStore } from '../store/uiStore'
 

@@ -11,13 +11,13 @@
 // which every Windows since Vista reads at every size.
 //
 // The mark is the three-wisp Foxfire logo, drawn from the same geometry the app
-// renders in src/renderer/src/components/Logo.tsx — both read src/shared/
-// logoMark.json, so the taskbar button, the tray item and the title bar cannot
-// drift apart. The tray icon used to be a base64 PNG pasted into tray.ts by
+// renders in packages/ui/src/components/Logo.tsx — both read
+// packages/ui/src/assets/logoMark.json, so the taskbar button, the tray item and
+// the title bar cannot drift apart. The tray icon used to be a base64 PNG pasted into tray.ts by
 // hand; it is generated here now, for exactly that reason.
 //
 // Colours are the --accent / --accent-dim / --canvas tokens from
-// src/renderer/src/styles/index.css.
+// packages/ui/src/styles/foxfire.css.
 //
 // The taskbar overlay badges are generated here too. They are not the mark —
 // they are the three coloured dots the shell draws over the corner of the
@@ -42,7 +42,9 @@ const OVERLAY_OUT = join(ROOT, 'src', 'main', 'appIconOverlays.ts')
 const FAVICON_OUT = join(ROOT, 'src', 'renderer', 'src', 'assets', 'favicon.svg')
 
 /** The one definition of the mark, shared with the renderer. */
-const mark = JSON.parse(readFileSync(join(ROOT, 'src', 'shared', 'logoMark.json'), 'utf8'))
+const mark = JSON.parse(
+  readFileSync(join(ROOT, '..', '..', 'packages', 'ui', 'src', 'assets', 'logoMark.json'), 'utf8')
+)
 
 /** The shell asks for 16 and 32 constantly; 256 is what Explorer's large view uses. */
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
@@ -261,7 +263,8 @@ async function main() {
   // For `npm run dev:web`, which is a browser tab and therefore wants a
   // favicon. Written under the renderer source tree rather than resources/ so
   // Vite emits it into the bundle and it loads from the 'self' origin the CSP
-  // already allows — the same reason fetch-assets.mjs puts Riot's crests there.
+  // already allows — the same reason fetch-assets.mjs puts Riot's crests in a
+  // source tree.
   await writeFile(
     FAVICON_OUT,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${CROP}">\n    ${wisps(ACCENT)}\n</svg>\n`

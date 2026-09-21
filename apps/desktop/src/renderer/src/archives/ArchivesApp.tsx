@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import * as Icon from '../components/icons'
-import { EmptyState } from '../components/EmptyState'
+import { Icon, EmptyState } from '@foxfire/ui'
 import type { ArchiveCopyProgress, ClientArchive } from '@shared/types'
 
 /**

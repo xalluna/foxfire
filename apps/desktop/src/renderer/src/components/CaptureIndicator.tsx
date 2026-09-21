@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import * as Icon from './icons'
+import { Icon } from '@foxfire/ui'
 import type { CaptureStatus } from '@shared/types'
 
 /**

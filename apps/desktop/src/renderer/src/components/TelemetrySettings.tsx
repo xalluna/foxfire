@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TelemetryState } from '@shared/telemetry'
-import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import { DangerRow, LinkRow, Stat, StatRow, ToggleRow } from './settings/SettingsRow'
+import { SettingsCard, SettingsPage, DangerRow, LinkRow, Stat, StatRow, ToggleRow } from '@foxfire/ui'
 
 /**
  * Switch for the developer telemetry subsystem.

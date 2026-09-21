@@ -7,7 +7,7 @@ import { RateLimitPanel } from './RateLimitPanel'
 import { ResourcesPanel } from './ResourcesPanel'
 import { LcuPanel } from './LcuPanel'
 import { WINDOW_OPTIONS, formatBytes } from './format'
-import * as Icon from '../components/icons'
+import { Icon } from '@foxfire/ui'
 
 const TABS = [
   { id: 'requests', label: 'Riot requests' },

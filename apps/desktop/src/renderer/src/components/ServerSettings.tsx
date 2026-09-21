@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
 import { LinkAccountRow } from './LinkAccountRow'
-import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import { DangerRow, SettingsBlock, SettingsRow, StatusRow } from './settings/SettingsRow'
-import { ghostButtonClass, inputClass, primaryButtonClass } from './settings/controls'
-import * as Icon from './icons'
+import { SettingsCard, SettingsPage, DangerRow, SettingsBlock, SettingsRow, StatusRow, ghostButtonClass, inputClass, primaryButtonClass, Icon } from '@foxfire/ui'
 
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'

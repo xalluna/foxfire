@@ -1,8 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClient } from './lib/queryClient'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { ErrorBoundary } from '@foxfire/ui'
+import { ScreensProvider, createQueryClient } from '@foxfire/screens'
+import { createIpcClient } from './platform/ipcClient'
+import { createDesktopPlatform } from './platform/desktopPlatform'
 import App from './App'
 import './styles/index.css'
 
@@ -19,6 +21,13 @@ async function start(): Promise<void> {
     installMockApi()
   }
 
+  // The shared screens read through a client and ask a platform for what this
+  // machine can do. Both are window.api underneath; the main process still
+  // decides where every answer comes from.
+  const client = createIpcClient(window.api)
+  const platform = createDesktopPlatform(window.api)
+  const queryClient = createQueryClient()
+
   const root = ReactDOM.createRoot(document.getElementById('root')!)
 
   // The telemetry panel, the LP editor, the archive manager and every recording
@@ -32,7 +41,7 @@ async function start(): Promise<void> {
   const Root = hash.startsWith('#telemetry')
     ? (await import('./telemetry/TelemetryApp')).TelemetryApp
     : hash.startsWith('#lp-editor')
-      ? (await import('./lpEditor/LpEditorApp')).LpEditorApp
+      ? (await import('./lpEditor/LpEditorWindow')).LpEditorWindow
       : hash.startsWith('#recording')
         ? (await import('./recording/RecordingApp')).RecordingApp
         : hash.startsWith('#archives')
@@ -43,7 +52,9 @@ async function start(): Promise<void> {
     <React.StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <Root />
+          <ScreensProvider client={client} platform={platform}>
+            <Root />
+          </ScreensProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </React.StrictMode>
