@@ -1,6 +1,6 @@
 import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
-import { is } from './lib/env'
+import { loadRoute } from './rendererUrl'
 import { closeTelemetryWindow } from './telemetryWindow'
 import { closeLpEditorWindow } from './lpEditorWindow'
 import { closeRecordingWindows } from './recordingWindow'
@@ -75,11 +75,7 @@ export function createMainWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    window.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadRoute(window, '/')
 
   mainWindow = window
   // Every path that builds a window comes through here — bootstrap, the tray,

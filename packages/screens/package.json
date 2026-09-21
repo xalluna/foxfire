@@ -20,12 +20,14 @@
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-router": "^1.170.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-router": "^1.170.38",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "react": "^18.3.1",

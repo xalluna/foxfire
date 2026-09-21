@@ -6,8 +6,10 @@
  * recording, launch a replay, download a file — arrives as the Platform, and
  * anything a platform cannot do is simply not offered.
  *
- * Which screens exist, where they are mounted and what state lives in a URL is
- * each app's decision; a screen takes that state as props.
+ * A screen takes the state that decides what it shows as props. The player
+ * pages both clients share are also offered as routes, built by
+ * createPlayerRoutes, so the two agree on every path and search param; which
+ * other screens exist and where they are mounted is each app's decision.
  */
 
 export { ScreensProvider } from './ScreensProvider'
@@ -46,3 +48,30 @@ export { SearchScreen } from './screens/SearchScreen'
 export { SeasonsCard } from './screens/SeasonsCard'
 export { ServerDataScreen } from './screens/ServerDataScreen'
 export { ServerManagementScreen } from './screens/ServerManagementScreen'
+
+export {
+  createPlayerRoutes,
+  usePlayer,
+  type PlayerLayoutProps,
+  type PlayerRoutesOptions
+} from './routes/players'
+export {
+  DEFAULT_RANK_RANGE,
+  queueIdFrom,
+  queueSearchFor,
+  queueTypeFrom,
+  rankQueueSearchFor,
+  rankRangeSearchFor,
+  validateChampionsSearch,
+  validateDashboardSearch,
+  validateLpEditorSearch,
+  validateRankSearch,
+  type ChampionsSearch,
+  type DashboardSearch,
+  type LpEditorSearch,
+  type QueueSearch,
+  type RankSearch
+} from './routes/params'
+export { rememberSearch, type SearchMemory } from './routes/rememberSearch'
+export { parseSearch, stringifySearch } from './routes/serialize'
+export { useRouteSearch, type SearchUpdateOptions } from './routes/useRouteSearch'

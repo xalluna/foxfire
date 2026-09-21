@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
 import {
   DangerRow,
@@ -34,11 +35,11 @@ import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
  * decide which games belong to which season — so it is now a card on the Rank
  * tracking page rather than a sibling of it.
  */
-type SettingsCategory =
+export type SettingsCategory =
   | 'server'
-  | 'serverAdmin'
-  | 'serverData'
-  | 'riotKey'
+  | 'server-admin'
+  | 'server-data'
+  | 'riot-key'
   | 'rank'
   | 'capture'
   | 'replays'
@@ -46,14 +47,15 @@ type SettingsCategory =
   | 'about'
 
 /**
- * The first category, and where Settings always opens.
+ * Where Settings opens when nothing says otherwise.
  *
- * Still the Riot key rather than Server, because the key is what the app cannot
- * work without and both of App's key banners land here. Server sits above it in
- * the sidebar — it is the bigger decision, and it decides whether the key page
- * applies at all — but it is not where somebody with a problem needs to arrive.
+ * The Riot key rather than Server, because the key is what the app cannot work
+ * without. Server sits above it in the sidebar — it is the bigger decision, and
+ * it decides whether the key page applies at all — but it is not where somebody
+ * with a problem needs to arrive. Connected to a server there is no key page,
+ * and Settings opens on Server instead.
  */
-const FIRST_CATEGORY: SettingsCategory = 'riotKey'
+const FIRST_CATEGORY: SettingsCategory = 'riot-key'
 
 interface NavItem extends SettingsNavItem<SettingsCategory> {
   /** Shown only to an administrator of the server currently connected. */
@@ -79,9 +81,9 @@ interface NavItem extends SettingsNavItem<SettingsCategory> {
 const GROUPS: NavItem[][] = [
   [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
-    { id: 'serverAdmin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
-    { id: 'serverData', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
-    { id: 'riotKey', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
+    { id: 'server-admin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
+    { id: 'server-data', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
+    { id: 'riot-key', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],
   [
@@ -107,17 +109,19 @@ const DEFAULT_APPLICATION_LIMITS: RiotKeyLimits = { burstLimit: 500, sustainedLi
  * be as long as it needs to be without hiding anything, and no section has to
  * summarise itself beside a chevron to stay honest about its own state.
  *
- * There is no category in the UI store on purpose. App renders this view
- * conditionally, so leaving Settings unmounts it and the `useState` below
- * resets — which is exactly the wanted behaviour, and means the two Riot key
- * banners in App still land on the right page without knowing this file exists.
+ * Which page is open is the URL's — `/settings/rank` — so the key banners and
+ * the rank page's League-client line can each send somebody straight to the
+ * page they mean. A category that is not on offer to this person right now
+ * shows the opening page instead, without rewriting the address: an admin page
+ * a moment before the connection has said who is an admin should appear once
+ * it has, rather than having been redirected away from for good.
  */
-export function Settings(): JSX.Element {
-  const [category, setCategory] = useState<SettingsCategory>(FIRST_CATEGORY)
+export function Settings({ category }: { category?: string }): JSX.Element {
+  const navigate = useNavigate()
 
-  // Drives whether the management page is offered at all. Follows every
-  // connection change, so signing out of a server takes its admin page with it
-  // rather than leaving a category whose every call now fails.
+  // Drives whether the management pages are offered at all. Follows every
+  // connection change, so signing out of a server takes its admin pages with it
+  // rather than leaving a page whose every call now fails.
   //
   // Decides what to draw and nothing else. The server checks the role on every
   // request it serves, so a window belonging to somebody demoted a minute ago
@@ -129,41 +133,35 @@ export function Settings(): JSX.Element {
     group.filter((item) => (!item.adminOnly || isServerAdmin) && (!item.localOnly || !isConnected))
   )
 
-  // Somebody demoted, or signed out, while looking at the page that is now gone.
-  useEffect(() => {
-    if (!isServerAdmin && (category === 'serverAdmin' || category === 'serverData')) {
-      setCategory(FIRST_CATEGORY)
-    }
-  }, [isServerAdmin, category])
+  const opening: SettingsCategory = isConnected ? 'server' : FIRST_CATEGORY
+  const active = groups.flat().find((item) => item.id === category)?.id ?? opening
 
-  // Settings opens on the Riot key page, which is the right default for a PC
-  // that cannot work without one — and exactly wrong connected to a server,
-  // where this machine holds no key and the page is not in the sidebar at all.
-  useEffect(() => {
-    if (isConnected && category === 'riotKey') setCategory('server')
-  }, [isConnected, category])
   const pane = useRef<HTMLDivElement>(null)
 
   // Arriving at a page scrolled to where the last one was left is disorienting
   // when the pages are unrelated.
   useEffect(() => {
     pane.current?.scrollTo({ top: 0 })
-  }, [category])
+  }, [active])
 
   return (
     <div className="flex h-full min-h-0">
-      <SettingsNav groups={groups} active={category} onSelect={setCategory} />
+      <SettingsNav
+        groups={groups}
+        active={active}
+        onSelect={(id) => void navigate({ to: '/settings/{-$category}', params: { category: id } })}
+      />
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
-        {category === 'server' && <ServerSettings />}
-        {category === 'serverAdmin' && <ServerManagementScreen />}
-        {category === 'serverData' && <ServerDataScreen />}
-        {category === 'riotKey' && <RiotKeySettings />}
-        {category === 'rank' && <RankTrackingSettings />}
-        {category === 'capture' && <CaptureSettings />}
-        {category === 'replays' && <ReplaySettings />}
-        {category === 'telemetry' && <TelemetrySettings />}
-        {category === 'about' && <AboutSettings />}
+        {active === 'server' && <ServerSettings />}
+        {active === 'server-admin' && <ServerManagementScreen />}
+        {active === 'server-data' && <ServerDataScreen />}
+        {active === 'riot-key' && <RiotKeySettings />}
+        {active === 'rank' && <RankTrackingSettings />}
+        {active === 'capture' && <CaptureSettings />}
+        {active === 'replays' && <ReplaySettings />}
+        {active === 'telemetry' && <TelemetrySettings />}
+        {active === 'about' && <AboutSettings />}
       </div>
     </div>
   )

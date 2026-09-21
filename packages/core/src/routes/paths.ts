@@ -1,4 +1,5 @@
-import type { RankRange } from '../types'
+import type { QueueType, RankRange } from '../types'
+import { parseSeasonRange } from '../rules/seasons'
 import { playerSlug } from './slug'
 
 /** Anybody with a Riot ID — an account on the server, or a participant in a game. */
@@ -9,6 +10,31 @@ export interface PlayerRef {
 
 /** The two ladders, as a URL says them. */
 export type RankQueue = 'solo' | 'flex'
+
+/** A ladder as a URL says it. */
+export function rankQueueParam(queueType: QueueType): RankQueue {
+  return queueType === 'RANKED_FLEX_SR' ? 'flex' : 'solo'
+}
+
+/** The inverse, with anything unreadable treated as absent. */
+export function parseRankQueueParam(raw: unknown): QueueType | undefined {
+  if (raw === 'solo') return 'RANKED_SOLO_5x5'
+  if (raw === 'flex') return 'RANKED_FLEX_SR'
+  return undefined
+}
+
+/**
+ * A period as a URL says it, with anything unreadable treated as absent.
+ *
+ * A range is already text a URL can carry, so this only checks it is one — a
+ * link naming a season that no longer exists still parses, and the screen says
+ * there is nothing in it.
+ */
+export function parseRangeParam(raw: unknown): RankRange | undefined {
+  if (raw === '7d' || raw === '30d' || raw === 'all') return raw
+  if (typeof raw !== 'string') return undefined
+  return parseSeasonRange(raw as RankRange) === null ? undefined : (raw as RankRange)
+}
 
 /**
  * A queue filter as a URL says it.
@@ -57,9 +83,11 @@ export const paths = {
 
   players: () => '/players',
 
-  player: (player: PlayerRef, search: { queue?: number | null } = {}) =>
+  /** A profile, and optionally one of its games opened in the history. */
+  player: (player: PlayerRef, search: { queue?: number | null; match?: string } = {}) =>
     withQuery(`/players/${segment(playerSlug(player))}`, {
-      queue: search.queue === undefined ? undefined : queueParam(search.queue)
+      queue: search.queue === undefined ? undefined : queueParam(search.queue),
+      match: search.match
     }),
 
   champions: (player: PlayerRef, search: { queue?: number | null; range?: RankRange } = {}) =>

@@ -1,11 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { RouterProvider } from '@tanstack/react-router'
 import { ErrorBoundary } from '@foxfire/ui'
 import { ScreensProvider, createQueryClient } from '@foxfire/screens'
 import { createIpcClient } from './platform/ipcClient'
 import { createDesktopPlatform } from './platform/desktopPlatform'
-import App from './App'
+import { router } from './router'
 import './styles/index.css'
 
 /**
@@ -28,32 +29,15 @@ async function start(): Promise<void> {
   const platform = createDesktopPlatform(window.api)
   const queryClient = createQueryClient()
 
-  const root = ReactDOM.createRoot(document.getElementById('root')!)
-
-  // The telemetry panel, the LP editor, the archive manager and every recording
-  // window are separate
-  // BrowserWindows loading this same bundle with a hash, so there is no second
-  // Vite entry point to keep in step. The dynamic imports mean no window
-  // downloads or parses a panel it is not showing. The editor and recording hashes
-  // carry query parameters after them, so they are matched by prefix — see
-  // lpEditorWindow.ts and recordingWindow.ts.
-  const hash = window.location.hash
-  const Root = hash.startsWith('#telemetry')
-    ? (await import('./telemetry/TelemetryApp')).TelemetryApp
-    : hash.startsWith('#lp-editor')
-      ? (await import('./lpEditor/LpEditorWindow')).LpEditorWindow
-      : hash.startsWith('#recording')
-        ? (await import('./recording/RecordingApp')).RecordingApp
-        : hash.startsWith('#archives')
-          ? (await import('./archives/ArchivesApp')).ArchivesApp
-          : App
-
-  root.render(
+  // Every window loads this bundle, and the router picks what it shows from the
+  // address it was opened at — the main window at `/`, the others at their own
+  // routes. See router.tsx.
+  ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <ScreensProvider client={client} platform={platform}>
-            <Root />
+            <RouterProvider router={router} />
           </ScreensProvider>
         </QueryClientProvider>
       </ErrorBoundary>

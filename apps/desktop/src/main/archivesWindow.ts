@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
-import { is } from './lib/env'
+import { windowRoutes } from '@shared/windowRoutes'
+import { loadRoute } from './rendererUrl'
 
 /**
  * Managing archived League installs, in a window of its own.
@@ -12,8 +13,8 @@ import { is } from './lib/env'
  * watch.
  *
  * A singleton, like the telemetry panel — there is one register and no reason
- * to look at it twice at once. It reuses the main renderer bundle and picks
- * itself out with a URL hash, so there is no second Vite entry to keep in step.
+ * to look at it twice at once. It reuses the main renderer bundle at a route of
+ * its own, so there is no second Vite entry to keep in step — see rendererUrl.ts.
  */
 let archivesWindow: BrowserWindow | null = null
 
@@ -51,14 +52,7 @@ export function openArchivesWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#archives`)
-  } else {
-    // A plain hash with no query, so loadFile is safe here — unlike the LP
-    // editor and recording windows, which carry parameters that url.format
-    // mangles.
-    window.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'archives' })
-  }
+  loadRoute(window, windowRoutes.archives())
 
   archivesWindow = window
 }

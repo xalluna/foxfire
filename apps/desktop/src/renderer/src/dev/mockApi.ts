@@ -1,4 +1,5 @@
 import type { Api, ValidateResult } from '@shared/api'
+import { windowRoutes } from '@shared/windowRoutes'
 import type {
   Account,
   AppSettingsPublic,
@@ -428,11 +429,10 @@ export const mockApi: Api = {
     ...fixture.rank,
 
     // There are no windows in a browser, so the editor takes over the page
-    // instead. main.tsx picks its root from the hash at startup, so setting it
-    // and reloading lands on the editor exactly as the real window does.
+    // instead: the window's route is a route like any other, and the router
+    // follows the hash to it exactly as the real window loads it.
     openEditor: (accountId: string, queueType: QueueType, matchId: string): Promise<void> => {
-      window.location.hash = `#lp-editor?account=${accountId}&queue=${queueType}&match=${encodeURIComponent(matchId)}`
-      window.location.reload()
+      window.location.hash = `#${windowRoutes.lpEditor(accountId, queueType, matchId)}`
       return Promise.resolve()
     },
 
@@ -475,7 +475,7 @@ export const mockApi: Api = {
 
   search: fixture.search,
   /**
-   * The panel opens at `#telemetry` in its own window against the real main
+   * The panel opens at `#/telemetry` in its own window against the real main
    * process, so the browser harness cannot produce genuine measurements. It
    * serves a synthetic backfill instead — the shape the panel exists to show:
    * queue wait climbing as the sustained window saturates, a couple of 429s,

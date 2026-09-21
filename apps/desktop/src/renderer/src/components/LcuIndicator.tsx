@@ -1,6 +1,6 @@
 import clsx from 'clsx'
+import { useNavigate } from '@tanstack/react-router'
 import { useLcuStatus } from '../hooks/useLcuStatus'
-import { useUiStore } from '../store/uiStore'
 
 /**
  * Whether per-game LP is being captured right now.
@@ -16,7 +16,7 @@ import { useUiStore } from '../store/uiStore'
  */
 export function LcuIndicator(): JSX.Element {
   const status = useLcuStatus()
-  const setView = useUiStore((s) => s.setView)
+  const navigate = useNavigate()
 
   const tone =
     status.state === 'connected'
@@ -34,7 +34,7 @@ export function LcuIndicator(): JSX.Element {
 
   return (
     <button
-      onClick={() => setView('settings')}
+      onClick={() => void navigate({ to: '/settings/{-$category}', params: { category: 'rank' } })}
       title="Open rank tracking settings"
       className={clsx(
         'mt-1.5 flex items-center gap-1.5 text-2xs transition hover:text-accent',

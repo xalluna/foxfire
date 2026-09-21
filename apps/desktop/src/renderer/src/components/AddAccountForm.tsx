@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { randomExampleRiotId, parseRiotId } from '@foxfire/ui'
+import { queryKeys } from '@foxfire/screens'
 import { useServerHealth } from '../hooks/useKeyStatus'
-import { useUiStore } from '../store/uiStore'
+import { useSwitchPlayer } from '../hooks/usePlayerNavigation'
 
 /**
  * How an account is added, which is not the same question in the two modes.
@@ -44,7 +45,7 @@ function TypeARiotId({ onAdded }: { onAdded?: () => void }): JSX.Element {
   // the one greyed out in the box.
   const [example] = useState(randomExampleRiotId)
   const queryClient = useQueryClient()
-  const setActiveAccount = useUiStore((s) => s.setActiveAccount)
+  const switchPlayer = useSwitchPlayer()
 
   const add = useMutation({
     mutationFn: (raw: string) => {
@@ -52,11 +53,14 @@ function TypeARiotId({ onAdded }: { onAdded?: () => void }): JSX.Element {
       if (!parsed) throw new Error(`Enter a Riot ID like ${example}`)
       return window.api.accounts.add(parsed)
     },
-    onSuccess: (account) => {
+    onSuccess: async (account) => {
       setValue('')
       setError(null)
-      setActiveAccount(account.id)
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      // The page is found by looking the account up in the list, so the list
+      // has to have it before the page is asked for — or the first thing the
+      // new account shows is "no player by that name".
+      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
+      switchPlayer(account)
       onAdded?.()
     },
     onError: (err: Error) => {

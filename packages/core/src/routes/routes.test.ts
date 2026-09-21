@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { absoluteUrl, parseQueueParam, paths, queueParam } from './paths'
+import {
+  absoluteUrl,
+  parseQueueParam,
+  parseRangeParam,
+  parseRankQueueParam,
+  paths,
+  queueParam,
+  rankQueueParam
+} from './paths'
 import { isPlayer, parsePlayerSlug, playerSlug } from './slug'
 
 const FAKER = { gameName: 'Faker', tagLine: 'KR1' }
@@ -48,6 +56,37 @@ describe('queue params', () => {
   })
 })
 
+describe('ladder params', () => {
+  it('names the two ladders the way a person would', () => {
+    expect(rankQueueParam('RANKED_SOLO_5x5')).toBe('solo')
+    expect(rankQueueParam('RANKED_FLEX_SR')).toBe('flex')
+    expect(parseRankQueueParam('solo')).toBe('RANKED_SOLO_5x5')
+    expect(parseRankQueueParam('flex')).toBe('RANKED_FLEX_SR')
+  })
+
+  it('treats anything else as absent', () => {
+    expect(parseRankQueueParam('RANKED_SOLO_5x5')).toBeUndefined()
+    expect(parseRankQueueParam(420)).toBeUndefined()
+    expect(parseRankQueueParam(undefined)).toBeUndefined()
+  })
+})
+
+describe('range params', () => {
+  it('accepts every period a screen can offer', () => {
+    expect(parseRangeParam('7d')).toBe('7d')
+    expect(parseRangeParam('30d')).toBe('30d')
+    expect(parseRangeParam('all')).toBe('all')
+    expect(parseRangeParam('season:12')).toBe('season:12')
+  })
+
+  it('treats anything else as absent', () => {
+    expect(parseRangeParam('season:')).toBeUndefined()
+    expect(parseRangeParam('season:twelve')).toBeUndefined()
+    expect(parseRangeParam('90d')).toBeUndefined()
+    expect(parseRangeParam(30)).toBeUndefined()
+  })
+})
+
 describe('paths', () => {
   it('encodes a player into one path segment', () => {
     expect(paths.player({ gameName: 'Hide on bush', tagLine: 'KR1' })).toBe('/players/Hide%20on%20bush-KR1')
@@ -61,6 +100,7 @@ describe('paths', () => {
     expect(paths.lpEditor(FAKER, { queue: 'solo', match: 'KR_1' })).toBe(
       '/players/Faker-KR1/lp?queue=solo&match=KR_1'
     )
+    expect(paths.player(FAKER, { match: 'KR_1' })).toBe('/players/Faker-KR1?match=KR_1')
   })
 
   it('leaves the query off when there is nothing to say', () => {
