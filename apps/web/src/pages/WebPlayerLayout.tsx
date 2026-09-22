@@ -33,15 +33,25 @@ function Tab({
  *
  * The desktop has an account rail here; a browser has the Players page for
  * choosing somebody, so this only has to move between one player's views.
+ *
+ * Capped at 1280px, not narrower, because the dashboard brings its 320px stats
+ * rail in at `xl:` — a viewport query, 1280px — and has no cap of its own. A
+ * narrower box here still gets the rail on a wide screen, and the match rows
+ * lose their items to the list's overflow-hidden. SearchPage explains the same
+ * bargain.
+ *
+ * The tabs do not scroll sideways. Three fit the narrowest phone, and a scroll
+ * container turns each tab's -mb-px — the pixel that overlaps the hairline —
+ * into a 1px vertical scroll, with a scrollbar to match.
  */
 export function WebPlayerLayout({ account, children }: PlayerLayoutProps): JSX.Element {
-  if (!account) return <div className="mx-auto max-w-6xl">{children}</div>
+  if (!account) return <div className="mx-auto max-w-7xl">{children}</div>
 
   const slug = playerSlug(account)
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <nav className="flex gap-1 overflow-x-auto border-b border-hairline px-4 max-md:px-2">
+    <div className="mx-auto max-w-7xl">
+      <nav className="flex gap-1 border-b border-hairline px-4 max-md:px-2">
         <Tab to="/players/$slug" slug={slug} exact>
           Profile
         </Tab>

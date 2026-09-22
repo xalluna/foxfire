@@ -43,7 +43,8 @@ export function WebShell(): JSX.Element {
   return (
     <div className="min-h-screen bg-canvas text-text">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/95 backdrop-blur">
-        <div className="mx-auto flex h-12 max-w-6xl items-center gap-4 px-4 max-md:gap-2 max-md:px-2">
+        {/* As wide as the widest page below it — see WebPlayerLayout. */}
+        <div className="mx-auto flex h-12 max-w-7xl items-center gap-4 px-4 max-md:gap-2 max-md:px-2">
           <Link to="/" className="flex shrink-0 items-center gap-2">
             <Logo className="shrink-0 text-accent" />
             <span className="font-display text-base tracking-wide text-accent max-sm:hidden">

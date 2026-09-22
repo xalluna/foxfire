@@ -40,7 +40,8 @@ export function AdminLayout(): JSX.Element {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <nav className="flex gap-1 overflow-x-auto border-b border-hairline px-4 max-md:px-2">
+      {/* Not a scroll container, for the reason in WebPlayerLayout. */}
+      <nav className="flex gap-1 border-b border-hairline px-4 max-md:px-2">
         <Tab to="/admin" exact>
           Members &amp; invites
         </Tab>

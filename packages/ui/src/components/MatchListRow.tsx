@@ -32,9 +32,14 @@ import * as Icon from './icons'
  * expands into.
  *
  * On a phone it keeps the result, the champion and the KDA — what a glance at
- * a history is for — and lets the rest go: CS, damage and items below 768px,
- * the champion's name too below 640px, where its portrait already says it.
- * The desktop never goes below 1024px, so it never sees any of this.
+ * a history is for — and lets the rest go: items below 768px; below 640px the
+ * champion's name, where its portrait already says it, and the spells and
+ * runes, which the expanded row still has. CS and damage go earlier, below
+ * 1024px. Every column is a fixed width, so whatever does not fit is not
+ * squeezed but cut off by the list's overflow-hidden: the whole row needs
+ * about 850px, which a tablet held upright or a half-screen window does not
+ * have, and a 360px phone has room for no more than what is left. The desktop
+ * never goes below 1024px, so it never sees any of this.
  */
 export function MatchListRow({
   match,
@@ -114,7 +119,7 @@ export function MatchListRow({
           )}
         </div>
 
-        <div className="flex flex-col gap-[3px]">
+        <div className="flex flex-col gap-[3px] max-sm:hidden">
           <Asset
             src={assets && match.summoner1Id !== null ? spellIconUrl(assets, match.summoner1Id) : null}
             className="h-[19px] w-[19px]"
@@ -125,7 +130,7 @@ export function MatchListRow({
           />
         </div>
 
-        <div className="flex flex-col gap-[3px]">
+        <div className="flex flex-col gap-[3px] max-sm:hidden">
           <Asset
             src={assets && keystone !== null ? runeIconUrl(assets, keystone) : null}
             className="h-[19px] w-[19px] bg-canvas"
@@ -164,7 +169,7 @@ export function MatchListRow({
       </div>
 
       {/* Farm and participation */}
-      <div className="w-[78px] shrink-0 max-md:hidden">
+      <div className="w-[78px] shrink-0 max-lg:hidden">
         <p className="text-sm tabular-nums text-text-dim">
           {match.cs ?? 0} CS{' '}
           {cspm !== null && <span className="text-text-mute">({cspm.toFixed(1)})</span>}
@@ -173,7 +178,7 @@ export function MatchListRow({
       </div>
 
       {/* Damage share — a measured ratio, not a rating */}
-      <div className="w-[72px] shrink-0 max-md:hidden">
+      <div className="w-[72px] shrink-0 max-lg:hidden">
         <p className="text-2xs tabular-nums text-text-dim">
           {compactNumber(match.damageDealtToChampions)} dmg
         </p>

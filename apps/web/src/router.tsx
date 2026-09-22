@@ -98,17 +98,8 @@ const player = createPlayerRoutes(authed, { layout: WebPlayerLayout })
 
 const match = createMatchRoute(authed)
 
-const search = createRoute({
-  getParentRoute: () => authed,
-  path: 'search',
-  component: function SearchRoute() {
-    return (
-      <div className="mx-auto max-w-5xl">
-        <SearchScreen />
-      </div>
-    )
-  }
-})
+// Unwrapped: SearchPage sets its own width, and has to — see the note there.
+const search = createRoute({ getParentRoute: () => authed, path: 'search', component: SearchScreen })
 
 const admin = createRoute({ getParentRoute: () => authed, path: 'admin', component: AdminLayout })
 const adminMembers = createRoute({ getParentRoute: () => admin, path: '/', component: ServerManagementScreen })
