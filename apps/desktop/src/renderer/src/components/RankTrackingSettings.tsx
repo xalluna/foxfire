@@ -3,10 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import type { BackgroundSettings } from '@shared/types'
 import { useLcuStatus } from '../hooks/useLcuStatus'
-import { SeasonsCard } from './SeasonSettings'
-import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import { SettingsBlock, StatusRow, ToggleRow } from './settings/SettingsRow'
-import { ghostButtonClass, inputClass } from './settings/controls'
+import { SeasonsCard } from '@foxfire/screens'
+import { SettingsCard, SettingsPage, SettingsBlock, StatusRow, ToggleRow, ghostButtonClass, inputClass } from '@foxfire/ui'
 
 /**
  * Controls for the half of LP tracking that cannot work from the Riot API.

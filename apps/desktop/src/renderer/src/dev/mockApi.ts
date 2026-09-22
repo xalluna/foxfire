@@ -1,29 +1,14 @@
-import type { Api, DashboardData, MasteryData, ValidateResult } from '@shared/api'
+import type { Api, ValidateResult } from '@shared/api'
+import { windowRoutes } from '@shared/windowRoutes'
 import type {
   Account,
-  AdminActionResult,
-  AdminInvite,
-  AdminUser,
-  AdminReplay,
-  AdminUserPatch,
-  ServerStorageUsage,
-  ImportProgress,
-  ImportResult,
-  AdHocSummonerResult,
   AppSettingsPublic,
-  AssetManifest,
   BackgroundSettings,
   CaptureSettings,
   CaptureStatus,
-  ChampionStats,
   LcuStatus,
-  MatchDetail,
-  InvitePreview,
-  MatchSummary,
   QueueType,
   ObsValidation,
-  RankHistory,
-  RankRange,
   Recording,
   RecordingDetail,
   RecordingDiskUsage,
@@ -38,15 +23,12 @@ import type {
   RiotKeyType,
   ServerAuthResult,
   ServerCredentials,
-  ServerAdminSettings,
   ServerProbe,
   ServerRegistration,
   ServerState,
   Scoreboard,
-  Season,
-  SeasonInput,
-  SyncProgressEvent,
-  SyncState
+  InvitePreview,
+  ImportProgress
 } from '@shared/types'
 import type {
   LcuTelemetry,
@@ -56,37 +38,30 @@ import type {
   TelemetryState,
   TelemetrySummary
 } from '@shared/telemetry'
-import { rankMovement } from '@shared/ladder'
-import { rangeBounds, resetsBetween, seasonsSpanning } from '@shared/seasons'
-import { DEV_SEASONS } from './seasons'
-import { DDRAGON_MANIFEST } from './ddragonManifest'
+import {
+  ACCOUNTS,
+  MOCK_SERVER_URL,
+  createFixtureClient,
+  delay,
+  runFixtureImport,
+  scenario
+} from '@foxfire/screens/dev'
 import {
   RECORDINGS,
   RECORDING_EVENTS,
   MOCK_REPLAYS,
   MOCK_ROFL_SETTINGS,
   MOCK_ARCHIVES,
-  ACCOUNTS,
-  LEAGUE_ENTRIES,
-  MASTERY,
-  MATCHES,
-  MATCH_DETAILS,
-  RANK_SNAPSHOTS,
-  SCOREBOARD,
-  championStatsFor
-} from './fixtures'
-import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
+  SCOREBOARD
+} from './desktopFixtures'
 
 /**
- * Stands in for the main process broadcasting rank:edited to every window.
- * Here there is only one, but the match list and rank graph still have to be
- * told to refetch after an edit.
+ * The shared half: League data, a server's admin surface, and the events that
+ * refresh them. The same fixture client the web client's harness renders, so
+ * the two review the same games; what is added below is only what a desktop
+ * has and a browser does not.
  */
-const editedListeners = new Set<(accountId: string) => void>()
-
-function notifyEdited(accountId: string): void {
-  for (const listener of editedListeners) listener(accountId)
-}
+const fixture = createFixtureClient()
 
 /**
  * A fake window.api for running the renderer in a plain browser.
@@ -102,37 +77,6 @@ function notifyEdited(accountId: string): void {
  *
  * Dev-only — loaded lazily from main.tsx behind import.meta.env.DEV.
  */
-
-/**
- * Scenario switch, read from ?scenario= in the URL.
- *
- * The states below are not rare edge cases in this app: a personal Riot key
- * expires every 24 hours, so no-key and key-expired are part of ordinary use
- * and need to be as designed as the happy path.
- */
-export type Scenario =
-  | 'default'
-  | 'loading'
-  | 'no-key'
-  | 'key-expired'
-  | 'no-accounts'
-  | 'no-matches'
-  | 'sync-error'
-  | 'not-live'
-  | 'no-obs'
-  // Signed in to a Foxfire server; refused by one for being too old; and one
-  // whose own Riot key has expired, which is the state a personal key reaches
-  // every twenty-four hours and which nobody on this machine can fix.
-  | 'server-connected'
-  | 'server-outdated'
-  | 'server-degraded'
-
-function currentScenario(): Scenario {
-  const raw = new URLSearchParams(window.location.search).get('scenario')
-  return (raw ?? 'default') as Scenario
-}
-
-const scenario = currentScenario()
 
 /** Mutable, so toggling a setting in the harness actually sticks for the session. */
 const CAPTURE_SETTINGS: CaptureSettings = {
@@ -151,98 +95,14 @@ const CAPTURE_SETTINGS: CaptureSettings = {
   obsScene: null
 }
 
-/** Never resolves — holds the UI in its loading state for inspection. */
-const NEVER = new Promise<never>(() => {})
-
-/**
- * `hold: false` opts a call out of the `loading` scenario.
- *
- * The shell needs its accounts, settings and asset manifest to resolve before
- * any screen renders at all, so stalling those would only ever show the
- * "no accounts" state. Holding just the data queries reproduces the state that
- * actually matters: a populated app waiting on its match list.
- */
-function delay<T>(value: T, ms = 180, hold = true): Promise<T> {
-  if (scenario === 'loading' && hold) return NEVER
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms))
-}
-
-function fail(message: string): Promise<never> {
-  if (scenario === 'loading') return NEVER
-  return new Promise((_, reject) => setTimeout(() => reject(new Error(message)), 180))
-}
-
-const KEY_EXPIRED = 'Riot API returned 401 — your key has expired.'
-
-function accounts(): Account[] {
-  return scenario === 'no-accounts' ? [] : ACCOUNTS
-}
-
-function matchesFor(accountId: string): MatchSummary[] {
-  if (scenario === 'no-matches') return []
-  return MATCHES[accountId] ?? []
-}
-
-function syncState(accountId: string): SyncState {
-  return {
-    accountId,
-    mostRecentMatchId: matchesFor(accountId)[0]?.matchId ?? null,
-    backfillComplete: scenario !== 'no-matches',
-    backfillTarget: 200,
-    lastFullSyncAt: '2026-08-14T18:00:00Z',
-    lastDeltaSyncAt: '2026-08-14T18:00:00Z'
-  }
-}
-
-/** Listeners registered by the renderer, invoked by the fake sync run below. */
-const progressListeners = new Set<(event: SyncProgressEvent) => void>()
+/** Listeners registered by the renderer for a rejected Riot key. */
 const keyInvalidListeners = new Set<() => void>()
-
-/** Drives a believable progress sequence so the progress bar can be designed against motion. */
-function runFakeSync(accountId: string): void {
-  if (scenario === 'sync-error') {
-    setTimeout(() => {
-      for (const cb of progressListeners) {
-        cb({
-          accountId,
-          phase: 'error',
-          current: 0,
-          total: 100,
-          message: 'Riot API unreachable',
-          trigger: 'manual'
-        })
-      }
-    }, 400)
-    return
-  }
-
-  let current = 0
-  const total = 60
-  const tick = setInterval(() => {
-    current += 3
-    const done = current >= total
-    for (const cb of progressListeners) {
-      cb({
-        accountId,
-        phase: done ? 'complete' : 'backfill',
-        current: Math.min(current, total),
-        total,
-        message: done ? undefined : `Fetching match ${current} of ${total}`,
-        // The harness exists to design the progress bar against motion, and an
-        // auto-triggered sync deliberately renders nothing.
-        trigger: 'manual'
-      })
-    }
-    if (done) clearInterval(tick)
-  }, 220)
-}
 
 // Held in module state so the settings screen behaves like the real one: the
 // control moves, the numbers stick, and nothing reaches a rate limiter that
 // does not exist in the browser harness.
 let keyType: RiotKeyType = 'personal'
 let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
-
 
 /**
  * The server connection, as module state so the harness behaves like the real
@@ -251,12 +111,11 @@ let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000
  * Reachable by ?scenario=server-connected, which is how the connected shape of
  * the Server settings page is reviewed without standing a .NET server up.
  */
-const MOCK_SERVER_URL = 'https://foxfire.example.com'
-
 let serverState: ServerState =
   scenario === 'server-connected' || scenario === 'server-degraded'
     ? {
         activeUrl: MOCK_SERVER_URL,
+        publicUrl: MOCK_SERVER_URL,
         servers: [
           { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
         ],
@@ -267,14 +126,17 @@ let serverState: ServerState =
           isAdmin: true
         },
         upgradeRequired: null,
+        serverOutdated: false,
         riotKeyRejected: scenario === 'server-degraded'
       }
-    : scenario === 'server-outdated'
+    : scenario === 'server-outdated' || scenario === 'server-behind'
       ? {
           // Signed in, and then the host upgraded their server out from under
-          // this build. That is the shape worth designing for: the session is
+          // this build — or, for server-behind, this build was updated past
+          // the server. That is the shape worth designing for: the session is
           // still real, and it is the reads that stop.
           activeUrl: MOCK_SERVER_URL,
+          publicUrl: MOCK_SERVER_URL,
           servers: [
             { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
           ],
@@ -284,119 +146,20 @@ let serverState: ServerState =
             email: 'faker@example.com',
             isAdmin: false
           },
-          upgradeRequired: '0.14.0',
+          upgradeRequired: scenario === 'server-outdated' ? '0.14.0' : null,
+          serverOutdated: scenario === 'server-behind',
           riotKeyRejected: false
         }
-      : { activeUrl: null, servers: [], session: null, upgradeRequired: null,
-        riotKeyRejected: false }
+      : { activeUrl: null, servers: [], session: null, publicUrl: null, upgradeRequired: null,
+        serverOutdated: false, riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
-
-/**
- * The shared replay library, biggest first — which is the order the panel
- * shows them in, because the reason to open that list is that something needs
- * to go.
- */
-const MOCK_STORED_REPLAYS: AdminReplay[] = [
-  {
-    matchId: 'NA1_5312345678',
-    patch: '15.16',
-    fileBytes: 34_200_000,
-    uploadedBy: 'Faker',
-    uploadedAt: '2026-09-16T21:04:00.000Z'
-  },
-  {
-    matchId: 'NA1_5312301111',
-    patch: '15.14',
-    fileBytes: 29_800_000,
-    uploadedBy: 'Sova',
-    uploadedAt: '2026-08-30T19:41:00.000Z'
-  },
-  {
-    matchId: 'NA1_5311900042',
-    patch: null,
-    fileBytes: 21_500_000,
-    uploadedBy: null,
-    uploadedAt: '2026-07-02T23:12:00.000Z'
-  }
-]
 
 function setServerState(next: ServerState): ServerState {
   serverState = next
   for (const listener of serverListeners) listener(next)
   return next
-}
-
-
-/**
- * The server this harness pretends to administer.
- *
- * Mutable, so the management page behaves: promote somebody and the badge
- * appears, withdraw an invite and it leaves the list. Reachable under
- * ?scenario=server-connected, whose session is an admin.
- */
-let mockUsers: AdminUser[] = [
-  {
-    id: 'u-1',
-    username: 'Faker',
-    email: 'faker@example.com',
-    isAdmin: true,
-    isDisabled: false,
-    createdAt: '2026-06-01T10:00:00.000Z',
-    linkedRiotAccounts: 2,
-    activeSessions: 1
-  },
-  {
-    id: 'u-2',
-    username: 'phantomduval',
-    email: 'duval@example.com',
-    isAdmin: false,
-    isDisabled: false,
-    createdAt: '2026-07-14T18:30:00.000Z',
-    linkedRiotAccounts: 1,
-    activeSessions: 2
-  },
-  {
-    id: 'u-3',
-    username: 'ward andersen',
-    email: 'ward@example.com',
-    isAdmin: false,
-    isDisabled: true,
-    createdAt: '2026-08-02T09:15:00.000Z',
-    linkedRiotAccounts: 0,
-    activeSessions: 0
-  }
-]
-
-let mockInvites: AdminInvite[] = [
-  {
-    id: 'i-1',
-    email: 'killua@example.com',
-    link: 'https://foxfire.example.com/invite/QbGgAX5_snuoIQKRWXw1EQAAAABqvs9-.K8nkbyg6mVzANgvRHI7L2RS2JaXxPzmf',
-    createdAt: '2026-09-10T12:00:00.000Z',
-    expiresAt: '2026-09-24T12:00:00.000Z',
-    redeemedAt: null,
-    redeemedBy: null,
-    isOpen: true
-  },
-  {
-    id: 'i-2',
-    email: 'duval@example.com',
-    link: 'https://foxfire.example.com/invite/spent-token-for-the-harness-only-aaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    createdAt: '2026-07-10T12:00:00.000Z',
-    expiresAt: '2026-07-24T12:00:00.000Z',
-    redeemedAt: '2026-07-14T18:30:00.000Z',
-    redeemedBy: 'phantomduval',
-    isOpen: false
-  }
-]
-
-// Uncapped, which is the default a host has to choose away from.
-let mockServerSettings: ServerAdminSettings = {
-  publicSignup: true,
-  backfillTarget: 200,
-  replayByteCap: 0
 }
 
 export const mockApi: Api = {
@@ -424,6 +187,7 @@ export const mockApi: Api = {
               minimumDesktop: null,
               recommendedDesktop: null,
               publicSignup: null,
+              publicUrl: null,
               compatibility: 'unknown'
             }
           : {
@@ -436,7 +200,14 @@ export const mockApi: Api = {
               minimumDesktop: '0.12.0',
               recommendedDesktop: '0.12.0',
               publicSignup: !url.includes('invite-only'),
-              compatibility: url.includes('too-old') ? 'unsupported' : 'ok'
+              publicUrl: url,
+              // "too-old" is this build behind the server; "old-server" is the
+              // server behind this build.
+              compatibility: url.includes('too-old')
+                ? 'unsupported'
+                : url.includes('old-server')
+                  ? 'server-outdated'
+                  : 'ok'
             },
         400,
         false
@@ -477,8 +248,10 @@ export const mockApi: Api = {
               email: registration.email,
               isAdmin: false
             },
+            publicUrl: url,
             upgradeRequired: null,
-        riotKeyRejected: false
+            serverOutdated: false,
+            riotKeyRejected: false
           })
         },
         600,
@@ -505,8 +278,10 @@ export const mockApi: Api = {
                   email: credentials.email,
                   isAdmin: true
                 },
+                publicUrl: url,
                 upgradeRequired: null,
-        riotKeyRejected: false
+                serverOutdated: false,
+                riotKeyRejected: false
               })
             },
         600,
@@ -519,8 +294,10 @@ export const mockApi: Api = {
           activeUrl: null,
           servers: serverState.servers.map((s) => ({ ...s, username: null, isActive: false })),
           session: null,
+          publicUrl: null,
           upgradeRequired: null,
-        riotKeyRejected: false
+          serverOutdated: false,
+          riotKeyRejected: false
         }),
         300,
         false
@@ -532,8 +309,10 @@ export const mockApi: Api = {
           ...serverState,
           activeUrl: url,
           servers: serverState.servers.map((s) => ({ ...s, isActive: s.url === url })),
+          publicUrl: url,
           upgradeRequired: null,
-        riotKeyRejected: false
+          serverOutdated: false,
+          riotKeyRejected: false
         }),
         200,
         false
@@ -545,8 +324,10 @@ export const mockApi: Api = {
           activeUrl: serverState.activeUrl === url ? null : serverState.activeUrl,
           servers: serverState.servers.filter((s) => s.url !== url),
           session: serverState.session?.url === url ? null : serverState.session,
+          publicUrl: serverState.activeUrl === url ? null : serverState.publicUrl,
           upgradeRequired: null,
-        riotKeyRejected: false
+          serverOutdated: false,
+          riotKeyRejected: false
         }),
         200,
         false
@@ -558,152 +339,17 @@ export const mockApi: Api = {
     }
   },
   serverAdmin: {
-    users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
-
-    // Numbers a host would actually be looking at: a match history that is
-    // nowhere near troubling a 10 GB database, beside replays that are the
-    // thing which will fill a volume.
-    storage: (): Promise<ServerStorageUsage> =>
-      delay(
-        {
-          replaysConfigured: true,
-          replayCount: 46,
-          replayBytes: 1_412_000_000,
-          replayRecords: 46,
-          matches: 4_812,
-          matchParticipants: 48_120,
-          riotAccounts: 7,
-          unclaimedAccounts: 2,
-          rankReadings: 1_904
-        },
-        220
-      ),
-
-    storedReplays: (): Promise<AdminReplay[]> => delay(MOCK_STORED_REPLAYS, 240),
-
-    removeReplay: (matchId: string): Promise<AdminActionResult> => {
-      const index = MOCK_STORED_REPLAYS.findIndex((r) => r.matchId === matchId)
-      if (index >= 0) MOCK_STORED_REPLAYS.splice(index, 1)
-      return delay({ ok: true, error: null }, 200, false)
-    },
-
-    // Actually clears the claim, so the harness shows what the panel does
-    // rather than only that it asked. The account and its games stay; that is
-    // the whole distinction the card exists to make.
-    forceUnlink: (riotAccountId: string): Promise<AdminActionResult> => {
-      const account = ACCOUNTS.find((a) => a.id === riotAccountId)
-      if (account) {
-        account.ownerUsername = null
-        account.isMine = false
-      }
-      return delay({ ok: true, error: null }, 200, false)
-    },
+    ...fixture.admin,
 
     // The harness has no file system and no server, so the import is the one
     // shape the panel has to draw for real: a run that reports its way through
     // the phases and finishes with a tally.
     chooseDatabase: (): Promise<string | null> => delay('C:\\Users\\you\\stats.db', 400, false),
-
-    importDatabase: async (): Promise<ImportResult> => {
-      for (const [phase, total] of [['accounts', 3], ['matches', 412], ['readings', 190]] as const) {
-        for (const current of [0, total / 2, total]) {
-          importListeners.forEach((cb) => cb({ phase, current: Math.round(current), total }))
-          await new Promise((resolve) => setTimeout(resolve, 120))
-        }
-      }
-
-      importListeners.forEach((cb) => cb({ phase: 'finishing', current: 0, total: 0 }))
-      await new Promise((resolve) => setTimeout(resolve, 400))
-      importListeners.forEach((cb) => cb({ phase: 'done', current: 0, total: 0 }))
-
-      return {
-        ok: true,
-        message: null,
-        accounts: 3,
-        matches: 412,
-        readings: 190,
-        seasons: 1,
-        attributed: 88,
-        unresolved: ['OldName#NA1']
-      }
-    },
-
+    importDatabase: () =>
+      runFixtureImport((progress: ImportProgress) => importListeners.forEach((cb) => cb(progress))),
     onImportProgress: (cb: (progress: ImportProgress) => void): (() => void) => {
       importListeners.add(cb)
       return () => importListeners.delete(cb)
-    },
-
-    updateUser: (id: string, patch: AdminUserPatch): Promise<AdminActionResult> => {
-      const target = mockUsers.find((u) => u.id === id)
-      const admins = mockUsers.filter((u) => u.isAdmin)
-
-      // The same refusal the server makes, so the harness shows the message
-      // rather than letting the page reach a state the real thing forbids.
-      if (target?.isAdmin && admins.length === 1 && (patch.isAdmin === false || patch.isDisabled)) {
-        return delay(
-          {
-            ok: false,
-            error:
-              'That is the only administrator on this server, so there is no way to change them from here. Make somebody else an admin first.'
-          },
-          200,
-          false
-        )
-      }
-
-      mockUsers = mockUsers.map((u) => (u.id === id ? { ...u, ...patch } : u))
-      return delay({ ok: true, error: null }, 200, false)
-    },
-
-    deleteUser: (id: string): Promise<AdminActionResult> => {
-      const target = mockUsers.find((u) => u.id === id)
-      if (target?.isAdmin && mockUsers.filter((u) => u.isAdmin).length === 1) {
-        return delay(
-          {
-            ok: false,
-            error:
-              'That is the only administrator on this server, so there is no way to remove them from here. Make somebody else an admin first.'
-          },
-          200,
-          false
-        )
-      }
-
-      mockUsers = mockUsers.filter((u) => u.id !== id)
-      return delay({ ok: true, error: null }, 200, false)
-    },
-
-    invites: (): Promise<AdminInvite[]> => delay(mockInvites, 200, false),
-
-    createInvite: (email: string): Promise<AdminInvite> => {
-      const existing = mockInvites.find((i) => i.email === email && i.isOpen)
-      if (existing) return delay(existing, 300, false)
-
-      const invite: AdminInvite = {
-        id: `i-${mockInvites.length + 1}`,
-        email,
-        link: `https://foxfire.example.com/invite/${btoa(email).replace(/=/g, "")}-harness-token-aaaaaaaaaaaa`,
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 14 * 24 * 3600_000).toISOString(),
-        redeemedAt: null,
-        redeemedBy: null,
-        isOpen: true
-      }
-
-      mockInvites = [invite, ...mockInvites]
-      return delay(invite, 300, false)
-    },
-
-    revokeInvite: (id: string): Promise<AdminActionResult> => {
-      mockInvites = mockInvites.filter((i) => i.id !== id)
-      return delay({ ok: true, error: null }, 200, false)
-    },
-
-    getSettings: (): Promise<ServerAdminSettings> => delay(mockServerSettings, 180, false),
-
-    setSettings: (patch: Partial<ServerAdminSettings>): Promise<ServerAdminSettings> => {
-      mockServerSettings = { ...mockServerSettings, ...patch }
-      return delay(mockServerSettings, 180, false)
     }
   },
   settings: {
@@ -751,8 +397,7 @@ export const mockApi: Api = {
   },
 
   accounts: {
-    list: (): Promise<Account[]> => delay(accounts(), 180, false),
-    getHome: (): Promise<Account | null> => delay(accounts()[0] ?? null, 180, false),
+    ...fixture.accounts,
     add: (input): Promise<Account> =>
       delay(
         {
@@ -780,56 +425,17 @@ export const mockApi: Api = {
           ownerUsername: 'Faker'
         },
         700
-      ),
-    remove: (accountId: string): Promise<Account[]> =>
-      delay(accounts().filter((a) => a.id !== accountId)),
-    setHome: (accountId: string): Promise<Account[]> =>
-      delay(accounts().map((a) => ({ ...a, isHomeAccount: a.id === accountId })))
+      )
   },
 
-  dashboard: {
-    get: (accountId: string): Promise<DashboardData | null> => {
-      if (scenario === 'key-expired') return fail(KEY_EXPIRED)
-      const account = accounts().find((a) => a.id === accountId)
-      if (!account) return delay(null)
-      return delay({
-        account,
-        leagueEntries: LEAGUE_ENTRIES[accountId] ?? [],
-        syncState: syncState(accountId)
-      })
-    },
-    matchList: (
-      accountId: string,
-      limit: number,
-      offset: number,
-      queueId: number | null
-    ): Promise<MatchSummary[]> => {
-      // Filter before slicing, mirroring the real handler's SQL — otherwise the
-      // harness pages differently to the app and hides paging bugs.
-      const all = matchesFor(accountId).filter((m) => queueId === null || m.queueId === queueId)
-      return delay(all.slice(offset, offset + limit), 260)
-    },
-    matchDetail: (matchId: string): Promise<MatchDetail | null> =>
-      delay(MATCH_DETAILS[matchId] ?? null, 420)
-  },
+  dashboard: fixture.dashboard,
 
   sync: {
-    start: (accountId: string): Promise<void> => {
-      runFakeSync(accountId)
-      return delay(undefined, 100)
-    },
-    getState: (accountId: string): Promise<SyncState | null> => delay(syncState(accountId)),
-    onProgress: (cb) => {
-      progressListeners.add(cb)
-      return () => progressListeners.delete(cb)
-    }
+    ...fixture.sync,
+    onProgress: fixture.events.onSyncProgress
   },
 
-  assets: {
-    // Real Data Dragon metadata, so champion, item, spell and rune art all load
-    // from the CDN exactly as it does in the app.
-    get: (): Promise<AssetManifest> => delay(DDRAGON_MANIFEST, 60, false)
-  },
+  assets: fixture.assets,
 
   liveClient: {
     // Answered fast and without the shell hold, because the real one polls: a
@@ -838,117 +444,27 @@ export const mockApi: Api = {
       scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false)
   },
 
-  champions: {
-    stats: (
-      accountId: string,
-      queueId: number | null,
-      range: RankRange
-    ): Promise<ChampionStats[]> => delay(championStatsFor(accountId, queueId, range), 300)
-  },
-
-  // Editable in the harness so the Settings form can be designed against it,
-  // but held in memory: DEV_SEASONS is what every other mock reads, and
-  // rewriting it at runtime would desync the already-stamped fixture
-  // snapshots from the list the pickers are built from.
-  seasons: {
-    list: (): Promise<Season[]> => delay(DEV_SEASONS, 120),
-    save: (seasons: SeasonInput[]): Promise<Season[]> =>
-      delay(
-        seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i })),
-        200
-      )
-  },
-
-  mastery: {
-    get: (accountId: string, _refresh: boolean, queueId: number | null): Promise<MasteryData> =>
-      delay(
-        {
-          // Mastery is lifetime and never narrows; only the win rates do.
-          riotMastery: MASTERY[accountId] ?? [],
-          localWinRates: championStatsFor(accountId, queueId)
-        },
-        300
-      )
-  },
+  champions: fixture.champions,
+  seasons: fixture.seasons,
+  mastery: fixture.mastery,
 
   rank: {
-    history: (accountId: string, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
-      const { sinceMs, untilMs } = rangeBounds(range, DEV_SEASONS)
-      const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
-        (s) =>
-          (sinceMs === null || s.capturedAt >= sinceMs) &&
-          (untilMs === null || s.capturedAt < untilMs)
-      )
-
-      const milestones = snapshots
-        .flatMap((snapshot, i) => {
-          if (i === 0) return []
-          // Mirrors getRankMilestones: a reset is not a demotion. Keyed on the
-          // reset rather than the season boundary, so a promotion across a
-          // preseason — which carries rank forward — still counts.
-          if (resetsBetween(DEV_SEASONS, snapshots[i - 1].capturedAt, snapshot.capturedAt)) {
-            return []
-          }
-          const movement = rankMovement(snapshots[i - 1], snapshot)
-          if (movement === 'none') return []
-          return [
-            {
-              queueType,
-              movement,
-              tier: snapshot.tier,
-              rank: snapshot.rank,
-              capturedAt: snapshot.capturedAt
-            }
-          ]
-        })
-        .reverse()
-
-      return delay({ snapshots, milestones }, 280)
-    },
-
-    periods: (accountId: string): Promise<Season[]> => {
-      const times = [
-        ...Object.values(RANK_SNAPSHOTS[accountId] ?? {}).flatMap((series) =>
-          series.map((s) => s.capturedAt)
-        ),
-        ...(MATCHES[accountId] ?? []).map((m) => m.gameCreation)
-      ]
-      if (times.length === 0) return delay(DEV_SEASONS.slice(-1), 120)
-      return delay(seasonsSpanning(DEV_SEASONS, Math.min(...times), Math.max(...times)), 120)
-    },
-
-    editable: (accountId: string, queueType: QueueType) =>
-      delay(editableMatches(accountId, queueType), 200),
-
-    saveManual: (accountId: string, queueType: QueueType, edits) => {
-      const fresh = saveManualRanks(accountId, queueType, edits)
-      notifyEdited(accountId)
-      return delay(fresh, 250)
-    },
-
-    clearManual: (accountId: string, queueType: QueueType, matchId: string) => {
-      const fresh = clearManualRank(accountId, queueType, matchId)
-      notifyEdited(accountId)
-      return delay(fresh, 250)
-    },
+    ...fixture.rank,
 
     // There are no windows in a browser, so the editor takes over the page
-    // instead. main.tsx picks its root from the hash at startup, so setting it
-    // and reloading lands on the editor exactly as the real window does.
+    // instead: the window's route is a route like any other, and the router
+    // follows the hash to it exactly as the real window loads it.
     openEditor: (accountId: string, queueType: QueueType, matchId: string): Promise<void> => {
-      window.location.hash = `#lp-editor?account=${accountId}&queue=${queueType}&match=${encodeURIComponent(matchId)}`
-      window.location.reload()
+      window.location.hash = `#${windowRoutes.lpEditor(accountId, queueType, matchId)}`
       return Promise.resolve()
     },
 
-    onEdited: (cb) => {
-      editedListeners.add(cb)
-      return () => editedListeners.delete(cb)
-    },
+    onEdited: fixture.events.onRankEdited,
     // Only fires when a second right-click reaches an already-open window,
     // which cannot happen with a single page.
     onEditorFocus: () => () => {}
   },
+
 
   // The browser harness has no League client and no Electron main process, so
   // these report the states the renderer must handle rather than pretending to
@@ -970,7 +486,7 @@ export const mockApi: Api = {
         100
       ),
     onStatus: () => () => {},
-    onRankChanged: () => () => {}
+    onRankChanged: fixture.events.onRankChanged
   },
 
   background: {
@@ -980,29 +496,9 @@ export const mockApi: Api = {
       delay({ runInTray: false, launchAtStartup: false, lcuInstallPath: null, ...patch }, 150)
   },
 
-  search: {
-    summoner: (input): Promise<AdHocSummonerResult> => {
-      if (input.gameName.toLowerCase() === 'nobody') {
-        return fail('No summoner found with that Riot ID.')
-      }
-      return delay(
-        {
-          profile: {
-            puuid: 'puuid-searched',
-            gameName: input.gameName,
-            tagLine: input.tagLine,
-            profileIconId: 5788,
-            summonerLevel: 214
-          },
-          leagueEntries: LEAGUE_ENTRIES[2],
-          recentMatches: MATCHES[2].slice(0, 10)
-        },
-        900
-      )
-    }
-  },
+  search: fixture.search,
   /**
-   * The panel opens at `#telemetry` in its own window against the real main
+   * The panel opens at `#/telemetry` in its own window against the real main
    * process, so the browser harness cannot produce genuine measurements. It
    * serves a synthetic backfill instead — the shape the panel exists to show:
    * queue wait climbing as the sustained window saturates, a couple of 429s,

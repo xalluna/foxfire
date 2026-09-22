@@ -1,47 +1,39 @@
 import { useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
-import { AccountRail } from './components/AccountRail'
-import { Dashboard } from './views/Dashboard'
-import { LiveGame } from './views/LiveGame'
-import { Captures } from './views/Captures'
-import { Mastery } from './views/Mastery'
-import { RankHistory } from './views/RankHistory'
-import { Search } from './views/Search'
-import { Settings } from './views/Settings'
-import { EmptyState } from './components/EmptyState'
-import { Logo } from './components/Logo'
+import { playerSlug } from '@foxfire/core/routes'
+import { Icon, Logo } from '@foxfire/ui'
+import { queryKeys, useClient } from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { LiveNavIcon } from './components/LiveNavIcon'
-import * as Icon from './components/icons'
-import {
-  useLcuRankUpdates,
-  useManualRankUpdates,
-  useRecordingUpdates,
-  useReplayUpdates,
-  useSyncProgress
-} from './hooks/useSyncProgress'
+import { useRecordingUpdates, useReplayUpdates } from './hooks/useDesktopUpdates'
 import { useKeyRejected, useServerHealth } from './hooks/useKeyStatus'
-import { useUiStore, type View } from './store/uiStore'
+import { useNavSlug } from './hooks/usePlayerNavigation'
 
-const NAV: Array<{ id: View; label: string; icon: JSX.Element }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: <Icon.Dashboard /> },
+/** Pages of one account, found under its slug. */
+type PlayerPage =
+  | '/players/$slug'
+  | '/players/$slug/live'
+  | '/players/$slug/captures'
+  | '/players/$slug/champions'
+  | '/players/$slug/rank'
+
+type NavItem =
+  | { label: string; icon: JSX.Element; page: PlayerPage }
+  | { label: string; icon: JSX.Element; to: '/search' | '/settings/{-$category}' }
+
+const NAV: NavItem[] = [
+  { label: 'Dashboard', icon: <Icon.Dashboard />, page: '/players/$slug' },
   // Coloured by whether a game is on and whether it is being recorded.
-  { id: 'liveGame', label: 'Live game', icon: <LiveNavIcon /> },
-  { id: 'captures', label: 'Captures', icon: <Icon.Film /> },
-  { id: 'mastery', label: 'Champions', icon: <Icon.Trophy /> },
-  { id: 'rank', label: 'Rank', icon: <Icon.TrendingUp /> },
-  { id: 'search', label: 'Search', icon: <Icon.Search /> },
-  { id: 'settings', label: 'Settings', icon: <Icon.Settings /> }
+  { label: 'Live game', icon: <LiveNavIcon />, page: '/players/$slug/live' },
+  { label: 'Captures', icon: <Icon.Film />, page: '/players/$slug/captures' },
+  { label: 'Champions', icon: <Icon.Trophy />, page: '/players/$slug/champions' },
+  { label: 'Rank', icon: <Icon.TrendingUp />, page: '/players/$slug/rank' },
+  { label: 'Search', icon: <Icon.Search />, to: '/search' },
+  { label: 'Settings', icon: <Icon.Settings />, to: '/settings/{-$category}' }
 ]
 
-/** Views that operate on the selected account and need the rail alongside them. */
-const ACCOUNT_VIEWS: View[] = ['dashboard', 'liveGame', 'captures', 'mastery', 'rank']
-
-/**
- * A full-width strip under the title bar. Used for the two Riot key states,
- * which are routine rather than exceptional: personal keys expire every 24h.
- */
 /**
  * A strip across the top of the app.
  *
@@ -82,44 +74,87 @@ function Banner({
   )
 }
 
-function App(): JSX.Element {
-  useSyncProgress()
-  useLcuRankUpdates()
-  useManualRankUpdates()
+/**
+ * A recording window asking the main window to show its match.
+ *
+ * The window that made the request is a different renderer process with its
+ * own query cache, so it cannot open the row here itself — it sends a message
+ * and the main process forwards it. Here that becomes a navigation to the
+ * account's profile with the game named in the URL, which the profile opens.
+ */
+function useShowMatchRequests(): void {
+  const client = useClient()
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  useEffect(
+    () =>
+      window.api.recordings.onShowMatch((accountId, matchId) => {
+        void queryClient
+          .ensureQueryData({ queryKey: queryKeys.accounts(), queryFn: () => client.accounts.list() })
+          .then((accounts) => {
+            const account = accounts.find((a) => a.id === accountId)
+            if (!account) return
+            void navigate({
+              to: '/players/$slug',
+              params: { slug: playerSlug(account) },
+              search: { match: matchId }
+            })
+          })
+      }),
+    [client, queryClient, navigate]
+  )
+}
+
+/**
+ * The main window: its header and nav, the banners, and whichever page the URL
+ * names beneath them. The other windows are routes too, but outside this — see
+ * router.tsx.
+ */
+export function AppShell(): JSX.Element {
   useRecordingUpdates()
   useReplayUpdates()
+  useShowMatchRequests()
   const [keyRejected, clearRejected] = useKeyRejected()
 
-  const view = useUiStore((s) => s.view)
-  const setView = useUiStore((s) => s.setView)
-  const activeAccountId = useUiStore((s) => s.activeAccountId)
-  const setActiveAccount = useUiStore((s) => s.setActiveAccount)
-
-  const accounts = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => window.api.accounts.list()
-  })
+  const navigate = useNavigate()
+  const matchRoute = useMatchRoute()
+  const slug = useNavSlug()
 
   const settings = useQuery({
     queryKey: ['settings'],
     queryFn: () => window.api.settings.get()
   })
 
-  // Land on the home account once accounts load.
-  useEffect(() => {
-    if (activeAccountId === null && accounts.data && accounts.data.length > 0) {
-      const home = accounts.data.find((a) => a.isHomeAccount) ?? accounts.data[0]
-      setActiveAccount(home.id)
-    }
-  }, [accounts.data, activeAccountId, setActiveAccount])
-
-  const activeAccount = accounts.data?.find((a) => a.id === activeAccountId) ?? null
   const { connected, riotKeyRejected: serverKeyRejected } = useServerHealth()
 
   // Only meaningful in local-only mode. Connected to a server this machine holds
   // no key, and the settings page that would ask for one is not even shown.
   const needsKey = settings.data && !settings.data.hasApiKey
-  const showRail = ACCOUNT_VIEWS.includes(view)
+  const onSettings = !!matchRoute({ to: '/settings/{-$category}', includeSearch: false })
+
+  const openRiotKeySettings = (): void => {
+    void navigate({ to: '/settings/{-$category}', params: { category: 'riot-key' } })
+  }
+
+  const isActive = (item: NavItem): boolean => {
+    if ('to' in item) return !!matchRoute({ to: item.to, includeSearch: false })
+    // With no accounts every player page is the empty home page, which the
+    // Dashboard tab stands for.
+    if (item.page === '/players/$slug' && matchRoute({ to: '/', includeSearch: false })) return true
+    return !!matchRoute({ to: item.page, includeSearch: false })
+  }
+
+  const go = (item: NavItem): void => {
+    if ('to' in item) {
+      if (item.to === '/search') void navigate({ to: '/search' })
+      else void navigate({ to: '/settings/{-$category}', params: { category: undefined } })
+    } else if (slug === null) {
+      void navigate({ to: '/' })
+    } else {
+      void navigate({ to: item.page, params: { slug } })
+    }
+  }
 
   return (
     <div className="flex h-screen flex-col bg-canvas text-text">
@@ -144,22 +179,23 @@ function App(): JSX.Element {
         </div>
 
         <nav className="no-drag flex gap-0.5">
-          {NAV.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setView(item.id)}
-              aria-current={view === item.id ? 'page' : undefined}
-              className={clsx(
-                'flex items-center gap-1.5 rounded px-2.5 py-1 text-sm transition',
-                view === item.id
-                  ? 'bg-accent/10 text-accent'
-                  : 'text-text-dim hover:bg-surface hover:text-text'
-              )}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
+          {NAV.map((item) => {
+            const active = isActive(item)
+            return (
+              <button
+                key={item.label}
+                onClick={() => go(item)}
+                aria-current={active ? 'page' : undefined}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded px-2.5 py-1 text-sm transition',
+                  active ? 'bg-accent/10 text-accent' : 'text-text-dim hover:bg-surface hover:text-text'
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            )
+          })}
         </nav>
 
         <div className="ml-auto pr-2">
@@ -167,7 +203,7 @@ function App(): JSX.Element {
         </div>
       </header>
 
-{/*
+      {/*
         Three banners about one situation, and which one shows depends entirely
         on whose key it is. Connected to a server this machine holds no key at
         all, so neither of the local two can be right — and the server's has no
@@ -185,7 +221,7 @@ function App(): JSX.Element {
           tone="error"
           onClick={() => {
             clearRejected()
-            setView('settings')
+            openRiotKeySettings()
           }}
         >
           Riot rejected your API key — personal keys expire every 24 hours. Click here to paste a
@@ -193,42 +229,15 @@ function App(): JSX.Element {
         </Banner>
       )}
 
-      {!connected && needsKey && !keyRejected && view !== 'settings' && (
-        <Banner tone="warning" onClick={() => setView('settings')}>
+      {!connected && needsKey && !keyRejected && !onSettings && (
+        <Banner tone="warning" onClick={openRiotKeySettings}>
           No Riot API key saved — open Settings to add one before looking anything up.
         </Banner>
       )}
 
       <div className="flex min-h-0 flex-1">
-        {showRail && <AccountRail accounts={accounts.data ?? []} />}
-
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          {showRail ? (
-            activeAccount ? (
-              <>
-                {view === 'dashboard' && <Dashboard key={activeAccount.id} account={activeAccount} />}
-                {view === 'liveGame' && <LiveGame key={activeAccount.id} account={activeAccount} />}
-                {view === 'captures' && <Captures key={activeAccount.id} account={activeAccount} />}
-                {view === 'mastery' && <Mastery key={activeAccount.id} account={activeAccount} />}
-                {view === 'rank' && <RankHistory key={activeAccount.id} account={activeAccount} />}
-              </>
-            ) : (
-              <EmptyState
-                icon={<Icon.Plus />}
-                title="No accounts yet"
-                description="Add a Riot ID from the rail on the left to start tracking matches, rank and champion stats."
-              />
-            )
-          ) : (
-            <>
-              {view === 'search' && <Search />}
-              {view === 'settings' && <Settings />}
-            </>
-          )}
-        </main>
+        <Outlet />
       </div>
     </div>
   )
 }
-
-export default App

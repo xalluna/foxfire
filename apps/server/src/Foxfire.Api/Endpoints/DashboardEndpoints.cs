@@ -37,6 +37,13 @@ public static class DashboardEndpoints
                 int? queueId = null) =>
             sender.SendAsync(new GetMatchesRequest(riotAccountId, limit, offset, queueId), cancellationToken));
 
+        accounts.MapGet("/matches/{matchId}", (
+                Guid riotAccountId,
+                string matchId,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new GetMatchSummaryRequest(riotAccountId, matchId), cancellationToken));
+
         accounts.MapGet("/champions", (
                 Guid riotAccountId,
                 ISender sender,

@@ -42,7 +42,14 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
 
     private readonly MsSqlContainer _sql = new MsSqlBuilder(SqlServerImage).Build();
     private readonly AzuriteContainer _blob = new AzuriteBuilder(AzuriteImage).Build();
+    private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"foxfire-web-{Guid.NewGuid():N}");
     private WebApplicationFactory<Program>? _factory;
+
+    /// <summary>In the stand-in web client's index.html, so a test can tell the page apart from anything else.</summary>
+    public const string WebIndexMarker = "<!-- foxfire web client, test build -->";
+
+    /// <summary>A fingerprinted asset in the stand-in web client, the way Vite names one.</summary>
+    public const string WebAssetPath = "/assets/app-abc123.js";
 
     /// <summary>The address configured as this server's administrator.</summary>
     public const string AdminEmail = "admin@example.com";
@@ -62,6 +69,16 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     {
         await Task.WhenAll(_sql.StartAsync(), _blob.StartAsync());
 
+        // A stand-in for the web client's build: an index page and one hashed
+        // asset, which is all the hosting has to tell apart. The real build is
+        // not needed to test how the server serves it, and building it here
+        // would put Node in the way of every server test.
+        Directory.CreateDirectory(Path.Combine(_webRoot, "assets"));
+        await File.WriteAllTextAsync(
+            Path.Combine(_webRoot, "index.html"),
+            $"<!doctype html><html><head><title>Foxfire</title></head><body>{WebIndexMarker}<div id=\"root\"></div></body></html>");
+        await File.WriteAllTextAsync(Path.Combine(_webRoot, "assets", "app-abc123.js"), "console.log('foxfire')");
+
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", _sql.GetConnectionString());
         Environment.SetEnvironmentVariable("ConnectionStrings__Blob", _blob.GetConnectionString());
         Environment.SetEnvironmentVariable("Server__PublicUrl", "https://test.example.com");
@@ -71,6 +88,13 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Auth__JwtSigningKey", "PSZoLQdDOTJXHJv3fjGEKPI4sMmY9uD0rCtNbVkWaXc=");
         Environment.SetEnvironmentVariable("Auth__InviteSigningKey", "lRk2yNqTgWv8eBmZ6uAoHx4JdFsCpQ1iXyU3nEwK7Vg=");
         Environment.SetEnvironmentVariable("Admin__Email", AdminEmail);
+        Environment.SetEnvironmentVariable("Web__Root", _webRoot);
+
+        // Every request from the test client arrives from the same (absent)
+        // address, so the real limits would trip halfway through the suite.
+        // RateLimitTests runs its own host with low ones.
+        Environment.SetEnvironmentVariable("RateLimit__AuthPerMinute", "100000");
+        Environment.SetEnvironmentVariable("RateLimit__SearchPerMinute", "100000");
 
         _factory = new WebApplicationFactory<Program>();
 
@@ -86,6 +110,8 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         if (_factory is not null) await _factory.DisposeAsync();
         await _sql.DisposeAsync();
         await _blob.DisposeAsync();
+
+        if (Directory.Exists(_webRoot)) Directory.Delete(_webRoot, recursive: true);
     }
 
     /// <summary>
@@ -103,6 +129,28 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
 
     /// <summary>A client with no version header at all — what something else entirely looks like.</summary>
     public HttpClient AnonymousClient() => _factory!.CreateClient();
+
+    /// <summary>
+    /// A client that names itself the way the web client does, and keeps cookies.
+    ///
+    /// On https, because the session cookie is Secure and a cookie container
+    /// will not send a Secure cookie over plain http — which is the behaviour
+    /// being relied on, in a browser, to keep it off the wire.
+    /// </summary>
+    public HttpClient WebClient(int? apiVersion = null)
+    {
+        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            HandleCookies = true
+        });
+
+        client.DefaultRequestHeaders.Add("X-Foxfire-Client", "web");
+        client.DefaultRequestHeaders.Add(
+            "X-Foxfire-Api-Version",
+            (apiVersion ?? DesktopCompatibility.WebApiVersions[^1]).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return client;
+    }
 
     /// <summary>
     /// The running server's services, for tests about the database rather than
@@ -134,7 +182,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         string password = GoodPassword)
     {
         var response = await client.PostAsJsonAsync(
-            new Uri("/auth/register", UriKind.Relative),
+            new Uri("/api/auth/register", UriKind.Relative),
             new { username, email, password, inviteToken });
 
         response.EnsureSuccessStatusCode();
@@ -159,7 +207,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         var client = Client();
 
         var login = await client.PostAsJsonAsync(
-            new Uri("/auth/login", UriKind.Relative),
+            new Uri("/api/auth/login", UriKind.Relative),
             new { email = AdminEmail, password = GoodPassword });
 
         var session = login.IsSuccessStatusCode
@@ -190,6 +238,13 @@ public sealed record SessionUser(Guid Id, string Username, string Email, bool Is
 /// <summary>An error as every endpoint reports one.</summary>
 public sealed record ApiError(string Error, string Message);
 
+/// <summary>What /auth/register, /auth/login and /auth/refresh answer the web client with.</summary>
+public sealed record WebSession(
+    string AccessToken,
+    DateTimeOffset AccessTokenExpiresAt,
+    DateTimeOffset RefreshTokenExpiresAt,
+    SessionUser User);
+
 /// <summary>What /version says to anybody who asks.</summary>
 public sealed record VersionInfo(
     string ServerName,
@@ -197,7 +252,9 @@ public sealed record VersionInfo(
     int ApiVersion,
     string MinimumDesktop,
     string RecommendedDesktop,
-    bool PublicSignup);
+    bool PublicSignup,
+    string ApiBase,
+    string PublicUrl);
 
 /// <summary>An invite, as an admin sees it.</summary>
 public sealed record InviteInfo(

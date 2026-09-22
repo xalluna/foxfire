@@ -19,6 +19,9 @@ bin/
 obj/
 *.user
 
+# The web client's build, copied in for the server to host. Built, never edited.
+apps/server/src/Foxfire.Api/wwwroot/
+
 # Rider output
 **/**/.idea/
 # Local compose tweaks — publishing the database to the host, and so on.

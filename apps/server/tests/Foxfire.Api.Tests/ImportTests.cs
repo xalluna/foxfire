@@ -76,7 +76,7 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/admin/import/accounts", UriKind.Relative),
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
             new[] { new { gameName, tagLine = "NA1", platform = "na1", puuid = deadPuuid } });
 
         response.EnsureSuccessStatusCode();
@@ -118,7 +118,7 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/admin/import/accounts", UriKind.Relative),
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
             new[]
             {
                 new { gameName = missing, tagLine = "NA1", platform = "na1", puuid = UniquePuuid() },
@@ -154,14 +154,14 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         await client.PostAsJsonAsync(
-            new Uri("/admin/import/accounts", UriKind.Relative),
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
             new[] { new { gameName, tagLine = "NA1", platform = "na1", puuid = deadPuuid } });
 
         // Written under the old key, exactly as a stats.db holds it.
         var payload = MatchPayloads.TenPlayerGame(matchId, T0, 420, [deadPuuid]);
 
         var stored = await client.PostAsJsonAsync(
-            new Uri("/admin/import/matches", UriKind.Relative),
+            new Uri("/api/admin/import/matches", UriKind.Relative),
             new[] { new { matchId, rawJson = payload } });
 
         stored.EnsureSuccessStatusCode();
@@ -205,11 +205,11 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var first = await client.PostAsJsonAsync(
-            new Uri("/admin/import/matches", UriKind.Relative),
+            new Uri("/api/admin/import/matches", UriKind.Relative),
             new[] { new { matchId, rawJson = payload } });
 
         var second = await client.PostAsJsonAsync(
-            new Uri("/admin/import/matches", UriKind.Relative),
+            new Uri("/api/admin/import/matches", UriKind.Relative),
             new[] { new { matchId, rawJson = payload } });
 
         Assert.Equal(1, (await first.Content.ReadFromJsonAsync<ImportBatchResult>())!.Accepted);
@@ -234,13 +234,13 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var created = await client.PostAsJsonAsync(
-            new Uri("/admin/import/accounts", UriKind.Relative),
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
             new[] { new { gameName, tagLine = "NA1", platform = "na1", puuid = deadPuuid } });
 
         var accountId = (await created.Content.ReadFromJsonAsync<List<ImportAccountResult>>())![0].AccountId!.Value;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/admin/import/rank-readings", UriKind.Relative),
+            new Uri("/api/admin/import/rank-readings", UriKind.Relative),
             new[]
             {
                 new
@@ -282,7 +282,7 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/admin/import/rank-readings", UriKind.Relative),
+            new Uri("/api/admin/import/rank-readings", UriKind.Relative),
             new[]
             {
                 new
@@ -324,27 +324,27 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var created = await client.PostAsJsonAsync(
-            new Uri("/admin/import/accounts", UriKind.Relative),
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
             new[] { new { gameName, tagLine = "NA1", platform = "na1", puuid = deadPuuid } });
 
         var accountId = (await created.Content.ReadFromJsonAsync<List<ImportAccountResult>>())![0].AccountId!.Value;
 
         await client.PostAsJsonAsync(
-            new Uri("/admin/import/matches", UriKind.Relative),
+            new Uri("/api/admin/import/matches", UriKind.Relative),
             new[]
             {
                 new { matchId, rawJson = MatchPayloads.TenPlayerGame(matchId, T0, 420, [deadPuuid]) }
             });
 
         await client.PostAsJsonAsync(
-            new Uri("/admin/import/rank-readings", UriKind.Relative),
+            new Uri("/api/admin/import/rank-readings", UriKind.Relative),
             new[]
             {
                 Reading(deadPuuid, "GOLD", "II", 41, T0 - 60_000),
                 Reading(deadPuuid, "GOLD", "II", 62, T0 + 60_000)
             });
 
-        var finished = await client.PostAsync(new Uri("/admin/import/finish", UriKind.Relative), null);
+        var finished = await client.PostAsync(new Uri("/api/admin/import/finish", UriKind.Relative), null);
         finished.EnsureSuccessStatusCode();
 
         await using var scope = server.Services.CreateAsyncScope();
@@ -369,13 +369,13 @@ public class ImportTests(FoxfireServerFixture server)
         using var _client = client;
 
         var before = await client.GetFromJsonAsync<List<SeasonResponse>>(
-            new Uri("/seasons", UriKind.Relative));
+            new Uri("/api/seasons", UriKind.Relative));
 
         var seeded = before!.First();
         var novel = 1_801_000_000_000L + Random.Shared.Next(1, 1_000_000);
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/admin/import/seasons", UriKind.Relative),
+            new Uri("/api/admin/import/seasons", UriKind.Relative),
             new[]
             {
                 // The same boundary the server already has, under another name.
@@ -387,7 +387,7 @@ public class ImportTests(FoxfireServerFixture server)
         Assert.Equal(1, batch!.Accepted);
         Assert.Equal(1, batch.Skipped);
 
-        var after = await client.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/seasons", UriKind.Relative));
+        var after = await client.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/api/seasons", UriKind.Relative));
         Assert.NotNull(after);
 
         // The existing one kept its name.
@@ -407,7 +407,7 @@ public class ImportTests(FoxfireServerFixture server)
         FoxfireServerFixture.Authenticated(member, session);
 
         var response = await member.PostAsJsonAsync(
-            new Uri("/admin/import/accounts", UriKind.Relative),
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
             Array.Empty<object>());
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);

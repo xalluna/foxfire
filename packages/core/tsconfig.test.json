@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Tests and the corpus script read files, so they get Node's types; the
+    // source they exercise is checked without them by tsconfig.json.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.test.ts", "scripts/**/*", "vitest.config.ts"]
+}

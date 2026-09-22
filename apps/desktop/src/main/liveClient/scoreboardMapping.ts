@@ -2,7 +2,7 @@
 // scoreboard draws. Deliberately free of any database, network or Electron
 // imports so it stays trivially testable, in the manner of syncPlanning.ts.
 
-import { byPosition, isPosition } from '@shared/positions'
+import { byPosition, isPosition } from '@foxfire/core'
 import type { AssetManifest, Scoreboard, ScoreboardPlayer } from '@shared/types'
 import type { AllGameDataDto, LivePlayerDto } from './types'
 

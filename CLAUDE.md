@@ -2,14 +2,46 @@
 
 ## Repository layout
 
-This is a monorepo. The Electron desktop app lives in `apps/desktop`; the Foxfire Server will live
-in `apps/server`. The repo root holds only the npm workspace (`package.json` + the single
-`package-lock.json` for the whole tree), this file, the README, and `.github/`.
+This is a monorepo. The repo root holds only the npm workspace (`package.json` + the single
+`package-lock.json` for the whole tree), `tsconfig.base.json` and `.eslintrc.json` for every
+package, this file, the README, and `.github/`.
+
+- `apps/desktop` — the Electron app: main process, preload, the IPC client, and the desktop's
+  own screens (live game, captures, the recording player, telemetry, archives, the settings that
+  are about this PC).
+- `apps/server` — the Foxfire Server (.NET). Its API is under `/api`, and it hosts the web client
+  at the root of the same address.
+- `apps/web` — the web client. Built into the server's image and archives and served by the server
+  it talks to; it has no deployable, version or changelog of its own.
+- `packages/core` — what every client agrees on: the data shapes, the LP and season rules, route
+  paths, the server client, the Data Dragon manifest and the stats.db importer. No React, no Node,
+  no DOM beyond what a browser and Node share — ESLint enforces it.
+- `packages/ui` — the React components and pages, presentational only: props in, markup out. The
+  Tailwind preset, tokens, fonts, crests and logo live here.
+- `packages/screens` — the screens both clients mount: react-query hooks and keys, what each server
+  event refreshes, the Client/Platform providers, the shared routes, and the dev fixture client.
+- `tooling/vite` — the Vite `fs.allow` helper every app's config shares.
+
+Dependencies run `core ← ui ← screens ← {desktop renderer, web}` and `core ← desktop main`, and
+nothing depends on an app. The packages are TypeScript source with no build of their own: `exports`
+points at `.ts`, and each app's Vite compiles them. In the desktop they are devDependencies, which is
+what makes electron-vite bundle them rather than leave a runtime `require` of a `.ts` file.
 
 Each app carries its own version and its own `CHANGELOG.md`, and each releases on its own tag
 prefix that names it: `desktop-v*` and `server-v*`. Nothing about the two version numbers is
-coupled — they move independently, and the compatibility contract between them is a separate
-`apiVersion` integer that the server publishes and gates on.
+coupled — they move independently. Compatibility is the server's to judge, two ways:
+
+- **A desktop by its exact version**, against `DesktopCompatibility.Allowed` in
+  `apps/server/src/Foxfire.Core`. A build that is not on the list is refused with 426. So **a PR
+  that bumps the desktop's version adds that version to `Allowed` in the same change**, and a server
+  release is what ships it.
+- **The web client by the API version its page was built against** — `WEB_API_VERSION` in
+  `packages/core/src/server/identity.ts`, admitted when it is in `DesktopCompatibility.WebApiVersions`.
+  A test on the server side reads the TypeScript constant and fails if the two disagree. A tab left
+  open across an upgrade to an API it no longer matches is told to reload.
+
+`DesktopCompatibility.ApiVersion` is the contract version the server publishes in `/version`; it
+bumps only when something breaks compatibility.
 
 A tag cannot hold a space, so the prefix carries the name and the Release title spells it out:
 `desktop-v0.12.0` is published as **Desktop v0.12.0**, `server-v0.1.0` as **Server v0.1.0**.
@@ -17,15 +49,36 @@ A tag cannot hold a space, so the prefix carries the name and the Release title 
 The desktop's tags used to be a bare `v0.12.0`, from when it was the only thing that released out
 of this repo. The nineteen cut that way keep their names — renaming a tag moves a Release somebody
 may already have a link to, and the compare links at the bottom of the changelog point at the old
-ones. So the scheme changes forwards. 0.12.0 is not out yet, which makes it the first tag under
-the new name and gives it the one compare link that spans both spellings —
-`compare/v0.11.0...desktop-v0.12.0`, already written that way. Every entry after it is
-`desktop-v` on both sides.
+ones. So the scheme changed forwards. 0.12.0 was the first tag under the new name, and has the one
+compare link that spans both spellings — `compare/v0.11.0...desktop-v0.12.0`. Every entry after it
+is `desktop-v` on both sides.
+
+## The server's front door
+
+The API lives under `/api`, and everything else at the root is the web client's — its pages and the
+files they load. The split is what lets one address answer both a desktop asking for `/api/search`
+and a browser opening `/search`. `/version` and `/health` answer at the root as well as under
+`/api`, permanently: they are how a client finds the API, and a health check should not have to
+change because the API moved.
+
+Desktop 0.12.0 predates `/api` and calls everything at the root. `Versioning/LegacyRootShim.cs`
+keeps it working: a request carrying `X-Foxfire-Client` (every desktop sends it, no browser opening
+a page does) that is not already under `/api` is moved there before routing. **Delete the shim in
+the same PR that takes 0.12.0 off `Allowed`** — from then on every desktop the server serves calls
+`/api` itself.
+
+A server that has not been updated refuses a desktop newer than anything it knows, and names the
+newest it does know — an older one. The desktop reads that as the server being behind rather than
+as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
 
 ## Patch notes
 
 `apps/desktop/CHANGELOG.md` is the source of truth for what the desktop app shipped when. GitHub Releases are
 generated from it by `.github/workflows/release.yml`, so the two can never disagree.
+`apps/server/CHANGELOG.md` is the same for the server, through `.github/workflows/release-server.yml`
+— and it is also where the web client's changes go, because the web client ships inside the server
+and has no release of its own. A change in `packages/` is recorded in the changelog of each app that
+ships it: a fix to a shared screen is a line in both.
 
 **Any PR that bumps `version` in `apps/desktop/package.json` must add that version's
 `apps/desktop/CHANGELOG.md` section in the same commit.** There is no `[Unreleased]` section — the section lands with the bump that names
@@ -87,6 +140,10 @@ spell out. The desktop tags `desktop-v0.12.0` and the
 server tags `server-v0.1.0`; the two patterns never collide, so each triggers only its
 own workflow.
 
+When one PR bumps both apps, tag the server first. A desktop bump puts its version on the server's
+allow list, so the desktop that PR ships is refused by every server release before it — 0.13.0 also
+calls `/api`, which only Server 0.2.0 has — and its Release should not be the first to go out.
+
 That tags the current commit as whatever version the app being released already names —
 `apps/desktop/package.json` for the desktop, `<VersionPrefix>` in
 `apps/server/Directory.Build.props` for the server — the version is read rather
@@ -107,8 +164,9 @@ There is nothing to do by hand afterwards. The desktop workflow verifies the tag
 publishes the Release with the installer, its `.blockmap` and `latest.yml` attached. The server
 workflow does the same shape of thing on Linux: it runs the tests — including the ones that stand a
 real SQL Server up in a container, so a release cannot go out on a schema that does not migrate —
-then builds self-contained `linux-x64` and `win-x64` archives and a container image, pushes the
-image to GHCR, and publishes the Release with both archives attached.
+then builds the web client, self-contained `linux-x64` and `win-x64` archives that carry it, and a
+container image that builds its own, pushes the image to GHCR, and publishes the Release with both
+archives attached.
 
 It builds before it publishes, and creates the Release as a draft that only becomes visible once the
 uploaded installer has been read back off the API at the size that was actually built. So a release
@@ -122,3 +180,24 @@ no longer need it. To exercise the CI build without cutting a release — after 
 a change to `electron-builder.yml` — run the workflow from the Actions tab. A dispatched run builds
 the installer and hands it back as a workflow artifact, and every step that can write to a release
 is gated so that it cannot.
+
+## Checks
+
+From the repo root, `npm run typecheck`, `npm run lint` and `npm test` each run in every workspace
+that has the script. The server is `dotnet test apps/server`, and its API suite stands SQL Server
+and Azurite up in containers, so it needs Docker running.
+
+Every pull request, and every push to `main`, runs `.github/workflows/ci.yml`:
+
+- **Node, on Windows** — `npm ci`, then typecheck, lint and test across every workspace, then build
+  the web client and the desktop. Windows because the desktop's tests assert Windows paths, and
+  without skipping Electron's download, because the modules that import it need its binary.
+- **Server, on Linux** — `dotnet test`, including the container suites, which is the only place a
+  schema that does not migrate is caught before a release is.
+- **Image, on Linux** — the server's container image, web client included, built and thrown away,
+  so a Dockerfile that no longer builds is found before a tag is pushed rather than after.
+
+Tests go at the seams as plain node-environment vitest — the rules, the search params, what each
+event refreshes, what a menu offers on each platform — with no DOM test setup. The screens
+themselves are checked by eye in the fixture harnesses: `npm run dev:web` for the desktop's
+renderer and `npm run dev:mock -w @foxfire/web` for the web client, both switched by `?scenario=`.

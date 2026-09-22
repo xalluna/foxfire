@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
-import { is } from './lib/env'
+import { windowRoutes } from '@shared/windowRoutes'
+import { loadRoute } from './rendererUrl'
 
 /**
  * The developer telemetry panel, in its own window rather than a tab in the app.
@@ -10,8 +11,8 @@ import { is } from './lib/env'
  * rendering never shows up in the CPU and memory figures it is displaying. A
  * tab would have measured itself.
  *
- * It reuses the main renderer bundle and selects itself with a URL hash, so
- * there is no second Vite entry point to keep in step — see main.tsx.
+ * It reuses the main renderer bundle at a route of its own, so there is no
+ * second Vite entry point to keep in step — see rendererUrl.ts.
  */
 let telemetryWindow: BrowserWindow | null = null
 
@@ -49,11 +50,7 @@ export function openTelemetryWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#telemetry`)
-  } else {
-    window.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'telemetry' })
-  }
+  loadRoute(window, windowRoutes.telemetry())
 
   telemetryWindow = window
 }

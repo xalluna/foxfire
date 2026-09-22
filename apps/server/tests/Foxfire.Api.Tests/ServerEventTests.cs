@@ -140,7 +140,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         using var _client = client;
 
         var saved = await client.PostAsJsonAsync(
-            new Uri($"/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
+            new Uri($"/api/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
             new
             {
                 queueType = "RANKED_SOLO_5x5",
@@ -168,7 +168,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         using var _client = client;
 
         await client.PostAsJsonAsync(
-            new Uri($"/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
+            new Uri($"/api/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
             new
             {
                 queueType = "RANKED_SOLO_5x5",
@@ -184,7 +184,7 @@ public class ServerEventTests(FoxfireServerFixture server)
             });
 
         var cleared = await client.DeleteAsync(
-            new Uri($"/riot-accounts/{accountId}/rank/manual/{matchId}", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/rank/manual/{matchId}", UriKind.Relative));
 
         cleared.EnsureSuccessStatusCode();
 
@@ -205,7 +205,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         using var _client = client;
 
         var refused = await client.PostAsJsonAsync(
-            new Uri($"/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
+            new Uri($"/api/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
             new
             {
                 queueType = "RANKED_SOLO_5x5",
@@ -234,7 +234,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         using var _client = client;
 
         var missing = await client.DeleteAsync(
-            new Uri($"/riot-accounts/{accountId}/rank/manual/{matchId}", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/rank/manual/{matchId}", UriKind.Relative));
 
         Assert.Equal(System.Net.HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Empty(events.RankEdited);
@@ -248,7 +248,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         using var _client = client;
 
         var recorded = await client.PostAsJsonAsync(
-            new Uri("/rank-readings", UriKind.Relative),
+            new Uri("/api/rank-readings", UriKind.Relative),
             new
             {
                 riotAccountId = accountId,
@@ -287,8 +287,8 @@ public class ServerEventTests(FoxfireServerFixture server)
             force = false
         };
 
-        await client.PostAsJsonAsync(new Uri("/rank-readings", UriKind.Relative), reading);
-        await client.PostAsJsonAsync(new Uri("/rank-readings", UriKind.Relative), reading);
+        await client.PostAsJsonAsync(new Uri("/api/rank-readings", UriKind.Relative), reading);
+        await client.PostAsJsonAsync(new Uri("/api/rank-readings", UriKind.Relative), reading);
 
         Assert.Single(events.RankChanged);
     }

@@ -1,26 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { CAPTURE_QUEUE_OPTIONS } from '@shared/queues'
+import { CAPTURE_QUEUE_OPTIONS } from '@shared/captureQueues'
 import { CAPTURE_QUALITY_OPTIONS } from '@shared/captureQuality'
-import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import {
-  ByteCapRow,
-  PathRow,
-  SettingsBlock,
-  Stat,
-  StatRow,
-  StatusRow,
-  ToggleRow
-} from './settings/SettingsRow'
-import {
-  checkboxClass,
-  ghostButtonClass,
-  inputClass,
-  primaryButtonClass,
-  selectClass
-} from './settings/controls'
-import * as Icon from './icons'
+import { SettingsCard, SettingsPage, ByteCapRow, PathRow, SettingsBlock, Stat, StatRow, StatusRow, ToggleRow, checkboxClass, ghostButtonClass, inputClass, primaryButtonClass, selectClass, Icon } from '@foxfire/ui'
 import type {
   CaptureAudio,
   CaptureQuality,

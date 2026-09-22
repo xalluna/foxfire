@@ -1,0 +1,9 @@
+/*
+ * One CSS tree: the shared tokens, fonts and base layer from @foxfire/ui, then
+ * Tailwind's layers, whose utilities the preset themes.
+ */
+@import '@foxfire/ui/styles.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Asset } from '../../components/Asset'
-import { EmptyState } from '../../components/EmptyState'
-import * as Icon from '../../components/icons'
-import { MatchListSkeleton } from '../../components/Skeleton'
-import { useAssets } from '../../hooks/useAssets'
-import { championIconUrl, championName } from '../../lib/assets'
-import { formatAge, formatClock, kdaRatio } from '../../lib/matchStats'
-import { queueName } from '../../lib/queues'
+import { Asset, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
 import { formatBytes, GB } from './bytes'
 import type { Account, Replay } from '@shared/types'
 
@@ -251,7 +244,7 @@ function AddReplayButton({ onPick }: { onPick: (path: string) => void }): JSX.El
  * ten players was you from a name that may since have changed.
  */
 function ReplayRow({ replay, onDelete }: { replay: Replay; onDelete: () => void }): JSX.Element {
-  const assets = useAssets()
+  const assets = useAssetManifest()
   const [error, setError] = useState<string | null>(null)
   const match = replay.match
   const watchable = replay.blockedReason === null

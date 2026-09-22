@@ -23,6 +23,11 @@
 **/release/
 **/dist/
 
+# A web client build left over from a local run. The image builds its own, in
+# the web stage, and one copied in here would be whatever this machine last
+# built rather than what this commit says.
+apps/server/src/Foxfire.Api/wwwroot/
+
 # Never a secret, however careful the Dockerfile is
 **/.env
 **/*.pfx

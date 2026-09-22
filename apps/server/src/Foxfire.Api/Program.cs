@@ -9,6 +9,7 @@ using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
 using Foxfire.Api.Sync;
 using Foxfire.Api.Versioning;
+using Foxfire.Api.Web;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -30,19 +31,22 @@ builder.Services.Configure<RiotOptions>(builder.Configuration.GetSection(RiotOpt
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.Section));
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.Section));
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new();
 var riotOptions = builder.Configuration.GetSection(RiotOptions.Section).Get<RiotOptions>() ?? new();
 var authOptions = builder.Configuration.GetSection(AuthOptions.Section).Get<AuthOptions>() ?? new();
 var adminOptions = builder.Configuration.GetSection(AdminOptions.Section).Get<AdminOptions>() ?? new();
 var smtpOptions = builder.Configuration.GetSection(SmtpOptions.Section).Get<SmtpOptions>() ?? new();
+var rateLimitOptions = builder.Configuration.GetSection(RateLimitOptions.Section).Get<RateLimitOptions>() ?? new();
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
 // Everything wrong with the configuration, in one message, before anything
 // starts. A host should not have to restart a container five times to find five
 // missing settings, and a server that started degraded would be worse than one
 // that refused — half of these produce failures that look like something else.
-var problems = ConfigurationCheck.Validate(connectionString, serverOptions, riotOptions, authOptions, adminOptions);
+var problems = ConfigurationCheck.Validate(
+    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions);
 if (problems.Count > 0)
 {
     var message = new StringBuilder()
@@ -225,37 +229,80 @@ builder.Services.AddSingleton<IReplayStorage>(sp => new AzureBlobReplayStorage(
     sp.GetRequiredService<ILogger<AzureBlobReplayStorage>>()));
 
 builder.Services.AddProblemDetails();
+builder.Services.AddFoxfireProxies();
+builder.Services.AddFoxfireRateLimits();
 
 var app = builder.Build();
 
 await app.Services.PrepareDatabaseAsync(app.Lifetime.ApplicationStopping);
 
-app.UseExceptionHandler();
-app.UseRouting();
+var spa = SpaHosting.Locate(app.Configuration, app.Environment);
 
-// Before authentication: a desktop this server does not speak to should be told
+app.UseExceptionHandler();
+
+// First, so that everything after it — the rate limits above all — sees the
+// address a request came from rather than the reverse proxy's.
+app.UseForwardedHeaders();
+
+// Before routing, which it rewrites the path for: desktop 0.12.0 calls the API
+// at the root, where the web client's pages now are.
+app.UseLegacyRootShim();
+
+// The web client's files, before routing: a request for one never needs an
+// endpoint, a version check or a user.
+spa.UseFiles(app);
+
+app.UseRouting();
+app.UseRateLimiter();
+
+// Before authentication: a client this server does not speak to should be told
 // so, not handed an authentication failure it cannot act on.
 app.UseDesktopVersionGate();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
+// The handshake and the health check answer at the root as well as under the
+// API, permanently: they are how a client finds the API in the first place.
 app.MapVersionEndpoints();
-app.MapAuthEndpoints();
-app.MapInviteEndpoints();
-app.MapAdminSettingsEndpoints();
-app.MapAdminUserEndpoints();
-app.MapAdminStorageEndpoints();
-app.MapRiotLinkEndpoints();
-app.MapSyncEndpoints();
-app.MapDashboardEndpoints();
-app.MapRankEndpoints();
-app.MapSearchEndpoints();
-app.MapReplayEndpoints();
-app.MapImportEndpoints();
+
+var api = app.MapGroup(ApiPaths.Base);
+api.MapVersionEndpoints();
+api.MapAuthEndpoints();
+api.MapInviteEndpoints();
+api.MapAdminSettingsEndpoints();
+api.MapAdminUserEndpoints();
+api.MapAdminStorageEndpoints();
+api.MapRiotLinkEndpoints();
+api.MapSyncEndpoints();
+api.MapDashboardEndpoints();
+api.MapRankEndpoints();
+api.MapSearchEndpoints();
+api.MapReplayEndpoints();
+api.MapImportEndpoints();
 app.MapHub<FoxfireHub>(FoxfireHub.Path);
 
+// An API route that does not exist is a JSON 404, from any client. Without
+// this it would fall through to the web client's fallback and come back as a
+// web page, which is no answer to a program.
+api.MapFallback("{**path}", () => Results.Json(
+        new { error = "not_found", message = "There is no such route on this server." },
+        statusCode: StatusCodes.Status404NotFound))
+    .AllowAnyDesktopVersion();
+
+spa.MapFallback(app);
+
 var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");
+
+if (spa.IsAvailable)
+{
+    startup.LogInformation("Serving the web client from {Root}", spa.Root);
+}
+else
+{
+    startup.LogInformation(
+        "No web client build found, so this server answers the API only. Desktops are unaffected.");
+}
 
 startup.LogInformation(
     "Foxfire Server for '{Name}' at {PublicUrl} — API v{ApiVersion}, serving desktop {Minimum} to {Recommended}",
@@ -295,7 +342,7 @@ if (!smtpOptions.IsConfigured)
 {
     startup.LogWarning(
         "No SMTP configured, so nothing will be emailed. Invite links are still readable from the admin "
-        + "section of the desktop app — copy them to your community wherever it actually talks.");
+        + "pages, in the desktop app or the web client — copy them to your community wherever it actually talks.");
 }
 
 // The one place a key rejection becomes news. The limiter latches the moment

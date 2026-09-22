@@ -1,13 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
+import { useParams } from '@tanstack/react-router'
 import clsx from 'clsx'
-import { Asset } from '../components/Asset'
-import { EmptyState } from '../components/EmptyState'
-import * as Icon from '../components/icons'
-import { MatchListSkeleton } from '../components/Skeleton'
-import { useAssets } from '../hooks/useAssets'
-import { championIconUrl, championName } from '../lib/assets'
-import { formatAge, formatClock, kdaRatio } from '../lib/matchStats'
-import { queueName } from '../lib/queues'
+import { Asset, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
 import { RecordingPlayer } from './RecordingPlayer'
 import type { Recording } from '@shared/types'
 
@@ -19,16 +13,17 @@ import type { Recording } from '@shared/types'
  * gone — so unlike the telemetry panel and the LP editor this is not a
  * singleton on the main side. See recordingWindow.ts.
  *
- * Loads the same renderer bundle as everything else, selected by the URL hash.
+ * Loads the same renderer bundle as everything else, at `/recording/<id>` —
+ * see router.tsx.
  */
-function recordingIdFromHash(): number | null {
-  const query = window.location.hash.split('?')[1] ?? ''
-  const id = Number(new URLSearchParams(query).get('id'))
+function recordingIdFrom(param: string): number | null {
+  const id = Number(param)
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
 export function RecordingApp(): JSX.Element {
-  const recordingId = recordingIdFromHash()
+  const { id } = useParams({ from: '/_window/recording/$id' })
+  const recordingId = recordingIdFrom(id)
 
   const detail = useQuery({
     queryKey: ['recordingDetail', recordingId],
@@ -108,7 +103,7 @@ function Shell({ children }: { children: React.ReactNode }): JSX.Element {
  * column inside a window shaped for video.
  */
 function RecordingHeader({ recording }: { recording: Recording }): JSX.Element {
-  const assets = useAssets()
+  const assets = useAssetManifest()
   const match = recording.match
   const championId = match?.championId ?? recording.selfChampionId
 

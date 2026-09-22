@@ -119,10 +119,34 @@ jobs:
         # release cannot go out on a schema that does not migrate.
         run: dotnet test --no-restore --verbosity minimal
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # The web client the server hosts, built once from the lockfile and put in
+      # wwwroot, where both standalone builds below pick it up. The container
+      # image builds its own in the Dockerfile's web stage, the same way.
+      #
+      # Only the web client's dependencies, and no install scripts — Electron's
+      # would download the desktop app to build a web page.
+      - name: Build the web client
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: |
+          npm ci --workspace @foxfire/web --include-workspace-root=false --ignore-scripts
+          npm run build -w @foxfire/web
+          rm -rf apps/server/src/Foxfire.Api/wwwroot
+          cp -r apps/web/dist apps/server/src/Foxfire.Api/wwwroot
+
       # Self-contained and single-file, so a host who would rather not run
       # Docker needs no .NET installed at all. Deliberately not trimmed: EF Core
       # and Identity resolve a great deal by reflection, and a trimmed build
       # fails at runtime in ways that do not show up until somebody registers.
+      #
+      # wwwroot is not folded into the single file; it sits beside it, which is
+      # where the server looks.
       - name: Build the standalone servers
         run: |
           for rid in linux-x64 win-x64; do
@@ -133,6 +157,18 @@ jobs:
               -p:PublishSingleFile=true \
               -p:Version="$VERSION" \
               --output "publish/$rid"
+          done
+
+      # A server without its web client still starts and serves the API, so a
+      # build that lost it would pass everything else here and ship half a
+      # release. Checked by name, in both.
+      - name: Check both carry the web client
+        run: |
+          for rid in linux-x64 win-x64; do
+            if [ ! -f "publish/$rid/wwwroot/index.html" ]; then
+              echo "::error::publish/$rid has no wwwroot/index.html — the web client did not make it into the build"
+              exit 1
+            fi
           done
 
       - name: Package them

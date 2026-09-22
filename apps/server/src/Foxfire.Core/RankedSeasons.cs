@@ -17,7 +17,7 @@ namespace Foxfire.Core;
 public sealed record Season(int Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
 
 /// <summary>
-/// Arithmetic over the season list. Ported from the desktop's src/shared/seasons.ts.
+/// Arithmetic over the season list. Ported from packages/core/src/rules/seasons.ts.
 ///
 /// Every list passed in must be ordered oldest first, which is how it comes back
 /// out of the database.

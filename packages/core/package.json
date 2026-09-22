@@ -1,0 +1,29 @@
+{
+  "name": "@foxfire/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "What every Foxfire client agrees on: League data shapes, the rules over them, and the Foxfire Server client",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./import": "./src/import/index.ts",
+    "./ddragon": "./src/ddragon/index.ts",
+    "./routes": "./src/routes/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "lint": "eslint . --ext .ts",
+    "test": "vitest run",
+    "generate-corpus": "vite-node scripts/generate-ladder-corpus.ts"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

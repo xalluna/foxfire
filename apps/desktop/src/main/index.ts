@@ -10,6 +10,7 @@ import { repairAttribution } from './services/rankHistoryService'
 import { serverBacked } from './api'
 import { startSyncFor } from './api/lcuReporting'
 import { bindPendingRecordings } from './services/recordingService'
+import { resumeActiveServer } from './services/serverService'
 import { rescanReplays, startReplayWatcher, stopReplayWatcher } from './rofl/watcher'
 import { stopLcuWatcher } from './lcu/watcher'
 import { attachTrayBehaviour, beginQuit, showWindow, syncTray } from './tray'
@@ -129,6 +130,10 @@ function bootstrap(): void {
   // report a game to.
   initCapture()
   syncTray()
+  // Before the catch-up, which reads from whichever store owns the accounts:
+  // signed in to a server when the app closed means reading from it now, with
+  // its push channel open again.
+  resumeActiveServer()
   catchUpOnLaunch()
 
   app.on('activate', () => {

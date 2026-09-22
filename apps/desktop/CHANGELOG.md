@@ -7,6 +7,63 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.13.0] — 2026-09-21
+
+Foxfire Server 0.2.0 hosts a web client of its own, so the people on your server can read everybody's
+history in a browser. This release is the desktop's half of that: links into it, and talking to the
+server where it now keeps its API.
+
+### Added
+
+- **Copy link.** Connected to a server, a match's menu, a profile and the rank graph each offer
+  "Copy link" — a link into your server's web client, which anybody on the server can open in a
+  browser once they have signed in. It opens on what you were looking at: the same game, or the same
+  profile or graph with the same queue and period. Only offered where there is somewhere for it to
+  go, so never in local-only mode, and not from a server too old to host a web client.
+
+### Changed
+
+- **Needs Foxfire Server 0.2.0.** The server moved its API under `/api` to share its address with
+  the web client, and this version talks to it there. A server that has not been updated refuses
+  this version — and Foxfire now says so the right way round: that the server is older than this
+  copy and its host should update it, rather than telling you to install the older Foxfire the
+  server names.
+- **The League-client line on the Rank page opens Rank tracking**, as its tooltip always said,
+  instead of the Riot API key page.
+
+### Fixed
+
+- **Signed in to a server, Foxfire hears it change as soon as it starts.** Sync progress, games
+  arriving and LP typed in on another machine reached a copy started in server mode only after you
+  signed in again or switched servers, so until then the screens sat still.
+- **Several screens loading at once no longer sign you out of a server.** When your session renewed
+  just as more than one screen asked for data, each of them spent the same renewal, and the server
+  read the second as a stolen copy and signed you out everywhere. Renewals now take turns.
+- **"View match history" in a recording's window works from anywhere.** It did nothing unless that
+  account's profile happened to be the page open in the main window; now it opens it, with the game
+  expanded.
+- **A server's search results no longer look like games you recorded.** Every row drew the
+  "something to watch" marker.
+- **An empty match history no longer offers "Sync now" on somebody else's account**, where the
+  server could only refuse it.
+
+### Under the hood
+
+- **The screens are shared with the web client.** The components, the pages built from them and the
+  data layer behind them moved into packages that the desktop and the web client both build from —
+  `@foxfire/ui` and `@foxfire/screens` — and what the two have to agree on, from the data shapes and
+  the LP arithmetic to the server client and the stats.db import, into `@foxfire/core`. Every screen
+  draws as it did.
+- **Navigation is by route.** Every page has an address, and so does every other window — telemetry,
+  the archive manager, a recording, the LP editor — each opened at its own. The player pages are the
+  same routes the web client mounts. Queue filters still last for the session, page by page, and still
+  reset on every launch.
+- **The app's package is `@foxfire/desktop`.** Its name, where its settings live and everything else a
+  user could see are unchanged.
+- Tests at the seams: the search params each page keeps and the memory behind the queue filters, the
+  links the desktop writes as the web client reads them, the match menu on each platform, what each
+  server event refreshes, and the addresses the main process opens windows at.
+
 ## [0.12.0] — 2026-09-17
 
 Foxfire can now read from a server your community hosts, instead of only from this PC. This release
@@ -929,6 +986,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0
 [0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/xalluna/foxfire/compare/v0.10.2...v0.10.3

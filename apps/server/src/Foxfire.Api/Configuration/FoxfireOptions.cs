@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 
 namespace Foxfire.Api.Configuration;
@@ -19,6 +20,48 @@ public sealed class ServerOptions
 
     /// <summary>What this community calls itself. Shown on the connect screen.</summary>
     public string Name { get; set; } = "Foxfire";
+
+    /// <summary>
+    /// Addresses of reverse proxies whose X-Forwarded-For is believed, comma-separated.
+    ///
+    /// Behind a proxy every request arrives from the proxy, so without this the
+    /// rate limits would count the whole community as one address — one person
+    /// mistyping a password and everybody locked out together. Only the proxies
+    /// named here are believed, because anybody else can write the header too.
+    /// </summary>
+    public string TrustedProxies { get; set; } = "";
+
+    /// <summary>The same, as networks in CIDR form — 172.16.0.0/12 — for a proxy without a fixed address.</summary>
+    public string TrustedNetworks { get; set; } = "";
+
+    /// <summary>The trusted proxy addresses, parsed. Only valid after ConfigurationCheck has passed.</summary>
+    public IEnumerable<IPAddress> TrustedProxyAddresses => Split(TrustedProxies).Select(IPAddress.Parse);
+
+    /// <summary>The trusted proxy networks, parsed. Only valid after ConfigurationCheck has passed.</summary>
+    public IEnumerable<IPNetwork> TrustedProxyNetworks => Split(TrustedNetworks).Select(n => IPNetwork.Parse(n));
+
+    internal static IEnumerable<string> Split(string list) =>
+        list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+}
+
+/// <summary>How many sign-ins, registrations and searches one address gets in a minute.</summary>
+public sealed class RateLimitOptions
+{
+    public const string Section = "RateLimit";
+
+    /// <summary>
+    /// Sign-ins and registrations together. Enough for a household behind one
+    /// address to all sign in at once, and a small fraction of what guessing a
+    /// password would need.
+    /// </summary>
+    public int AuthPerMinute { get; set; } = 20;
+
+    /// <summary>
+    /// Searches. Every one is a live call to Riot on the server's one key, so
+    /// this is what keeps a single member from spending the whole community's
+    /// allowance.
+    /// </summary>
+    public int SearchPerMinute { get; set; } = 30;
 }
 
 /// <summary>The one Riot API key this server has.</summary>
@@ -150,8 +193,12 @@ public static class ConfigurationCheck
         ServerOptions server,
         RiotOptions riot,
         AuthOptions auth,
-        AdminOptions admin)
+        AdminOptions admin,
+        RateLimitOptions rateLimits)
     {
+        ArgumentNullException.ThrowIfNull(server);
+        ArgumentNullException.ThrowIfNull(rateLimits);
+
         List<string> problems = [];
 
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -202,6 +249,34 @@ public static class ConfigurationCheck
             problems.Add(
                 "Admin__Email is not set. It names the account that becomes this server's admin when it "
                 + "registers — without it nobody can administer the server.");
+        }
+
+        foreach (var address in ServerOptions.Split(server.TrustedProxies))
+        {
+            if (!IPAddress.TryParse(address, out _))
+            {
+                problems.Add($"Server__TrustedProxies has '{address}', which is not an IP address.");
+            }
+        }
+
+        foreach (var network in ServerOptions.Split(server.TrustedNetworks))
+        {
+            if (!IPNetwork.TryParse(network, out _))
+            {
+                problems.Add(
+                    $"Server__TrustedNetworks has '{network}', which is not a network in CIDR form "
+                    + "such as 172.16.0.0/12.");
+            }
+        }
+
+        if (rateLimits.AuthPerMinute < 1)
+        {
+            problems.Add($"RateLimit__AuthPerMinute is {rateLimits.AuthPerMinute}; it has to be at least 1.");
+        }
+
+        if (rateLimits.SearchPerMinute < 1)
+        {
+            problems.Add($"RateLimit__SearchPerMinute is {rateLimits.SearchPerMinute}; it has to be at least 1.");
         }
 
         return problems;

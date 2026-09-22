@@ -1,7 +1,7 @@
 import { join } from 'path'
-import { pathToFileURL } from 'url'
 import { BrowserWindow, shell } from 'electron'
-import { is } from './lib/env'
+import { windowRoutes } from '@shared/windowRoutes'
+import { loadRoute } from './rendererUrl'
 
 /**
  * Recording windows, one per open recording — and more than one per recording if asked.
@@ -18,10 +18,6 @@ import { is } from './lib/env'
  * two panels.
  */
 const windows = new Set<BrowserWindow>()
-
-function recordingHash(recordingId: number): string {
-  return `#recording?id=${recordingId}`
-}
 
 export function openRecordingWindow(recordingId: number): void {
   const window = new BrowserWindow({
@@ -49,15 +45,7 @@ export function openRecordingWindow(recordingId: number): void {
     return { action: 'deny' }
   })
 
-  const hash = recordingHash(recordingId)
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}${hash}`)
-  } else {
-    // Built by hand rather than through loadFile, whose hash goes through
-    // url.format and mangles the '?' and '=' this one carries — the same
-    // reason lpEditorWindow.ts does it this way.
-    window.loadURL(pathToFileURL(join(__dirname, '../renderer/index.html')).href + hash)
-  }
+  loadRoute(window, windowRoutes.recording(recordingId))
 
   windows.add(window)
 }

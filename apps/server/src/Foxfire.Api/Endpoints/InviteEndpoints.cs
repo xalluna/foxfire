@@ -37,6 +37,11 @@ public static class InviteEndpoints
 
         // Unauthenticated and version-free: somebody following a link may not
         // have Foxfire installed yet, which is rather the point of an invite.
+        //
+        // The link itself — {PublicUrl}/invite/{token} — is not a route here.
+        // It is a page of the web client, which reads this preview and offers
+        // the sign-up form; the server-rendered page it replaces could only
+        // say "open Foxfire".
         app.MapGet("/invites/{token}/preview", (
                     string token,
                     ISender sender,
@@ -44,15 +49,5 @@ public static class InviteEndpoints
                 sender.SendAsync(new PreviewInviteRequest(token), cancellationToken))
             .AllowAnyDesktopVersion()
             .WithTags("Invites");
-
-        // The one route that answers with a page rather than a payload, so it
-        // is the one route that does not go through SendAsync.
-        app.MapGet("/invite/{token}", async (string token, ISender sender, CancellationToken cancellationToken) =>
-            {
-                var page = await sender.Send(new GetInviteLandingPageRequest(token), cancellationToken);
-                return Results.Content(page.Data ?? "", "text/html; charset=utf-8");
-            })
-            .AllowAnyDesktopVersion()
-            .ExcludeFromDescription();
     }
 }

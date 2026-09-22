@@ -58,7 +58,7 @@ public class RiotLinkProfileTests(FoxfireServerFixture server)
         using var _client = client;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/riot-accounts/", UriKind.Relative),
+            new Uri("/api/riot-accounts/", UriKind.Relative),
             new { gameName, tagLine = "KR" });
 
         response.EnsureSuccessStatusCode();
@@ -89,7 +89,7 @@ public class RiotLinkProfileTests(FoxfireServerFixture server)
         await using var _host = host;
         using var _client = client;
 
-        await client.PostAsJsonAsync(new Uri("/riot-accounts/", UriKind.Relative), new { gameName, tagLine = "KR" });
+        await client.PostAsJsonAsync(new Uri("/api/riot-accounts/", UriKind.Relative), new { gameName, tagLine = "KR" });
 
         // Somebody else on the same server sees it, and sees that it is not theirs.
         using var onlooker = server.Client();
@@ -100,7 +100,7 @@ public class RiotLinkProfileTests(FoxfireServerFixture server)
 
         FoxfireServerFixture.Authenticated(onlooker, theirSession);
 
-        var listed = await onlooker.GetFromJsonAsync<JsonElement>(new Uri("/riot-accounts/", UriKind.Relative));
+        var listed = await onlooker.GetFromJsonAsync<JsonElement>(new Uri("/api/riot-accounts/", UriKind.Relative));
 
         var mine = listed.EnumerateArray()
             .First(a => a.GetProperty("gameName").GetString() == gameName);

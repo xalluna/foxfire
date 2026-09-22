@@ -77,7 +77,7 @@ public sealed class DesktopAllowList
 }
 
 /// <summary>
-/// Which desktop builds this server will talk to, stated by hand.
+/// Which clients this server will talk to, stated by hand.
 ///
 /// This is compiled in rather than configured, and that is the point. A server
 /// and a desktop agree on a contract, and whether a given build honours it is a
@@ -90,6 +90,9 @@ public sealed class DesktopAllowList
 /// change. If the contract itself moved — a field dropped, a route renamed,
 /// anything an older build would mis-read — bump <see cref="ApiVersion"/> and
 /// remove the builds that cannot speak it.
+///
+/// The web client is judged differently, by the API version it was built
+/// against rather than by its own version — see <see cref="WebApiVersions"/>.
 /// </summary>
 public static class DesktopCompatibility
 {
@@ -103,8 +106,26 @@ public static class DesktopCompatibility
     public const int ApiVersion = 1;
 
     /// <summary>Every desktop version this server answers, in any order.</summary>
-    public static readonly IReadOnlyList<string> Allowed = ["0.12.0"];
+    public static readonly IReadOnlyList<string> Allowed = ["0.12.0", "0.13.0"];
 
     /// <summary>The compiled-in list, ready to judge against.</summary>
     public static DesktopAllowList AllowList { get; } = new(Allowed);
+
+    /// <summary>
+    /// The API versions a web client may have been built against.
+    ///
+    /// Not a list of web builds. The web client ships inside this server — the
+    /// page a browser holds came from here — so which build it is has never
+    /// been in doubt. What goes stale is a tab left open across an upgrade:
+    /// still running the old page, now talking to a new server. The page says
+    /// which contract it was built for, and a tab built for one no longer
+    /// listed here is told to reload rather than left to misread the answers.
+    ///
+    /// packages/core states the web client's side as WEB_API_VERSION, and a
+    /// test holds the two together.
+    /// </summary>
+    public static readonly IReadOnlyList<int> WebApiVersions = [1];
+
+    /// <summary>Whether a web page built against this API version is served.</summary>
+    public static bool ServesWebApiVersion(int apiVersion) => WebApiVersions.Contains(apiVersion);
 }

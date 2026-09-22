@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import * as Icon from '../components/icons'
-import { formatClock } from '../lib/matchStats'
+import { Icon, formatClock } from '@foxfire/ui'
 import { clusterEvents, describeCluster, leadEvent, seekTargetFor } from './timelineMarkers'
 import type { RecordingEvent } from '@shared/types'
 

@@ -14,7 +14,7 @@ public class AdminUserTests(FoxfireServerFixture server)
     private async Task<HttpClient> AdminAsync() => (await server.AdminAsync()).Client;
 
     private static async Task<AdminUser[]> ListAsync(HttpClient admin) =>
-        (await admin.GetFromJsonAsync<AdminUser[]>(new Uri("/admin/users/", UriKind.Relative)))!;
+        (await admin.GetFromJsonAsync<AdminUser[]>(new Uri("/api/admin/users/", UriKind.Relative)))!;
 
     /// <summary>Creates an invited account on a server with signup shut, then opens it again.</summary>
     private async Task<(Session Member, InviteInfo Invite)> InvitedMemberAsync(HttpClient admin, string username)
@@ -22,10 +22,10 @@ public class AdminUserTests(FoxfireServerFixture server)
         var email = $"{Unique(username.ToLowerInvariant())}@example.com";
 
         var invite = (await (await admin.PostAsJsonAsync(
-            new Uri("/admin/invites/", UriKind.Relative),
+            new Uri("/api/admin/invites/", UriKind.Relative),
             new { email })).Content.ReadFromJsonAsync<InviteInfo>())!;
 
-        await admin.PatchAsJsonAsync(new Uri("/admin/settings/", UriKind.Relative), new { publicSignup = false });
+        await admin.PatchAsJsonAsync(new Uri("/api/admin/settings/", UriKind.Relative), new { publicSignup = false });
 
         try
         {
@@ -34,7 +34,7 @@ public class AdminUserTests(FoxfireServerFixture server)
         }
         finally
         {
-            await admin.PatchAsJsonAsync(new Uri("/admin/settings/", UriKind.Relative), new { publicSignup = true });
+            await admin.PatchAsJsonAsync(new Uri("/api/admin/settings/", UriKind.Relative), new { publicSignup = true });
         }
     }
 
@@ -63,11 +63,11 @@ public class AdminUserTests(FoxfireServerFixture server)
         var member = await server.RegisterAsync(client, "Promoted", $"{Unique("promote")}@example.com");
 
         await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = true });
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = true });
         Assert.True((await ListAsync(admin)).Single(u => u.Id == member.User.Id).IsAdmin);
 
         await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = false });
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = false });
         Assert.False((await ListAsync(admin)).Single(u => u.Id == member.User.Id).IsAdmin);
     }
 
@@ -82,10 +82,10 @@ public class AdminUserTests(FoxfireServerFixture server)
         var member = await server.RegisterAsync(client, "Cut", $"{Unique("cut")}@example.com");
 
         await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = true });
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = true });
 
         var refresh = await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = member.RefreshToken });
 
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
@@ -100,14 +100,14 @@ public class AdminUserTests(FoxfireServerFixture server)
         var member = await server.RegisterAsync(client, "Disabled", email);
 
         await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{member.User.Id}", UriKind.Relative), new { isDisabled = true });
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isDisabled = true });
 
         var refresh = await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = member.RefreshToken });
 
         var login = await client.PostAsJsonAsync(
-            new Uri("/auth/login", UriKind.Relative),
+            new Uri("/api/auth/login", UriKind.Relative),
             new { email, password = FoxfireServerFixture.GoodPassword });
 
         var error = await login.Content.ReadFromJsonAsync<ApiError>();
@@ -126,12 +126,12 @@ public class AdminUserTests(FoxfireServerFixture server)
         var member = await server.RegisterAsync(client, "Restored", email);
 
         await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{member.User.Id}", UriKind.Relative), new { isDisabled = true });
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isDisabled = true });
         await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{member.User.Id}", UriKind.Relative), new { isDisabled = false });
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isDisabled = false });
 
         var login = await client.PostAsJsonAsync(
-            new Uri("/auth/login", UriKind.Relative),
+            new Uri("/api/auth/login", UriKind.Relative),
             new { email, password = FoxfireServerFixture.GoodPassword });
 
         login.EnsureSuccessStatusCode();
@@ -147,7 +147,7 @@ public class AdminUserTests(FoxfireServerFixture server)
         using var admin = await AdminAsync();
         var (member, _) = await InvitedMemberAsync(admin, "Fleeting");
 
-        var deleted = await admin.DeleteAsync(new Uri($"/admin/users/{member.User.Id}", UriKind.Relative));
+        var deleted = await admin.DeleteAsync(new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.DoesNotContain(await ListAsync(admin), u => u.Id == member.User.Id);
@@ -161,11 +161,11 @@ public class AdminUserTests(FoxfireServerFixture server)
         using var admin = await AdminAsync();
         var (member, invite) = await InvitedMemberAsync(admin, "Spender");
 
-        await admin.DeleteAsync(new Uri($"/admin/users/{member.User.Id}", UriKind.Relative));
+        await admin.DeleteAsync(new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative));
 
         using var anyone = server.AnonymousClient();
         var preview = await anyone.GetFromJsonAsync<InvitePreview>(
-            new Uri($"/invites/{invite.Token}/preview", UriKind.Relative));
+            new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
 
         Assert.False(preview?.Usable);
         Assert.Contains("already been used", preview?.Message ?? "", StringComparison.OrdinalIgnoreCase);
@@ -181,11 +181,11 @@ public class AdminUserTests(FoxfireServerFixture server)
         using var _ = admin;
 
         var demote = await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{session.User.Id}", UriKind.Relative), new { isAdmin = false });
+            new Uri($"/api/admin/users/{session.User.Id}", UriKind.Relative), new { isAdmin = false });
         var disable = await admin.PatchAsJsonAsync(
-            new Uri($"/admin/users/{session.User.Id}", UriKind.Relative), new { isDisabled = true });
+            new Uri($"/api/admin/users/{session.User.Id}", UriKind.Relative), new { isDisabled = true });
         var delete = await admin.DeleteAsync(
-            new Uri($"/admin/users/{session.User.Id}", UriKind.Relative));
+            new Uri($"/api/admin/users/{session.User.Id}", UriKind.Relative));
 
         foreach (var response in new[] { demote, disable, delete })
         {
@@ -201,7 +201,7 @@ public class AdminUserTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Meddler", $"{Unique("meddle")}@example.com");
         FoxfireServerFixture.Authenticated(client, session);
 
-        var response = await client.GetAsync(new Uri("/admin/users/", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/admin/users/", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

@@ -1,10 +1,10 @@
+import type { FoxfireData } from '@foxfire/core'
 import type {
   AdminReplay,
   ImportProgress,
   ImportResult,
   ServerStorageUsage,
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
   AdminUser,
@@ -16,22 +16,13 @@ import type {
   BackgroundSettings,
   CaptureSettings,
   CaptureStatus,
-  ChampionStats,
   ClientArchive,
-  EditableMatch,
   IdentityReport,
   InvitePreview,
   LcuStatus,
-  LeagueEntry,
   LiveClient,
-  ManualRankEdit,
-  MasteryEntry,
-  MatchDetail,
-  MatchSummary,
   ObsValidation,
   QueueType,
-  RankHistory,
-  RankRange,
   Recording,
   RecordingDetail,
   RecordingDiskUsage,
@@ -44,16 +35,13 @@ import type {
   RiotKeyType,
   RoflSettings,
   Scoreboard,
-  Season,
-  SeasonInput,
   ServerAuthResult,
   ServerCredentials,
   ServerProbe,
   ServerAdminSettings,
   ServerRegistration,
   ServerState,
-  SyncProgressEvent,
-  SyncState
+  SyncProgressEvent
 } from './types'
 import type {
   LcuTelemetry,
@@ -76,16 +64,21 @@ export interface ValidateResult {
   identities?: IdentityReport[]
 }
 
-export interface DashboardData {
-  account: Account
-  leagueEntries: LeagueEntry[]
-  syncState: SyncState | null
-}
+// The shapes a screen reads live in @foxfire/core now, beside the contract they
+// belong to; these two are re-exported for everything that still reads them
+// from here.
+export type { DashboardData, MasteryData } from '@foxfire/core'
 
 // The typed contract exposed by src/preload/index.ts via contextBridge and
 // consumed by the renderer as `window.api`. Grows as IPC handlers are added
 // in src/main/ipc/handlers.ts — this file is the single source of truth for
 // the shape both sides must agree on.
+//
+// The namespaces a screen reads League data through are typed from
+// @foxfire/core's FoxfireData, which the web client implements too, so the
+// desktop cannot drift from the contract both clients share. What is added to
+// them here — adding an account by a typed Riot ID, claiming one through the
+// League client, the LP editor's window — is the desktop's alone.
 export interface Api {
   app: {
     /** The packaged version, matching the CHANGELOG entry the build shipped with. */
@@ -166,9 +159,7 @@ export interface Api {
     /** Fires when Riot rejects the stored key (personal keys expire every 24h). */
     onKeyInvalid: (cb: () => void) => () => void
   }
-  accounts: {
-    list: () => Promise<Account[]>
-    getHome: () => Promise<Account | null>
+  accounts: FoxfireData['accounts'] & {
     add: (input: RiotIdInput) => Promise<Account>
 
     /**
@@ -183,24 +174,9 @@ export interface Api {
      * yours and tracking an account is all claiming could mean.
      */
     link: (input: RiotIdInput) => Promise<Account>
-
-    remove: (accountId: string) => Promise<Account[]>
-    setHome: (accountId: string) => Promise<Account[]>
   }
-  dashboard: {
-    get: (accountId: string) => Promise<DashboardData | null>
-    /** `queueId` null means every queue; filtering happens in SQL so paging stays even. */
-    matchList: (
-      accountId: string,
-      limit: number,
-      offset: number,
-      queueId: number | null
-    ) => Promise<MatchSummary[]>
-    matchDetail: (matchId: string) => Promise<MatchDetail | null>
-  }
-  sync: {
-    start: (accountId: string) => Promise<void>
-    getState: (accountId: string) => Promise<SyncState | null>
+  dashboard: FoxfireData['dashboard']
+  sync: FoxfireData['sync'] & {
     onProgress: (cb: (event: SyncProgressEvent) => void) => () => void
   }
   assets: {
@@ -215,47 +191,10 @@ export interface Api {
     /** Null whenever no game is running on this machine, which is not an error. */
     scoreboard: (accountId: string) => Promise<Scoreboard | null>
   }
-  champions: {
-    /** Local-only, so the Champions screen renders whatever the API key is doing. */
-    stats: (
-      accountId: string,
-      queueId: number | null,
-      range: RankRange
-    ) => Promise<ChampionStats[]>
-  }
-  /**
-   * Ranked season boundaries, entered by hand — Riot exposes none, and the
-   * calendar is not a stand-in for one. Saving replaces the whole list.
-   */
-  seasons: {
-    list: () => Promise<Season[]>
-    save: (seasons: SeasonInput[]) => Promise<Season[]>
-  }
-  mastery: {
-    /** Win rates are scoped to `queueId`; Riot mastery is lifetime and never is. */
-    get: (accountId: string, refresh: boolean, queueId: number | null) => Promise<MasteryData>
-  }
-  rank: {
-    history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
-    /** Seasons with data, newest first. The first is what the pickers open on. */
-    periods: (accountId: string) => Promise<Season[]>
-    /** Ranked games with no LP figure — everything the editor can offer. */
-    editable: (accountId: string, queueType: QueueType) => Promise<EditableMatch[]>
-    /**
-     * Stores a batch of entries and returns what still needs one. Fewer rows can
-     * come back than were left: stating the rank after two games of a run of
-     * three resolves the third on its own.
-     */
-    saveManual: (
-      accountId: string,
-      queueType: QueueType,
-      edits: ManualRankEdit[]
-    ) => Promise<EditableMatch[]>
-    clearManual: (
-      accountId: string,
-      queueType: QueueType,
-      matchId: string
-    ) => Promise<EditableMatch[]>
+  champions: FoxfireData['champions']
+  seasons: FoxfireData['seasons']
+  mastery: FoxfireData['mastery']
+  rank: FoxfireData['rank'] & {
     openEditor: (accountId: string, queueType: QueueType, matchId: string) => Promise<void>
     /** Fires after any edit, so the match list and rank graph refetch. */
     onEdited: (cb: (accountId: string) => void) => () => void
@@ -358,9 +297,7 @@ export interface Api {
     onCopyProgress: (cb: (progress: ArchiveCopyProgress) => void) => () => void
     openWindow: () => Promise<void>
   }
-  search: {
-    summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>
-  }
+  search: FoxfireData['search']
   /**
    * Developer telemetry. Off by default; reads still work with collection
    * disabled so history stays visible after switching it off.
@@ -382,9 +319,4 @@ export interface Api {
     /** Starts the post-game sync schedule by hand. False when no account exists. */
     simulateGameEnd: () => Promise<boolean>
   }
-}
-
-export interface MasteryData {
-  riotMastery: MasteryEntry[]
-  localWinRates: ChampionStats[]
 }

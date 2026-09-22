@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fsAllow } from '../../tooling/vite/fsAllow'
 
 /**
  * Serves the renderer as a plain web app for design work — `npm run dev:web`.
@@ -24,6 +25,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5199,
-    strictPort: true
+    strictPort: true,
+    // The screens are served from packages/, outside this app — see fsAllow.
+    fs: { allow: fsAllow(__dirname) }
   }
 })

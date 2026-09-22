@@ -7,7 +7,7 @@ import { RateLimitPanel } from './RateLimitPanel'
 import { ResourcesPanel } from './ResourcesPanel'
 import { LcuPanel } from './LcuPanel'
 import { WINDOW_OPTIONS, formatBytes } from './format'
-import * as Icon from '../components/icons'
+import { Icon } from '@foxfire/ui'
 
 const TABS = [
   { id: 'requests', label: 'Riot requests' },
@@ -23,8 +23,8 @@ type TabId = (typeof TABS)[number]['id']
  *
  * Mounted in its own BrowserWindow rather than as a tab in the app, so the
  * renderer it measures is not the renderer drawing the charts. It loads the
- * same bundle as the main window and selects itself on a `#telemetry` hash —
- * see main.tsx — which avoids maintaining a second Vite entry point.
+ * same bundle as the main window at `#/telemetry` — see router.tsx — which
+ * avoids maintaining a second Vite entry point.
  */
 export function TelemetryApp(): JSX.Element {
   const queryClient = useQueryClient()

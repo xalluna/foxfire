@@ -184,6 +184,10 @@ public sealed class MatchReads(FoxfireDbContext db)
     /// filtered set — filtering after paging would yield short, uneven pages —
     /// while the team-totals join stays unfiltered, so the denominator is always
     /// the whole team.
+    ///
+    /// A match id narrows it to the one game, as that player's row — the same
+    /// row, LP and all, that the history shows, which is what a link to one
+    /// game opens on.
     /// </summary>
     public async Task<IReadOnlyList<MatchSummaryResponse>> MatchListAsync(
         string puuid,
@@ -191,6 +195,7 @@ public sealed class MatchReads(FoxfireDbContext db)
         int limit,
         int offset,
         int? queueId,
+        string? matchId = null,
         CancellationToken cancellationToken = default)
     {
         var rows = await db.MatchParticipants
@@ -198,6 +203,7 @@ public sealed class MatchReads(FoxfireDbContext db)
             .Where(p => p.Puuid == puuid)
             .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => new { p, m })
             .Where(x => queueId == null || x.m.QueueId == queueId)
+            .Where(x => matchId == null || x.m.MatchId == matchId)
             .OrderByDescending(x => x.m.GameCreation)
             .Skip(offset)
             .Take(limit)

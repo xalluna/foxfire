@@ -1,0 +1,78 @@
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { isPlayer, parsePlayerSlug, paths, playerSlug } from '@foxfire/core/routes'
+import { CopyLinkButton, Icon, MatchPage } from '@foxfire/ui'
+import { useClient } from '../client/context'
+import { useShareLink } from '../client/useShareLink'
+import { queryKeys } from '../queries/keys'
+
+/** Whether a failed read was the server saying it has no such thing. */
+function isNotFound(error: unknown): boolean {
+  return (error as { status?: unknown } | null)?.status === 404
+}
+
+/**
+ * One game, on a page of its own: what a link to it opens on.
+ *
+ * The link names the game and, usually, whose game it was. When that player
+ * is on this server the page shows it as they saw it — their row from the
+ * history, LP included, and their line picked out of the scoreboard — with the
+ * way back to their profile. When the link names nobody this server knows, it
+ * is still the game, just nobody's in particular.
+ */
+export function MatchScreen({ matchId, player }: { matchId: string; player?: string }): JSX.Element {
+  const client = useClient()
+  const share = useShareLink()
+
+  const accounts = useQuery({
+    queryKey: queryKeys.accounts(),
+    queryFn: () => client.accounts.list()
+  })
+
+  const riotId = player === undefined ? null : parsePlayerSlug(player)
+  const account = (riotId && accounts.data?.find((a) => isPlayer(a, riotId))) || null
+  const readSummary = client.dashboard.matchSummary
+
+  const summary = useQuery({
+    queryKey: queryKeys.matchSummary(account?.id ?? '', matchId),
+    queryFn: () => readSummary!(account!.id, matchId),
+    enabled: account !== null && readSummary !== undefined
+  })
+
+  const detail = useQuery({
+    queryKey: queryKeys.matchDetail(matchId),
+    queryFn: () => client.dashboard.matchDetail(matchId),
+    // A game the server has no record of is an answer, not a failure to retry.
+    retry: (count, error) => !isNotFound(error) && count < 1
+  })
+
+  const notFound = (detail.isSuccess && detail.data === null) || (detail.isError && isNotFound(detail.error))
+
+  return (
+    <MatchPage
+      back={
+        account && (
+          <Link
+            to="/players/$slug"
+            params={{ slug: playerSlug(account) }}
+            className="inline-flex items-center gap-1.5 text-sm text-text-dim transition hover:text-accent"
+          >
+            <Icon.ChevronDown width={14} height={14} className="rotate-90" />
+            {account.gameName}&rsquo;s profile
+          </Link>
+        )
+      }
+      actions={
+        share && (
+          <CopyLinkButton onCopy={() => share(paths.match(matchId, account ? { player: account } : {}))} />
+        )
+      }
+      summary={summary.data}
+      summaryLoading={account !== null && readSummary !== undefined && summary.isLoading}
+      detail={detail.data}
+      detailLoading={detail.isLoading}
+      trackedPuuid={account?.puuid ?? null}
+      notFound={notFound}
+    />
+  )
+}

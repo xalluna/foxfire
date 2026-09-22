@@ -84,4 +84,18 @@ describe('getServerState', () => {
 
     expect(getServerState().session).toBeNull()
   })
+
+  it("carries the active server's public address, which Copy link is built on", () => {
+    remember({ username: 'Faker', publicUrl: 'https://fox.example' })
+
+    expect(getServerState().publicUrl).toBe('https://fox.example')
+  })
+
+  it('has no public address for a server remembered before one was kept', () => {
+    // Copy link stays hidden until the server's handshake is read again,
+    // rather than building links on the address this machine connected with.
+    remember({ username: 'Faker' })
+
+    expect(getServerState().publicUrl).toBeNull()
+  })
 })

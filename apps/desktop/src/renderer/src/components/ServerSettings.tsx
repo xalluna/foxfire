@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
 import { LinkAccountRow } from './LinkAccountRow'
-import { SettingsCard, SettingsPage } from './settings/SettingsCard'
-import { DangerRow, SettingsBlock, SettingsRow, StatusRow } from './settings/SettingsRow'
-import { ghostButtonClass, inputClass, primaryButtonClass } from './settings/controls'
-import * as Icon from './icons'
+import { SettingsCard, SettingsPage, DangerRow, SettingsBlock, SettingsRow, StatusRow, ghostButtonClass, inputClass, primaryButtonClass, Icon } from '@foxfire/ui'
 
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'
@@ -67,6 +64,16 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           <StatusRow tone="error">
             This server needs Foxfire {state.upgradeRequired}. Until this copy is updated it will
             not serve anything — download the new version from the releases page.
+          </StatusRow>
+        </SettingsCard>
+      )}
+
+      {state.serverOutdated && (
+        <SettingsCard>
+          <StatusRow tone="error">
+            This server is running an older Foxfire Server that does not know this version of
+            Foxfire, so it will not serve anything until it is updated. Ask whoever runs it to
+            update the server.
           </StatusRow>
         </SettingsCard>
       )}
@@ -148,7 +155,12 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
   const [invite, setInvite] = useState('')
   const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null)
 
-  const connected = probe?.reachable === true && probe.compatibility !== 'unsupported'
+  // Neither kind of refusal gets a form: the server would turn away whatever
+  // was typed into it.
+  const connected =
+    probe?.reachable === true &&
+    probe.compatibility !== 'unsupported' &&
+    probe.compatibility !== 'server-outdated'
   const needsInvite = mode === 'register' && probe?.publicSignup === false
 
   async function check(): Promise<void> {
@@ -288,6 +300,13 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
           <StatusRow tone="error">
             {probe.serverName} needs Foxfire {probe.recommendedDesktop}. This copy is too old for
             it — update Foxfire and try again.
+          </StatusRow>
+        )}
+
+        {probe?.reachable === true && probe.compatibility === 'server-outdated' && (
+          <StatusRow tone="error">
+            {probe.serverName} is running Foxfire Server {probe.serverVersion}, which is older than
+            this copy of Foxfire and does not know it. Ask whoever runs it to update the server.
           </StatusRow>
         )}
 

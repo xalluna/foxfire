@@ -476,7 +476,7 @@ public class ReadTests(FoxfireServerFixture server)
         FoxfireServerFixture.Authenticated(stranger, session);
 
         var response = await stranger.GetAsync(
-            new Uri($"/riot-accounts/{accountId}/matches", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
         response.EnsureSuccessStatusCode();
 
@@ -486,13 +486,62 @@ public class ReadTests(FoxfireServerFixture server)
 
         // Reading is open; writing is not.
         var write = await stranger.PostAsJsonAsync(
-            new Uri($"/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
+            new Uri($"/api/riot-accounts/{accountId}/rank/manual", UriKind.Relative),
             new { queueType = "RANKED_SOLO_5x5", edits = Array.Empty<object>() });
 
         Assert.Equal(HttpStatusCode.Forbidden, write.StatusCode);
 
         adminClient.Dispose();
         stranger.Dispose();
+    }
+
+    [Fact]
+    public async Task One_game_reads_as_the_row_the_history_shows_for_that_player()
+    {
+        // What a link to a game opens on: the player's own row, LP and all,
+        // rather than a page of history to find it in.
+        var (client, admin) = await server.AdminAsync();
+        using var _ = client;
+
+        Guid accountId;
+        string matchId;
+        await using (var scope = Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            var account = await AddAccountAsync(db, admin.User.Id);
+            accountId = account.Id;
+
+            await AddMatchAsync(db, account.Puuid, T0 - 60_000);
+            matchId = await AddMatchAsync(db, account.Puuid, T0, championId: 103);
+            await AddMatchAsync(db, account.Puuid, T0 + 60_000);
+
+            db.MatchRanks.Add(new MatchRank
+            {
+                MatchId = matchId,
+                RiotAccountId = account.Id,
+                QueueType = RankedQueue.SoloDuo.RiotName(),
+                TierBefore = RankTier.Silver,
+                DivisionBefore = RankDivision.I,
+                LpBefore = 80,
+                TierAfter = RankTier.Silver,
+                DivisionAfter = RankDivision.I,
+                LpAfter = 98,
+                LpDelta = 18
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var row = await client.GetFromJsonAsync<MatchSummaryResponse>(
+            new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}", UriKind.Relative));
+
+        Assert.NotNull(row);
+        Assert.Equal(matchId, row.MatchId);
+        Assert.Equal(103, row.ChampionId);
+        Assert.Equal(18, row.Rank?.LpDelta);
+
+        var missing = await client.GetAsync(
+            new Uri($"/api/riot-accounts/{accountId}/matches/NA1_0", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
     [Fact]
@@ -509,14 +558,14 @@ public class ReadTests(FoxfireServerFixture server)
         FoxfireServerFixture.Authenticated(member, session);
 
         var refused = await member.PutAsJsonAsync(
-            new Uri("/seasons", UriKind.Relative),
+            new Uri("/api/seasons", UriKind.Relative),
             new[] { new { label = "Season 2027", startsAt = 1_799_000_000_000L, isPreseason = false, resetsRank = true } });
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
 
         var (admin, _) = await server.AdminAsync();
 
-        var existing = await admin.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/seasons", UriKind.Relative));
+        var existing = await admin.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/api/seasons", UriKind.Relative));
         Assert.NotNull(existing);
         Assert.NotEmpty(existing);
 
@@ -530,7 +579,7 @@ public class ReadTests(FoxfireServerFixture server)
 
         if (duplicate.Count > 1)
         {
-            var rejected = await admin.PutAsJsonAsync(new Uri("/seasons", UriKind.Relative), duplicate);
+            var rejected = await admin.PutAsJsonAsync(new Uri("/api/seasons", UriKind.Relative), duplicate);
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         }
 
@@ -541,15 +590,15 @@ public class ReadTests(FoxfireServerFixture server)
             .Append(new { label = "Season 2027", startsAt = 1_799_000_000_000L, isPreseason = false, resetsRank = true })
             .ToList();
 
-        var saved = await admin.PutAsJsonAsync(new Uri("/seasons", UriKind.Relative), added);
+        var saved = await admin.PutAsJsonAsync(new Uri("/api/seasons", UriKind.Relative), added);
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
 
-        var after = await admin.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/seasons", UriKind.Relative));
+        var after = await admin.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/api/seasons", UriKind.Relative));
         Assert.NotNull(after);
         Assert.Equal(existing.Count + 1, after.Count);
 
         var restored = await admin.PutAsJsonAsync(
-            new Uri("/seasons", UriKind.Relative),
+            new Uri("/api/seasons", UriKind.Relative),
             existing.Select(s => new { label = s.Label, startsAt = s.StartsAt, isPreseason = s.IsPreseason, resetsRank = s.ResetsRank }));
 
         Assert.Equal(HttpStatusCode.NoContent, restored.StatusCode);
@@ -573,7 +622,7 @@ public class ReadTests(FoxfireServerFixture server)
         }
 
         var dashboard = await admin.GetFromJsonAsync<DashboardResponse>(
-            new Uri($"/riot-accounts/{accountId}/dashboard", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/dashboard", UriKind.Relative));
 
         Assert.NotNull(dashboard);
         Assert.True(dashboard.Account.IsMine);

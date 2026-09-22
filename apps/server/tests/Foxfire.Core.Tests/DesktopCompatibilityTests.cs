@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Foxfire.Core;
 
 namespace Foxfire.Core.Tests;
@@ -119,5 +121,58 @@ public class DesktopCompatibilityTests
         {
             Assert.NotEqual(DesktopSupportLevel.Refused, DesktopCompatibility.AllowList.Check(version).Level);
         }
+    }
+
+    [Fact]
+    public void A_web_page_is_served_only_for_an_api_version_on_the_list()
+    {
+        foreach (var version in DesktopCompatibility.WebApiVersions)
+        {
+            Assert.True(DesktopCompatibility.ServesWebApiVersion(version));
+        }
+
+        Assert.False(DesktopCompatibility.ServesWebApiVersion(0));
+        Assert.False(DesktopCompatibility.ServesWebApiVersion(DesktopCompatibility.WebApiVersions.Max() + 1));
+    }
+}
+
+/// <summary>
+/// The web client's API version, held to the server's list.
+///
+/// The web client ships inside this server, built from packages/core in the
+/// same commit — so the two can only disagree if somebody bumps one side and
+/// not the other. That mistake would not show up in either half's own tests:
+/// the page would build, the server would start, and every call the page made
+/// would be refused with "reload the page". So it is caught here, by reading
+/// the constant out of the TypeScript, the same way the ladder corpus holds
+/// the two ladders together.
+/// </summary>
+public partial class WebApiVersionTests
+{
+    [GeneratedRegex(@"export const WEB_API_VERSION = (\d+)")]
+    private static partial Regex WebApiVersionLine();
+
+    [Fact]
+    public void The_web_client_is_built_against_a_version_this_server_serves()
+    {
+        var source = File.ReadAllText(FindCoreIdentitySource());
+        var match = WebApiVersionLine().Match(source);
+
+        Assert.True(match.Success, "WEB_API_VERSION was not found in packages/core/src/server/identity.ts.");
+
+        var webApiVersion = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        Assert.Contains(webApiVersion, DesktopCompatibility.WebApiVersions);
+    }
+
+    private static string FindCoreIdentitySource()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "packages", "core", "src", "server", "identity.ts");
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        throw new FileNotFoundException(
+            "packages/core/src/server/identity.ts was not found above " + AppContext.BaseDirectory);
     }
 }

@@ -32,7 +32,7 @@ public enum RankMovement
 /// <summary>
 /// Tier, division and LP folded onto one continuous number.
 ///
-/// A port of the desktop's src/shared/ladder.ts, and the arithmetic every LP
+/// A port of packages/core/src/rules/ladder.ts, and the arithmetic every LP
 /// figure in Foxfire is derived from. It exists because raw LP is discontinuous:
 /// Gold III 95 to Gold II 12 reads as −83 and was a 17 point win, and a graph
 /// drawn on raw LP resets to zero at every promotion.

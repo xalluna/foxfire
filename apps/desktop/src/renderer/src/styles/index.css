@@ -1,50 +1,18 @@
-/* Self-hosted so the CSP's default-src 'self' covers them — no CDN, no FOUT. */
-@import '@fontsource-variable/inter';
-@import '@fontsource/marcellus';
+/*
+ * Foxfire's tokens, fonts and base layer come from @foxfire/ui, which the web
+ * client imports too. First, because an @import has to lead the sheet, and so
+ * that everything below can use what it defines. Imported from CSS rather than
+ * from JavaScript so it is one stylesheet as far as Tailwind is concerned —
+ * the base layer in there belongs in the base layer here.
+ */
+@import '@foxfire/ui/styles.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Hextech tokens.
- *
- * Dark only by design — the greys and the semantic colours below still follow
- * Riot's own client UI, which is what the app is read alongside.
- *
- * The accent is the exception, and deliberately so. It was Riot's gold until
- * 0.8.0, lifted from the position icons in src/assets/positions; the rebrand
- * gives the app a colour of its own rather than one borrowed from the game it
- * reports on. Those icons still ship filled with Riot's two golds and are left
- * that way, alongside the rank crests — Riot's art keeps Riot's palette.
- *
- * --gold is that same exemption rather than a retreat from the rebrand. It is
- * the #c8aa6e those position icons are filled with, and it colours one thing:
- * gold earned. That is a quantity the game denominates, so it keeps the game's
- * colour, the way a currency symbol does. It is deliberately not --amber, which
- * means "something needs your attention" everywhere else in the app.
- *
- * Defined as custom properties so a second theme is a variable swap rather
- * than a rewrite; tailwind.config.js maps every colour utility onto them.
- */
+/* What belongs to this app's window rather than to Foxfire's look. */
 :root {
-  --canvas: 1 10 19; /* #010A13 */
-  --surface: 10 20 40; /* #0A1428 */
-  --surface-2: 15 27 45; /* #0F1B2D */
-  --hairline: 30 35 40; /* #1E2328 */
-
-  --accent: 157 200 255; /* #9DC8FF */
-  --accent-dim: 62 95 138; /* #3E5F8A */
-
-  --teal: 10 200 185; /* #0AC8B9 */
-  --red: 232 64 87; /* #E84057 */
-  --amber: 235 156 0; /* #EB9C00 */
-  --gold: 200 170 110; /* #C8AA6E — the currency, not the accent */
-
-  --text: 240 230 210; /* #F0E6D2 */
-  --text-dim: 160 155 140; /* #A09B8C */
-  --text-mute: 91 90 86; /* #5B5A56 */
-
   /*
    * Height of the native title-bar overlay reserved in src/main/window.ts.
    * Nothing the renderer draws in the top-right of this band survives — the
@@ -54,43 +22,6 @@
   --titlebar-h: 40px;
   /* Windows draws minimise/maximise/close here; nothing interactive may sit under it. */
   --titlebar-controls-w: 140px;
-}
-
-@layer base {
-  html,
-  body,
-  #root {
-    height: 100%;
-  }
-
-  body {
-    @apply bg-canvas text-text antialiased;
-    font-feature-settings: 'cv05' 1; /* single-storey l, easier to tell from 1 and I */
-  }
-
-  /* Numbers line up in every stat column without opting in per component. */
-  table,
-  [data-numeric] {
-    font-variant-numeric: tabular-nums;
-  }
-
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply rounded-full border-2 border-solid border-transparent bg-hairline bg-clip-content;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-accent-dim bg-clip-content;
-  }
-
-  :focus-visible {
-    @apply outline outline-2 outline-offset-2 outline-accent/70;
-  }
 }
 
 @layer components {

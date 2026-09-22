@@ -1,7 +1,7 @@
 import { join } from 'path'
-import { pathToFileURL } from 'url'
 import { BrowserWindow, shell } from 'electron'
-import { is } from './lib/env'
+import { windowRoutes } from '@shared/windowRoutes'
+import { loadRoute } from './rendererUrl'
 import { CH } from './ipc/channels'
 import type { QueueType } from '@shared/types'
 
@@ -14,18 +14,14 @@ import type { QueueType } from '@shared/types'
  * unresolved run is the useful shape for that, and it does not fit in a match
  * row — so the right-click that starts the job opens a window showing all of it.
  *
- * Reuses the main renderer bundle and selects itself with a URL hash, the same
- * arrangement as the telemetry panel, so there is no second Vite entry point to
- * keep in step — see main.tsx.
+ * Reuses the main renderer bundle at a route of its own, the same arrangement
+ * as the telemetry panel, so there is no second Vite entry point to keep in
+ * step — see rendererUrl.ts.
  */
 let editorWindow: BrowserWindow | null = null
 
 /** What the open window is showing, so a repeat open knows whether to reload. */
 let context: { accountId: string; queueType: QueueType } | null = null
-
-function editorHash(accountId: string, queueType: QueueType, matchId: string): string {
-  return `#lp-editor?account=${accountId}&queue=${queueType}&match=${encodeURIComponent(matchId)}`
-}
 
 export function openLpEditorWindow(
   accountId: string,
@@ -87,16 +83,7 @@ function loadEditor(
   queueType: QueueType,
   matchId: string
 ): void {
-  const hash = editorHash(accountId, queueType, matchId)
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}${hash}`)
-  } else {
-    // loadFile would do this itself, but it routes the hash through url.format,
-    // and this one carries '?', '&' and '=' rather than the bare word the
-    // telemetry window passes. Building the file URL here keeps the escaping
-    // out of the question.
-    window.loadURL(pathToFileURL(join(__dirname, '../renderer/index.html')).href + hash)
-  }
+  loadRoute(window, windowRoutes.lpEditor(accountId, queueType, matchId))
 }
 
 export function closeLpEditorWindow(): void {

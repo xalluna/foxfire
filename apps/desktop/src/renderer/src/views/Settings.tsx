@@ -1,30 +1,100 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
-import { Disclaimer } from '../components/Disclaimer'
+import {
+  DangerRow,
+  Disclaimer,
+  Icon,
+  Logo,
+  SettingsBlock,
+  SettingsCard,
+  SettingsNav,
+  SettingsPage,
+  SettingsRow,
+  StatusRow,
+  checkboxClass,
+  inputClass,
+  primaryButtonClass,
+  type SettingsNavItem
+} from '@foxfire/ui'
+import { ServerDataScreen, ServerManagementScreen, useIsServerAdmin } from '@foxfire/screens'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { useServerHealth } from '../hooks/useKeyStatus'
-import { ServerAdminSettings } from '../components/ServerAdminSettings'
-import { ServerDataSettings } from '../components/ServerDataSettings'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
-import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
-import {
-  DangerRow,
-  SettingsBlock,
-  SettingsRow,
-  StatusRow
-} from '../components/settings/SettingsRow'
-import {
-  FIRST_CATEGORY,
-  SettingsNav,
-  type SettingsCategory
-} from '../components/settings/SettingsNav'
-import { checkboxClass, inputClass, primaryButtonClass } from '../components/settings/controls'
-import { Logo } from '../components/Logo'
 import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
+
+/**
+ * Which settings page is on screen.
+ *
+ * Ranked seasons is not one of these. It was its own top-level section when
+ * every section was a fold, but it exists to serve rank history — the dates
+ * decide which games belong to which season — so it is now a card on the Rank
+ * tracking page rather than a sibling of it.
+ */
+export type SettingsCategory =
+  | 'server'
+  | 'server-admin'
+  | 'server-data'
+  | 'riot-key'
+  | 'rank'
+  | 'capture'
+  | 'replays'
+  | 'telemetry'
+  | 'about'
+
+/**
+ * Where Settings opens when nothing says otherwise.
+ *
+ * The Riot key rather than Server, because the key is what the app cannot work
+ * without. Server sits above it in the sidebar — it is the bigger decision, and
+ * it decides whether the key page applies at all — but it is not where somebody
+ * with a problem needs to arrive. Connected to a server there is no key page,
+ * and Settings opens on Server instead.
+ */
+const FIRST_CATEGORY: SettingsCategory = 'riot-key'
+
+interface NavItem extends SettingsNavItem<SettingsCategory> {
+  /** Shown only to an administrator of the server currently connected. */
+  adminOnly?: boolean
+  /**
+   * Hidden while a server is answering.
+   *
+   * For the one page that is genuinely about nothing then: connected, this
+   * machine holds no Riot key at all — the server has one, shared by everybody
+   * on it — so a page offering to save one would be offering to save something
+   * nothing would read.
+   */
+  localOnly?: boolean
+}
+
+/**
+ * The sidebar, in groups.
+ *
+ * Grouped the way the app is: where its data comes from, what it records off
+ * your machine, and the two pages that are about Foxfire itself rather than
+ * about League.
+ */
+const GROUPS: NavItem[][] = [
+  [
+    { id: 'server', label: 'Server', icon: <Icon.Server /> },
+    { id: 'server-admin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
+    { id: 'server-data', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
+    { id: 'riot-key', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
+    { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
+  ],
+  [
+    { id: 'capture', label: 'Game capture', icon: <Icon.Film /> },
+    { id: 'replays', label: 'Riot replays', icon: <Icon.Replay /> }
+  ],
+  [
+    { id: 'telemetry', label: 'Developer telemetry', icon: <Icon.Activity /> },
+    { id: 'about', label: 'About', icon: <Icon.Info /> }
+  ]
+]
 
 // Only ever shown before the first settings load answers; the main process owns
 // the real defaults (rateLimiter's APPLICATION_KEY_LIMITS).
@@ -39,68 +109,59 @@ const DEFAULT_APPLICATION_LIMITS: RiotKeyLimits = { burstLimit: 500, sustainedLi
  * be as long as it needs to be without hiding anything, and no section has to
  * summarise itself beside a chevron to stay honest about its own state.
  *
- * There is no category in the UI store on purpose. App renders this view
- * conditionally, so leaving Settings unmounts it and the `useState` below
- * resets — which is exactly the wanted behaviour, and means the two Riot key
- * banners in App still land on the right page without knowing this file exists.
+ * Which page is open is the URL's — `/settings/rank` — so the key banners and
+ * the rank page's League-client line can each send somebody straight to the
+ * page they mean. A category that is not on offer to this person right now
+ * shows the opening page instead, without rewriting the address: an admin page
+ * a moment before the connection has said who is an admin should appear once
+ * it has, rather than having been redirected away from for good.
  */
-export function Settings(): JSX.Element {
-  const [category, setCategory] = useState<SettingsCategory>(FIRST_CATEGORY)
+export function Settings({ category }: { category?: string }): JSX.Element {
+  const navigate = useNavigate()
 
-  // Drives whether the management page is offered at all. Refetched on every
-  // connection change, so signing out of a server takes its admin page with it
-  // rather than leaving a category whose every call now fails.
-  const [isServerAdmin, setIsServerAdmin] = useState(false)
+  // Drives whether the management pages are offered at all. Follows every
+  // connection change, so signing out of a server takes its admin pages with it
+  // rather than leaving a page whose every call now fails.
+  //
+  // Decides what to draw and nothing else. The server checks the role on every
+  // request it serves, so a window belonging to somebody demoted a minute ago
+  // shows a page whose every call is refused — which is the right way round.
+  const isServerAdmin = useIsServerAdmin()
   const { connected: isConnected } = useServerHealth()
 
-  useEffect(() => {
-    const read = (state: { session: { isAdmin: boolean } | null }): void =>
-      setIsServerAdmin(state.session?.isAdmin ?? false)
+  const groups = GROUPS.map((group) =>
+    group.filter((item) => (!item.adminOnly || isServerAdmin) && (!item.localOnly || !isConnected))
+  )
 
-    void window.api.server.getState().then(read)
-    return window.api.server.onChanged(read)
-  }, [])
+  const opening: SettingsCategory = isConnected ? 'server' : FIRST_CATEGORY
+  const active = groups.flat().find((item) => item.id === category)?.id ?? opening
 
-  // Somebody demoted, or signed out, while looking at the page that is now gone.
-  useEffect(() => {
-    if (!isServerAdmin && (category === 'serverAdmin' || category === 'serverData')) {
-      setCategory(FIRST_CATEGORY)
-    }
-  }, [isServerAdmin, category])
-
-  // Settings opens on the Riot key page, which is the right default for a PC
-  // that cannot work without one — and exactly wrong connected to a server,
-  // where this machine holds no key and the page is not in the sidebar at all.
-  useEffect(() => {
-    if (isConnected && category === 'riotKey') setCategory('server')
-  }, [isConnected, category])
   const pane = useRef<HTMLDivElement>(null)
 
   // Arriving at a page scrolled to where the last one was left is disorienting
   // when the pages are unrelated.
   useEffect(() => {
     pane.current?.scrollTo({ top: 0 })
-  }, [category])
+  }, [active])
 
   return (
     <div className="flex h-full min-h-0">
       <SettingsNav
-        active={category}
-        isServerAdmin={isServerAdmin}
-        isConnected={isConnected}
-        onSelect={setCategory}
+        groups={groups}
+        active={active}
+        onSelect={(id) => void navigate({ to: '/settings/{-$category}', params: { category: id } })}
       />
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
-        {category === 'server' && <ServerSettings />}
-        {category === 'serverAdmin' && <ServerAdminSettings />}
-        {category === 'serverData' && <ServerDataSettings />}
-        {category === 'riotKey' && <RiotKeySettings />}
-        {category === 'rank' && <RankTrackingSettings />}
-        {category === 'capture' && <CaptureSettings />}
-        {category === 'replays' && <ReplaySettings />}
-        {category === 'telemetry' && <TelemetrySettings />}
-        {category === 'about' && <AboutSettings />}
+        {active === 'server' && <ServerSettings />}
+        {active === 'server-admin' && <ServerManagementScreen />}
+        {active === 'server-data' && <ServerDataScreen />}
+        {active === 'riot-key' && <RiotKeySettings />}
+        {active === 'rank' && <RankTrackingSettings />}
+        {active === 'capture' && <CaptureSettings />}
+        {active === 'replays' && <ReplaySettings />}
+        {active === 'telemetry' && <TelemetrySettings />}
+        {active === 'about' && <AboutSettings />}
       </div>
     </div>
   )

@@ -1,18 +1,20 @@
 {
   "name": "foxfire-repo",
   "private": true,
-  "description": "Foxfire monorepo: the desktop app and the Foxfire Server",
+  "description": "Foxfire monorepo: the desktop app, the Foxfire Server, and the packages they share",
   "workspaces": [
-    "apps/desktop"
+    "apps/desktop",
+    "apps/web",
+    "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w foxfire",
-    "dev:web": "npm run dev:web -w foxfire",
-    "build": "npm run build -w foxfire",
-    "build:win": "npm run build:win -w foxfire",
-    "typecheck": "npm run typecheck -w foxfire",
-    "lint": "npm run lint -w foxfire",
-    "test": "npm run test -w foxfire",
+    "dev": "npm run dev -w @foxfire/desktop",
+    "dev:web": "npm run dev:web -w @foxfire/desktop",
+    "build": "npm run build -w @foxfire/desktop",
+    "build:win": "npm run build:win -w @foxfire/desktop",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "tag-release": "node scripts/tag-release.mjs"
   }
 }

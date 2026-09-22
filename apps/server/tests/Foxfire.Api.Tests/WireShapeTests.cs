@@ -11,8 +11,9 @@ namespace Foxfire.Api.Tests;
 /// <summary>
 /// The names on the wire, asserted as names.
 ///
-/// Every payload here is consumed by a TypeScript type in apps/desktop that no
-/// compiler can check against this one. A field spelled differently on the two
+/// Every payload here is consumed by a TypeScript type in packages/core — read
+/// by the desktop and the web client alike — that no compiler can check against
+/// this one. A field spelled differently on the two
 /// sides does not fail: it arrives as undefined, and a screen renders a blank
 /// where a number should be. That is the worst shape of bug available to this
 /// project — silent, cosmetic-looking, and invisible to both test suites.
@@ -172,12 +173,12 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task An_account_carries_every_field_the_desktops_Account_reads()
     {
-        // @shared/types Account, plus the two a shared server adds.
+        // @foxfire/core Account, plus the two a shared server adds.
         var (client, _, _) = await RiggedAsync();
         using var _client = client;
 
         var accounts = await client.GetFromJsonAsync<JsonElement>(
-            new Uri("/riot-accounts", UriKind.Relative));
+            new Uri("/api/riot-accounts", UriKind.Relative));
 
         var account = accounts.EnumerateArray().First();
 
@@ -202,13 +203,13 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task A_sync_state_calls_the_account_what_the_desktop_calls_it()
     {
-        // @shared/types SyncState. This one was wrong: riotAccountId, which the
+        // @foxfire/core SyncState. This one was wrong: riotAccountId, which the
         // desktop reads as undefined and then keys a progress bar on.
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
         var state = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/sync/{accountId}", UriKind.Relative));
+            new Uri($"/api/sync/{accountId}", UriKind.Relative));
 
         AssertHasAll(
             state,
@@ -223,13 +224,13 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task A_match_row_carries_every_field_the_row_component_draws()
     {
-        // @shared/types MatchSummary, minus recordingId and replayId — those are
-        // files on one machine and the desktop fills them in from its own SQLite.
+        // @foxfire/core MatchSummary, minus `local` — the recording and replay on
+        // one machine's disk, which the desktop fills in from its own SQLite.
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
         var rows = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/matches", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
         var row = rows.EnumerateArray().First();
 
@@ -267,12 +268,12 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task A_dashboard_carries_the_three_things_the_account_page_opens_with()
     {
-        // @shared/api DashboardData, and @shared/types LeagueEntry inside it.
+        // @foxfire/core DashboardData, and LeagueEntry inside it.
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
         var dashboard = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/dashboard", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/dashboard", UriKind.Relative));
 
         AssertHasAll(dashboard, "account", "leagueEntries", "syncState");
 
@@ -287,12 +288,12 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task A_rank_reading_crosses_the_wire_as_the_graph_plots_it()
     {
-        // @shared/types RankHistory, RankSnapshot.
+        // @foxfire/core RankHistory, RankSnapshot.
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
         var history = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
+            new Uri($"/api/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
                 UriKind.Relative));
 
         AssertHasAll(history, "snapshots", "milestones");
@@ -318,13 +319,13 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task An_editable_game_offers_a_rank_the_editor_can_fill_in()
     {
-        // @shared/types EditableMatch, ManualRank. The rank was wrong here too:
+        // @foxfire/core EditableMatch, ManualRank. The rank was wrong here too:
         // Foxfire.Core calls the division a division, and the form does not.
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
         var games = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/rank/editable?queueType=RANKED_SOLO_5x5",
+            new Uri($"/api/riot-accounts/{accountId}/rank/editable?queueType=RANKED_SOLO_5x5",
                 UriKind.Relative));
 
         var game = games.EnumerateArray().First();
@@ -353,11 +354,11 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task A_season_crosses_the_wire_as_the_picker_reads_one()
     {
-        // @shared/types Season.
+        // @foxfire/core Season.
         var (client, _, _) = await RiggedAsync();
         using var _client = client;
 
-        var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/seasons", UriKind.Relative));
+        var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/seasons", UriKind.Relative));
         var season = seasons.EnumerateArray().First();
 
         AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank");
@@ -366,12 +367,12 @@ public class WireShapeTests(FoxfireServerFixture server)
     [Fact]
     public async Task Champion_numbers_cross_the_wire_as_the_table_reads_them()
     {
-        // @shared/types ChampionStats.
+        // @foxfire/core ChampionStats.
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
         var stats = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/champions", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/champions", UriKind.Relative));
 
         var champion = stats.EnumerateArray().First();
 
@@ -399,7 +400,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/rank-readings", UriKind.Relative),
+            new Uri("/api/rank-readings", UriKind.Relative),
             new
             {
                 riotAccountId = accountId,
@@ -421,7 +422,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         // The same reading again has not moved, so nothing is filed — and the
         // desktop needs to be able to tell that from a write.
         var again = await client.PostAsJsonAsync(
-            new Uri("/rank-readings", UriKind.Relative),
+            new Uri("/api/rank-readings", UriKind.Relative),
             new
             {
                 riotAccountId = accountId,

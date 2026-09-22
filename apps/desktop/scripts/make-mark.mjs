@@ -1,4 +1,5 @@
-// Generates the Foxfire mark's geometry into src/shared/logoMark.json.
+// Generates the Foxfire mark's geometry into packages/ui/src/assets/logoMark.json,
+// where the Logo component both clients draw reads it.
 //
 // The mark is three wisps circling an empty centre. Each wisp is a ribbon whose
 // spine *is* the orbit circle — so the tails do not merely suggest rotation,
@@ -19,7 +20,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const OUT = join(ROOT, 'src', 'shared', 'logoMark.json')
+const OUT = join(ROOT, '..', '..', 'packages', 'ui', 'src', 'assets', 'logoMark.json')
 
 /** The 24-unit grid every icon in the app is drawn on. */
 const GRID = 24

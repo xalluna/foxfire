@@ -12,8 +12,7 @@ import {
 import { attributeInterval, replayAttribution } from './rankAttribution'
 import { rebuildAttribution } from './manualRankService'
 import { listSeasons } from '../db/repositories/seasons.repo'
-import { queueIdForQueueType } from '@shared/queues'
-import { rangeBounds, seasonsSpanning } from '@shared/seasons'
+import { queueIdForQueueType, rangeBounds, seasonsSpanning } from '@foxfire/core'
 import { createLogger } from '../telemetry/logger'
 import type { QueueType, RankHistory, RankRange, Season } from '@shared/types'
 

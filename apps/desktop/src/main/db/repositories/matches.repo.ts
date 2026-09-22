@@ -232,8 +232,7 @@ export function getMatchSummaries(
             isDemotion: row.is_demotion === 1
           },
     hasManualRank: row.has_manual_rank === 1,
-    recordingId: row.recording_id,
-    replayId: row.replay_id
+    local: { recordingId: row.recording_id, replayId: row.replay_id }
   }))
 }
 
