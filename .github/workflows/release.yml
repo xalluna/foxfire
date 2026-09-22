@@ -97,8 +97,14 @@ jobs:
       # The heading is matched by exact string, so the version's dots are never
       # treated as wildcards. A section ends at the next heading or, for the
       # oldest release, at the link definitions that close the file.
+      #
+      # Not gated on the event any more. These notes are the Release body *and*
+      # what the build puts inside latest.yml for the app to show, so a
+      # dispatched run that skipped them would exercise a different build from
+      # the one a tag produces — which is the one thing that run exists to
+      # prevent. Building a version whose section is not written yet is a
+      # reasonable thing to dispatch, so there it warns and carries on.
       - name: Extract the changelog section
-        if: github.event_name == 'push'
         run: |
           awk -v v="$VERSION" '
             BEGIN { heading = "## [" v "]" }
@@ -108,8 +114,13 @@ jobs:
             found { print }
           ' CHANGELOG.md > notes.md
           if [ ! -s notes.md ]; then
-            echo "::error::CHANGELOG.md has no section for $VERSION"
-            exit 1
+            rm -f notes.md
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              echo "::error::CHANGELOG.md has no section for $VERSION"
+              exit 1
+            fi
+            echo "::warning::CHANGELOG.md has no section for $VERSION - building without release notes"
+            exit 0
           fi
           cat notes.md
 
@@ -172,10 +183,21 @@ jobs:
       # signing and says so rather than failing, and identity auto-discovery is
       # turned off so that stays true whatever the runner image happens to have
       # in its certificate store.
+      #
+      # The changelog section is handed to electron-builder, which writes it
+      # into latest.yml as releaseNotes. That is how patch notes reach the app
+      # at all: the updater reads that file to decide whether to fetch
+      # anything, and finds what changed already in it, so nobody has to go and
+      # find a release page to know what they are installing.
       - name: Build the installer
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run build:win -- --publish never
+        run: |
+          if [ -f notes.md ]; then
+            npm run build:win -- --publish never -c.releaseInfo.releaseNotesFile=notes.md
+          else
+            npm run build:win -- --publish never
+          fi
 
       # electron-builder.yml sets artifactName to
       # ${productName}-${version}-setup.${ext}, so these three names follow from
@@ -201,6 +223,26 @@ jobs:
             exit 1
           fi
           echo "INSTALLER_SIZE=$size" >> "$GITHUB_ENV"
+
+      # latest.yml is what every installed copy reads to decide whether to
+      # update and what to fetch, which makes its contents a contract rather
+      # than a by-product. Checked by fixed string, so a change in how
+      # electron-builder names or writes any of it fails here — while there is
+      # still no release — rather than quietly producing a file no app can act
+      # on. The notes are checked only when there were notes to put in.
+      - name: Check latest.yml says what the updater needs
+        run: |
+          cat release/latest.yml
+          for expected in "version: $VERSION" "path: Foxfire-$VERSION-setup.exe" "sha512:"; do
+            if ! grep -qF "$expected" release/latest.yml; then
+              echo "::error::latest.yml carries no '$expected' - the updater reads this file"
+              exit 1
+            fi
+          done
+          if [ -f notes.md ] && ! grep -qF "releaseNotes:" release/latest.yml; then
+            echo "::error::latest.yml carries no releaseNotes, so the app would show no patch notes"
+            exit 1
+          fi
 
       # Dispatched runs only. On a tag the installer's permanent home is the
       # Release itself, and a second copy here would be a 100 MiB upload that
@@ -235,13 +277,13 @@ jobs:
       # next attempt. There is no ordering in which a naked release becomes
       # visible.
       #
-      # latest.yml and the .blockmap go up alongside the .exe. Neither does
-      # anything today: they are what electron-updater reads to notice a newer
-      # version and to fetch only the parts of the installer that changed, and
-      # nothing in the app asks for updates yet. Together they are 110 KiB
-      # against a 100 MiB installer, and they have to be attached to the release
-      # they describe — which cannot be done retroactively for releases already
-      # cut by the time auto-update is wired up. Attaching the blockmap without
+      # latest.yml and the .blockmap go up alongside the .exe, and from 0.14.0
+      # they are the point rather than provision for it: an installed copy
+      # reads latest.yml off whichever release its server names, and the
+      # blockmap is what lets it fetch only the parts of the installer that
+      # changed. They have to be attached to the release they describe, which
+      # is why they were attached from 0.12.0 onwards with nothing yet reading
+      # them — it cannot be done retroactively. Attaching the blockmap without
       # latest.yml, which is what 0.10.3 ended up with, is the one combination
       # that is no use to anybody.
       - name: Create the release as a draft, with the installer attached
@@ -262,6 +304,17 @@ jobs:
       # worth doing rather than assuming the previous step's exit code covers
       # it. A failure here leaves the draft in place: invisible, and cleared by
       # the guard on the next run.
+      #
+      # The other two assets are read back too, because an update reads them
+      # off this release: a published release missing latest.yml is one that no
+      # installed copy can act on, which is the same failure as a release with
+      # no installer, one step further along.
+      #
+      # --latest is what makes this the release GitHub serves as the
+      # repository's newest. That is both where a browser lands from the
+      # Releases page and where the updater reads the newest desktop version
+      # from, so server releases give the badge up for it; see
+      # release-server.yml.
       - name: Publish the release
         if: github.event_name == 'push'
         env:
@@ -273,5 +326,15 @@ jobs:
             echo "::error::The installer on the draft is ${uploaded:-absent}, not the $INSTALLER_SIZE bytes that were built"
             exit 1
           fi
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+
+          for asset in "latest.yml" "Foxfire-$VERSION-setup.exe.blockmap"; do
+            size="$(gh release view "$GITHUB_REF_NAME" --json assets \
+              --jq ".assets[] | select(.name == \"$asset\") | .size")"
+            if [ -z "$size" ] || [ "$size" -eq 0 ]; then
+              echo "::error::$asset is ${size:-absent} on the draft, so an update would have nothing to read"
+              exit 1
+            fi
+          done
+
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
           echo "Published $GITHUB_REF_NAME with a $INSTALLER_SIZE byte installer."

@@ -22,6 +22,11 @@ obj/
 # The web client's build, copied in for the server to host. Built, never edited.
 apps/server/src/Foxfire.Api/wwwroot/
 
+# The changelog section the release workflow cuts out for a build: the Release
+# body, and the patch notes built into latest.yml. Written from CHANGELOG.md
+# every time, so a copy left behind by a local build is never worth committing.
+apps/desktop/notes.md
+
 # Rider output
 **/**/.idea/
 # Local compose tweaks — publishing the database to the host, and so on.

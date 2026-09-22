@@ -28,7 +28,8 @@ import type {
   ServerState,
   Scoreboard,
   InvitePreview,
-  ImportProgress
+  ImportProgress,
+  UpdateState
 } from '@shared/types'
 import type {
   LcuTelemetry,
@@ -162,6 +163,75 @@ function setServerState(next: ServerState): ServerState {
   return next
 }
 
+/**
+ * The patch notes an update carries, in the shape CHANGELOG.md is written in.
+ *
+ * Wrapped mid-sentence on purpose: the real notes arrive as the file was
+ * typed, and the renderer has to put the lines back together.
+ */
+const UPDATE_NOTES = `Foxfire now updates itself.
+
+### Added
+
+- **Updates arrive on their own.** Foxfire checks for a new build, downloads it
+  quietly, and offers to restart — never in the middle of a game.
+- **Patch notes travel with the update**, so what changed is in the app.
+
+### Fixed
+
+- Starting with Windows no longer opens a window nobody asked for.`
+
+/** What the updater is doing, per scenario. See the Scenario type. */
+function mockUpdateState(): UpdateState {
+  const base: UpdateState = {
+    status: 'idle',
+    current: '0.14.0',
+    target: null,
+    percent: null,
+    notes: null,
+    blockedBy: null,
+    heldBy: null,
+    error: null,
+    justInstalled: null
+  }
+
+  switch (scenario) {
+    case 'update-ready':
+      return { ...base, status: 'ready', target: '0.15.0', notes: UPDATE_NOTES }
+    case 'update-blocked':
+      return {
+        ...base,
+        status: 'ready',
+        target: '0.15.0',
+        notes: UPDATE_NOTES,
+        blockedBy: 'game'
+      }
+    case 'update-downloading':
+      return { ...base, status: 'downloading', target: '0.15.0', percent: 45 }
+    case 'update-held':
+      return {
+        ...base,
+        heldBy: { serverName: 'Late Night', allows: '0.14.0', newest: '0.15.0' }
+      }
+    case 'just-installed':
+      return {
+        ...base,
+        notes: UPDATE_NOTES,
+        justInstalled: { version: '0.14.0', notes: UPDATE_NOTES }
+      }
+    default:
+      return base
+  }
+}
+
+let updateState = mockUpdateState()
+const updateListeners = new Set<(state: UpdateState) => void>()
+
+function setUpdateState(next: UpdateState): void {
+  updateState = next
+  for (const listener of updateListeners) listener(next)
+}
+
 export const mockApi: Api = {
   // The browser harness has no Electron and so no real path for a File.
   pathForFile: () => null,
@@ -169,7 +239,28 @@ export const mockApi: Api = {
     // The harness has no main process to ask, so this is the browser-only
     // stand-in; the packaged app reads it from app.getVersion().
     // Never held, even in the loading scenario — this is chrome, not data.
-    getVersion: (): Promise<string> => delay('0.0.0-dev', 0, false)
+    getVersion: (): Promise<string> => delay(updateState.current, 0, false)
+  },
+  updates: {
+    getState: (): Promise<UpdateState> => delay(updateState, 0, false),
+    // No feed to ask in a browser, so this is the shape of the round trip
+    // rather than its outcome: checking, then whatever was already true.
+    check: async (): Promise<UpdateState> => {
+      const settled = updateState
+      setUpdateState({ ...settled, status: 'checking' })
+      await delay(null, 700, false)
+      setUpdateState(settled)
+      return settled
+    },
+    // Nothing to restart into. The harness is here to look at the offer.
+    restart: (): Promise<void> => delay(undefined, 0, false),
+    dismissNote: async (): Promise<void> => {
+      setUpdateState({ ...updateState, justInstalled: null })
+    },
+    onChanged: (cb) => {
+      updateListeners.add(cb)
+      return () => updateListeners.delete(cb)
+    }
   },
   server: {
     getState: (): Promise<ServerState> => delay(serverState, 120, false),

@@ -11,6 +11,25 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.2.1] — 2026-09-22
+
+Accepts Foxfire 0.14.0, the first desktop that updates itself — and which asks this server which
+version to update to.
+
+### Added
+
+- **Serves Foxfire 0.14.0.** A desktop from 0.14.0 on reads `recommendedDesktop` from `/version`
+  and installs that build, so the allow list here is now what decides which version the people on
+  your server are running. They move when you update the server, and not before — a desktop never
+  updates past what its server will talk to.
+
+### Under the hood
+
+- Server releases are no longer marked as the repository's Latest release. That badge is what a
+  browser lands on, and what the desktop's updater reads the newest desktop version from, so it
+  belongs to the desktop installer. The container image is unaffected: `:latest` on GHCR still
+  follows every server release.
+
 ## [0.2.0] — 2026-09-21
 
 Foxfire in a browser. The server now hosts a web client of its own, so your
@@ -308,5 +327,6 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.2.1]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.2.1
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

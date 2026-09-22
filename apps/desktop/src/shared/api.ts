@@ -41,7 +41,8 @@ import type {
   ServerAdminSettings,
   ServerRegistration,
   ServerState,
-  SyncProgressEvent
+  SyncProgressEvent,
+  UpdateState
 } from './types'
 import type {
   LcuTelemetry,
@@ -83,6 +84,23 @@ export interface Api {
   app: {
     /** The packaged version, matching the CHANGELOG entry the build shipped with. */
     getVersion: () => Promise<string>
+  }
+  /**
+   * Keeping this copy of Foxfire current.
+   *
+   * The renderer decides nothing here: which version may be installed is the
+   * active server's business and the main process asks it. This is the offer
+   * and the two answers to it.
+   */
+  updates: {
+    getState: () => Promise<UpdateState>
+    /** Asks now rather than waiting for the next scheduled check. */
+    check: () => Promise<UpdateState>
+    /** Installs what was downloaded. Refused while a game or recording is on. */
+    restart: () => Promise<void>
+    /** Drops the "what's new" note shown once after an update. */
+    dismissNote: () => Promise<void>
+    onChanged: (cb: (state: UpdateState) => void) => () => void
   }
   /**
    * Joining a Foxfire server, and choosing which one answers.
