@@ -68,6 +68,16 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
         </SettingsCard>
       )}
 
+      {state.serverOutdated && (
+        <SettingsCard>
+          <StatusRow tone="error">
+            This server is running an older Foxfire Server that does not know this version of
+            Foxfire, so it will not serve anything until it is updated. Ask whoever runs it to
+            update the server.
+          </StatusRow>
+        </SettingsCard>
+      )}
+
       <SettingsCard title="Signed in">
         <SettingsRow
           label={session.username}
@@ -145,7 +155,12 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
   const [invite, setInvite] = useState('')
   const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null)
 
-  const connected = probe?.reachable === true && probe.compatibility !== 'unsupported'
+  // Neither kind of refusal gets a form: the server would turn away whatever
+  // was typed into it.
+  const connected =
+    probe?.reachable === true &&
+    probe.compatibility !== 'unsupported' &&
+    probe.compatibility !== 'server-outdated'
   const needsInvite = mode === 'register' && probe?.publicSignup === false
 
   async function check(): Promise<void> {
@@ -285,6 +300,13 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
           <StatusRow tone="error">
             {probe.serverName} needs Foxfire {probe.recommendedDesktop}. This copy is too old for
             it — update Foxfire and try again.
+          </StatusRow>
+        )}
+
+        {probe?.reachable === true && probe.compatibility === 'server-outdated' && (
+          <StatusRow tone="error">
+            {probe.serverName} is running Foxfire Server {probe.serverVersion}, which is older than
+            this copy of Foxfire and does not know it. Ask whoever runs it to update the server.
           </StatusRow>
         )}
 

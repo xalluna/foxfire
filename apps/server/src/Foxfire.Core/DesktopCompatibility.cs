@@ -106,7 +106,7 @@ public static class DesktopCompatibility
     public const int ApiVersion = 1;
 
     /// <summary>Every desktop version this server answers, in any order.</summary>
-    public static readonly IReadOnlyList<string> Allowed = ["0.12.0"];
+    public static readonly IReadOnlyList<string> Allowed = ["0.12.0", "0.13.0"];
 
     /// <summary>The compiled-in list, ready to judge against.</summary>
     public static DesktopAllowList AllowList { get; } = new(Allowed);

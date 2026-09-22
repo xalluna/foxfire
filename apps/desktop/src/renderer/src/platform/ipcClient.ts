@@ -86,9 +86,10 @@ export function connectionFrom(state: ServerState): ConnectionState {
 
   return {
     mode: connected ? 'server' : 'local',
-    // Not the address this machine connected with, which may be a LAN name
-    // nobody else can reach. Filled in once the server says what it is.
-    publicUrl: null,
+    // The address the server says it is reached at, never the one this machine
+    // connected with — that may be a LAN name nobody the link is sent to could
+    // open. Null from a server too old to say, which hides "Copy link".
+    publicUrl: connected ? state.publicUrl : null,
     serverName: connected ? (active?.name ?? null) : null,
     session: state.session
       ? {

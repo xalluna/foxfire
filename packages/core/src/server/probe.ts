@@ -42,6 +42,7 @@ export async function probeServer(
     minimumDesktop: null,
     recommendedDesktop: null,
     publicSignup: null,
+    publicUrl: null,
     compatibility: 'unknown'
   })
 
@@ -58,6 +59,7 @@ export async function probeServer(
       minimumDesktop: version.minimumDesktop,
       recommendedDesktop: version.recommendedDesktop,
       publicSignup: version.publicSignup,
+      publicUrl: version.publicUrl ?? null,
       compatibility:
         identity.kind === 'desktop'
           ? judge(identity.version, version.minimumDesktop, version.recommendedDesktop)
@@ -82,6 +84,11 @@ export async function probeServer(
  * a range — a version between the minimum and the newest can still be absent
  * from it — so this decides what to say on the connect screen and never whether
  * to proceed. The real answer comes from the first gated call.
+ *
+ * A build newer than the newest the server knows is `server-outdated` rather
+ * than `ok`: the server has never heard of it and will refuse it, and its
+ * refusal names the version it does know — an older one. Saying "install
+ * Foxfire 0.12.0" to somebody on 0.13.0 would be advice in the wrong direction.
  */
 export function judge(mine: string, minimum: string, recommended: string): ServerProbe['compatibility'] {
   const own = parseVersion(mine)
@@ -91,6 +98,7 @@ export function judge(mine: string, minimum: string, recommended: string): Serve
 
   if (compare(own, min) < 0) return 'unsupported'
   if (compare(own, rec) < 0) return 'outdated'
+  if (compare(own, rec) > 0) return 'server-outdated'
   return 'ok'
 }
 

@@ -23,6 +23,9 @@ export type Scenario =
   | 'server-connected'
   | 'server-outdated'
   | 'server-degraded'
+  // Signed in to a server older than this build, which refuses it — the case
+  // where the remedy is the host's, not anybody's download.
+  | 'server-behind'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

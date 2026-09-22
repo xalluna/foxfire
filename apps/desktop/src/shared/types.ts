@@ -529,11 +529,22 @@ export interface ServerState {
   servers: KnownServer[]
   session: ServerSession | null
   /**
+   * Where the active server's web client is reached from outside, which is
+   * what "Copy link" builds on. Null in local-only mode, and from a server
+   * older than the web client.
+   */
+  publicUrl: string | null
+  /**
    * Set when the active server refused this build outright, and holds the
    * version to install. Everything server-backed is unavailable until then, so
    * this is the one thing the UI has to say.
    */
   upgradeRequired: string | null
+  /**
+   * The active server refused this build for being newer than anything it
+   * knows. Nothing to install here: its host has to update the server.
+   */
+  serverOutdated: boolean
 
   /**
    * Whether Riot has refused the active server's API key.

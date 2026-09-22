@@ -115,6 +115,7 @@ let serverState: ServerState =
   scenario === 'server-connected' || scenario === 'server-degraded'
     ? {
         activeUrl: MOCK_SERVER_URL,
+        publicUrl: MOCK_SERVER_URL,
         servers: [
           { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
         ],
@@ -125,14 +126,17 @@ let serverState: ServerState =
           isAdmin: true
         },
         upgradeRequired: null,
+        serverOutdated: false,
         riotKeyRejected: scenario === 'server-degraded'
       }
-    : scenario === 'server-outdated'
+    : scenario === 'server-outdated' || scenario === 'server-behind'
       ? {
           // Signed in, and then the host upgraded their server out from under
-          // this build. That is the shape worth designing for: the session is
+          // this build — or, for server-behind, this build was updated past
+          // the server. That is the shape worth designing for: the session is
           // still real, and it is the reads that stop.
           activeUrl: MOCK_SERVER_URL,
+          publicUrl: MOCK_SERVER_URL,
           servers: [
             { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
           ],
@@ -142,11 +146,12 @@ let serverState: ServerState =
             email: 'faker@example.com',
             isAdmin: false
           },
-          upgradeRequired: '0.14.0',
+          upgradeRequired: scenario === 'server-outdated' ? '0.14.0' : null,
+          serverOutdated: scenario === 'server-behind',
           riotKeyRejected: false
         }
-      : { activeUrl: null, servers: [], session: null, upgradeRequired: null,
-        riotKeyRejected: false }
+      : { activeUrl: null, servers: [], session: null, publicUrl: null, upgradeRequired: null,
+        serverOutdated: false, riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
@@ -182,6 +187,7 @@ export const mockApi: Api = {
               minimumDesktop: null,
               recommendedDesktop: null,
               publicSignup: null,
+              publicUrl: null,
               compatibility: 'unknown'
             }
           : {
@@ -194,7 +200,14 @@ export const mockApi: Api = {
               minimumDesktop: '0.12.0',
               recommendedDesktop: '0.12.0',
               publicSignup: !url.includes('invite-only'),
-              compatibility: url.includes('too-old') ? 'unsupported' : 'ok'
+              publicUrl: url,
+              // "too-old" is this build behind the server; "old-server" is the
+              // server behind this build.
+              compatibility: url.includes('too-old')
+                ? 'unsupported'
+                : url.includes('old-server')
+                  ? 'server-outdated'
+                  : 'ok'
             },
         400,
         false
@@ -235,8 +248,10 @@ export const mockApi: Api = {
               email: registration.email,
               isAdmin: false
             },
+            publicUrl: url,
             upgradeRequired: null,
-        riotKeyRejected: false
+            serverOutdated: false,
+            riotKeyRejected: false
           })
         },
         600,
@@ -263,8 +278,10 @@ export const mockApi: Api = {
                   email: credentials.email,
                   isAdmin: true
                 },
+                publicUrl: url,
                 upgradeRequired: null,
-        riotKeyRejected: false
+                serverOutdated: false,
+                riotKeyRejected: false
               })
             },
         600,
@@ -277,8 +294,10 @@ export const mockApi: Api = {
           activeUrl: null,
           servers: serverState.servers.map((s) => ({ ...s, username: null, isActive: false })),
           session: null,
+          publicUrl: null,
           upgradeRequired: null,
-        riotKeyRejected: false
+          serverOutdated: false,
+          riotKeyRejected: false
         }),
         300,
         false
@@ -290,8 +309,10 @@ export const mockApi: Api = {
           ...serverState,
           activeUrl: url,
           servers: serverState.servers.map((s) => ({ ...s, isActive: s.url === url })),
+          publicUrl: url,
           upgradeRequired: null,
-        riotKeyRejected: false
+          serverOutdated: false,
+          riotKeyRejected: false
         }),
         200,
         false
@@ -303,8 +324,10 @@ export const mockApi: Api = {
           activeUrl: serverState.activeUrl === url ? null : serverState.activeUrl,
           servers: serverState.servers.filter((s) => s.url !== url),
           session: serverState.session?.url === url ? null : serverState.session,
+          publicUrl: serverState.activeUrl === url ? null : serverState.publicUrl,
           upgradeRequired: null,
-        riotKeyRejected: false
+          serverOutdated: false,
+          riotKeyRejected: false
         }),
         200,
         false

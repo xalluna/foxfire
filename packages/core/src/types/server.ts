@@ -27,12 +27,22 @@ export interface ServerProbe {
   /** Whether anybody may register, or an invite is needed. */
   publicSignup: boolean | null
   /**
+   * Where the server's web client is reached from outside — what "Copy link"
+   * builds on. Null from a server older than the web client, and when the
+   * server could not be reached.
+   */
+  publicUrl: string | null
+  /**
    * How this build stands against that server's stated range. Advisory only:
    * the server's allow list is a set rather than a range, so a version between
    * the minimum and the newest can still be absent from it. This decides what
    * the connect screen says, never whether to proceed.
+   *
+   * `server-outdated` is this build being newer than anything the server
+   * knows: it will be refused, and the remedy is the host updating the server,
+   * not anybody installing the older Foxfire the server would name.
    */
-  compatibility: 'ok' | 'outdated' | 'unsupported' | 'unknown'
+  compatibility: 'ok' | 'outdated' | 'unsupported' | 'server-outdated' | 'unknown'
 }
 
 /**

@@ -57,7 +57,9 @@ browser with nothing to install — and send each other links to them.
   `/api` — along with the WebSocket upgrade on `/api/hub` and, for 0.12.0, on
   `/hub`.
 - **`/version` also says where the API is and the server's public address**,
-  which is what a "Copy link" in the desktop will be built on.
+  which is what the desktop's "Copy link" is built on.
+- **Serves Foxfire desktop 0.13.0**, alongside 0.12.0. 0.13.0 talks to `/api`
+  directly and offers "Copy link" into this server's web client.
 - **New, optional settings in `.env`:** `TRUSTED_PROXIES` and
   `TRUSTED_PROXY_NETWORKS`, which say whose word to take on a member's real
   address, and `RATE_LIMIT_AUTH_PER_MINUTE` and `RATE_LIMIT_SEARCH_PER_MINUTE`.

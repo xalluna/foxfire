@@ -6,6 +6,7 @@ import {
   createTransport,
   displayName,
   inviteTokenFrom,
+  judge,
   normaliseServerUrl,
   probeServer,
   type ClientIdentity,
@@ -38,12 +39,16 @@ const KNOWN_SETTING = 'server.known'
 /**
  * Where a server's API sits beneath its address.
  *
- * The root, for now, and so for every server this build has spoken to. Kept as
- * one constant because it is exactly the kind of thing that moves: every route
- * below is written relative to it, and `/version` and `/health` — which never
- * move — are asked for at the root regardless.
+ * Under `/api` since Foxfire Server 0.2.0, which moved it there to share its
+ * address with the web client it hosts. Every route below is written relative
+ * to this, the hub included; `/version` and `/health` answer at the root for
+ * every build that will ever ask, and are asked for there.
+ *
+ * A server older than that has no `/api`, and does not know this build either:
+ * it refuses it, and serverOutdated below is how that is told apart from this
+ * copy being the one that is behind.
  */
-const API_BASE = ''
+const API_BASE = '/api'
 
 /** One remembered server, as stored. */
 interface StoredServer {
@@ -64,6 +69,18 @@ interface StoredServer {
    */
   email?: string
   isAdmin?: boolean
+
+  /**
+   * Where the server's web client is reached from outside — what "Copy link"
+   * is built on, never the address this install connected with, which may be a
+   * name only this network can resolve.
+   *
+   * Read from the server's handshake on signing in and whenever its push
+   * channel connects. Absent from a server older than the web client, and from
+   * a row an older build wrote; either way there is nothing to link into, and
+   * "Copy link" stays hidden.
+   */
+  publicUrl?: string | null
 }
 
 /**
@@ -98,6 +115,39 @@ const sessions = new Map<string, ServerSession>()
  * yet — is the entire remedy.
  */
 let upgradeRequired: string | null = null
+
+/**
+ * Set when the active server refused this build because it is older than it.
+ *
+ * The other half of a refusal. A server names the newest Foxfire it knows, and
+ * when that is older than this copy the fault is the server's: the remedy is
+ * its host updating it, and passing its answer on as "install Foxfire 0.12.0"
+ * would send somebody on 0.13.0 backwards.
+ */
+let serverOutdated = false
+
+/**
+ * Records a refusal, as whichever of the two it is.
+ *
+ * The server's 426 names the version it would serve. Judged against this
+ * build's own: newer than that means the server is behind; otherwise this copy
+ * is, and that version is the one to install.
+ */
+function recordRefusal(upgradeTo: string | null): void {
+  if (upgradeTo !== null && judge(app.getVersion(), upgradeTo, upgradeTo) === 'server-outdated') {
+    serverOutdated = true
+    upgradeRequired = null
+  } else {
+    serverOutdated = false
+    upgradeRequired = upgradeTo
+  }
+}
+
+/** Forgets a refusal — on signing in, switching servers, signing out. */
+function clearRefusal(): void {
+  upgradeRequired = null
+  serverOutdated = false
+}
 
 function secretName(url: string): string {
   return `server-${url}`
@@ -149,7 +199,7 @@ function sessionFor(url: string): ServerSession {
     },
 
     onUpgradeRequired: (upgradeTo) => {
-      upgradeRequired = upgradeTo
+      recordRefusal(upgradeTo)
       announce()
     }
   })
@@ -234,7 +284,9 @@ export function getServerState(): ServerState {
     activeUrl: active,
     servers,
     session,
+    publicUrl: activeServer?.publicUrl ?? null,
     upgradeRequired: active ? upgradeRequired : null,
+    serverOutdated: active ? serverOutdated : false,
     riotKeyRejected: active ? riotKeyRejected : false
   }
 }
@@ -281,6 +333,46 @@ export async function refreshServerHealth(): Promise<void> {
   }
 }
 
+/**
+ * Reads the active server's handshake again and keeps what it says.
+ *
+ * Its name and its public address can both change under a host's hands — a
+ * rename, a move to a new domain — and a server remembered by an older build
+ * never said where its web client is at all. Announced only when something
+ * moved, since this runs every time the push channel connects.
+ *
+ * Never throws: a server that cannot be reached keeps what it last said.
+ */
+export async function refreshServerInfo(): Promise<void> {
+  const url = readActive()
+  if (!url) return
+
+  const probed = await probeServer(url, identity())
+  if (!probed.reachable) return
+
+  const stored = readKnown().find((s) => s.url === url)
+  if (!stored) return
+
+  const name = probed.serverName ?? stored.name
+  if (stored.publicUrl === probed.publicUrl && stored.name === name) return
+
+  writeKnown(readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl } : s)))
+  announce()
+}
+
+/**
+ * Picks the active server back up when Foxfire starts.
+ *
+ * Signed in before the app was closed means signed in now — the refresh token
+ * is in the encrypted store — but nothing had opened the push channel again:
+ * it followed announcements, and nothing announces at launch. So a copy
+ * started in server mode drew the server's data and never heard it change
+ * until somebody signed in or switched servers.
+ */
+export function resumeActiveServer(): void {
+  syncHubConnection(getServerState())
+}
+
 function announce(): ServerState {
   const state = getServerState()
   broadcast(CH.server.changed, state)
@@ -315,6 +407,7 @@ function syncHubConnection(state: ServerState): void {
   // happened. One connecting to a server that has been degraded since last
   // night would otherwise see nothing at all.
   void refreshServerHealth()
+  void refreshServerInfo()
 }
 
 /** Asks a server what it is. Never throws; every failure is part of the answer. */
@@ -332,6 +425,7 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
       minimumDesktop: null,
       recommendedDesktop: null,
       publicSignup: null,
+      publicUrl: null,
       compatibility: 'unknown'
     }
   }
@@ -412,18 +506,19 @@ async function authenticate(
       name: probed.serverName ?? displayName(url),
       username: user.username,
       email: user.email,
-      isAdmin: user.isAdmin
+      isAdmin: user.isAdmin,
+      publicUrl: probed.publicUrl
     })
 
     writeKnown(known)
     writeActive(url)
-    upgradeRequired = null
+    clearRefusal()
 
     log.info('Signed in to a Foxfire server', { url, username: user.username })
     return { ok: true, error: null, state: announce() }
   } catch (err) {
     if (err instanceof ServerError && err.isUnsupportedClient) {
-      upgradeRequired = err.upgradeTo
+      recordRefusal(err.upgradeTo)
     }
 
     return {
@@ -449,7 +544,7 @@ export async function logout(): Promise<ServerState> {
 
   writeKnown(readKnown().map((s) => (s.url === url ? { ...s, username: null } : s)))
   writeActive(null)
-  upgradeRequired = null
+  clearRefusal()
 
   return announce()
 }
@@ -463,7 +558,7 @@ export async function logout(): Promise<ServerState> {
 export function setActiveServer(url: string | null): ServerState {
   if (url === null) {
     writeActive(null)
-    upgradeRequired = null
+    clearRefusal()
     return announce()
   }
 
@@ -474,7 +569,7 @@ export function setActiveServer(url: string | null): ServerState {
   }
 
   writeActive(url)
-  upgradeRequired = null
+  clearRefusal()
   return announce()
 }
 
