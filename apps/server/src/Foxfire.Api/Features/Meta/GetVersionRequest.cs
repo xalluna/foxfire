@@ -14,13 +14,24 @@ namespace Foxfire.Api.Features.Meta;
 /// <param name="MinimumDesktop">Oldest desktop this server serves.</param>
 /// <param name="RecommendedDesktop">Newest desktop this server knows about.</param>
 /// <param name="PublicSignup">Whether anybody can register, or an invite is needed.</param>
+/// <param name="ApiBase">
+/// The path every API route sits under. A client that finds this field talks to
+/// it; one that does not is talking to a server from before the API moved.
+/// </param>
+/// <param name="PublicUrl">
+/// Where this server's web client lives, as its members reach it. The desktop
+/// builds "Copy link" from this rather than from the address it connected with,
+/// which may be one only that machine can use.
+/// </param>
 public sealed record VersionResponse(
     string ServerName,
     string ServerVersion,
     int ApiVersion,
     string MinimumDesktop,
     string RecommendedDesktop,
-    bool PublicSignup);
+    bool PublicSignup,
+    string ApiBase,
+    string PublicUrl);
 
 /// <summary>
 /// The handshake.
@@ -54,7 +65,9 @@ internal sealed class GetVersionRequestHandler(IOptions<ServerOptions> server, S
             ApiVersion: DesktopCompatibility.ApiVersion,
             MinimumDesktop: DesktopCompatibility.AllowList.Minimum,
             RecommendedDesktop: DesktopCompatibility.AllowList.Recommended,
-            PublicSignup: await settings.IsPublicSignupEnabledAsync(cancellationToken));
+            PublicSignup: await settings.IsPublicSignupEnabledAsync(cancellationToken),
+            ApiBase: ApiPaths.Base,
+            PublicUrl: server.Value.PublicUrl.TrimEnd('/'));
 }
 
 /// <summary>Whether the server can currently reach Riot, and how busy the queue is.</summary>

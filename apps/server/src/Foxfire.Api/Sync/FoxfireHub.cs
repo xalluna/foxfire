@@ -49,8 +49,11 @@ public static class HubEvents
 [Authorize]
 public sealed class FoxfireHub : Hub
 {
-    /// <summary>Where the desktop connects.</summary>
-    public const string Path = "/hub";
+    /// <summary>
+    /// Where clients connect. Under the API like every other route; desktop
+    /// 0.12.0, which connects to /hub, is moved here by LegacyRootShim.
+    /// </summary>
+    public const string Path = "/api/hub";
 }
 
 /// <summary>

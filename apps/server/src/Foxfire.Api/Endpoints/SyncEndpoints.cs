@@ -34,7 +34,7 @@ public static class SyncEndpoints
             CancellationToken cancellationToken) =>
         {
             var started = await sender.Send(new StartSyncRequest(riotAccountId), cancellationToken);
-            return started.Errors.Count > 0 ? started.ToResult() : Results.Accepted($"/sync/{riotAccountId}");
+            return started.Errors.Count > 0 ? started.ToResult() : Results.Accepted($"{ApiPaths.Base}/sync/{riotAccountId}");
         });
 
         group.MapGet("/{riotAccountId:guid}", (

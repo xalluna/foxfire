@@ -1,5 +1,7 @@
+using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
 using Foxfire.Api.Features.Auth;
+using Foxfire.Api.Startup;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +13,15 @@ namespace Foxfire.Api.Endpoints;
 /// Email is the login and the username is the display name, which is the split
 /// asked for: you cannot forget your email, a reset has to go to it anyway, and
 /// what shows up next to your games should be yours to pick.
+///
+/// How the refresh token travels depends on who is asking — in the body for a
+/// desktop, as a cookie for the web client — and that is settled here, at the
+/// edge, by SessionTransport. The handlers never know which it was.
+///
+/// Signing in and registering are rate limited per address; refreshing and
+/// signing out are not. A household behind one address reloading a few tabs at
+/// once must not lock itself out, and a refresh token is not something anybody
+/// can guess their way into.
 /// </summary>
 public static class AuthEndpoints
 {
@@ -18,29 +29,45 @@ public static class AuthEndpoints
     {
         var auth = app.MapGroup("/auth").WithTags("Auth");
 
-        auth.MapPost("/register", (
+        auth.MapPost("/register", async (
                 [FromBody] RegisterRequest request,
+                HttpContext http,
                 ISender sender,
                 CancellationToken cancellationToken) =>
-            sender.SendAsync(request, cancellationToken));
+            SessionTransport.Deliver(http, await sender.Send(request, cancellationToken)))
+            .RequireRateLimiting(RateLimits.Auth);
 
-        auth.MapPost("/login", (
+        auth.MapPost("/login", async (
                 [FromBody] LoginRequest request,
+                HttpContext http,
                 ISender sender,
                 CancellationToken cancellationToken) =>
-            sender.SendAsync(request, cancellationToken));
+            SessionTransport.Deliver(http, await sender.Send(request, cancellationToken)))
+            .RequireRateLimiting(RateLimits.Auth);
 
-        auth.MapPost("/refresh", (
-                [FromBody] RefreshSessionRequest request,
+        // The body is optional because the web client has nothing to put in it:
+        // its refresh token is the cookie.
+        auth.MapPost("/refresh", async (
+                [FromBody] RefreshSessionRequest? request,
+                HttpContext http,
                 ISender sender,
                 CancellationToken cancellationToken) =>
-            sender.SendAsync(request, cancellationToken));
+            {
+                var token = SessionTransport.RefreshTokenFrom(http, request?.RefreshToken);
+                return SessionTransport.Deliver(http, await sender.Send(new RefreshSessionRequest(token), cancellationToken));
+            });
 
-        auth.MapPost("/logout", (
-                [FromBody] LogoutRequest request,
+        auth.MapPost("/logout", async (
+                [FromBody] LogoutRequest? request,
+                HttpContext http,
                 ISender sender,
                 CancellationToken cancellationToken) =>
-            sender.SendAsync(request, cancellationToken));
+            {
+                var token = SessionTransport.RefreshTokenFrom(http, request?.RefreshToken);
+                var result = await sender.SendAsync(new LogoutRequest(token), cancellationToken);
+                SessionTransport.Forget(http);
+                return result;
+            });
 
         auth.MapGet("/me", (ISender sender, CancellationToken cancellationToken) =>
                 sender.SendAsync(new GetCurrentUserRequest(), cancellationToken))

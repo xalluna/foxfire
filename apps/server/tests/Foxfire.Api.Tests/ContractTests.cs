@@ -30,7 +30,7 @@ public class VersionTests(FoxfireServerFixture server)
     {
         using var client = server.AnonymousClient();
 
-        var response = await client.GetAsync(new Uri("/auth/me", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/auth/me", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
     }
@@ -40,7 +40,7 @@ public class VersionTests(FoxfireServerFixture server)
     {
         using var client = server.Client("0.1.0");
 
-        var response = await client.GetAsync(new Uri("/auth/me", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/auth/me", UriKind.Relative));
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
 
         Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
@@ -55,7 +55,7 @@ public class VersionTests(FoxfireServerFixture server)
         // it cannot act on. Ordering, asserted rather than assumed.
         using var client = server.Client("0.1.0");
 
-        var response = await client.GetAsync(new Uri("/auth/me", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/auth/me", UriKind.Relative));
 
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
@@ -118,7 +118,7 @@ public class AuthTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Whoever", $"{Unique("whoever")}@example.com");
 
         FoxfireServerFixture.Authenticated(client, session);
-        var me = await client.GetFromJsonAsync<SessionUser>(new Uri("/auth/me", UriKind.Relative));
+        var me = await client.GetFromJsonAsync<SessionUser>(new Uri("/api/auth/me", UriKind.Relative));
 
         Assert.NotEmpty(session.RefreshToken);
         Assert.Equal(session.User.Id, me?.Id);
@@ -130,7 +130,7 @@ public class AuthTests(FoxfireServerFixture server)
         using var client = server.Client();
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/auth/register", UriKind.Relative),
+            new Uri("/api/auth/register", UriKind.Relative),
             new { username = "Brief", email = $"{Unique("brief")}@example.com", password = "short" });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
@@ -148,7 +148,7 @@ public class AuthTests(FoxfireServerFixture server)
         await server.RegisterAsync(client, "First", email);
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/auth/register", UriKind.Relative),
+            new Uri("/api/auth/register", UriKind.Relative),
             new { username = "Second", email, password = FoxfireServerFixture.GoodPassword });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -171,7 +171,7 @@ public class AuthTests(FoxfireServerFixture server)
         await server.RegisterAsync(client, username, $"{Unique("twin-first")}@example.com");
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/auth/register", UriKind.Relative),
+            new Uri("/api/auth/register", UriKind.Relative),
             new
             {
                 username,
@@ -193,7 +193,7 @@ public class AuthTests(FoxfireServerFixture server)
         using var client = server.Client();
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/auth/register", UriKind.Relative),
+            new Uri("/api/auth/register", UriKind.Relative),
             new { username, email = $"{Unique("named")}@example.com", password = FoxfireServerFixture.GoodPassword });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
@@ -210,11 +210,11 @@ public class AuthTests(FoxfireServerFixture server)
         await server.RegisterAsync(client, "Real", email);
 
         var wrongPassword = await client.PostAsJsonAsync(
-            new Uri("/auth/login", UriKind.Relative),
+            new Uri("/api/auth/login", UriKind.Relative),
             new { email, password = "not-the-right-password" });
 
         var noSuchAccount = await client.PostAsJsonAsync(
-            new Uri("/auth/login", UriKind.Relative),
+            new Uri("/api/auth/login", UriKind.Relative),
             new { email = $"{Unique("ghost")}@example.com", password = "not-the-right-password" });
 
         Assert.Equal(wrongPassword.StatusCode, noSuchAccount.StatusCode);
@@ -230,7 +230,7 @@ public class AuthTests(FoxfireServerFixture server)
         var first = await server.RegisterAsync(client, "Rotator", $"{Unique("rotate")}@example.com");
 
         var refreshed = await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = first.RefreshToken });
 
         refreshed.EnsureSuccessStatusCode();
@@ -239,7 +239,7 @@ public class AuthTests(FoxfireServerFixture server)
         Assert.NotEqual(first.RefreshToken, second.RefreshToken);
 
         var replay = await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = first.RefreshToken });
 
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
@@ -255,16 +255,16 @@ public class AuthTests(FoxfireServerFixture server)
         var first = await server.RegisterAsync(client, "Replayed", $"{Unique("replay")}@example.com");
 
         var second = (await (await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = first.RefreshToken })).Content.ReadFromJsonAsync<Session>())!;
 
         // The replay, which is what trips the alarm.
         await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = first.RefreshToken });
 
         var successor = await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = second.RefreshToken });
 
         Assert.Equal(HttpStatusCode.Unauthorized, successor.StatusCode);
@@ -279,13 +279,13 @@ public class AuthTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Leaver", $"{Unique("leave")}@example.com");
 
         var loggedOut = await client.PostAsJsonAsync(
-            new Uri("/auth/logout", UriKind.Relative),
+            new Uri("/api/auth/logout", UriKind.Relative),
             new { refreshToken = session.RefreshToken });
 
         Assert.Equal(HttpStatusCode.NoContent, loggedOut.StatusCode);
 
         var afterwards = await client.PostAsJsonAsync(
-            new Uri("/auth/refresh", UriKind.Relative),
+            new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = session.RefreshToken });
 
         Assert.Equal(HttpStatusCode.Unauthorized, afterwards.StatusCode);
@@ -296,7 +296,7 @@ public class AuthTests(FoxfireServerFixture server)
     {
         using var client = server.Client();
 
-        var response = await client.GetAsync(new Uri("/auth/me", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/auth/me", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -314,7 +314,7 @@ public class InviteTests(FoxfireServerFixture server)
 
     private static async Task<InviteInfo> CreateInviteAsync(HttpClient admin, string email)
     {
-        var response = await admin.PostAsJsonAsync(new Uri("/admin/invites/", UriKind.Relative), new { email });
+        var response = await admin.PostAsJsonAsync(new Uri("/api/admin/invites/", UriKind.Relative), new { email });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<InviteInfo>())!;
     }
@@ -322,7 +322,7 @@ public class InviteTests(FoxfireServerFixture server)
     private async Task SetPublicSignupAsync(HttpClient admin, bool enabled)
     {
         var response = await admin.PatchAsJsonAsync(
-            new Uri("/admin/settings/", UriKind.Relative),
+            new Uri("/api/admin/settings/", UriKind.Relative),
             new { publicSignup = enabled });
 
         response.EnsureSuccessStatusCode();
@@ -367,7 +367,7 @@ public class InviteTests(FoxfireServerFixture server)
         for (var i = 0; i < 4; i++)
         {
             var preview = await anyone.GetFromJsonAsync<InvitePreview>(
-                new Uri($"/invites/{invite.Token}/preview", UriKind.Relative));
+                new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
 
             Assert.True(preview?.Usable);
         }
@@ -385,7 +385,7 @@ public class InviteTests(FoxfireServerFixture server)
 
         using var anyone = server.AnonymousClient();
         var preview = await anyone.GetFromJsonAsync<InvitePreview>(
-            new Uri($"/invites/{invite.Token}/preview", UriKind.Relative));
+            new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
 
         Assert.Equal(email, preview?.Email);
     }
@@ -403,13 +403,13 @@ public class InviteTests(FoxfireServerFixture server)
             using var client = server.Client();
 
             var first = await client.PostAsJsonAsync(
-                new Uri("/auth/register", UriKind.Relative),
+                new Uri("/api/auth/register", UriKind.Relative),
                 new { username = "Invitee", email, password = FoxfireServerFixture.GoodPassword, inviteToken = invite.Token });
 
             Assert.True(first.IsSuccessStatusCode);
 
             var second = await client.PostAsJsonAsync(
-                new Uri("/auth/register", UriKind.Relative),
+                new Uri("/api/auth/register", UriKind.Relative),
                 new { username = "Gatecrasher", email = $"{Unique("second")}@example.com", password = FoxfireServerFixture.GoodPassword, inviteToken = invite.Token });
 
             Assert.False(second.IsSuccessStatusCode);
@@ -432,7 +432,7 @@ public class InviteTests(FoxfireServerFixture server)
             using var client = server.Client();
 
             var response = await client.PostAsJsonAsync(
-                new Uri("/auth/register", UriKind.Relative),
+                new Uri("/api/auth/register", UriKind.Relative),
                 new
                 {
                     username = "Forwarded",
@@ -460,7 +460,7 @@ public class InviteTests(FoxfireServerFixture server)
             using var client = server.Client();
 
             var response = await client.PostAsJsonAsync(
-                new Uri("/auth/register", UriKind.Relative),
+                new Uri("/api/auth/register", UriKind.Relative),
                 new { username = "Stranger", email = $"{Unique("stranger")}@example.com", password = FoxfireServerFixture.GoodPassword });
 
             var error = await response.Content.ReadFromJsonAsync<ApiError>();
@@ -502,7 +502,7 @@ public class InviteTests(FoxfireServerFixture server)
         using var anyone = server.AnonymousClient();
 
         var forged = await anyone.GetFromJsonAsync<InvitePreview>(
-            new Uri("/invites/AAAABBBBCCCCDDDD.EEEEFFFFGGGGHHHH/preview", UriKind.Relative));
+            new Uri("/api/invites/AAAABBBBCCCCDDDD.EEEEFFFFGGGGHHHH/preview", UriKind.Relative));
 
         Assert.False(forged?.Usable);
         Assert.Null(forged?.Email);
@@ -514,22 +514,27 @@ public class InviteTests(FoxfireServerFixture server)
         using var admin = await AdminAsync();
         var invite = await CreateInviteAsync(admin, $"{Unique("withdrawn")}@example.com");
 
-        var revoked = await admin.DeleteAsync(new Uri($"/admin/invites/{invite.Id}", UriKind.Relative));
+        var revoked = await admin.DeleteAsync(new Uri($"/api/admin/invites/{invite.Id}", UriKind.Relative));
         Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
 
         using var anyone = server.AnonymousClient();
         var preview = await anyone.GetFromJsonAsync<InvitePreview>(
-            new Uri($"/invites/{invite.Token}/preview", UriKind.Relative));
+            new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
 
         Assert.False(preview?.Usable);
         Assert.Contains("withdrawn", preview?.Message ?? "", StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task The_landing_page_is_html_that_explains_itself()
+    public async Task An_invite_link_opens_the_web_client()
     {
+        // The link is a page of the web client now, which reads the preview and
+        // offers the sign-up form. The token is two halves joined by a dot, so
+        // this is also the test that the fallback does not mistake it for a
+        // file name and answer 404.
         using var admin = await AdminAsync();
         var invite = await CreateInviteAsync(admin, $"{Unique("landing")}@example.com");
+        Assert.Contains('.', invite.Token);
 
         using var browser = server.AnonymousClient();
         var page = await browser.GetAsync(new Uri($"/invite/{invite.Token}", UriKind.Relative));
@@ -537,8 +542,7 @@ public class InviteTests(FoxfireServerFixture server)
 
         page.EnsureSuccessStatusCode();
         Assert.Contains("text/html", page.Content.Headers.ContentType?.ToString() ?? "", StringComparison.Ordinal);
-        Assert.Contains("invited to join", html, StringComparison.Ordinal);
-        Assert.Contains(invite.Token, html, StringComparison.Ordinal);
+        Assert.Contains(FoxfireServerFixture.WebIndexMarker, html, StringComparison.Ordinal);
     }
 }
 
@@ -557,8 +561,8 @@ public class AuthorizationTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Nosy", $"{Unique("nosy")}@example.com");
         FoxfireServerFixture.Authenticated(client, session);
 
-        var invites = await client.GetAsync(new Uri("/admin/invites/", UriKind.Relative));
-        var settings = await client.GetAsync(new Uri("/admin/settings/", UriKind.Relative));
+        var invites = await client.GetAsync(new Uri("/api/admin/invites/", UriKind.Relative));
+        var settings = await client.GetAsync(new Uri("/api/admin/settings/", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Forbidden, invites.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, settings.StatusCode);
@@ -569,7 +573,7 @@ public class AuthorizationTests(FoxfireServerFixture server)
     {
         using var client = server.Client();
 
-        var response = await client.GetAsync(new Uri("/admin/invites/", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/admin/invites/", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -579,7 +583,7 @@ public class AuthorizationTests(FoxfireServerFixture server)
     {
         using var client = server.Client();
 
-        var response = await client.GetAsync(new Uri("/riot-accounts/", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -602,7 +606,7 @@ public class RiotLinkTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Looker", $"{Unique("look")}@example.com");
         FoxfireServerFixture.Authenticated(client, session);
 
-        var response = await client.GetAsync(new Uri("/riot-accounts/", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
 
         response.EnsureSuccessStatusCode();
     }
@@ -615,7 +619,7 @@ public class RiotLinkTests(FoxfireServerFixture server)
         FoxfireServerFixture.Authenticated(client, session);
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/riot-accounts/", UriKind.Relative),
+            new Uri("/api/riot-accounts/", UriKind.Relative),
             new { gameName = "", tagLine = "" });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
@@ -632,7 +636,7 @@ public class RiotLinkTests(FoxfireServerFixture server)
         FoxfireServerFixture.Authenticated(client, session);
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/riot-accounts/", UriKind.Relative),
+            new Uri("/api/riot-accounts/", UriKind.Relative),
             new { gameName = "Faker", tagLine = "KR" });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
@@ -656,7 +660,7 @@ public class AdminSettingsTests(FoxfireServerFixture server)
     {
         using var admin = await AdminAsync();
 
-        var settings = await admin.GetFromJsonAsync<ServerSettings>(new Uri("/admin/settings/", UriKind.Relative));
+        var settings = await admin.GetFromJsonAsync<ServerSettings>(new Uri("/api/admin/settings/", UriKind.Relative));
 
         Assert.True(settings?.PublicSignup);
         Assert.Equal(200, settings?.BackfillTarget);
@@ -671,7 +675,7 @@ public class AdminSettingsTests(FoxfireServerFixture server)
 
         try
         {
-            await admin.PatchAsJsonAsync(new Uri("/admin/settings/", UriKind.Relative), new { publicSignup = false });
+            await admin.PatchAsJsonAsync(new Uri("/api/admin/settings/", UriKind.Relative), new { publicSignup = false });
 
             using var anyone = server.AnonymousClient();
             var version = await anyone.GetFromJsonAsync<VersionInfo>(new Uri("/version", UriKind.Relative));
@@ -680,7 +684,7 @@ public class AdminSettingsTests(FoxfireServerFixture server)
         }
         finally
         {
-            await admin.PatchAsJsonAsync(new Uri("/admin/settings/", UriKind.Relative), new { publicSignup = true });
+            await admin.PatchAsJsonAsync(new Uri("/api/admin/settings/", UriKind.Relative), new { publicSignup = true });
         }
     }
 
@@ -693,7 +697,7 @@ public class AdminSettingsTests(FoxfireServerFixture server)
         using var admin = await AdminAsync();
 
         var response = await admin.PatchAsJsonAsync(
-            new Uri("/admin/settings/", UriKind.Relative),
+            new Uri("/api/admin/settings/", UriKind.Relative),
             new { backfillTarget = target });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
@@ -710,17 +714,17 @@ public class AdminSettingsTests(FoxfireServerFixture server)
         using var admin = await AdminAsync();
 
         var before = await admin.GetFromJsonAsync<ServerSettings>(
-            new Uri("/admin/settings/", UriKind.Relative));
+            new Uri("/api/admin/settings/", UriKind.Relative));
 
         var response = await admin.PatchAsJsonAsync(
-            new Uri("/admin/settings/", UriKind.Relative),
+            new Uri("/api/admin/settings/", UriKind.Relative),
             new { replayByteCap = 5_000_000_000L, backfillTarget = 5000 });
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
         Assert.Equal("invalid_backfill_target", error?.Error);
 
         var after = await admin.GetFromJsonAsync<ServerSettings>(
-            new Uri("/admin/settings/", UriKind.Relative));
+            new Uri("/api/admin/settings/", UriKind.Relative));
 
         Assert.Equal(before?.ReplayByteCap, after?.ReplayByteCap);
         Assert.Equal(before?.BackfillTarget, after?.BackfillTarget);
@@ -734,7 +738,7 @@ public class AdminSettingsTests(FoxfireServerFixture server)
         try
         {
             var response = await admin.PatchAsJsonAsync(
-                new Uri("/admin/settings/", UriKind.Relative),
+                new Uri("/api/admin/settings/", UriKind.Relative),
                 new { backfillTarget = 50 });
 
             var settings = await response.Content.ReadFromJsonAsync<ServerSettings>();
@@ -742,7 +746,7 @@ public class AdminSettingsTests(FoxfireServerFixture server)
         }
         finally
         {
-            await admin.PatchAsJsonAsync(new Uri("/admin/settings/", UriKind.Relative), new { backfillTarget = 200 });
+            await admin.PatchAsJsonAsync(new Uri("/api/admin/settings/", UriKind.Relative), new { backfillTarget = 200 });
         }
     }
 }

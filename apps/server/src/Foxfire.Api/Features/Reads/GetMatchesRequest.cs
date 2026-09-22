@@ -37,7 +37,45 @@ internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads m
                 Math.Clamp(request.Limit, 1, 100),
                 Math.Max(request.Offset, 0),
                 request.QueueId,
-                cancellationToken));
+                cancellationToken: cancellationToken));
+    }
+}
+
+/// <summary>
+/// One game, as one player's row in their history: the same summary the list
+/// shows, LP chip included.
+///
+/// For a link to a game somebody played. The full detail is the same for
+/// everybody and comes from GetMatchDetailRequest; this is the part that
+/// belongs to the player the link names.
+/// </summary>
+public sealed record GetMatchSummaryRequest(Guid RiotAccountId, string MatchId)
+    : IDomainRequest<MatchSummaryResponse>;
+
+internal sealed class GetMatchSummaryRequestHandler(FoxfireDbContext db, MatchReads matches)
+    : IDomainRequestHandler<GetMatchSummaryRequest, MatchSummaryResponse>
+{
+    public async Task<Response<MatchSummaryResponse>> Handle(
+        GetMatchSummaryRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var account = await db.RiotAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == request.RiotAccountId, cancellationToken);
+
+        if (account is null) return Response<MatchSummaryResponse>.NotFound();
+
+        var rows = await matches.MatchListAsync(
+            account.Puuid,
+            request.RiotAccountId,
+            limit: 1,
+            offset: 0,
+            queueId: null,
+            matchId: request.MatchId,
+            cancellationToken: cancellationToken);
+
+        return rows.Count == 0 ? Response<MatchSummaryResponse>.NotFound() : rows[0];
     }
 }
 

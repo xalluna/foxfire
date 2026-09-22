@@ -12,6 +12,16 @@ export type ClientIdentity =
   | { kind: 'desktop'; version: string }
   | { kind: 'web'; apiVersion: number }
 
+/**
+ * The API version the web client is built against.
+ *
+ * Bumped together with the server's contract, and held to it by a test on the
+ * server side (DesktopCompatibilityTests) that reads this line: the server
+ * lists the versions it serves in DesktopCompatibility.WebApiVersions, and a
+ * web client built for one missing from there would be refused on every call.
+ */
+export const WEB_API_VERSION = 1
+
 /** What every request says the caller is. */
 export const CLIENT_HEADER = 'X-Foxfire-Client'
 

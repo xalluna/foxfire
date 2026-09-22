@@ -57,7 +57,7 @@ public class ReplayTests(FoxfireServerFixture server)
         string patch = "15.16")
     {
         var claim = await client.PostAsJsonAsync(
-            new Uri("/replays/claim", UriKind.Relative),
+            new Uri("/api/replays/claim", UriKind.Relative),
             new
             {
                 matchId,
@@ -81,7 +81,7 @@ public class ReplayTests(FoxfireServerFixture server)
         put.EnsureSuccessStatusCode();
 
         var complete = await client.PostAsync(
-            new Uri($"/replays/{matchId}/complete", UriKind.Relative), null);
+            new Uri($"/api/replays/{matchId}/complete", UriKind.Relative), null);
 
         complete.EnsureSuccessStatusCode();
         return (await complete.Content.ReadFromJsonAsync<SharedReplayResponse>())!;
@@ -112,7 +112,7 @@ public class ReplayTests(FoxfireServerFixture server)
         using var _viewer = viewer;
 
         var grant = await viewer.GetFromJsonAsync<ReplayDownloadGrant>(
-            new Uri($"/replays/{matchId}/download", UriKind.Relative));
+            new Uri($"/api/replays/{matchId}/download", UriKind.Relative));
 
         Assert.NotNull(grant);
 
@@ -138,7 +138,7 @@ public class ReplayTests(FoxfireServerFixture server)
         using var _second = second;
 
         var claim = await second.PostAsJsonAsync(
-            new Uri("/replays/claim", UriKind.Relative),
+            new Uri("/api/replays/claim", UriKind.Relative),
             new { matchId, gameVersion = "15.16.700.1234", patch = "15.16", durationSeconds = 1800, fileBytes = 4096 });
 
         Assert.Equal(HttpStatusCode.Conflict, claim.StatusCode);
@@ -158,15 +158,15 @@ public class ReplayTests(FoxfireServerFixture server)
         using var _client = client;
 
         var claim = await client.PostAsJsonAsync(
-            new Uri("/replays/claim", UriKind.Relative),
+            new Uri("/api/replays/claim", UriKind.Relative),
             new { matchId, gameVersion = "15.16.700.1234", patch = "15.16", durationSeconds = 1800, fileBytes = 4096 });
 
         claim.EnsureSuccessStatusCode();
 
-        var described = await client.GetAsync(new Uri($"/replays/{matchId}", UriKind.Relative));
+        var described = await client.GetAsync(new Uri($"/api/replays/{matchId}", UriKind.Relative));
         Assert.Equal(HttpStatusCode.NotFound, described.StatusCode);
 
-        var download = await client.GetAsync(new Uri($"/replays/{matchId}/download", UriKind.Relative));
+        var download = await client.GetAsync(new Uri($"/api/replays/{matchId}/download", UriKind.Relative));
         Assert.Equal(HttpStatusCode.NotFound, download.StatusCode);
     }
 
@@ -182,11 +182,11 @@ public class ReplayTests(FoxfireServerFixture server)
         using var _client = client;
 
         await client.PostAsJsonAsync(
-            new Uri("/replays/claim", UriKind.Relative),
+            new Uri("/api/replays/claim", UriKind.Relative),
             new { matchId, gameVersion = "15.16.700.1234", patch = "15.16", durationSeconds = 1800, fileBytes = 4096 });
 
         var complete = await client.PostAsync(
-            new Uri($"/replays/{matchId}/complete", UriKind.Relative), null);
+            new Uri($"/api/replays/{matchId}/complete", UriKind.Relative), null);
 
         Assert.Equal(HttpStatusCode.Conflict, complete.StatusCode);
 
@@ -209,14 +209,14 @@ public class ReplayTests(FoxfireServerFixture server)
         var (stranger, _) = await MemberAsync();
         using var _stranger = stranger;
 
-        var refused = await stranger.DeleteAsync(new Uri($"/replays/{matchId}", UriKind.Relative));
+        var refused = await stranger.DeleteAsync(new Uri($"/api/replays/{matchId}", UriKind.Relative));
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
 
-        var removed = await uploader.DeleteAsync(new Uri($"/replays/{matchId}", UriKind.Relative));
+        var removed = await uploader.DeleteAsync(new Uri($"/api/replays/{matchId}", UriKind.Relative));
         Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
 
         // And the blob went with the row, so the space is actually freed.
-        var download = await uploader.GetAsync(new Uri($"/replays/{matchId}/download", UriKind.Relative));
+        var download = await uploader.GetAsync(new Uri($"/api/replays/{matchId}/download", UriKind.Relative));
         Assert.Equal(HttpStatusCode.NotFound, download.StatusCode);
     }
 
@@ -232,7 +232,7 @@ public class ReplayTests(FoxfireServerFixture server)
         var (admin, _) = await server.AdminAsync();
         using var _admin = admin;
 
-        var removed = await admin.DeleteAsync(new Uri($"/replays/{matchId}", UriKind.Relative));
+        var removed = await admin.DeleteAsync(new Uri($"/api/replays/{matchId}", UriKind.Relative));
         Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
     }
 
@@ -247,13 +247,13 @@ public class ReplayTests(FoxfireServerFixture server)
         using var _admin = admin;
 
         var original = await admin.GetFromJsonAsync<ServerSettings>(
-            new Uri("/admin/settings/", UriKind.Relative));
+            new Uri("/api/admin/settings/", UriKind.Relative));
 
         try
         {
             // One byte, which nothing fits inside.
             var capped = await admin.PatchAsJsonAsync(
-                new Uri("/admin/settings/", UriKind.Relative),
+                new Uri("/api/admin/settings/", UriKind.Relative),
                 new { replayByteCap = 1 });
 
             capped.EnsureSuccessStatusCode();
@@ -262,7 +262,7 @@ public class ReplayTests(FoxfireServerFixture server)
             using var _client = client;
 
             var claim = await client.PostAsJsonAsync(
-                new Uri("/replays/claim", UriKind.Relative),
+                new Uri("/api/replays/claim", UriKind.Relative),
                 new
                 {
                     matchId = UniqueMatchId(),
@@ -282,7 +282,7 @@ public class ReplayTests(FoxfireServerFixture server)
             // The server is shared across the suite, and a cap left behind would
             // fail every replay test that runs after this one.
             await admin.PatchAsJsonAsync(
-                new Uri("/admin/settings/", UriKind.Relative),
+                new Uri("/api/admin/settings/", UriKind.Relative),
                 new { replayByteCap = original?.ReplayByteCap ?? 0 });
         }
     }
@@ -296,7 +296,7 @@ public class ReplayTests(FoxfireServerFixture server)
         using var _admin = admin;
 
         var settings = await admin.GetFromJsonAsync<ServerSettings>(
-            new Uri("/admin/settings/", UriKind.Relative));
+            new Uri("/api/admin/settings/", UriKind.Relative));
 
         Assert.Equal(0, settings?.ReplayByteCap);
 
@@ -368,7 +368,7 @@ public class ReplayTests(FoxfireServerFixture server)
         }
 
         var before = await client.GetFromJsonAsync<List<System.Text.Json.JsonElement>>(
-            new Uri($"/riot-accounts/{accountId}/matches", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
         Assert.NotNull(before);
         Assert.Equal(
@@ -378,7 +378,7 @@ public class ReplayTests(FoxfireServerFixture server)
         await UploadAsync(client, matchId, Rofl(matchId), patch: "15.14");
 
         var after = await client.GetFromJsonAsync<List<System.Text.Json.JsonElement>>(
-            new Uri($"/riot-accounts/{accountId}/matches", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
         Assert.NotNull(after);
 

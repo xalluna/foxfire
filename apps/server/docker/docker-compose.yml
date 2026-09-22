@@ -36,6 +36,16 @@ services:
       Storage__PublicUrl: "${BLOB_PUBLIC_URL:-http://localhost:10000}"
       Server__PublicUrl: "${SERVER_PUBLIC_URL}"
       Server__Name: "${SERVER_NAME:-Foxfire}"
+
+      # Which reverse proxies to believe about a request's real address. The
+      # port below is published on localhost only, so everything arrives here
+      # through Docker's own proxy, from an address on a Docker network — which
+      # is why the default trusts those networks and nothing else. See
+      # .env.example before changing it.
+      Server__TrustedProxies: "${TRUSTED_PROXIES:-}"
+      Server__TrustedNetworks: "${TRUSTED_PROXY_NETWORKS:-172.16.0.0/12}"
+      RateLimit__AuthPerMinute: "${RATE_LIMIT_AUTH_PER_MINUTE:-20}"
+      RateLimit__SearchPerMinute: "${RATE_LIMIT_SEARCH_PER_MINUTE:-30}"
       Riot__ApiKey: "${RIOT_API_KEY}"
       Riot__KeyType: "${RIOT_KEY_TYPE:-personal}"
       Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"

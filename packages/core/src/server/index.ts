@@ -2,6 +2,7 @@ export { ServerError, describeFailure, describeNetworkFailure } from './errors'
 export {
   API_VERSION_HEADER,
   CLIENT_HEADER,
+  WEB_API_VERSION,
   identityHeaders,
   identityQuery,
   type ClientIdentity

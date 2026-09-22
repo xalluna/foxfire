@@ -178,7 +178,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var accounts = await client.GetFromJsonAsync<JsonElement>(
-            new Uri("/riot-accounts", UriKind.Relative));
+            new Uri("/api/riot-accounts", UriKind.Relative));
 
         var account = accounts.EnumerateArray().First();
 
@@ -209,7 +209,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var state = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/sync/{accountId}", UriKind.Relative));
+            new Uri($"/api/sync/{accountId}", UriKind.Relative));
 
         AssertHasAll(
             state,
@@ -230,7 +230,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var rows = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/matches", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
         var row = rows.EnumerateArray().First();
 
@@ -273,7 +273,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var dashboard = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/dashboard", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/dashboard", UriKind.Relative));
 
         AssertHasAll(dashboard, "account", "leagueEntries", "syncState");
 
@@ -293,7 +293,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var history = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
+            new Uri($"/api/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
                 UriKind.Relative));
 
         AssertHasAll(history, "snapshots", "milestones");
@@ -325,7 +325,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var games = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/rank/editable?queueType=RANKED_SOLO_5x5",
+            new Uri($"/api/riot-accounts/{accountId}/rank/editable?queueType=RANKED_SOLO_5x5",
                 UriKind.Relative));
 
         var game = games.EnumerateArray().First();
@@ -358,7 +358,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         var (client, _, _) = await RiggedAsync();
         using var _client = client;
 
-        var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/seasons", UriKind.Relative));
+        var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/seasons", UriKind.Relative));
         var season = seasons.EnumerateArray().First();
 
         AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank");
@@ -372,7 +372,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var stats = await client.GetFromJsonAsync<JsonElement>(
-            new Uri($"/riot-accounts/{accountId}/champions", UriKind.Relative));
+            new Uri($"/api/riot-accounts/{accountId}/champions", UriKind.Relative));
 
         var champion = stats.EnumerateArray().First();
 
@@ -400,7 +400,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         using var _client = client;
 
         var response = await client.PostAsJsonAsync(
-            new Uri("/rank-readings", UriKind.Relative),
+            new Uri("/api/rank-readings", UriKind.Relative),
             new
             {
                 riotAccountId = accountId,
@@ -422,7 +422,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         // The same reading again has not moved, so nothing is filed — and the
         // desktop needs to be able to tell that from a write.
         var again = await client.PostAsJsonAsync(
-            new Uri("/rank-readings", UriKind.Relative),
+            new Uri("/api/rank-readings", UriKind.Relative),
             new
             {
                 riotAccountId = accountId,
