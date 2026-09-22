@@ -23,6 +23,8 @@ export interface DashboardPageProps {
   syncProgress?: SyncProgressEvent
   syncing: boolean
   onSync: () => void
+  /** Copies a link to this profile. Absent where there is no web client to link into. */
+  onCopyProfileLink?: () => Promise<void> | void
 
   matches: MatchSummary[]
   matchesLoading: boolean
@@ -67,6 +69,7 @@ export function DashboardPage({
   syncProgress,
   syncing,
   onSync,
+  onCopyProfileLink,
   matches: rows,
   matchesLoading,
   hasMoreMatches,
@@ -97,7 +100,7 @@ export function DashboardPage({
   }, [reveal])
 
   return (
-    <div className="flex gap-4 p-4">
+    <div className="flex gap-4 p-4 max-md:p-2">
       {/*
         Two columns only above 1280px. Below that the match row would have to
         clip its item slots, so the rail folds into ProfileStrip instead and
@@ -116,6 +119,7 @@ export function DashboardPage({
           onRefresh={onSync}
           refreshing={syncing}
           progress={syncProgress}
+          onCopyLink={onCopyProfileLink}
         />
       </aside>
 
@@ -133,6 +137,7 @@ export function DashboardPage({
             onRefresh={onSync}
             refreshing={syncing}
             progress={syncProgress}
+            onCopyLink={onCopyProfileLink}
           />
         </div>
 

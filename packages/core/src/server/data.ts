@@ -41,7 +41,8 @@ export function createServerData(
     dashboard: {
       get: api.dashboard.get,
       matchList: api.dashboard.matches,
-      matchDetail: api.dashboard.matchDetail
+      matchDetail: api.dashboard.matchDetail,
+      matchSummary: api.dashboard.matchSummary
     },
 
     sync: {

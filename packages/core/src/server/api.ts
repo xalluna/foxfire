@@ -134,7 +134,23 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       },
 
       matchDetail: (matchId: string) =>
-        request<MatchDetail | null>(`/matches/${encodeURIComponent(matchId)}`)
+        request<MatchDetail | null>(`/matches/${encodeURIComponent(matchId)}`),
+
+      /**
+       * One game as one player's row: the same summary their history shows,
+       * LP chip included. Null when the server holds no such game for them —
+       * a link to a game can outlive the account it named.
+       */
+      matchSummary: async (accountId: string, matchId: string): Promise<ServerMatchSummary | null> => {
+        try {
+          return await request<ServerMatchSummary>(
+            `/riot-accounts/${accountId}/matches/${encodeURIComponent(matchId)}`
+          )
+        } catch (err) {
+          if (err instanceof ServerError && err.status === 404) return null
+          throw err
+        }
+      }
     },
 
     sync: {

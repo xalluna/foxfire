@@ -304,7 +304,9 @@ export function createFixtureClient(): FoxfireClient {
         return delay(all.slice(offset, offset + limit), 260)
       },
       matchDetail: (matchId: string): Promise<MatchDetail | null> =>
-        delay(MATCH_DETAILS[matchId] ?? null, 420)
+        delay(MATCH_DETAILS[matchId] ?? null, 420),
+      matchSummary: (accountId: string, matchId: string): Promise<MatchSummary | null> =>
+        delay(matchesFor(accountId).find((m) => m.matchId === matchId) ?? null, 200)
     },
 
     sync: {

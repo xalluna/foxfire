@@ -61,6 +61,14 @@ export interface FoxfireData {
       queueId: number | null
     ) => Promise<MatchSummary[]>
     matchDetail: (matchId: string) => Promise<MatchDetail | null>
+    /**
+     * One game as one player's row — the result, the queue, the LP it moved.
+     *
+     * Optional because only a client with a page for a single game needs it,
+     * and the desktop has none: it opens a game where it sits in the history.
+     * A screen that uses it has to cope with its absence.
+     */
+    matchSummary?: (accountId: string, matchId: string) => Promise<MatchSummary | null>
   }
   sync: {
     start: (accountId: string) => Promise<void>

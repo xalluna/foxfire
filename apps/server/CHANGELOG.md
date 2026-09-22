@@ -8,6 +8,102 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.2.0] — 2026-09-21
+
+Foxfire in a browser. The server now hosts a web client of its own, so your
+members can read match history, LP, the rank graph and shared replays from any
+browser with nothing to install — and send each other links to them.
+
+### Added
+
+- **A web client, served by the server itself.** Open your server's address in a
+  browser and sign in: profiles, match history with what each game was worth in
+  LP, a page for every game, champion stats and the rank graph, for every account
+  on the server. It comes from the same address as the API, so there is nothing
+  else to host and nothing to configure — the address your members connect the
+  desktop to is the one their browser opens. Laid out for a desktop screen and
+  still readable on a phone.
+- **Links worth sending.** Every profile, rank graph and game has an address,
+  and "Copy link" puts it on the clipboard with the view it was copied from —
+  queue, period and all — so whoever opens it sees what you saw. Links are for
+  members: opening one asks you to sign in first, then goes where it pointed.
+- **Your own LP and syncs, from the browser.** Whoever claimed an account can
+  type in what a game was worth and start a sync, as on the desktop. Everybody
+  else's history reads as it always has, and stays theirs to change.
+- **Running the server from the browser.** Members and invites, public sign-up,
+  storage, unlinking accounts and removing replays — the same pages the desktop
+  has. Importing an old Foxfire database works there too: the browser reads the
+  `stats.db` itself and sends it up, so a host without the desktop to hand can
+  still bring a community's history across. A very large one is better imported
+  from the desktop, which does not hold the whole file in memory while it works.
+- **Invite links open a sign-up page.** The link the server hands out, or emails,
+  now opens a form with the invited address already filled in, rather than a page
+  that could only say "paste this into Foxfire". The same link still works in the
+  desktop.
+- **Registering in the browser**, on a server with public sign-up, or with an
+  invite on one without.
+- **Rate limits on signing in, registering and searching**, per address: twenty a
+  minute for the first two together and thirty searches, both adjustable. A server
+  on the internet will have somebody guessing passwords at it, and every search is
+  a live call on the one Riot key everybody shares. Staying signed in is never
+  limited, so a household reloading its tabs cannot lock itself out.
+
+### Changed
+
+- **The API moved under `/api`**, which is what lets one address serve both the
+  web client's pages and the API. Foxfire desktop 0.12.0 keeps working unchanged:
+  its requests are recognised and moved there. A reverse proxy in front of the
+  server should forward every path to it — the web client's pages as well as
+  `/api` — along with the WebSocket upgrade on `/api/hub` and, for 0.12.0, on
+  `/hub`.
+- **`/version` also says where the API is and the server's public address**,
+  which is what a "Copy link" in the desktop will be built on.
+- **New, optional settings in `.env`:** `TRUSTED_PROXIES` and
+  `TRUSTED_PROXY_NETWORKS`, which say whose word to take on a member's real
+  address, and `RATE_LIMIT_AUTH_PER_MINUTE` and `RATE_LIMIT_SEARCH_PER_MINUTE`.
+  And one existing setting matters more now: a browser will not download a
+  replay over plain http from a page served over https, so behind TLS
+  `BLOB_PUBLIC_URL` should be https as well.
+
+### Removed
+
+- **The server-rendered invite page.** Invite links open the web client's sign-up
+  page instead.
+
+### Under the hood
+
+- **The web client never sees its refresh token.** It travels as an httpOnly,
+  Secure, SameSite=Strict cookie that only the auth routes receive, so a script
+  injected into a page has no month-long credential to steal; the access token
+  lives in the page's memory for its fifteen minutes. Tabs take turns refreshing,
+  because two refreshing at once would present the same token twice — which the
+  server reads as a stolen copy, ending every session its owner has. The
+  desktop's sessions are unchanged.
+- **A tab left open across an upgrade is told to reload.** The web client says
+  which API version its page was built against and the server lists the ones it
+  serves, so a page from before an upgrade gets a prompt to reload rather than
+  answers it would misread.
+- **Pages are sent with a content security policy**, `noindex`, a same-origin
+  referrer policy — so an invite token in a page's address is never sent to
+  Riot's image CDN — and `nosniff`. Fingerprinted assets are cached for good and
+  everything else is checked on every load, so an upgrade reaches an open browser
+  the next time it navigates. An API route that does not exist answers with a
+  JSON 404, never a web page.
+- **Behind a reverse proxy, the rate limits count your members' addresses** rather
+  than the proxy's — believed only from the proxies you name. The compose file
+  trusts Docker's own networks, which is right while the server's port is
+  published on localhost only, as it is by default.
+- **The web client is built into the container image and both archives**, from
+  the repository's lockfile, and a release checks that each archive carries it.
+- **One game can be read as one player's row**, LP included, which is what the
+  page for a single game opens with.
+- Tests: the API suite now calls everything under `/api`, and new suites cover the
+  web client's hosting and headers, desktop 0.12.0's requests at their old
+  addresses, the web session cookie — its attributes, rotation, reuse detection
+  through it, signing out — and the rate limits, including that a forwarded
+  address is believed only from a trusted proxy. One reads the web client's API
+  version out of `packages/core` and fails if the server does not serve it.
+
 ## [0.1.0] — 2026-09-17
 
 The first thing that runs. You can stand a server up, register on it, sign in,
@@ -207,4 +303,5 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

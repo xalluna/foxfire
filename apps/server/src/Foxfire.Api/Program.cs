@@ -342,7 +342,7 @@ if (!smtpOptions.IsConfigured)
 {
     startup.LogWarning(
         "No SMTP configured, so nothing will be emailed. Invite links are still readable from the admin "
-        + "section of the desktop app — copy them to your community wherever it actually talks.");
+        + "pages, in the desktop app or the web client — copy them to your community wherever it actually talks.");
 }
 
 // The one place a key rejection becomes news. The limiter latches the moment

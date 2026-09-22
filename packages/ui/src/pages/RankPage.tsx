@@ -85,8 +85,9 @@ export function RankPage({
       : null
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-4xl space-y-4 p-4 max-md:p-2">
+      {/* On a phone the pickers drop beneath the heading instead of squeezing it. */}
+      <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-start">
         <div>
           <h1 className="font-display text-xl text-text">Rank</h1>
           <p className="mt-0.5 text-sm text-text-mute">
@@ -101,7 +102,7 @@ export function RankPage({
         </div>
 
         {/* Wraps because the range picker grows by one button every January. */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 max-md:justify-start">
           <Segmented options={QUEUES} value={queueType} onChange={setQueueType} />
           <Segmented options={ranges} value={range} onChange={setRange} />
         </div>

@@ -101,7 +101,8 @@ export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined
         Last {summary.games} games
       </p>
 
-      <div className="flex gap-5">
+      {/* Three blocks side by side, stacked on a phone with the dividers dropped. */}
+      <div className="flex gap-5 max-md:flex-col max-md:gap-4">
         {/* Record */}
         <div className="flex shrink-0 items-center gap-3">
           <WinRateRing winRate={summary.winRate} />
@@ -123,7 +124,7 @@ export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined
           </div>
         </div>
 
-        <div className="w-px shrink-0 bg-hairline" />
+        <div className="w-px shrink-0 bg-hairline max-md:hidden" />
 
         {/* Most played */}
         <div className="min-w-0 flex-1 space-y-1.5">
@@ -132,10 +133,10 @@ export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined
           ))}
         </div>
 
-        <div className="w-px shrink-0 bg-hairline" />
+        <div className="w-px shrink-0 bg-hairline max-md:hidden" />
 
         {/* Role split */}
-        <div className="w-[132px] shrink-0 space-y-1.5">
+        <div className="w-[132px] shrink-0 space-y-1.5 max-md:w-full">
           {summary.roles.length === 0 ? (
             <p className="text-2xs text-text-mute">No ranked positions in this window.</p>
           ) : (

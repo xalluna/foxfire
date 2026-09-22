@@ -31,6 +31,7 @@ export {
   type ServerMatchSummary
 } from './api'
 export { createServerData } from './data'
+export { createServerClient, type ServerClient, type ServerClientOptions } from './serverClient'
 export { applyHomeAccount, type HomeAccountStore } from './home'
 export { createHub, type HubHandlers, type HubOptions, type ServerHub } from './hub'
 export { displayName, inviteTokenFrom, normaliseServerUrl, type NormalisedUrl, type UrlProblem } from './url'

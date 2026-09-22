@@ -47,6 +47,11 @@ export interface LpEditorSearch {
   match?: string
 }
 
+export interface MatchSearch {
+  /** Whose game it was, as a player slug — their row and their LP, when this server knows them. */
+  player?: string
+}
+
 type RawSearch = Record<string, unknown>
 
 /** The period the rank page opens on. */
@@ -88,6 +93,10 @@ export function validateRankSearch(raw: RawSearch): RankSearch {
 
 export function validateLpEditorSearch(raw: RawSearch): LpEditorSearch {
   return present({ queue: readRankQueue(raw.queue), match: readText(raw.match) })
+}
+
+export function validateMatchSearch(raw: RawSearch): MatchSearch {
+  return present({ player: readText(raw.player) })
 }
 
 /** The queue filter a page shows for what its URL says. */

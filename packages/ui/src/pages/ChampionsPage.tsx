@@ -210,8 +210,8 @@ export function ChampionsPage({
   const queueName = queueFilterLabel(queueId)
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-5xl space-y-4 p-4 max-md:p-2">
+      <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-start">
         <div>
           <h1 className="font-display text-xl text-text">Champions</h1>
           <p className="mt-0.5 text-sm text-text-mute">
@@ -222,16 +222,17 @@ export function ChampionsPage({
           </p>
         </div>
         {/* Wraps because the period picker grows by one button every January. */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 max-md:justify-start">
           <Segmented options={rangeOptions} value={range} onChange={setPicked} />
           <QueueFilter value={queueId} onChange={setQueueId} />
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
+      {/* On a phone the table keeps its columns and scrolls sideways on its own. */}
+      <div className="overflow-hidden rounded-lg border border-hairline bg-surface/40 max-md:overflow-x-auto">
         <div
           className={clsx(
-            'grid gap-4 border-b border-hairline px-4 py-2 text-2xs font-medium uppercase tracking-widest text-text-mute',
+            'grid gap-4 border-b border-hairline px-4 py-2 text-2xs font-medium uppercase tracking-widest text-text-mute max-md:min-w-[640px]',
             GRID
           )}
         >
@@ -265,7 +266,7 @@ export function ChampionsPage({
           />
         )}
 
-        <ul className="divide-y divide-hairline/60">
+        <ul className="divide-y divide-hairline/60 max-md:min-w-[640px]">
           {rows.map((row) => {
             const { games, wins } = row
             const wr = wins / games

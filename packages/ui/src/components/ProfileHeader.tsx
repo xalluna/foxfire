@@ -3,6 +3,7 @@ import { useAssetManifest } from '../context/assetManifest'
 import { profileIconUrl } from '../lib/assets'
 import { emptyEntry } from '../lib/rank'
 import { Asset } from './Asset'
+import { CopyLinkButton } from './CopyLinkButton'
 import { RankCard } from './RankCard'
 import { SyncProgressBar } from './SyncProgressBar'
 import * as Icon from './icons'
@@ -34,7 +35,8 @@ export function ProfileHeader({
   leagueEntries,
   onRefresh,
   refreshing,
-  progress
+  progress,
+  onCopyLink
 }: {
   account: Account
   leagueEntries: LeagueEntry[]
@@ -42,6 +44,8 @@ export function ProfileHeader({
   refreshing: boolean
   /** The latest sync event for this account, if one is running or has just failed. */
   progress?: SyncProgressEvent
+  /** Copies a link to this profile. Absent where there is no web client to link into. */
+  onCopyLink?: () => Promise<void> | void
 }): JSX.Element {
   const notYours = account.isMine === false
   const assets = useAssetManifest()
@@ -92,6 +96,8 @@ export function ProfileHeader({
             <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
             {refreshing ? 'Syncing…' : 'Sync now'}
           </button>
+
+          {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="mt-2 w-full py-1.5" />}
         </div>
 
         <SyncProgressBar progress={progress} />

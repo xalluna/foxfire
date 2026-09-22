@@ -1,8 +1,16 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
-import { queueTypeForQueueId, type Account, type MatchSummary, type QueueType } from '@foxfire/core'
+import {
+  DEFAULT_QUEUE_FILTER,
+  queueTypeForQueueId,
+  type Account,
+  type MatchSummary,
+  type QueueType
+} from '@foxfire/core'
+import { paths } from '@foxfire/core/routes'
 import { DashboardPage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useShareLink } from '../client/useShareLink'
 import { matchContextItems } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
 import { queryKeys } from '../queries/keys'
@@ -35,6 +43,7 @@ export function DashboardScreen({
 }): JSX.Element {
   const client = useClient()
   const platform = usePlatform()
+  const share = useShareLink()
 
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(focus?.matchId ?? null)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
@@ -94,6 +103,7 @@ export function DashboardScreen({
         {
           onCopyId: () => void platform.copyText(match.matchId),
           onOpenDetails: () => setExpandedMatchId(match.matchId),
+          onCopyLink: share ? () => void share(paths.match(match.matchId, { player: account })) : undefined,
 
           onEditLp: platform.openLpEditor
             ? () => {
@@ -149,6 +159,11 @@ export function DashboardScreen({
       syncProgress={progress}
       syncing={syncing}
       onSync={() => sync.mutate()}
+      onCopyProfileLink={
+        share
+          ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))
+          : undefined
+      }
       matches={matches.data?.pages.flat() ?? []}
       matchesLoading={matches.isLoading}
       hasMoreMatches={matches.hasNextPage}

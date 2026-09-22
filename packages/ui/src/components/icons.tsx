@@ -357,6 +357,16 @@ export function Info(props: IconProps): JSX.Element {
   )
 }
 
+/** Two chain links — a link to share, as opposed to ExternalLink's "opens elsewhere". */
+export function Link(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" />
+      <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" />
+    </Icon>
+  )
+}
+
 /** Marks a settings row that opens a separate window rather than expanding. */
 export function ExternalLink(props: IconProps): JSX.Element {
   return (

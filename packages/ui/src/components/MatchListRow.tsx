@@ -30,6 +30,11 @@ import * as Icon from './icons'
  * — but not its two columns of ten participant names: at 109px only about four
  * rows fit an 800px window, and those names are already in the panel this row
  * expands into.
+ *
+ * On a phone it keeps the result, the champion and the KDA — what a glance at
+ * a history is for — and lets the rest go: CS, damage and items below 768px,
+ * the champion's name too below 640px, where its portrait already says it.
+ * The desktop never goes below 1024px, so it never sees any of this.
  */
 export function MatchListRow({
   match,
@@ -135,7 +140,7 @@ export function MatchListRow({
       </div>
 
       {/* Champion name and role */}
-      <div className="w-24 shrink-0">
+      <div className="w-24 shrink-0 max-sm:hidden">
         <p className="truncate text-base font-medium text-text">{name}</p>
         {position && (
           <span className="mt-0.5 flex items-center gap-1 text-2xs text-text-dim">
@@ -159,7 +164,7 @@ export function MatchListRow({
       </div>
 
       {/* Farm and participation */}
-      <div className="w-[78px] shrink-0">
+      <div className="w-[78px] shrink-0 max-md:hidden">
         <p className="text-sm tabular-nums text-text-dim">
           {match.cs ?? 0} CS{' '}
           {cspm !== null && <span className="text-text-mute">({cspm.toFixed(1)})</span>}
@@ -168,7 +173,7 @@ export function MatchListRow({
       </div>
 
       {/* Damage share — a measured ratio, not a rating */}
-      <div className="w-[72px] shrink-0">
+      <div className="w-[72px] shrink-0 max-md:hidden">
         <p className="text-2xs tabular-nums text-text-dim">
           {compactNumber(match.damageDealtToChampions)} dmg
         </p>
@@ -179,7 +184,7 @@ export function MatchListRow({
       </div>
 
       {/* Items and badges */}
-      <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5">
+      <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5 max-md:hidden">
         {assets && (
           <ItemStrip
             m={assets}

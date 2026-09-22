@@ -11,6 +11,28 @@
         "apps/desktop"
       ],
       "port": 5199
+    },
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace",
+        "apps/web"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "web-mock",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:mock",
+        "--workspace",
+        "apps/web"
+      ],
+      "port": 5173
     }
   ]
 }

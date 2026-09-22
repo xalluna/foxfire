@@ -22,6 +22,7 @@ export {
   type Platform
 } from './client/context'
 export { useConnection, useIsServerAdmin } from './client/useConnection'
+export { useShareLink, type ShareLink } from './client/useShareLink'
 export { useDataEvents } from './client/useDataEvents'
 
 export { queryKeys } from './queries/keys'
@@ -43,6 +44,7 @@ export { MatchDetailPanel } from './match/MatchDetailPanel'
 export { ChampionsScreen } from './screens/ChampionsScreen'
 export { DashboardScreen } from './screens/DashboardScreen'
 export { LpEditorScreen } from './screens/LpEditorScreen'
+export { MatchScreen } from './screens/MatchScreen'
 export { RankScreen } from './screens/RankScreen'
 export { SearchScreen } from './screens/SearchScreen'
 export { SeasonsCard } from './screens/SeasonsCard'
@@ -55,6 +57,7 @@ export {
   type PlayerLayoutProps,
   type PlayerRoutesOptions
 } from './routes/players'
+export { createMatchRoute } from './routes/match'
 export {
   DEFAULT_RANK_RANGE,
   queueIdFrom,
@@ -65,10 +68,12 @@ export {
   validateChampionsSearch,
   validateDashboardSearch,
   validateLpEditorSearch,
+  validateMatchSearch,
   validateRankSearch,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
+  type MatchSearch,
   type QueueSearch,
   type RankSearch
 } from './routes/params'

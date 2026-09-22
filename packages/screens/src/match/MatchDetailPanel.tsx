@@ -18,5 +18,12 @@ export function MatchDetailPanel({
     queryFn: () => client.dashboard.matchDetail(matchId)
   })
 
-  return <MatchDetailTable detail={data} loading={isLoading} trackedPuuid={trackedPuuid} />
+  // On a phone the scoreboard keeps its columns and scrolls sideways on its own.
+  return (
+    <div className="max-md:overflow-x-auto">
+      <div className="max-md:min-w-[720px]">
+        <MatchDetailTable detail={data} loading={isLoading} trackedPuuid={trackedPuuid} />
+      </div>
+    </div>
+  )
 }

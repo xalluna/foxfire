@@ -23,6 +23,7 @@ export {
   type ContextMenuItem,
   type ContextMenuState
 } from './components/ContextMenu'
+export { CopyLinkButton } from './components/CopyLinkButton'
 export { Disclaimer } from './components/Disclaimer'
 export { EmptyState } from './components/EmptyState'
 export { ErrorBoundary } from './components/ErrorBoundary'
@@ -72,6 +73,7 @@ export {
 export { ChampionsPage, type ChampionsPageProps } from './pages/ChampionsPage'
 export { DashboardPage, type DashboardPageProps, type MatchFocus } from './pages/DashboardPage'
 export { LpEditorPage } from './pages/LpEditorPage'
+export { MatchPage } from './pages/MatchPage'
 export { RankPage } from './pages/RankPage'
 export { SearchPage } from './pages/SearchPage'
 export { RankInput, RankLabel, isApexTier } from './pages/RankInput'

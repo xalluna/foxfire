@@ -3,6 +3,7 @@ import { useAssetManifest } from '../context/assetManifest'
 import { profileIconUrl } from '../lib/assets'
 import { queueLabel, rankRecord, tierColor, tierCrest, tierLabel } from '../lib/rank'
 import { Asset } from './Asset'
+import { CopyLinkButton } from './CopyLinkButton'
 import { SyncProgressBar } from './SyncProgressBar'
 import * as Icon from './icons'
 
@@ -36,6 +37,9 @@ function RankChip({ entry }: { entry: LeagueEntry | undefined }): JSX.Element | 
  * clipping its item slots, and the window can be resized down to 1024. Rather
  * than degrade the row, the rail folds into this strip and gives the full
  * width back to the match list.
+ *
+ * On a phone the rank chips drop to a line of their own beneath the name, so
+ * the name and the buttons keep the width they need.
  */
 /**
  * Why syncing somebody else's account is not offered.
@@ -52,7 +56,8 @@ export function ProfileStrip({
   leagueEntries,
   onRefresh,
   refreshing,
-  progress
+  progress,
+  onCopyLink
 }: {
   account: Account
   leagueEntries: LeagueEntry[]
@@ -60,13 +65,15 @@ export function ProfileStrip({
   refreshing: boolean
   /** The latest sync event for this account, if one is running or has just failed. */
   progress?: SyncProgressEvent
+  /** Copies a link to this profile. Absent where there is no web client to link into. */
+  onCopyLink?: () => Promise<void> | void
 }): JSX.Element {
   const notYours = account.isMine === false
   const assets = useAssetManifest()
 
   return (
     <section className="rounded-lg border border-hairline bg-surface p-3">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 max-md:flex-wrap">
         <div className="relative shrink-0">
           <Asset
             src={assets ? profileIconUrl(assets, account.profileIconId) : null}
@@ -91,20 +98,23 @@ export function ProfileStrip({
           </p>
         </div>
 
-        <div className="ml-2 flex min-w-0 flex-wrap gap-2">
+        <div className="ml-2 flex min-w-0 flex-wrap gap-2 max-md:order-last max-md:ml-0 max-md:w-full">
           <RankChip entry={leagueEntries.find((e) => e.queueType === 'RANKED_SOLO_5x5')} />
           <RankChip entry={leagueEntries.find((e) => e.queueType === 'RANKED_FLEX_SR')} />
         </div>
 
-        <button
-          onClick={onRefresh}
-          disabled={refreshing || notYours}
-          title={notYours ? NOT_YOURS : undefined}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
-        >
-          <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
-          {refreshing ? 'Syncing…' : 'Sync now'}
-        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="py-1.5" />}
+          <button
+            onClick={onRefresh}
+            disabled={refreshing || notYours}
+            title={notYours ? NOT_YOURS : undefined}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
+          >
+            <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
+            {refreshing ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
       </div>
 
       <SyncProgressBar progress={progress} />

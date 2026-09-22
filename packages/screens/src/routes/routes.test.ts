@@ -9,6 +9,7 @@ import {
   validateChampionsSearch,
   validateDashboardSearch,
   validateLpEditorSearch,
+  validateMatchSearch,
   validateRankSearch,
   type DashboardSearch
 } from './params'
@@ -149,6 +150,12 @@ describe('links core writes, as the routes read them', () => {
     expect(validateLpEditorSearch(searchOf(paths.lpEditor(FAKER, { queue: 'solo', match: 'KR_7' })))).toEqual({
       queue: 'solo',
       match: 'KR_7'
+    })
+  })
+
+  it('agrees on whose game a match link is about', () => {
+    expect(validateMatchSearch(searchOf(paths.match('KR_7', { player: FAKER })))).toEqual({
+      player: 'Faker-KR1'
     })
   })
 })

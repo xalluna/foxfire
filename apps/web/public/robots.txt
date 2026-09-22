@@ -1,0 +1,4 @@
+# A Foxfire server is one community's, and nothing on it is for a search
+# engine. The pages say so too, in X-Robots-Tag and a robots meta tag.
+User-agent: *
+Disallow: /

@@ -28,6 +28,12 @@ export const queryKeys = {
       ? (['matchList', accountId] as const)
       : (['matchList', accountId, queueId] as const),
 
+  /**
+   * One game as one player's row. Under that player's match list, so whatever
+   * refreshes their history — a sync finishing, LP typed in — refreshes it too.
+   */
+  matchSummary: (accountId: string, matchId: string) => ['matchList', accountId, 'match', matchId] as const,
+
   matchDetail: (matchId: string) => ['matchDetail', matchId] as const,
 
   rankHistory: (accountId?: string, queueType?: QueueType, range?: RankRange) =>

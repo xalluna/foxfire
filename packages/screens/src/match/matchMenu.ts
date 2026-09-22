@@ -88,6 +88,12 @@ export function downloadBlockedReason(match: MatchSummary): string | null {
 export interface MatchMenuActions {
   onCopyId: () => void
   onOpenDetails: () => void
+  /**
+   * A link to the game in the server's web client. Absent in local-only mode
+   * and from a server that does not say where its web client is, and then the
+   * item is not offered at all.
+   */
+  onCopyLink?: () => void
   onEditLp?: () => void
   onClearLp?: () => void
   onWatchRecording?: () => void
@@ -159,6 +165,8 @@ export function matchContextItems(
       ...(blocked ? { disabledReason: blocked } : {})
     })
   }
+
+  if (actions.onCopyLink) items.push({ label: 'Copy link', onSelect: actions.onCopyLink })
 
   items.push(
     { label: 'Copy match ID', onSelect: actions.onCopyId },

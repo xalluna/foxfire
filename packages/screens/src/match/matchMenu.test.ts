@@ -220,4 +220,13 @@ describe('matchContextItems on a platform that cannot do everything', () => {
     const all = labels({ ...EVERYWHERE, onWatchRecording: () => {}, onWatchReplay: () => {} })
     expect(all.slice(0, 2)).toEqual(['Watch recording', 'Watch replay'])
   })
+
+  it('offers a link to the game only where there is a web client to open it in', () => {
+    expect(labels(EVERYWHERE)).not.toContain('Copy link')
+    expect(labels({ ...EVERYWHERE, onCopyLink: () => {} })).toEqual([
+      'Copy link',
+      'Copy match ID',
+      'Open match details'
+    ])
+  })
 })
