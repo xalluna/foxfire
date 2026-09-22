@@ -2,7 +2,10 @@
 
 The record of what the server shipped when, kept separately from the desktop's
 `apps/desktop/CHANGELOG.md` because the two release on their own tags and their
-own schedules — `server-v*` here, `v*` there.
+own schedules — `server-v*` here, `desktop-v*` there.
+
+The web client has no changelog of its own: it ships inside the server, so what
+changed in it is recorded here, in the release that carries it.
 
 The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same

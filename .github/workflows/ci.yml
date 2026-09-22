@@ -1,0 +1,111 @@
+name: CI
+
+# Every pull request, and every push to main: typecheck, lint and test across
+# the whole workspace, both builds, the server's suites against a real SQL
+# Server, and the server's container image.
+#
+# Nothing here publishes anything. The release workflows run the same checks
+# again on a tag; this is what finds a problem before there is one.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A push to a pull request's branch makes its previous run moot.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    # Windows, for two reasons that both have to hold. The desktop's tests
+    # assert Windows paths — the rofl settings, OBS validation and the
+    # recordings repository all build them — and the modules that import
+    # electron need its binary, so this install downloads it rather than
+    # skipping it the way the server's image does.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          # One lockfile for the whole tree, at the root.
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Each of these runs in every workspace that has the script — the two
+      # apps and the three packages.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build the web client
+        run: npm run build -w @foxfire/web
+
+      - name: Build the desktop
+        run: npm run build -w @foxfire/desktop
+
+      # The packages are TypeScript source with no build of their own, so the
+      # desktop's main process only works if electron-vite bundled them. A
+      # runtime require of one would be a .ts file Node cannot load, found by
+      # the first person to launch the installer.
+      - name: Check the packages were bundled into the main process
+        run: |
+          if grep -q 'require("@foxfire/' apps/desktop/out/main/index.js apps/desktop/out/preload/index.js; then
+            echo "::error::apps/desktop/out requires a @foxfire package at runtime rather than bundling it. Is it in devDependencies?"
+            exit 1
+          fi
+
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: apps/server/global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      # Testcontainers needs a Docker daemon, which ubuntu-latest has. These
+      # are the suites that run the server against a real SQL Server and a real
+      # blob store, so a schema that does not migrate fails here rather than in
+      # a release.
+      - name: Test
+        run: dotnet test --no-restore --verbosity minimal
+
+  image:
+    # Built and thrown away. The release builds it too, but finding out there
+    # that the Dockerfile no longer builds — a workspace missing from the web
+    # stage's package list, say — means finding out after the tag is pushed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the container image
+        run: docker build --file apps/server/docker/Dockerfile --tag foxfire-server:ci .

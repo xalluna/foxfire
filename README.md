@@ -4,6 +4,8 @@ An ad-free desktop app for viewing League of Legends stats and live games — a 
 
 It runs entirely on your own machine by default. It can also read from a **Foxfire Server** that you or your community hosts, so match history, rank and LP are shared rather than kept per PC. There is no central Foxfire service — anyone can run one, and recordings, Riot replays and the League client connection always stay on your machine either way. See [apps/server](apps/server) to host one.
 
+A server also hosts a **web client** of its own, at its own address: the people on it can read everybody's match history, LP, the rank graph and shared replays in a browser, with nothing to install, and send each other links to them.
+
 Built with Electron, React, and TypeScript. All data comes from **Riot's official Developer API** (op.gg's Terms of Use prohibit scraping their site, and everything here is available from Riot directly).
 
 ## Features
@@ -15,6 +17,7 @@ Built with Electron, React, and TypeScript. All data comes from **Riot's officia
 - **Champions** — Riot's mastery points/levels alongside win rates computed locally from your synced games
 - **Ad-hoc search** — look up any summoner without saving them
 - **Optional server** — join one your community hosts to share match history, rank and LP; local-only stays a first-class mode
+- **In a browser** — a server's web client shows profiles, match history, a page per game, champions and the rank graph, and "Copy link" in either client hands somebody the view you are looking at
 
 ## Setup
 
@@ -29,6 +32,17 @@ Then run the app:
 
 ```bash
 npm run dev
+```
+
+The web client runs against a Foxfire Server — Vite forwards `/api` to `FOXFIRE_SERVER`, by default
+`http://localhost:8080` — or against fixtures, with no server at all:
+
+```bash
+npm run dev -w @foxfire/web
+```
+
+```bash
+npm run dev:mock -w @foxfire/web
 ```
 
 ### Riot API key
@@ -52,13 +66,25 @@ Note that Riot's match-v5 endpoint only exposes a rolling window of history, so 
 
 ## Architecture
 
-The desktop app is one workspace in a monorepo:
+A monorepo of three apps and the packages they share:
 
 ```
 apps/
-  desktop/      this app
-  server/       the Foxfire Server (.NET) — not yet present
+  desktop/      the Electron app
+  server/       the Foxfire Server (.NET) — its API under /api, and the web client at the root
+  web/          the web client — built into the server, never deployed on its own
+packages/
+  core/         what every client agrees on: data shapes, LP and season rules, route paths,
+                the server client, the Data Dragon manifest, the stats.db importer
+  ui/           the React components and pages — props in, markup out — and the theme
+  screens/      the screens both clients mount: query hooks, what each server event refreshes,
+                the shared routes, and the fixtures the design harnesses render
+tooling/vite/   the Vite helper every app's config shares
 ```
+
+The desktop and the web client draw the same screens. The desktop's reach them through IPC, the web
+client's over HTTP, and neither screen can tell which — the screens read through a client and ask a
+platform for what the machine can do, so a browser simply never offers "Watch recording".
 
 Inside `apps/desktop`:
 
@@ -67,11 +93,12 @@ src/
   main/         Electron main process — the only place that touches Riot's API or SQLite
     riot/       API client, rate limiter, per-endpoint wrappers
     db/         node:sqlite connection, migrations, repositories
-    services/   account, sync, live game, mastery, search, settings, Data Dragon
+    services/   account, sync, live game, mastery, search, settings, Data Dragon, the server
     ipc/        channel names + handlers
     security/   encrypted API key storage
   preload/      contextBridge — exposes a typed `window.api` surface
-  renderer/     React UI (TanStack Query for data, Zustand for UI state)
+  renderer/     the desktop's shell: routes (TanStack Router), its own screens, and the IPC
+                client the shared screens read through
   shared/       types shared across processes
 ```
 
@@ -79,21 +106,36 @@ The renderer has `contextIsolation: true` and `nodeIntegration: false`; it can n
 
 Storage uses Node 24's built-in `node:sqlite` (bundled with Electron 43) rather than `better-sqlite3` — same synchronous API with no native compilation step, which keeps builds and packaging simple.
 
+### Hosting the web client
+
+There is nothing to host separately: the server serves the web client from its own address, so the
+address your members connect the desktop to is the one their browser opens. Behind a reverse proxy,
+forward **every** path to the server — the web client's pages as well as `/api` — and the WebSocket
+upgrade on `/api/hub`, plus `/hub` for Foxfire desktop 0.12.0. See
+[apps/server/docker/.env.example](apps/server/docker/.env.example) for the settings.
+
 ## Scripts
 
-Run these from the repo root, where they delegate into the `foxfire` workspace, or from
-`apps/desktop` directly.
+Run these from the repo root. `typecheck`, `lint` and `test` run in every workspace; the rest
+delegate to the one they name.
 
 | Command | Purpose |
 |---|---|
-| `npm run dev` | Run in development with hot reload |
-| `npm run build` | Type-check and bundle |
+| `npm run dev` | Run the desktop in development with hot reload |
+| `npm run dev:web` | The desktop's screens in a browser, on fixtures — `?scenario=` switches the state |
+| `npm run build` | Type-check and bundle the desktop |
 | `npm run build:win` | Produce a Windows NSIS installer in `apps/desktop/release/` |
-| `npm test` | Run unit tests |
-| `npm run typecheck` | Type-check both processes |
-| `npm run lint` | Lint |
-| `npm run make-mark` | Regenerate the logo geometry in `apps/desktop/src/shared/logoMark.json` |
-| `npm run make-icon` | Redraw the app icon, tray icon and favicon from that geometry |
+| `npm run dev -w @foxfire/web` | Run the web client against a server |
+| `npm run dev:mock -w @foxfire/web` | Run the web client on fixtures, with no server |
+| `npm run build -w @foxfire/web` | Build the web client into `apps/web/dist/` |
+| `npm test` | Run unit tests in every workspace |
+| `npm run typecheck` | Type-check every workspace |
+| `npm run lint` | Lint every workspace |
+| `npm run make-mark -w @foxfire/desktop` | Regenerate the logo geometry in `packages/ui/src/assets/logoMark.json` |
+| `npm run make-icon -w @foxfire/desktop` | Redraw the app icon, tray icon and favicon from that geometry |
+
+The server has its own: `dotnet test apps/server` runs its suites, which stand SQL Server and Azurite
+up in containers and so need Docker running.
 
 ## Disclaimer
 
