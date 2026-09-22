@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace Foxfire.Api.Tests;
@@ -174,6 +175,22 @@ public class WebClientTests(FoxfireServerFixture server)
         Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
         Assert.NotEmpty(next?.RefreshToken ?? "");
         Assert.False(refreshed.Headers.Contains("Set-Cookie"));
+    }
+
+    [Fact]
+    public async Task A_desktop_body_with_no_readable_token_is_refused_rather_than_failed()
+    {
+        // The body is read by hand rather than bound, so what binding used to
+        // answer is answered here: no body, or one that is not JSON, presents no
+        // token — refused like any other, not a 500 and not the API's 404.
+        using var desktop = server.Client();
+        using var garbled = new StringContent("{ not json", Encoding.UTF8, "application/json");
+
+        var empty = await desktop.PostAsync(Api("/api/auth/refresh"), content: null);
+        var unreadable = await desktop.PostAsync(Api("/api/auth/refresh"), garbled);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, empty.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, unreadable.StatusCode);
     }
 
     [Fact]

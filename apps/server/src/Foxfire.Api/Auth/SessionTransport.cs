@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Foxfire.Api.Common;
 using Foxfire.Api.Features.Auth;
 using Foxfire.Api.Versioning;
@@ -71,15 +72,35 @@ public static class SessionTransport
     /// The refresh token a request presents: the cookie from the web client, the
     /// body from a desktop. Never the other way round — a desktop has no cookie,
     /// and a page has no token to put in a body.
+    ///
+    /// The body is read here rather than bound with [FromBody], because the web
+    /// client posts no body at all. A [FromBody] parameter, even an optional
+    /// one, tells routing the endpoint only accepts JSON, and routing turns away
+    /// a request with no Content-Type before any handler runs. Under /api that
+    /// surfaces as the fallback's 404, which says nothing about why.
     /// </summary>
-    public static string RefreshTokenFrom(HttpContext http, string? fromBody)
+    public static async Task<string> RefreshTokenFromAsync(HttpContext http, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(http);
 
-        return ClientIdentity.IsWeb(http.Request)
-            ? http.Request.Cookies[CookieName] ?? ""
-            : fromBody ?? "";
+        if (ClientIdentity.IsWeb(http.Request)) return http.Request.Cookies[CookieName] ?? "";
+        if (!http.Request.HasJsonContentType()) return "";
+
+        try
+        {
+            var body = await http.Request.ReadFromJsonAsync<RefreshTokenBody>(cancellationToken);
+            return body?.RefreshToken ?? "";
+        }
+        catch (JsonException)
+        {
+            // A body with no readable token in it presents no token, which the
+            // handlers refuse the way they refuse any token they do not know.
+            return "";
+        }
     }
+
+    /// <summary>What a desktop posts to refresh or to sign out.</summary>
+    private sealed record RefreshTokenBody(string? RefreshToken);
 
     /// <summary>Drops the web client's cookie, on signing out or a session that has ended.</summary>
     public static void Forget(HttpContext http)

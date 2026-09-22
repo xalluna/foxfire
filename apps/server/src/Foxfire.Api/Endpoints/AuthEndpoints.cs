@@ -45,25 +45,24 @@ public static class AuthEndpoints
             SessionTransport.Deliver(http, await sender.Send(request, cancellationToken)))
             .RequireRateLimiting(RateLimits.Auth);
 
-        // The body is optional because the web client has nothing to put in it:
-        // its refresh token is the cookie.
+        // No [FromBody] on these two: the web client's refresh token is its
+        // cookie, so it posts no body, and SessionTransport reads a desktop's
+        // body itself — it says why.
         auth.MapPost("/refresh", async (
-                [FromBody] RefreshSessionRequest? request,
                 HttpContext http,
                 ISender sender,
                 CancellationToken cancellationToken) =>
             {
-                var token = SessionTransport.RefreshTokenFrom(http, request?.RefreshToken);
+                var token = await SessionTransport.RefreshTokenFromAsync(http, cancellationToken);
                 return SessionTransport.Deliver(http, await sender.Send(new RefreshSessionRequest(token), cancellationToken));
             });
 
         auth.MapPost("/logout", async (
-                [FromBody] LogoutRequest? request,
                 HttpContext http,
                 ISender sender,
                 CancellationToken cancellationToken) =>
             {
-                var token = SessionTransport.RefreshTokenFrom(http, request?.RefreshToken);
+                var token = await SessionTransport.RefreshTokenFromAsync(http, cancellationToken);
                 var result = await sender.SendAsync(new LogoutRequest(token), cancellationToken);
                 SessionTransport.Forget(http);
                 return result;
