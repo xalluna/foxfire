@@ -302,8 +302,234 @@ public class ImportTests(FoxfireServerFixture server)
 
         var batch = await response.Content.ReadFromJsonAsync<ImportBatchResult>();
 
+        // Not "skipped", which means the server already had it: this one has
+        // nowhere to go, and a person reading the tally needs to know that.
         Assert.Equal(0, batch!.Accepted);
-        Assert.Equal(1, batch.Skipped);
+        Assert.Equal(0, batch.Skipped);
+        Assert.Equal(1, batch.Unplaced);
+    }
+
+    [Fact]
+    public async Task Readings_report_what_was_already_there_apart_from_what_had_nowhere_to_go()
+    {
+        var deadPuuid = UniquePuuid();
+        var livePuuid = UniquePuuid();
+        var gameName = $"Tally{Guid.NewGuid().ToString("N")[..8]}";
+
+        var riot = new FakeRiot().WithAccount(gameName, "NA1", livePuuid);
+
+        var (host, client) = await RiggedAsync(riot);
+        await using var _host = host;
+        using var _client = client;
+
+        await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+
+        object[] batch = [Reading(deadPuuid, "GOLD", "II", 41, T0), Reading(UniquePuuid(), "GOLD", "II", 41, T0)];
+
+        var first = await PostAsync<ImportBatchResult>(client, "/api/admin/import/rank-readings", batch);
+        var second = await PostAsync<ImportBatchResult>(client, "/api/admin/import/rank-readings", batch);
+
+        Assert.Equal(new ImportBatchResult(1, 0, 0, 1), first);
+
+        // The reading that landed is now "already there"; the stranger's is
+        // still homeless, and is still reported as that rather than as a repeat.
+        Assert.Equal(new ImportBatchResult(0, 1, 0, 1), second);
+    }
+
+    [Fact]
+    public async Task Uploading_a_newer_copy_of_the_same_file_adds_only_what_is_new()
+    {
+        // The scenario this whole change is for: import a file, keep using Foxfire
+        // locally for a few days, import the file again. What was there must not
+        // double, what is new must land, and the LP for the new games must be
+        // worked out alongside the old.
+        var deadPuuid = UniquePuuid();
+        var livePuuid = UniquePuuid();
+        var gameName = $"Newer{Guid.NewGuid().ToString("N")[..8]}";
+        var firstMatch = UniqueMatchId();
+        var laterMatch = UniqueMatchId();
+
+        var riot = new FakeRiot().WithAccount(gameName, "NA1", livePuuid);
+
+        var (host, client) = await RiggedAsync(riot);
+        await using var _host = host;
+        using var _client = client;
+
+        // ── The file as it was the first time ──────────────────────────────────
+        var accounts = await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+        var accountId = accounts[0].AccountId!.Value;
+
+        // Three days back from the other constants here, so the newer copy's
+        // games are recent rather than in the future.
+        var earlier = T0 - 3 * 86_400_000L;
+
+        var firstGame = new { matchId = firstMatch, rawJson = MatchPayloads.TenPlayerGame(firstMatch, earlier, 420, [deadPuuid]) };
+        var readingsBefore = new[]
+        {
+            Reading(deadPuuid, "GOLD", "II", 41, earlier - 60_000),
+            Reading(deadPuuid, "GOLD", "II", 62, earlier + 60_000)
+        };
+
+        Assert.Equal(1, (await PostAsync<ImportBatchResult>(client, "/api/admin/import/matches", new[] { firstGame })).Accepted);
+        Assert.Equal(2, (await PostAsync<ImportBatchResult>(client, "/api/admin/import/rank-readings", readingsBefore)).Accepted);
+        await PostAsync<ImportSummary>(client, "/api/admin/import/finish", null);
+
+        // ── The same file, three days later ────────────────────────────────────
+        var laterGame = new { matchId = laterMatch, rawJson = MatchPayloads.TenPlayerGame(laterMatch, T0, 420, [deadPuuid], win: false) };
+        var readingsAfter = readingsBefore.Append(Reading(deadPuuid, "GOLD", "II", 41, T0 + 60_000)).ToArray();
+
+        var lookupsBefore = AccountLookups(riot, gameName);
+
+        var againAccounts = await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+
+        var againMatches = await PostAsync<ImportBatchResult>(
+            client, "/api/admin/import/matches", new[] { firstGame, laterGame });
+
+        var againReadings = await PostAsync<ImportBatchResult>(
+            client, "/api/admin/import/rank-readings", readingsAfter);
+
+        var summary = await PostAsync<ImportSummary>(client, "/api/admin/import/finish", null);
+
+        // Same account, found again without asking Riot who it is.
+        Assert.Equal(accountId, againAccounts[0].AccountId);
+        Assert.True(againAccounts[0].Resolved);
+        Assert.Equal(lookupsBefore, AccountLookups(riot, gameName));
+
+        Assert.Equal(new ImportBatchResult(1, 1, 0), againMatches);
+        Assert.Equal(new ImportBatchResult(1, 2, 0), againReadings);
+        Assert.True(summary.Attributed >= 1);
+
+        await using var scope = server.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        Assert.Equal(3, await db.RankSnapshots.CountAsync(r => r.RiotAccountId == accountId));
+        Assert.Equal(1, await db.Matches.CountAsync(m => m.MatchId == firstMatch));
+        Assert.Equal(1, await db.Matches.CountAsync(m => m.MatchId == laterMatch));
+
+        var first = await db.MatchRanks.AsNoTracking().FirstAsync(r => r.MatchId == firstMatch && r.RiotAccountId == accountId);
+        var newest = await db.MatchRanks.AsNoTracking().FirstAsync(r => r.MatchId == laterMatch && r.RiotAccountId == accountId);
+
+        Assert.Equal(21, first.LpDelta);
+        Assert.Equal(-21, newest.LpDelta);
+    }
+
+    [Fact]
+    public async Task An_account_the_server_already_knows_is_not_looked_up_again()
+    {
+        // A lookup is one Riot request out of a budget the whole server shares,
+        // and the answer cannot have changed: the file's id already means an
+        // account here. Only an account that has never resolved is worth asking
+        // about — that is how a rename gets fixed by importing again.
+        var deadPuuid = UniquePuuid();
+        var livePuuid = UniquePuuid();
+        var gameName = $"Known{Guid.NewGuid().ToString("N")[..8]}";
+
+        var riot = new FakeRiot().WithAccount(gameName, "NA1", livePuuid);
+
+        var (host, client) = await RiggedAsync(riot);
+        await using var _host = host;
+        using var _client = client;
+
+        var first = await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+
+        Assert.Equal(1, AccountLookups(riot, gameName));
+
+        var second = await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+
+        Assert.Equal(1, AccountLookups(riot, gameName));
+        Assert.True(second[0].Resolved);
+        Assert.Equal(first[0].AccountId, second[0].AccountId);
+    }
+
+    [Fact]
+    public async Task Unstored_matches_answers_with_only_what_the_server_lacks()
+    {
+        // What lets a re-upload send the new games instead of every game: ids are
+        // a few bytes each and payloads are 100–200 KB, so asking first is the
+        // difference between a year of history being re-sent and three days of it.
+        var have = UniqueMatchId();
+        var lack = UniqueMatchId();
+
+        var (host, client) = await RiggedAsync(new FakeRiot());
+        await using var _host = host;
+        using var _client = client;
+
+        await PostAsync<ImportBatchResult>(
+            client,
+            "/api/admin/import/matches",
+            new[] { new { matchId = have, rawJson = MatchPayloads.TenPlayerGame(have, T0, 420, [UniquePuuid()]) } });
+
+        var wanted = await PostAsync<List<string>>(
+            client, "/api/admin/import/unstored-matches", new[] { have, lack });
+
+        Assert.Equal([lack], wanted);
+    }
+
+    [Fact]
+    public async Task Learning_what_a_dead_id_meant_moves_the_games_already_stored_under_it()
+    {
+        // The account could not be resolved the first time — the server's Riot
+        // key was down, or it had been renamed — so its games went in under an id
+        // that matches nothing. "Already stored" then skips them on every later
+        // run, so unless the run that finally resolves the account also moves
+        // them, no amount of re-uploading brings that history back.
+        var deadPuuid = UniquePuuid();
+        var livePuuid = UniquePuuid();
+        var gameName = $"Late{Guid.NewGuid().ToString("N")[..8]}";
+        var stranded = UniqueMatchId();
+        var contested = UniqueMatchId();
+
+        var riot = new FakeRiot();
+
+        var (host, client) = await RiggedAsync(riot);
+        await using var _host = host;
+        using var _client = client;
+
+        var unresolved = await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+
+        Assert.False(unresolved[0].Resolved);
+
+        await PostAsync<ImportBatchResult>(
+            client,
+            "/api/admin/import/matches",
+            new[]
+            {
+                new { matchId = stranded, rawJson = MatchPayloads.TenPlayerGame(stranded, T0, 420, [deadPuuid]) },
+
+                // Both ids in one game: moving one onto the other would collide
+                // on the participant key, so this one has to be left alone
+                // rather than failing the account.
+                new { matchId = contested, rawJson = MatchPayloads.TenPlayerGame(contested, T0, 420, [deadPuuid, livePuuid]) }
+            });
+
+        riot.WithAccount(gameName, "NA1", livePuuid);
+
+        var resolved = await PostAsync<List<ImportAccountResult>>(
+            client, "/api/admin/import/accounts", Accounts((gameName, deadPuuid)));
+
+        Assert.True(resolved[0].Resolved);
+        Assert.Equal(1, resolved[0].HealedMatches);
+
+        await using var scope = server.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        Assert.True(await db.MatchParticipants.AnyAsync(p => p.MatchId == stranded && p.Puuid == livePuuid));
+        Assert.False(await db.MatchParticipants.AnyAsync(p => p.MatchId == stranded && p.Puuid == deadPuuid));
+
+        // The copy inside the payload moved with it, or a column backfilled out
+        // of it later would write the dead value straight back.
+        var match = await db.Matches.AsNoTracking().FirstAsync(m => m.MatchId == stranded);
+        Assert.DoesNotContain(deadPuuid, match.RawJson, StringComparison.Ordinal);
+        Assert.Contains(livePuuid, match.RawJson, StringComparison.Ordinal);
+
+        Assert.True(await db.MatchParticipants.AnyAsync(p => p.MatchId == contested && p.Puuid == deadPuuid));
+        Assert.True(await db.MatchParticipants.AnyAsync(p => p.MatchId == contested && p.Puuid == livePuuid));
     }
 
     [Fact]
@@ -412,6 +638,27 @@ public class ImportTests(FoxfireServerFixture server)
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    /// <summary>A batch of accounts, in the shape a stats.db sends them.</summary>
+    private static object[] Accounts(params (string GameName, string Puuid)[] accounts) =>
+        [.. accounts.Select(a => new { gameName = a.GameName, tagLine = "NA1", platform = "na1", puuid = a.Puuid })];
+
+    /// <summary>Posts a batch and reads the answer, failing the test on anything but success.</summary>
+    private static async Task<T> PostAsync<T>(HttpClient client, string path, object? body)
+    {
+        var response = body is null
+            ? await client.PostAsync(new Uri(path, UriKind.Relative), null)
+            : await client.PostAsJsonAsync(new Uri(path, UriKind.Relative), body);
+
+        response.EnsureSuccessStatusCode();
+
+        return (await response.Content.ReadFromJsonAsync<T>())!;
+    }
+
+    /// <summary>How many times Riot was asked who a Riot ID is.</summary>
+    private static int AccountLookups(FakeRiot riot, string gameName) =>
+        riot.Requests.Count(r => r.Contains("/riot/account/v1/accounts/by-riot-id/", StringComparison.Ordinal)
+            && r.Contains(gameName, StringComparison.Ordinal));
 
     private static object Reading(string puuid, string tier, string division, int lp, long capturedAt) =>
         new

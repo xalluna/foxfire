@@ -28,6 +28,7 @@ import { silentLogger, type Logger } from '../log'
 import type {
   ImportAccountResult,
   ImportAccountRow,
+  ImportBatchOutcome,
   ImportMatchRow,
   ImportReadingRow,
   ImportSeasonRow
@@ -96,6 +97,27 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
   const editable = (accountId: string, queueType: QueueType): Promise<EditableMatch[]> =>
     request<EditableMatch[]>(`/riot-accounts/${accountId}/rank/editable?queueType=${queueType}`)
+
+  /**
+   * One page of an import, answered in all four counts.
+   *
+   * Filled in where a server leaves one out, so nothing downstream has to
+   * wonder: one that predates `unplaced` counted those as skipped, and one that
+   * predates counting at all sent only what it accepted.
+   */
+  const importBatch = async (path: string, rows: unknown[]): Promise<ImportBatchOutcome> => {
+    const answer = await request<Partial<ImportBatchOutcome> & { accepted: number }>(path, {
+      method: 'POST',
+      body: rows
+    })
+
+    return {
+      accepted: answer.accepted,
+      skipped: answer.skipped ?? 0,
+      failed: answer.failed ?? 0,
+      unplaced: answer.unplaced ?? 0
+    }
+  }
 
   return {
     accounts: {
@@ -320,14 +342,30 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       accounts: (rows: ImportAccountRow[]) =>
         request<ImportAccountResult[]>('/admin/import/accounts', { method: 'POST', body: rows }),
 
-      seasons: (rows: ImportSeasonRow[]) =>
-        request<{ accepted: number }>('/admin/import/seasons', { method: 'POST', body: rows }),
+      seasons: (rows: ImportSeasonRow[]) => importBatch('/admin/import/seasons', rows),
 
-      matches: (rows: ImportMatchRow[]) =>
-        request<{ accepted: number }>('/admin/import/matches', { method: 'POST', body: rows }),
+      /**
+       * Which of these game ids the server has never stored.
+       *
+       * Null from a server too old to have the route, which answers an unknown
+       * one with a 404 — and that is an answer rather than a failure: the caller
+       * sends everything instead, and the matches batch skips what is there.
+       */
+      unstoredMatches: async (matchIds: string[]): Promise<string[] | null> => {
+        try {
+          return await request<string[]>('/admin/import/unstored-matches', {
+            method: 'POST',
+            body: matchIds
+          })
+        } catch (err) {
+          if (err instanceof ServerError && (err.status === 404 || err.status === 405)) return null
+          throw err
+        }
+      },
 
-      rankReadings: (rows: ImportReadingRow[]) =>
-        request<{ accepted: number }>('/admin/import/rank-readings', { method: 'POST', body: rows }),
+      matches: (rows: ImportMatchRow[]) => importBatch('/admin/import/matches', rows),
+
+      rankReadings: (rows: ImportReadingRow[]) => importBatch('/admin/import/rank-readings', rows),
 
       finish: () =>
         request<{ accounts: number; attributed: number }>('/admin/import/finish', { method: 'POST' })

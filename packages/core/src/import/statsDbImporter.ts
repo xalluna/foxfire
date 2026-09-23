@@ -3,6 +3,7 @@ import { silentLogger, type Logger } from '../log'
 import type {
   ImportAccountResult,
   ImportAccountRow,
+  ImportBatchOutcome,
   ImportMatchRow,
   ImportReadingRow,
   ImportSeasonRow
@@ -25,6 +26,15 @@ import type {
  * find their account through the same mapping. The LP is not sent at all: it is
  * derived from the readings, and the server works it out once at the end rather
  * than importing a stale copy of its own conclusion.
+ *
+ * The same file can be imported again, and that is the ordinary way to keep a
+ * server current: keep using Foxfire on your own PC for a few days, send the
+ * newer copy, and what lands is what is new. Every batch the server receives
+ * skips what it already holds, so that is correct by itself; what makes it
+ * cheap is asking first. The matches are 100–200 KB each and the ids are a few
+ * bytes, so the file's game ids go up before any payload does and only the ones
+ * the server lacks are sent. A server too old to be asked is sent everything,
+ * which costs time and nothing else.
  *
  * Nothing here opens the file, because opening it is the one part that differs
  * between the clients: the desktop reads it with node:sqlite straight off the
@@ -54,9 +64,15 @@ export interface SqliteReader {
 /** Where the rows go: the server's import endpoints, in the order they have to be called. */
 export interface ImportTarget {
   accounts(rows: ImportAccountRow[]): Promise<ImportAccountResult[]>
-  seasons(rows: ImportSeasonRow[]): Promise<{ accepted: number }>
-  matches(rows: ImportMatchRow[]): Promise<{ accepted: number }>
-  rankReadings(rows: ImportReadingRow[]): Promise<{ accepted: number }>
+  seasons(rows: ImportSeasonRow[]): Promise<ImportBatchOutcome>
+  /**
+   * Which of these game ids the server has never stored, or null when it cannot
+   * say — a server older than the question. Null is not a failure: it means
+   * send everything, and the matches batch skips what is already there.
+   */
+  unstoredMatches(matchIds: string[]): Promise<string[] | null>
+  matches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome>
+  rankReadings(rows: ImportReadingRow[]): Promise<ImportBatchOutcome>
   finish(): Promise<{ accounts: number; attributed: number }>
 }
 
@@ -69,6 +85,15 @@ export interface ImportTarget {
  * enforces the same number.
  */
 export const IMPORT_BATCH = 100
+
+/**
+ * How many game ids are asked about in one request.
+ *
+ * Far more than a page of payloads, because an id is a few bytes where a payload
+ * is a few hundred kilobytes: a thousand is a request about the size of one
+ * match. The server enforces the same number.
+ */
+export const IMPORT_ID_PAGE = 1000
 
 /**
  * Reads a stats.db and pushes it at a server.
@@ -115,7 +140,10 @@ async function run(
     }
   }
 
-  const result = { accounts: 0, matches: 0, readings: 0, seasons: 0, unresolved: [] as string[] }
+  const result = {
+    ...emptyImport(),
+    newest: await newestInFile(db)
+  }
 
   // ── Accounts, first and alone ───────────────────────────────────────────────
   //
@@ -145,6 +173,8 @@ async function run(
     for (const one of resolved) {
       if (one.resolved) result.accounts += 1
       else result.unresolved.push(one.riotId)
+
+      result.healed += one.healedMatches ?? 0
     }
 
     report({
@@ -178,31 +208,48 @@ async function run(
       )
 
       result.seasons = batch.accepted
+      result.alreadyThere.seasons = batch.skipped
     }
   }
 
   // ── Matches, as the payloads they already are ──────────────────────────────
+  //
+  // Ids first, then only the payloads the server does not have. The ids are read
+  // on their own and in a fixed order — game creation and then the id, because
+  // two games can start in the same millisecond and a page boundary between
+  // them would otherwise be decided by whatever order the file happens to
+  // return ties in.
 
-  const matchCount = await count(db, 'matches')
-  report({ phase: 'matches', current: 0, total: matchCount })
-
-  let offset = 0
-  while (offset < matchCount) {
-    const rows = await db.all<{ match_id: string; raw_json: string }>(
-      'SELECT match_id, raw_json FROM matches ORDER BY game_creation LIMIT ? OFFSET ?',
-      [IMPORT_BATCH, offset]
+  const ids = (
+    await db.all<{ match_id: string }>(
+      'SELECT match_id FROM matches ORDER BY game_creation, match_id'
     )
+  ).map((row) => row.match_id)
 
-    if (rows.length === 0) break
+  const wanted = await unstoredIds(ids, target, report)
+  result.alreadyThere.matches = ids.length - wanted.length
+
+  report({ phase: 'matches', current: 0, total: wanted.length })
+
+  let sent = 0
+  for (const page of pages(wanted)) {
+    const rows = await db.all<{ match_id: string; raw_json: string }>(
+      `SELECT match_id, raw_json FROM matches
+        WHERE match_id IN (${page.map(() => '?').join(', ')})
+        ORDER BY game_creation, match_id`,
+      page
+    )
 
     const batch = await target.matches(
       rows.map((row) => ({ matchId: row.match_id, rawJson: row.raw_json }))
     )
 
     result.matches += batch.accepted
-    offset += rows.length
+    result.alreadyThere.matches += batch.skipped
+    result.matchesFailed += batch.failed
+    sent += page.length
 
-    report({ phase: 'matches', current: offset, total: matchCount })
+    report({ phase: 'matches', current: sent, total: wanted.length })
   }
 
   // ── Rank readings, keyed on ids nothing can decrypt ────────────────────────
@@ -256,6 +303,8 @@ async function run(
       )
 
       result.readings += batch.accepted
+      result.alreadyThere.readings += batch.skipped
+      result.readingsUnplaced += batch.unplaced
       read += rows.length
 
       report({ phase: 'readings', current: read, total: readingCount })
@@ -274,18 +323,76 @@ async function run(
     accounts: result.accounts,
     matches: result.matches,
     readings: result.readings,
+    alreadyThere: result.alreadyThere,
+    matchesFailed: result.matchesFailed,
+    readingsUnplaced: result.readingsUnplaced,
+    healed: result.healed,
     attributed: summary.attributed
   })
 
   return {
+    ...result,
     ok: true,
     message: null,
-    accounts: result.accounts,
-    matches: result.matches,
-    readings: result.readings,
-    seasons: result.seasons,
-    attributed: summary.attributed,
-    unresolved: result.unresolved
+    attributed: summary.attributed
+  }
+}
+
+/**
+ * Which of the file's games are worth sending.
+ *
+ * Asks in pages of ids. A server that cannot be asked — one older than the
+ * question — answers null and everything is sent, which is the same result
+ * arrived at the slow way.
+ */
+async function unstoredIds(
+  ids: readonly string[],
+  target: ImportTarget,
+  report: (progress: ImportProgress) => void
+): Promise<string[]> {
+  report({ phase: 'comparing', current: 0, total: ids.length })
+
+  const missing = new Set<string>()
+  let asked = 0
+
+  for (let i = 0; i < ids.length; i += IMPORT_ID_PAGE) {
+    const page = ids.slice(i, i + IMPORT_ID_PAGE)
+    const answer = await target.unstoredMatches(page)
+    if (answer === null) return [...ids]
+
+    for (const id of answer) missing.add(id)
+
+    asked += page.length
+    report({ phase: 'comparing', current: asked, total: ids.length })
+  }
+
+  // In the file's order rather than the server's, so the payloads go up oldest
+  // first exactly as they did before anybody asked.
+  return ids.filter((id) => missing.has(id))
+}
+
+/**
+ * The newest game and reading in the file, so a run can say what it was given.
+ *
+ * A run that added nothing is either finished or was handed a file that stops
+ * where the last import did — the second is what reading a database without its
+ * write-ahead log looks like, and only the file can say which.
+ */
+async function newestInFile(
+  db: SqliteReader
+): Promise<{ matchAt: number | null; readingAt: number | null }> {
+  const newest = async (table: string, column: string): Promise<number | null> => {
+    if (!(await hasTable(db, table))) return null
+
+    // Interpolated for the same reason `count` does it: both are literals in
+    // this file, and a bind parameter cannot name a table.
+    const row = await db.get<{ newest: number | null }>(`SELECT MAX(${column}) AS newest FROM ${table}`)
+    return row?.newest == null ? null : Number(row.newest)
+  }
+
+  return {
+    matchAt: await newest('matches', 'game_creation'),
+    readingAt: await newest('rank_snapshots', 'captured_at')
   }
 }
 
@@ -311,5 +418,17 @@ function* pages<T>(rows: readonly T[]): Generator<T[]> {
 
 /** The tally of an import that did nothing, for the answers that explain why. */
 export function emptyImport(): Omit<ImportResult, 'ok' | 'message'> {
-  return { accounts: 0, matches: 0, readings: 0, seasons: 0, attributed: 0, unresolved: [] }
+  return {
+    accounts: 0,
+    matches: 0,
+    readings: 0,
+    seasons: 0,
+    attributed: 0,
+    unresolved: [],
+    alreadyThere: { matches: 0, readings: 0, seasons: 0 },
+    matchesFailed: 0,
+    readingsUnplaced: 0,
+    healed: 0,
+    newest: { matchAt: null, readingAt: null }
+  }
 }

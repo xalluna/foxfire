@@ -13,6 +13,7 @@ import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/Se
 import { ghostButtonClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
 import * as Icon from '../components/icons'
+import { formatAge } from '../lib/matchStats'
 import { useRowAction } from './rowAction'
 
 export interface ServerDataPageProps {
@@ -26,6 +27,12 @@ export interface ServerDataPageProps {
     progress: ImportProgress | null
     result: ImportResult | null
     onStart: () => void
+    /**
+     * Set when the file is read by a browser. It sees only the file that was
+     * picked, not the write-ahead log SQLite keeps beside it while Foxfire is
+     * running — so the newest games can be missing, and the page says so.
+     */
+    inBrowser?: boolean
   }
 
   storage: ServerStorageUsage | undefined
@@ -49,6 +56,12 @@ export interface ServerDataPageProps {
  * import only ever adds, every batch skips what has already landed, and running
  * the same file twice is free. That is what makes the absence of a rollback
  * acceptable rather than an omission.
+ *
+ * It is also how a server is kept current. Keep using Foxfire on your own PC for
+ * a few days, choose the newer copy of the same file, and what lands is what is
+ * new. The result says so in both directions — what was added and what the
+ * server already had — because a run that adds nothing has to be told apart from
+ * one that could not read the file.
  */
 export function ServerDataPage({
   importer,
@@ -84,10 +97,20 @@ export function ServerDataPage({
           title="Import"
           description={
             'Every player id in the file has to be resolved again, because Riot encrypts them against '
-            + 'the API key that asked for them. That costs one Riot request per account; the rest runs '
-            + 'at the speed of the server. Running it twice is safe — nothing is imported over itself.'
+            + 'the API key that asked for them. That costs one Riot request per account the server has '
+            + 'not met before; the rest runs at the speed of the server. To bring the server up to date '
+            + 'later, choose a newer copy of the same file — only what is new is sent, and nothing is '
+            + 'imported over itself.'
           }
         >
+          {importer.inBrowser && (
+            <StatusRow tone="mute">
+              A browser reads only the file you choose, not the changes Foxfire keeps beside it while it
+              is running. Close Foxfire on that PC first — or import from the desktop app — or the newest
+              games can be missing.
+            </StatusRow>
+          )}
+
           <SettingsBlock>
             <button
               type="button"
@@ -342,10 +365,39 @@ function megabytes(bytes: number | null): string {
   return `${Math.round(bytes / (1024 * 1024))} MB`
 }
 
+/**
+ * "12 matches", pluralised — because every one of these can legitimately be
+ * one: a server imported from a single account's database, a file with one
+ * season in it.
+ */
+function count(n: number, one: string, many: string): string {
+  return `${n.toLocaleString()} ${n === 1 ? one : many}`
+}
+
+/** The non-zero counts, spelled out; a zero is left out rather than said. */
+function tally(counts: Array<[number, string, string]>): string[] {
+  return counts.filter(([n]) => n > 0).map(([n, one, many]) => count(n, one, many))
+}
+
+/** A moment from the file, with how long ago that was, or that it has none. */
+function when(timestamp: number | null): string {
+  if (timestamp === null) return 'none'
+
+  const date = new Date(timestamp).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+
+  return `${date} (${formatAge(timestamp)})`
+}
+
 /** Where the run has got to, named for what it is actually doing. */
 function ProgressRow({ progress }: { progress: ImportProgress }): JSX.Element {
   const label: Record<ImportProgress['phase'], string> = {
     accounts: 'Re-resolving accounts with Riot',
+    comparing: 'Checking which games the server already has',
     matches: 'Storing matches',
     readings: 'Storing rank readings',
     finishing: 'Working out LP',
@@ -374,22 +426,70 @@ function ResultRows({ result }: { result: ImportResult }): JSX.Element {
     return <StatusRow tone="error">{result.message ?? 'The import could not be completed.'}</StatusRow>
   }
 
-  // Pluralised, because every one of these can legitimately be one: a server
-  // imported from a single account's database, a file with one season in it.
-  const counts: Array<[string, string, number]> = [
-    ['account', 'accounts', result.accounts],
-    ['match', 'matches', result.matches],
-    ['rank reading', 'rank readings', result.readings],
-    ['season', 'seasons', result.seasons]
-  ]
+  const added = tally([
+    [result.matches, 'match', 'matches'],
+    [result.readings, 'rank reading', 'rank readings'],
+    [result.seasons, 'season', 'seasons']
+  ])
+
+  const had = tally([
+    [result.alreadyThere.matches, 'match', 'matches'],
+    [result.alreadyThere.readings, 'rank reading', 'rank readings'],
+    [result.alreadyThere.seasons, 'season', 'seasons']
+  ])
+
+  // Both directions, always. "Imported 0 matches" cannot tell a server that
+  // already has everything from a file that could not be read, and a person who
+  // re-sent a file after three days has to be able to tell which one happened.
+  const summary = [
+    added.length > 0 ? `Added ${added.join(', ')}` : 'Nothing new to add',
+    result.attributed > 0
+      ? ` — and worked out LP for ${count(result.attributed, 'game', 'games')}`
+      : '',
+    '.',
+    had.length > 0 ? ` Already on the server: ${had.join(', ')}.` : ''
+  ].join('')
+
+  const nothingAdded = added.length === 0
 
   return (
     <>
-      <StatusRow tone="good">
-        Imported {counts.map(([one, many, n]) => `${n} ${n === 1 ? one : many}`).join(', ')} —
-        and worked out LP for {result.attributed}{' '}
-        {result.attributed === 1 ? 'game' : 'games'}.
+      <StatusRow tone="good">{summary}</StatusRow>
+
+      {/* What the file itself held. The newest game is the tell for a copy that
+          stops where the last one did — the browser missing Foxfire's latest
+          writes looks exactly like a server that is up to date, until this. */}
+      <StatusRow tone="mute">
+        In this file: {count(result.accounts, 'account', 'accounts')} the server recognises; newest
+        game {when(result.newest.matchAt)}; newest rank reading {when(result.newest.readingAt)}.
+        {nothingAdded &&
+          ' If that is older than you expected, this copy is missing Foxfire’s latest changes — close Foxfire on that PC and choose the file again.'}
       </StatusRow>
+
+      {result.healed > 0 && (
+        // Games an earlier run stored when it could not yet tell whose they
+        // were. Said out loud because it is the one thing an import does to rows
+        // that were already there.
+        <StatusRow tone="good">
+          Moved {count(result.healed, 'game', 'games')} imported earlier onto the account{' '}
+          {result.healed === 1 ? 'it belongs' : 'they belong'} to, now that the server can resolve it.
+        </StatusRow>
+      )}
+
+      {result.matchesFailed > 0 && (
+        <StatusRow tone="warn">
+          {count(result.matchesFailed, 'game', 'games')} in the file could not be read by the server and{' '}
+          {result.matchesFailed === 1 ? 'was' : 'were'} left out.
+        </StatusRow>
+      )}
+
+      {result.readingsUnplaced > 0 && (
+        <StatusRow tone="warn">
+          {count(result.readingsUnplaced, 'rank reading', 'rank readings')} left out: the account{' '}
+          {result.readingsUnplaced === 1 ? 'it belongs' : 'they belong'} to could not be resolved, or
+          the queue is not one this server tracks.
+        </StatusRow>
+      )}
 
       {result.unresolved.length > 0 && (
         // Named rather than counted. The fix is to add each one under the name
