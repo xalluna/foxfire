@@ -90,6 +90,8 @@ public sealed class PostGameSyncScheduler(
 
     private async Task RunLadderAsync(Guid riotAccountId, CancellationToken cancellationToken)
     {
+        using var _ = log.BeginScope(new Dictionary<string, object> { ["RiotAccountId"] = riotAccountId });
+
         try
         {
             for (var attempt = 0; attempt < RetryDelays.Count; attempt++)

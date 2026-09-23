@@ -94,6 +94,15 @@ public sealed class SyncService(
 
     private async Task<SyncResult> RunGuardedAsync(Guid riotAccountId, SyncTrigger trigger)
     {
+        // On every line the run writes, from here down through the Riot client
+        // and the ingestion it calls — so a sync can be followed on its own, and
+        // one that failed can be told apart from the five running beside it.
+        using var _ = log.BeginScope(new Dictionary<string, object>
+        {
+            ["RiotAccountId"] = riotAccountId,
+            ["SyncTrigger"] = trigger
+        });
+
         try
         {
             return await RunAsync(riotAccountId, trigger);
