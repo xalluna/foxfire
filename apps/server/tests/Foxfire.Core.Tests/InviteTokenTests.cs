@@ -18,7 +18,7 @@ public class InviteTokenTests
 
         var result = InviteToken.Verify(IssueValid(id), Key, Now);
 
-        Assert.Equal(InviteTokenStatus.Valid, result.Status);
+        Assert.Equal(SignedTokenStatus.Valid, result.Status);
         Assert.Equal(id, result.InviteId);
     }
 
@@ -32,7 +32,7 @@ public class InviteTokenTests
 
         for (var i = 0; i < 5; i++)
         {
-            Assert.Equal(InviteTokenStatus.Valid, InviteToken.Verify(token, Key, Now).Status);
+            Assert.Equal(SignedTokenStatus.Valid, InviteToken.Verify(token, Key, Now).Status);
         }
     }
 
@@ -53,7 +53,7 @@ public class InviteTokenTests
     {
         var token = InviteToken.Issue(Guid.NewGuid(), Now.AddDays(-1), Key);
 
-        Assert.Equal(InviteTokenStatus.Expired, InviteToken.Verify(token, Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.Expired, InviteToken.Verify(token, Key, Now).Status);
     }
 
     [Fact]
@@ -61,8 +61,8 @@ public class InviteTokenTests
     {
         var token = InviteToken.Issue(Guid.NewGuid(), Now, Key);
 
-        Assert.Equal(InviteTokenStatus.Expired, InviteToken.Verify(token, Key, Now).Status);
-        Assert.Equal(InviteTokenStatus.Valid, InviteToken.Verify(token, Key, Now.AddSeconds(-1)).Status);
+        Assert.Equal(SignedTokenStatus.Expired, InviteToken.Verify(token, Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.Valid, InviteToken.Verify(token, Key, Now.AddSeconds(-1)).Status);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class InviteTokenTests
     {
         var token = InviteToken.Issue(Guid.NewGuid(), Now.AddDays(7), OtherKey);
 
-        Assert.Equal(InviteTokenStatus.BadSignature, InviteToken.Verify(token, Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.BadSignature, InviteToken.Verify(token, Key, Now).Status);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class InviteTokenTests
         var parts = token.Split('.');
         var tampered = $"{Flip(parts[0])}.{parts[1]}";
 
-        Assert.Equal(InviteTokenStatus.BadSignature, InviteToken.Verify(tampered, Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.BadSignature, InviteToken.Verify(tampered, Key, Now).Status);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class InviteTokenTests
         var parts = token.Split('.');
         var tampered = $"{parts[0]}.{Flip(parts[1])}";
 
-        Assert.Equal(InviteTokenStatus.BadSignature, InviteToken.Verify(tampered, Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.BadSignature, InviteToken.Verify(tampered, Key, Now).Status);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class InviteTokenTests
     {
         // A token is attacker-supplied. Every path through Verify has to end in
         // a verdict — an exception here is a 500 on an unauthenticated route.
-        Assert.Equal(InviteTokenStatus.Malformed, InviteToken.Verify(token, Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.Malformed, InviteToken.Verify(token, Key, Now).Status);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class InviteTokenTests
     {
         var token = IssueValid(Guid.NewGuid());
 
-        Assert.Equal(InviteTokenStatus.Malformed, InviteToken.Verify(token[..^4], Key, Now).Status);
+        Assert.Equal(SignedTokenStatus.Malformed, InviteToken.Verify(token[..^4], Key, Now).Status);
     }
 
     [Fact]

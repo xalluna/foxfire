@@ -9,9 +9,10 @@ changes you would never notice while using the app.
 
 ## [0.14.0] — 2026-09-23
 
-Foxfire updates itself. A new version arrives quietly in the background and waits for you to
-restart — never in the middle of a game — and the patch notes travel with it, so what changed is
-in the app rather than on a page you would have to go and find.
+Foxfire updates itself, and you can look after your own account without leaving the app. A new
+version now arrives quietly in the background and waits for you to restart — never in the middle of
+a game — and the patch notes travel with it, so what changed is in the app rather than on a page you
+would have to go and find. Needs Foxfire Server 0.3.0.
 
 ### Added
 
@@ -25,6 +26,21 @@ in the app rather than on a page you would have to go and find.
 - **What's new, in the app.** Settings › About now has an Updates section: which version this is,
   what the updater is doing, a button to check now, and the patch notes for the version arriving.
   After an update lands, a line across the top of the window offers the same notes once.
+- **Change your email, password or name** from Settings › Server, where your account already was.
+  Changing your email or your password asks for your current password; changing your password signs
+  out every other device and keeps this one, so a password that had got out is worth nothing
+  anywhere.
+- **Confirm password when making an account.** Two boxes rather than one, because a password nobody
+  can read is a password nobody can check — and a typo used to mean a sign-in that could never work.
+- **Reset links, for whoever administers a server.** Settings › Members now offers a reset link for
+  any member: copy it, send it however your community talks, and they set a new password in a
+  browser. It lasts a day, works once, and making a new one withdraws the last. Nothing about their
+  account changes until they use it.
+- **Members and Invites are separate pages** in Settings, where Server management used to be one.
+  Members filters by name or address and opens a line for the detail and the actions; Invites keeps
+  public sign-up beside the invites it governs.
+- **The sign-in form says what to do about a forgotten password**: ask whoever runs the server for a
+  reset link.
 
 ### Changed
 
@@ -35,6 +51,8 @@ in the app rather than on a page you would have to go and find.
 - **A server that refuses this build now says what is being done about it.** The message named the
   version to install and sent you to the releases page; it now tells you that version is already
   downloading, and offers the restart when it is ready.
+- **Needs Foxfire Server 0.3.0.** Everything above that touches your account is the server's to
+  answer, and a server that has not been updated will say so.
 
 ### Fixed
 
@@ -56,6 +74,9 @@ in the app rather than on a page you would have to go and find.
   where the updater reads the newest version from.
 - The version's changelog section is built into `latest.yml` by the release workflow, which is how
   the notes reach the app at all.
+- The Members and Invites screens are shared with the web client, as Server management was.
+- The rule that a password is at least twelve characters lives in one place now, rather than in the
+  desktop's form, the web client's, and the server.
 
 ## [0.13.0] — 2026-09-21
 

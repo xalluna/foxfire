@@ -50,10 +50,10 @@ internal static class InviteLookup
 
         switch (verified.Status)
         {
-            case InviteTokenStatus.Expired:
+            case SignedTokenStatus.Expired:
                 return (null, "This invite has expired. Ask whoever sent it for a new one.");
-            case InviteTokenStatus.Malformed:
-            case InviteTokenStatus.BadSignature:
+            case SignedTokenStatus.Malformed:
+            case SignedTokenStatus.BadSignature:
                 return (null, "This invite link is not valid for this server.");
             default:
                 break;

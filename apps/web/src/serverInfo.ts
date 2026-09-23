@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { InvitePreview, VersionInfo } from '@foxfire/core'
+import type { InvitePreview, PasswordResetPreview, VersionInfo } from '@foxfire/core'
 import { getVersionInfo } from '@foxfire/core/server'
 import { session } from './session/session'
 
@@ -10,12 +10,17 @@ import { session } from './session/session'
 export interface ServerInfoSource {
   version(): Promise<VersionInfo>
   previewInvite(token: string): Promise<InvitePreview>
+  previewPasswordReset(token: string): Promise<PasswordResetPreview>
 }
 
 let source: ServerInfoSource = {
   version: () => getVersionInfo(session.transport),
   previewInvite: (token) =>
-    session.transport.request<InvitePreview>(`/api/invites/${encodeURIComponent(token)}/preview`)
+    session.transport.request<InvitePreview>(`/api/invites/${encodeURIComponent(token)}/preview`),
+  previewPasswordReset: (token) =>
+    session.transport.request<PasswordResetPreview>(
+      `/api/password-resets/${encodeURIComponent(token)}/preview`
+    )
 }
 
 /** For the design harness only. */
@@ -37,6 +42,15 @@ export function useInvitePreview(token: string) {
   return useQuery({
     queryKey: ['invite-preview', token],
     queryFn: () => source.previewInvite(token),
+    retry: false
+  })
+}
+
+/** Whose account a reset link sets, and whether it is still good for it. */
+export function usePasswordResetPreview(token: string) {
+  return useQuery({
+    queryKey: ['password-reset-preview', token],
+    queryFn: () => source.previewPasswordReset(token),
     retry: false
   })
 }

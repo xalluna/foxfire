@@ -25,6 +25,9 @@ export const CH = {
     register: 'server:register',
     login: 'server:login',
     logout: 'server:logout',
+    changePassword: 'server:changePassword',
+    changeEmail: 'server:changeEmail',
+    changeUsername: 'server:changeUsername',
     setActive: 'server:setActive',
     forget: 'server:forget',
     changed: 'server:changed'
@@ -37,6 +40,8 @@ export const CH = {
     users: 'serverAdmin:users',
     updateUser: 'serverAdmin:updateUser',
     deleteUser: 'serverAdmin:deleteUser',
+    createPasswordReset: 'serverAdmin:createPasswordReset',
+    revokePasswordReset: 'serverAdmin:revokePasswordReset',
     invites: 'serverAdmin:invites',
     createInvite: 'serverAdmin:createInvite',
     revokeInvite: 'serverAdmin:revokeInvite',

@@ -103,7 +103,12 @@ public sealed class AuthOptions
     /// </summary>
     public string JwtSigningKey { get; set; } = "";
 
-    /// <summary>Signs invite tokens. A separate key, so leaking one does not leak both.</summary>
+    /// <summary>
+    /// Signs invite tokens, and — through a key derived from it — password
+    /// reset links. A separate key from the JWT one, so leaking either does not
+    /// leak both; see ResetToken for why the second kind is derived rather than
+    /// configured.
+    /// </summary>
     public string InviteSigningKey { get; set; } = "";
 
     /// <summary>
@@ -123,6 +128,16 @@ public sealed class AuthOptions
 
     /// <summary>How long an invite link works for.</summary>
     public TimeSpan InviteLifetime { get; set; } = TimeSpan.FromDays(14);
+
+    /// <summary>
+    /// How long a password reset link works for.
+    ///
+    /// Hours where an invite gets a fortnight, because the two are not the same
+    /// kind of thing. An invite makes an account; a reset link takes one over,
+    /// so it should stop being dangerous about as soon as somebody has had time
+    /// to read the message it arrived in.
+    /// </summary>
+    public TimeSpan PasswordResetLifetime { get; set; } = TimeSpan.FromHours(24);
 
     public byte[] JwtSigningKeyBytes => Encoding.UTF8.GetBytes(JwtSigningKey);
 

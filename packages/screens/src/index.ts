@@ -49,7 +49,8 @@ export { RankScreen } from './screens/RankScreen'
 export { SearchScreen } from './screens/SearchScreen'
 export { SeasonsCard } from './screens/SeasonsCard'
 export { ServerDataScreen } from './screens/ServerDataScreen'
-export { ServerManagementScreen } from './screens/ServerManagementScreen'
+export { InvitesScreen } from './screens/InvitesScreen'
+export { MembersScreen } from './screens/MembersScreen'
 
 export {
   createPlayerRoutes,

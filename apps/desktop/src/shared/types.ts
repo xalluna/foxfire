@@ -55,8 +55,11 @@ export type {
   AdminUser,
   AdminUserPatch,
   AdminInvite,
+  AdminPasswordReset,
   ServerAdminSettings,
-  AdminActionResult
+  AdminActionResult,
+  PasswordChange,
+  EmailChange
 } from '@foxfire/core'
 
 /**

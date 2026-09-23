@@ -3,6 +3,7 @@ import type {
   AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminReplay,
   AdminUser,
   AdminUserPatch,
@@ -169,6 +170,10 @@ export interface FoxfireClient extends FoxfireData {
     users: () => Promise<AdminUser[]>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
+    /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
+    createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
+    /** Withdraws the reset link outstanding for somebody, if there is one. */
+    revokePasswordReset: (userId: string) => Promise<AdminActionResult>
     invites: () => Promise<AdminInvite[]>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>

@@ -13,22 +13,81 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.3.0] — 2026-09-23
 
-Accepts Foxfire 0.14.0, the first desktop that updates itself — and which asks this server which
-version to update to.
+Accounts you can look after. Everybody can change their own email, password and
+name; an admin can hand somebody a reset link the way they hand out invites; and
+the pages that run a server are split so that a community with forty people on
+it is still readable. It also serves Foxfire 0.14.0, the first desktop that
+updates itself — which makes the allow list here the thing that decides which
+build your members are running.
 
 ### Added
 
-- **Serves Foxfire 0.14.0.** A desktop from 0.14.0 on reads `recommendedDesktop` from `/version`
-  and installs that build, so the allow list here is now what decides which version the people on
-  your server are running. They move when you update the server, and not before — a desktop never
-  updates past what its server will talk to.
+- **A way back in.** An admin can make a password reset link for any member, on
+  the Members page, and copy it wherever their community talks — this server
+  sends no mail, so a link you can paste is the whole mechanism. It lasts 24
+  hours, works once, and there is never more than one live per account: making a
+  newer one withdraws the last. Making a link changes nothing until it is used,
+  so somebody who remembers their password in the meantime is not locked out.
+  Using it sets the new password, signs them in on that browser, and ends every
+  session the account had.
+- **Your own account, in the web client.** A new Account page — your name in the
+  header opens it — for changing the address you sign in with, your password,
+  and the name shown beside your games. Changing your email or your password
+  asks for your current password, because a session is not proof of the person:
+  somebody at an unlocked browser has one.
+- **Changing your password signs out every other device**, and keeps the one you
+  changed it on. If the old password had got out, nothing minted from it
+  survives. The other devices ask for a password within a quarter of an hour,
+  when their access token next needs renewing.
+- **A confirm-password box** wherever a password is set: registering, taking an
+  invite, changing it, and following a reset link.
+- **Members and Invites are separate pages.** Members has a filter and one line
+  per person, which opens for their League accounts, sessions, when they joined,
+  and everything an admin can do to them. Invites keeps the public sign-up
+  switch beside the invites it governs.
+- **The sign-in page says what to do about a forgotten password**: ask this
+  server's administrator for a reset link.
+- **Serves Foxfire 0.14.0.** A desktop from 0.14.0 on reads `recommendedDesktop`
+  from `/version` and installs that build, so the allow list here decides which
+  version the people on your server are running. They move when you update the
+  server, and not before — a desktop never updates past what its server will
+  talk to.
+
+### Changed
+
+- **The address in `ADMIN_EMAIL` is now pinned to the account that holds it.**
+  That account cannot change its email in the app, and nobody who is not already
+  an admin can move onto that address. Registering with it grants the Admin role
+  even on a server with sign-up shut, and it is re-granted on every boot, so
+  leaving it unheld would leave a claim on the server lying around. To move it,
+  change `ADMIN_EMAIL` and restart.
+- **A revoked refresh token is refused rather than treated as a theft.** Only a
+  token that was *rotated* and then presented again means a copy is in use
+  somewhere, which is what the whole-account revocation is for. One revoked by
+  signing out, by an admin, or by a password change has nothing continuing from
+  it. This is what lets a password change keep the device that made it — and it
+  also fixes signing back in after being demoted or disabled, where the first
+  device to return could be cut again by a stale one.
 
 ### Under the hood
 
-- Server releases are no longer marked as the repository's Latest release. That badge is what a
-  browser lands on, and what the desktop's updater reads the newest desktop version from, so it
-  belongs to the desktop installer. The container image is unaffected: `:latest` on GHCR still
-  follows every server release.
+- One new table, `PasswordResets`, alongside `Invites` and built the same way: a
+  signed token that names a row, and the row alone deciding whether it has been
+  spent. The reset link signs with a key derived from `Auth__InviteSigningKey`
+  rather than one of its own, so no existing server needs new configuration on
+  upgrade, and neither kind of token can ever verify as the other. Each row keeps
+  the account's security stamp, so a link goes dead the moment the account
+  changes underneath it.
+- `Auth__PasswordResetLifetime` sets how long a link lasts. It defaults to 24
+  hours, where an invite gets 14 days: an invite makes an account, a reset link
+  takes one over.
+- Reset previews and redemptions are rate limited per address, unlike the invite
+  preview beside them.
+- Server releases are no longer marked as the repository's Latest release. That
+  badge is what a browser lands on, and what the desktop's updater reads the
+  newest desktop version from, so it belongs to the desktop installer. The
+  container image is unaffected: `:latest` on GHCR still follows every server
+  release.
 
 ## [0.2.0] — 2026-09-21
 

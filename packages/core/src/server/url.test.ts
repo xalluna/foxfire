@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { displayName, inviteTokenFrom, normaliseServerUrl } from './url'
+import { displayName, tokenFromLink, normaliseServerUrl } from './url'
 
 function ok(raw: string): string {
   const result = normaliseServerUrl(raw)
@@ -73,29 +73,29 @@ describe('normaliseServerUrl', () => {
   })
 })
 
-describe('inviteTokenFrom', () => {
+describe('tokenFromLink', () => {
   const token = 'QbGgAX5_snuoIQKRWXw1EQAAAABqvs9-.K8nkbyg6mVzANgvRHI7L2RS2JaXxPzmfM6HRZ1-1H5U'
 
   it('takes the code when the code is what was pasted', () => {
-    expect(inviteTokenFrom(token)).toBe(token)
+    expect(tokenFromLink(token)).toBe(token)
   })
 
   it('takes the code out of the whole link', () => {
     // They are handed a link and told to paste a code, so they will paste both.
-    expect(inviteTokenFrom(`https://foxfire.example.com/invite/${token}`)).toBe(token)
+    expect(tokenFromLink(`https://foxfire.example.com/invite/${token}`)).toBe(token)
   })
 
   it('survives the angle brackets a chat client wraps links in', () => {
-    expect(inviteTokenFrom(`<https://foxfire.example.com/invite/${token}>`)).toBe(token)
+    expect(tokenFromLink(`<https://foxfire.example.com/invite/${token}>`)).toBe(token)
   })
 
   it('trims', () => {
-    expect(inviteTokenFrom(`  ${token}  `)).toBe(token)
+    expect(tokenFromLink(`  ${token}  `)).toBe(token)
   })
 
   it('is empty for nothing', () => {
-    expect(inviteTokenFrom('')).toBe('')
-    expect(inviteTokenFrom('   ')).toBe('')
+    expect(tokenFromLink('')).toBe('')
+    expect(tokenFromLink('   ')).toBe('')
   })
 })
 

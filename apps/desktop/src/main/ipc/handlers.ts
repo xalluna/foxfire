@@ -3,6 +3,9 @@ import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
 import { getAssetManifest } from '../services/ddragonService'
 import {
+  changeEmail,
+  changePassword,
+  changeUsername,
   forgetServer,
   getServerState,
   login as serverLogin,
@@ -14,6 +17,7 @@ import {
 } from '../services/serverService'
 import {
   createInvite,
+  createPasswordReset,
   deleteUser,
   forceUnlink,
   getStorageUsage,
@@ -23,6 +27,7 @@ import {
   listInvites,
   listUsers,
   revokeInvite,
+  revokePasswordReset,
   setSettings as setServerAdminSettings,
   updateUser
 } from '../services/serverAdminService'
@@ -103,7 +108,9 @@ import type {
   AdminUserPatch,
   BackgroundSettings,
   CaptureSettings,
+  EmailChange,
   ManualRankEdit,
+  PasswordChange,
   QueueType,
   RankRange,
   RiotIdInput,
@@ -151,6 +158,9 @@ export function registerIpcHandlers(): void {
     serverLogin(url, credentials)
   )
   ipcMain.handle(CH.server.logout, () => serverLogout())
+  ipcMain.handle(CH.server.changePassword, (_e, change: PasswordChange) => changePassword(change))
+  ipcMain.handle(CH.server.changeEmail, (_e, change: EmailChange) => changeEmail(change))
+  ipcMain.handle(CH.server.changeUsername, (_e, username: string) => changeUsername(username))
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
@@ -159,6 +169,12 @@ export function registerIpcHandlers(): void {
     updateUser(id, patch)
   )
   ipcMain.handle(CH.serverAdmin.deleteUser, (_e, id: string) => deleteUser(id))
+  ipcMain.handle(CH.serverAdmin.createPasswordReset, (_e, userId: string) =>
+    createPasswordReset(userId)
+  )
+  ipcMain.handle(CH.serverAdmin.revokePasswordReset, (_e, userId: string) =>
+    revokePasswordReset(userId)
+  )
   ipcMain.handle(CH.serverAdmin.invites, () => listInvites())
   ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))

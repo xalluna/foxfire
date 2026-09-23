@@ -54,6 +54,8 @@ export function createIpcClient(api: Api): FoxfireClient {
       users: api.serverAdmin.users,
       updateUser: api.serverAdmin.updateUser,
       deleteUser: api.serverAdmin.deleteUser,
+    createPasswordReset: api.serverAdmin.createPasswordReset,
+    revokePasswordReset: api.serverAdmin.revokePasswordReset,
       invites: api.serverAdmin.invites,
       createInvite: api.serverAdmin.createInvite,
       revokeInvite: api.serverAdmin.revokeInvite,

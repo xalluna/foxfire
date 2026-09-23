@@ -3,7 +3,22 @@ import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
 import { LinkAccountRow } from './LinkAccountRow'
 import { useUpdates } from '../hooks/useUpdates'
-import { SettingsCard, SettingsPage, DangerRow, SettingsBlock, SettingsRow, StatusRow, ghostButtonClass, inputClass, primaryButtonClass, Icon } from '@foxfire/ui'
+import {
+  SettingsCard,
+  SettingsPage,
+  ChangeEmailCard,
+  ChangePasswordCard,
+  ChangeUsernameCard,
+  DangerRow,
+  SettingsBlock,
+  SettingsRow,
+  StatusRow,
+  ghostButtonClass,
+  inputClass,
+  primaryButtonClass,
+  Icon
+} from '@foxfire/ui'
+import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
 
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'
@@ -94,6 +109,15 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
         <SettingsRow label="Address" control={<Address url={state.activeUrl!} />} />
       </SettingsCard>
 
+      <ChangeUsernameCard
+        username={session.username}
+        onSave={(username) => window.api.server.changeUsername(username)}
+      />
+
+      <ChangeEmailCard email={session.email} onSave={(change) => window.api.server.changeEmail(change)} />
+
+      <ChangePasswordCard onSave={(change) => window.api.server.changePassword(change)} />
+
       <SettingsCard
         title="Your League accounts"
         description="A server links the account it can see you are signed in to, rather than one you type — which is what stops anybody claiming a Riot ID that is not theirs."
@@ -153,6 +177,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
   const [invite, setInvite] = useState('')
   const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null)
 
@@ -194,6 +219,18 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
   async function submit(): Promise<void> {
     if (!probe?.url) return
+
+    // Only when registering: signing in with a typo is one wrong password, and
+    // a confirmation box on that form would be asking somebody to type a
+    // password they already know twice.
+    if (mode === 'register') {
+      const problem = passwordProblem(password, confirmation)
+      if (problem !== null) {
+        setError(problem)
+        return
+      }
+    }
+
     setBusy(true)
     setError(null)
 
@@ -399,7 +436,9 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
           <SettingsBlock
             label="Password"
-            description={mode === 'register' ? 'At least 12 characters.' : undefined}
+            description={
+              mode === 'register' ? `At least ${MINIMUM_PASSWORD} characters.` : undefined
+            }
           >
             <input
               type="password"
@@ -412,12 +451,45 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
             />
           </SettingsBlock>
 
+          {mode === 'register' && (
+            <SettingsBlock
+              label="Confirm password"
+              description="Typed twice because a password nobody can read is a password nobody can check."
+            >
+              <input
+                type="password"
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submit()
+                }}
+                className={clsx(inputClass, 'w-full')}
+              />
+            </SettingsBlock>
+          )}
+
+          {mode === 'login' && (
+            <SettingsBlock>
+              {/* No self-service reset: a Foxfire server sends no mail, so
+                  there is nowhere to send a link except through its admin. */}
+              <p className="text-2xs leading-relaxed text-text-mute">
+                Forgotten your password? Ask whoever runs this server for a reset link, and open it
+                in a browser.
+              </p>
+            </SettingsBlock>
+          )}
+
           {error !== null && <StatusRow tone="error">{error}</StatusRow>}
 
           <div className="flex justify-end px-4 py-3">
             <button
               type="button"
-              disabled={busy || !email.trim() || !password || (mode === 'register' && !username.trim())}
+              disabled={
+                busy ||
+                !email.trim() ||
+                !password ||
+                (mode === 'register' && (!username.trim() || !confirmation))
+              }
               className={primaryButtonClass}
               onClick={() => void submit()}
             >
