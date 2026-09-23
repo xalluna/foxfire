@@ -6,7 +6,9 @@ import type {
   BackgroundSettings,
   CaptureSettings,
   CaptureStatus,
+  EmailChange,
   LcuStatus,
+  PasswordChange,
   QueueType,
   ObsValidation,
   Recording,
@@ -299,6 +301,48 @@ export const mockApi: Api = {
           serverOutdated: false,
           riotKeyRejected: false
         }),
+        300,
+        false
+      ),
+
+    // The account forms, answered the way the server would: the wrong current
+    // password is refused, everything else is accepted and shows up in the
+    // "Signed in" card.
+    changePassword: ({ currentPassword }: PasswordChange): Promise<ServerAuthResult> =>
+      delay(
+        currentPassword === 'wrong'
+          ? { ok: false, error: 'That is not your current password.', state: serverState }
+          : { ok: true, error: null, state: serverState },
+        300,
+        false
+      ),
+
+    changeEmail: ({ email, currentPassword }: EmailChange): Promise<ServerAuthResult> =>
+      delay(
+        currentPassword === 'wrong'
+          ? { ok: false, error: 'That is not your current password.', state: serverState }
+          : {
+              ok: true,
+              error: null,
+              state: setServerState({
+                ...serverState,
+                session: serverState.session ? { ...serverState.session, email } : null
+              })
+            },
+        300,
+        false
+      ),
+
+    changeUsername: (username: string): Promise<ServerAuthResult> =>
+      delay(
+        {
+          ok: true,
+          error: null,
+          state: setServerState({
+            ...serverState,
+            session: serverState.session ? { ...serverState.session, username } : null
+          })
+        },
         300,
         false
       ),

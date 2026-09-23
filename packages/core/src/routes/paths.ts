@@ -119,6 +119,12 @@ export const paths = {
 
   invite: (token: string) => `/invite/${segment(token)}`,
 
+  /**
+   * Where a reset link lands. The server builds these itself when it describes
+   * a reset — this is the same path, for anybody on this side who needs it.
+   */
+  resetPassword: (token: string) => `/reset-password/${segment(token)}`,
+
   signIn: (redirect?: string) => withQuery('/sign-in', { redirect })
 }
 

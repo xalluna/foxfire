@@ -150,6 +150,8 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       users: api.admin.users,
       updateUser: api.admin.updateUser,
       deleteUser: api.admin.deleteUser,
+      createPasswordReset: api.admin.createPasswordReset,
+      revokePasswordReset: api.admin.revokePasswordReset,
       invites: api.admin.invites,
       createInvite: api.admin.createInvite,
       revokeInvite: api.admin.revokeInvite,
