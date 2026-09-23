@@ -13,14 +13,17 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.3.0] — 2026-09-23
 
-Accounts you can look after. Everybody can change their own email, password and
-name; an admin can hand somebody a reset link the way they hand out invites; and
-the pages that run a server are split so that a community with forty people on
-it is still readable. It also serves Foxfire 0.14.0, the first desktop that
-updates itself — which makes the allow list here the thing that decides which
-build your members are running.
+Accounts you can look after, and a search that looks through the people on this
+server rather than strangers on Riot. Everybody can change their own email,
+password and name; an admin can hand somebody a reset link the way they hand out
+invites, and can track a League account nobody here has claimed; and the pages
+that run a server are split so that a community with forty people on it is still
+readable. It also serves Foxfire 0.14.0, the first desktop that updates itself —
+which makes the allow list here the thing that decides which build your members
+are running.
 
 ### Added
+
 
 - **A way back in.** An admin can make a password reset link for any member, on
   the Members page, and copy it wherever their community talks — this server
@@ -47,13 +50,24 @@ build your members are running.
   switch beside the invites it governs.
 - **The sign-in page says what to do about a forgotten password**: ask this
   server's administrator for a reset link.
-- **Serves Foxfire 0.14.0.** A desktop from 0.14.0 on reads `recommendedDesktop`
-  from `/version` and installs that build, so the allow list here decides which
-  version the people on your server are running. They move when you update the
-  server, and not before — a desktop never updates past what its server will
-  talk to.
+- **Serves Foxfire 0.14.0, and only that.** A desktop from 0.14.0 on reads
+  `recommendedDesktop` from `/version` and installs that build, so the allow list
+  here decides which version the people on your server are running. They move
+  when you update the server, and not before — a desktop never updates past what
+  its server will talk to. There is no grace window this time: search changed
+  shape, so 0.12.0 and 0.13.0 are refused rather than nudged, and neither has an
+  updater to carry itself across. Tell your members to install 0.14.0 by hand;
+  it is the last time you will have to.
+
+- **Tracked League accounts, added by an admin.** A League accounts page takes a Riot ID and starts tracking
+  it — resolved through Riot as it is saved, so a name that does not exist is refused rather than
+  filed, and backfilled straight away at the lowest priority. The account arrives claimed by nobody,
+  the same state an imported one is in, and whoever it belongs to can still claim it from the
+  desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
+  appear in, and what removing one should mean is a question for another release.
 
 ### Changed
+
 
 - **The address in `ADMIN_EMAIL` is now pinned to the account that holds it.**
   That account cannot change its email in the app, and nobody who is not already
@@ -69,7 +83,28 @@ build your members are running.
   also fixes signing back in after being demoted or disabled, where the first
   device to return could be cut again by a stale one.
 
+- **Search finds the players this server tracks.** `GET /api/search` now takes `?q=` and answers out
+  of the database — every tracked account for a blank query, and whatever matches a name, a tag or a
+  whole Riot ID otherwise, each with its solo-queue rank. It used to resolve any Riot ID in the world
+  through fourteen Riot requests and answer with ten games that could carry no LP, because nothing
+  about a stranger is stored. In the browser this is the Players page, with a box at the top of it.
+- **Any member can start a sync, once every two minutes per account.** It used to be the owner's
+  alone. An account an admin tracks has no owner, nothing on this server syncs on a timer, and the
+  post-game ladder is armed by a desktop watching a League client nobody is running for it — so
+  owner-only meant its history froze on the day it arrived. The cooldown is read off the stored sync
+  timestamps, so a restart does not reopen the Riot budget. Recording a rank reading and writing LP
+  are still the owner's: those assert something about somebody's account rather than ask for what
+  Riot has already published.
+
+### Removed
+
+
+- **The legacy root shim.** Desktop 0.12.0 called the API at the root, where the web client's pages
+  are, and every such request was moved under `/api` before routing. 0.12.0 is off the allow list, so
+  every desktop this server answers now asks for `/api` itself.
+
 ### Under the hood
+
 
 - One new table, `PasswordResets`, alongside `Invites` and built the same way: a
   signed token that names a row, and the row alone deciding whether it has been
@@ -88,6 +123,16 @@ build your members are running.
   newest desktop version from, so it belongs to the desktop installer. The
   container image is unaffected: `:latest` on GHCR still follows every server
   release.
+
+- The per-address search limit went from 30 a minute to 120, and the finder waits
+  a quarter-second after the last keystroke before asking. Thirty was sized for a
+  search that cost fourteen Riot requests and was sent by pressing a button; this
+  one reads the database and is sent by typing, and thirty would have run out
+  inside a couple of names. `RATE_LIMIT_SEARCH_PER_MINUTE` still overrides it.
+- The finder is one screen shared by the web client and the desktop, so the two cannot drift.
+- Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
+  accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
+  adding a tracked account, refusing a duplicate, and the sync cooldown.
 
 ## [0.2.0] — 2026-09-21
 

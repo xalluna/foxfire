@@ -9,18 +9,19 @@ import {
 import { EmptyState, Icon } from '@foxfire/ui'
 import {
   InvitesScreen,
+  LeagueAccountsScreen,
   MembersScreen,
-  SearchScreen,
+  PlayersScreen,
   ServerDataScreen,
   createMatchRoute,
   createPlayerRoutes,
   parseSearch,
-  stringifySearch
+  stringifySearch,
+  validatePlayersSearch
 } from '@foxfire/screens'
 import { AccountPage } from './pages/AccountPage'
 import { AdminLayout } from './pages/AdminLayout'
 import { HomePage } from './pages/HomePage'
-import { PlayersPage } from './pages/PlayersPage'
 import { UpgradeOverlay } from './pages/UpgradeOverlay'
 import { WebPlayerLayout } from './pages/WebPlayerLayout'
 import { WebShell } from './pages/WebShell'
@@ -103,20 +104,27 @@ const authed = createRoute({
 
 const home = createRoute({ getParentRoute: () => authed, path: '/', component: HomePage })
 
-const players = createRoute({ getParentRoute: () => authed, path: 'players', component: PlayersPage })
+const players = createRoute({
+  getParentRoute: () => authed,
+  path: 'players',
+  validateSearch: validatePlayersSearch,
+  component: PlayersScreen
+})
 
 const player = createPlayerRoutes(authed, { layout: WebPlayerLayout })
 
 const match = createMatchRoute(authed)
-
-// Unwrapped: SearchPage sets its own width, and has to — see the note there.
-const search = createRoute({ getParentRoute: () => authed, path: 'search', component: SearchScreen })
 
 const account = createRoute({ getParentRoute: () => authed, path: 'account', component: AccountPage })
 
 const admin = createRoute({ getParentRoute: () => authed, path: 'admin', component: AdminLayout })
 const adminMembers = createRoute({ getParentRoute: () => admin, path: '/', component: MembersScreen })
 const adminInvites = createRoute({ getParentRoute: () => admin, path: 'invites', component: InvitesScreen })
+const adminAccounts = createRoute({
+  getParentRoute: () => admin,
+  path: 'accounts',
+  component: LeagueAccountsScreen
+})
 const adminData = createRoute({ getParentRoute: () => admin, path: 'data', component: ServerDataScreen })
 
 const routeTree = root.addChildren([
@@ -129,9 +137,8 @@ const routeTree = root.addChildren([
     players,
     player.player.addChildren([player.dashboard, player.champions, player.rank, player.lpEditor]),
     match,
-    search,
     account,
-    admin.addChildren([adminMembers, adminInvites, adminData])
+    admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData])
   ])
 ])
 

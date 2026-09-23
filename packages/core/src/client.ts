@@ -1,6 +1,5 @@
 import type {
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
   AdminPasswordReset,
@@ -15,6 +14,7 @@ import type {
   MasteryData,
   MatchDetail,
   MatchSummary,
+  PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
@@ -109,7 +109,11 @@ export interface FoxfireData {
     save: (seasons: SeasonInput[]) => Promise<Season[]>
   }
   search: {
-    summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>
+    /**
+     * The tracked players matching a query, or every one of them when it is
+     * blank. Reads stored data only — no Riot call, on a server or a desktop.
+     */
+    players: (query: string) => Promise<PlayerSearchResult[]>
   }
 }
 
@@ -186,6 +190,13 @@ export interface FoxfireClient extends FoxfireData {
     removeReplay: (matchId: string) => Promise<AdminActionResult>
     /** Takes a League account away from whoever claimed it. The account and its games stay. */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
+    /**
+     * Starts tracking a League account nobody here has claimed, and backfills it.
+     *
+     * Unlike linking, this claims nothing for the caller: the account arrives
+     * with no owner, the state an imported one already has.
+     */
+    addRiotAccount: (input: RiotIdInput) => Promise<Account>
   }
   /** What changed underneath the screens, from wherever the change happened. */
   events: {

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import type {
-  Account,
   AdminActionResult,
   AdminReplay,
   ImportProgress,
@@ -14,6 +13,7 @@ import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/Se
 import { ghostButtonClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
 import * as Icon from '../components/icons'
+import { useRowAction } from './rowAction'
 
 export interface ServerDataPageProps {
   /**
@@ -32,10 +32,6 @@ export interface ServerDataPageProps {
   /** In bytes. Zero is no cap. Undefined while the settings are loading. */
   replayCap: number | undefined
   onSaveReplayCap: (bytes: number) => Promise<void>
-
-  /** Every League account on the server, of which the claimed ones are listed. */
-  accounts: Account[] | undefined
-  onUnlink: (accountId: string) => Promise<AdminActionResult>
 
   replays: AdminReplay[] | undefined
   onRemoveReplay: (matchId: string) => Promise<AdminActionResult>
@@ -59,8 +55,6 @@ export function ServerDataPage({
   storage,
   replayCap,
   onSaveReplayCap,
-  accounts,
-  onUnlink,
   replays,
   onRemoveReplay
 }: ServerDataPageProps): JSX.Element {
@@ -114,110 +108,8 @@ export function ServerDataPage({
       {storage !== undefined && (
         <StorageCard storage={storage} replayCap={replayCap} onSaveReplayCap={onSaveReplayCap} />
       )}
-      <LinkedAccountsCard accounts={accounts} onUnlink={onUnlink} />
       <ReplayLibraryCard replays={replays} onRemove={onRemoveReplay} />
     </SettingsPage>
-  )
-}
-
-/**
- * Tracks one refusable action per row: which row is in flight, and the
- * server's reason the last one was refused.
- */
-function useRowAction(run: (id: string) => Promise<AdminActionResult>): {
-  pendingId: string | null
-  error: string | null
-  start: (id: string) => void
-} {
-  const [pendingId, setPendingId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  return {
-    pendingId,
-    error,
-    start: (id) => {
-      setPendingId(id)
-      run(id)
-        .then((result) => setError(result.ok ? null : result.error))
-        .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
-        .finally(() => setPendingId(null))
-    }
-  }
-}
-
-/**
- * Who has claimed which League account, and the way to take one back.
- *
- * Claiming is first-come and LCU-attested, which is not proof — a hand-written
- * HTTP client can claim any Riot ID — and the trade is deliberate: it costs an
- * honest person nothing. What makes it survivable is this. Without a way to
- * unlink, somebody claiming an account that is not theirs, or leaving the
- * community still holding one, is permanent.
- *
- * The account and its games stay; only the claim goes. History on a Foxfire
- * server belongs to the server, and whoever the account really belongs to
- * claims it again the ordinary way.
- */
-function LinkedAccountsCard({
-  accounts,
-  onUnlink
-}: {
-  accounts: Account[] | undefined
-  onUnlink: (accountId: string) => Promise<AdminActionResult>
-}): JSX.Element {
-  const unlink = useRowAction(onUnlink)
-  const claimed = (accounts ?? []).filter((account) => account.ownerUsername != null)
-
-  return (
-    <SettingsCard
-      title="Claimed League accounts"
-      description={
-        'Claiming is first-come and attested by a running League client, which is not proof. This is '
-        + 'what makes that survivable: unlinking returns an account to unclaimed and leaves every '
-        + 'game it played where it is.'
-      }
-    >
-      {unlink.error !== null && <StatusRow tone="error">{unlink.error}</StatusRow>}
-
-      {accounts !== undefined && claimed.length === 0 && (
-        <EmptyState
-          icon={<Icon.Server />}
-          title="Nobody has claimed an account yet"
-          description="Members claim their own by signing in to the League client with Foxfire connected."
-        />
-      )}
-
-      {claimed.map((account) => (
-        <LinkedAccountRow
-          key={account.id}
-          account={account}
-          onUnlink={() => unlink.start(account.id)}
-          unlinking={unlink.pendingId === account.id}
-        />
-      ))}
-    </SettingsCard>
-  )
-}
-
-function LinkedAccountRow({
-  account,
-  onUnlink,
-  unlinking
-}: {
-  account: Account
-  onUnlink: () => void
-  unlinking: boolean
-}): JSX.Element {
-  return (
-    <SettingsRow
-      label={`${account.gameName}#${account.tagLine}`}
-      description={`Claimed by ${account.ownerUsername}`}
-      control={
-        <button type="button" className={ghostButtonClass} onClick={onUnlink} disabled={unlinking}>
-          {unlinking ? 'Unlinking…' : 'Unlink'}
-        </button>
-      }
-    />
   )
 }
 

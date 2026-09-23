@@ -111,10 +111,10 @@ public static class DesktopCompatibility
     /// patches and features that change nothing a desktop can observe, and
     /// nobody should be told to update for those.
     /// </summary>
-    public const int ApiVersion = 1;
+    public const int ApiVersion = 2;
 
     /// <summary>Every desktop version this server answers, in any order.</summary>
-    public static readonly IReadOnlyList<string> Allowed = ["0.12.0", "0.13.0", "0.14.0"];
+    public static readonly IReadOnlyList<string> Allowed = ["0.14.0"];
 
     /// <summary>The compiled-in list, ready to judge against.</summary>
     public static DesktopAllowList AllowList { get; } = new(Allowed);
@@ -132,7 +132,7 @@ public static class DesktopCompatibility
     /// packages/core states the web client's side as WEB_API_VERSION, and a
     /// test holds the two together.
     /// </summary>
-    public static readonly IReadOnlyList<int> WebApiVersions = [1];
+    public static readonly IReadOnlyList<int> WebApiVersions = [2];
 
     /// <summary>Whether a web page built against this API version is served.</summary>
     public static bool ServesWebApiVersion(int apiVersion) => WebApiVersions.Contains(apiVersion);

@@ -8,7 +8,7 @@ function Tab({
   exact,
   children
 }: {
-  to: '/admin' | '/admin/invites' | '/admin/data'
+  to: '/admin' | '/admin/invites' | '/admin/accounts' | '/admin/data'
   exact?: boolean
   children: ReactNode
 }): JSX.Element {
@@ -54,6 +54,7 @@ export function AdminLayout(): JSX.Element {
           Members
         </Tab>
         <Tab to="/admin/invites">Invites</Tab>
+        <Tab to="/admin/accounts">League accounts</Tab>
         <Tab to="/admin/data">Data &amp; storage</Tab>
       </nav>
       <Outlet />

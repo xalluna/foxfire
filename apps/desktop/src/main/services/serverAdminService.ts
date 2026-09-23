@@ -1,11 +1,13 @@
 import { serverApi } from './serverService'
 import type {
+  Account,
   AdminActionResult,
   AdminReplay,
   AdminInvite,
   AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
+  RiotIdInput,
   ServerAdminSettings,
   ServerStorageUsage
 } from '@shared/types'
@@ -37,6 +39,11 @@ export async function removeStoredReplay(matchId: string): Promise<AdminActionRe
 /** Takes a League account away from whoever claimed it. The games stay. */
 export async function forceUnlink(riotAccountId: string): Promise<AdminActionResult> {
   return serverApi().admin.forceUnlink(riotAccountId)
+}
+
+/** Starts tracking an account nobody on the server has claimed, and backfills it. */
+export async function addRiotAccount(input: RiotIdInput): Promise<Account> {
+  return serverApi().admin.addRiotAccount(input)
 }
 
 export async function listUsers(): Promise<AdminUser[]> {

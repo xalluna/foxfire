@@ -17,6 +17,15 @@ namespace Foxfire.Api.Common;
 /// anyone asked for; every other admin ability is about people and access
 /// rather than about other people's data.
 ///
+/// Starting a sync stopped coming through here, and that is the one deliberate
+/// exception. An account an admin added has no owner to refresh it, nothing on
+/// this server syncs on a timer, and the post-game ladder needs a League client
+/// nobody is running for it — so owner-only meant its history froze on the day
+/// it arrived. StartSyncRequest guards the Riot budget with a per-account
+/// cooldown instead. Recording a rank reading and writing LP still belong to
+/// the owner: those assert something about somebody's account rather than ask
+/// for what Riot already published.
+///
 /// The service form of what used to be a static helper taking a ClaimsPrincipal.
 /// A handler has no principal, so it takes the identity context instead.
 /// </summary>

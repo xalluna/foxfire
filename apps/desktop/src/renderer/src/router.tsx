@@ -10,11 +10,12 @@ import {
   type ErrorComponentProps
 } from '@tanstack/react-router'
 import {
-  SearchScreen,
+  PlayersScreen,
   createPlayerRoutes,
   parseSearch,
   stringifySearch,
-  usePlayer
+  usePlayer,
+  validatePlayersSearch
 } from '@foxfire/screens'
 import { AppShell } from './App'
 import { Main, PlayerLayout } from './components/PlayerLayout'
@@ -63,13 +64,21 @@ const captures = createRoute({
   }
 })
 
+/**
+ * The finder, which the web client reaches as its Players page.
+ *
+ * Kept under "Search" here because that is the word for it in an app whose nav
+ * is otherwise one account's own pages — there is no list of everybody to fold
+ * it into, the way a browser has.
+ */
 const search = createRoute({
   getParentRoute: () => app,
   path: 'search',
+  validateSearch: validatePlayersSearch,
   component: function SearchRoute() {
     return (
       <Main>
-        <SearchScreen />
+        <PlayersScreen heading="Search" />
       </Main>
     )
   }

@@ -18,7 +18,13 @@ import {
   primaryButtonClass,
   type SettingsNavItem
 } from '@foxfire/ui'
-import { InvitesScreen, MembersScreen, ServerDataScreen, useIsServerAdmin } from '@foxfire/screens'
+import {
+  InvitesScreen,
+  LeagueAccountsScreen,
+  MembersScreen,
+  ServerDataScreen,
+  useIsServerAdmin
+} from '@foxfire/screens'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { useServerHealth } from '../hooks/useKeyStatus'
@@ -40,6 +46,7 @@ export type SettingsCategory =
   | 'server'
   | 'server-members'
   | 'server-invites'
+  | 'server-accounts'
   | 'server-data'
   | 'riot-key'
   | 'rank'
@@ -85,6 +92,7 @@ const GROUPS: NavItem[][] = [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
     { id: 'server-members', label: 'Members', icon: <Icon.Settings />, adminOnly: true },
     { id: 'server-invites', label: 'Invites', icon: <Icon.Link />, adminOnly: true },
+    { id: 'server-accounts', label: 'League accounts', icon: <Icon.Server />, adminOnly: true },
     { id: 'server-data', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
     { id: 'riot-key', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
@@ -159,6 +167,7 @@ export function Settings({ category }: { category?: string }): JSX.Element {
         {active === 'server' && <ServerSettings />}
         {active === 'server-members' && <MembersScreen />}
         {active === 'server-invites' && <InvitesScreen />}
+        {active === 'server-accounts' && <LeagueAccountsScreen />}
         {active === 'server-data' && <ServerDataScreen />}
         {active === 'riot-key' && <RiotKeySettings />}
         {active === 'rank' && <RankTrackingSettings />}

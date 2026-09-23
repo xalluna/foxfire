@@ -67,6 +67,6 @@ export function createServerData(
       save: api.seasons.save
     },
 
-    search: { summoner: api.search.summoner }
+    search: { players: api.search.players }
   }
 }

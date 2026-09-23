@@ -244,10 +244,6 @@ app.UseExceptionHandler();
 // address a request came from rather than the reverse proxy's.
 app.UseForwardedHeaders();
 
-// Before routing, which it rewrites the path for: desktop 0.12.0 calls the API
-// at the root, where the web client's pages now are.
-app.UseLegacyRootShim();
-
 // The web client's files, before routing: a request for one never needs an
 // endpoint, a version check or a user.
 spa.UseFiles(app);

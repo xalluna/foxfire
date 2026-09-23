@@ -9,10 +9,10 @@ changes you would never notice while using the app.
 
 ## [0.14.0] — 2026-09-23
 
-Foxfire updates itself, and you can look after your own account without leaving the app. A new
-version now arrives quietly in the background and waits for you to restart — never in the middle of
-a game — and the patch notes travel with it, so what changed is in the app rather than on a page you
-would have to go and find. Needs Foxfire Server 0.3.0.
+Foxfire updates itself, search looks through the people your server tracks rather than strangers on
+Riot, and you can look after your own account without leaving the app. A new version now arrives
+quietly in the background and waits for you to restart — never in the middle of a game — and the
+patch notes travel with it. Needs Foxfire Server 0.3.0.
 
 ### Added
 
@@ -36,9 +36,10 @@ would have to go and find. Needs Foxfire Server 0.3.0.
   any member: copy it, send it however your community talks, and they set a new password in a
   browser. It lasts a day, works once, and making a new one withdraws the last. Nothing about their
   account changes until they use it.
-- **Members and Invites are separate pages** in Settings, where Server management used to be one.
-  Members filters by name or address and opens a line for the detail and the actions; Invites keeps
-  public sign-up beside the invites it governs.
+- **Members, Invites and League accounts are separate pages** in Settings, where Server management
+  used to be one. Members filters by name or address and opens a line for the detail and the
+  actions; Invites keeps public sign-up beside the invites it governs; League accounts is where an
+  admin starts tracking somebody and where a claim is taken back.
 - **The sign-in form says what to do about a forgotten password**: ask whoever runs the server for a
   reset link.
 
@@ -51,8 +52,22 @@ would have to go and find. Needs Foxfire Server 0.3.0.
 - **A server that refuses this build now says what is being done about it.** The message named the
   version to install and sent you to the releases page; it now tells you that version is already
   downloading, and offers the restart when it is ready.
-- **Needs Foxfire Server 0.3.0.** Everything above that touches your account is the server's to
-  answer, and a server that has not been updated will say so.
+- **Search finds the players on your server.** Typing a name turns up the accounts your server keeps
+  history for, and opening one is the ordinary profile: every game, what each was worth in LP, the
+  rows that open for the scoreboard, and a replay to download where the server holds one. It used to
+  look up any Riot ID in the world and show ten games with no LP on them at all — nothing about a
+  stranger is stored, so there was never any to show. Searching costs no Riot requests now, so it is
+  as fast as the rest of the app and never queues behind a sync.
+- **Anybody can refresh any account.** Asking the server to fetch what it does not have used to be
+  the owner's alone. Accounts an admin tracks belong to nobody, so nobody would ever have refreshed
+  them; now any member can, and an account that was refreshed in the last two minutes is left alone
+  so a busy evening cannot spend the server's Riot budget twice over.
+- **Needs Foxfire Server 0.3.0.** Search asks the server a different question, and everything above
+  that touches your account is the server's to answer, so this version and older servers cannot talk
+  to each other. A server that has not been updated says so, and its host needs to update it.
+- **This is the last version you install by hand.** Foxfire Server 0.3.0 will not answer 0.12.0 or
+  0.13.0 at all — search changed shape underneath them — and neither of those builds has an updater
+  to carry itself across. Install this one yourself; after it, updates arrive on their own.
 
 ### Fixed
 
@@ -77,6 +92,10 @@ would have to go and find. Needs Foxfire Server 0.3.0.
 - The Members and Invites screens are shared with the web client, as Server management was.
 - The rule that a password is at least twelve characters lives in one place now, rather than in the
   desktop's form, the web client's, and the server.
+- The Search page and the web client's Players page are one screen now, mounted under the name that
+  fits each app. Its query lives in the address, so a filtered list can be linked to.
+- Local-only mode searches its own database rather than Riot, the same as everywhere else, and the
+  ad-hoc lookup service is gone.
 
 ## [0.13.0] — 2026-09-21
 

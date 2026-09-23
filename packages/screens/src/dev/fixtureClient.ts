@@ -1,6 +1,5 @@
 import type {
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
   AdminPasswordReset,
@@ -17,6 +16,7 @@ import type {
   MasteryData,
   MatchDetail,
   MatchSummary,
+  PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
@@ -431,23 +431,27 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     search: {
-      summoner: (input): Promise<AdHocSummonerResult> => {
-        if (input.gameName.toLowerCase() === 'nobody') {
-          return fail('No summoner found with that Riot ID.')
-        }
+      // The same substring rule the server applies, so the harness answers a
+      // half-typed name the way a real one does. Blank is everybody, which is
+      // what the finder opens on.
+      players: (query: string): Promise<PlayerSearchResult[]> => {
+        const needle = query.trim().toLowerCase()
+
+        const matches = ACCOUNTS.filter(
+          (account) =>
+            needle.length === 0 ||
+            account.gameName.toLowerCase().includes(needle) ||
+            account.tagLine.toLowerCase().includes(needle) ||
+            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
+        )
+
         return delay(
-          {
-            profile: {
-              puuid: 'puuid-searched',
-              gameName: input.gameName,
-              tagLine: input.tagLine,
-              profileIconId: 5788,
-              summonerLevel: 214
-            },
-            leagueEntries: LEAGUE_ENTRIES[2],
-            recentMatches: MATCHES[2].slice(0, 10)
-          },
-          900
+          matches.map((account) => ({
+            account,
+            soloEntry:
+              (LEAGUE_ENTRIES[account.id] ?? []).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
+          })),
+          200
         )
       }
     },
@@ -492,6 +496,42 @@ export function createFixtureClient(): FoxfireClient {
           account.isMine = false
         }
         return delay({ ok: true, error: null }, 200, false)
+      },
+
+      // Actually appends, so the harness shows the account turning up unclaimed
+      // in the finder afterwards rather than only that the form submitted.
+      addRiotAccount: (input): Promise<Account> => {
+        const gameName = input.gameName.trim()
+        const tagLine = input.tagLine.replace(/^#/, '').trim()
+
+        if (gameName.toLowerCase() === 'nobody') {
+          return fail(`Riot has no account called ${gameName}#${tagLine} in this region.`)
+        }
+
+        const existing = ACCOUNTS.find(
+          (a) => a.gameName.toLowerCase() === gameName.toLowerCase() && a.tagLine.toLowerCase() === tagLine.toLowerCase()
+        )
+        if (existing) return fail(`This server already tracks ${existing.gameName}#${existing.tagLine}.`)
+
+        const account: Account = {
+          id: `added-${ACCOUNTS.length + 1}`,
+          puuid: `puuid-${gameName.toLowerCase()}`,
+          gameName,
+          tagLine,
+          platform: 'na1',
+          regionalRoute: 'americas',
+          summonerId: null,
+          profileIconId: 5788,
+          summonerLevel: 214,
+          isHomeAccount: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isMine: false,
+          ownerUsername: null
+        }
+
+        ACCOUNTS.push(account)
+        return delay(account, 400, false)
       },
 
       updateUser: (id: string, patch: AdminUserPatch): Promise<AdminActionResult> => {
