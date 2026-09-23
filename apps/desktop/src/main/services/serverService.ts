@@ -5,7 +5,7 @@ import {
   createServerSession,
   createTransport,
   displayName,
-  inviteTokenFrom,
+  tokenFromLink,
   judge,
   normaliseServerUrl,
   probeServer,
@@ -21,8 +21,10 @@ import { broadcast } from '../ipc/broadcast'
 import { connectHub, disconnectHub } from '../server/hub'
 import { createLogger } from '../telemetry/logger'
 import type {
+  EmailChange,
   InvitePreview,
   KnownServer,
+  PasswordChange,
   ServerAuthResult,
   ServerCredentials,
   ServerProbe,
@@ -445,7 +447,7 @@ export async function previewInvite(rawUrl: string, pasted: string): Promise<Inv
 
   if ('error' in normalised) return unusable(normalised.error)
 
-  const token = inviteTokenFrom(pasted)
+  const token = tokenFromLink(pasted)
   if (!token) return unusable('Paste the invite code, or the whole link you were sent.')
 
   try {
@@ -527,6 +529,58 @@ async function authenticate(
       state: getServerState()
     }
   }
+}
+
+/**
+ * A change to the account on the active server, and the tidying it needs.
+ *
+ * The session does the work and re-reads who you are as part of it — a password
+ * change comes back with a whole new pair, which it adopts and writes to the
+ * key store. What is left here is the copy this install keeps for its sidebar
+ * and its connect page: the name and address it shows when the server is not
+ * being asked.
+ */
+async function changeAccount(
+  apply: (session: ServerSession) => Promise<{ username: string; email: string; isAdmin: boolean }>
+): Promise<ServerAuthResult> {
+  const url = readActive()
+  if (!url) {
+    return { ok: false, error: 'Not connected to a Foxfire server.', state: getServerState() }
+  }
+
+  try {
+    const user = await apply(sessionFor(url))
+
+    writeKnown(
+      readKnown().map((s) =>
+        s.url === url
+          ? { ...s, username: user.username, email: user.email, isAdmin: user.isAdmin }
+          : s
+      )
+    )
+
+    log.info('Changed the account on a Foxfire server', { url, username: user.username })
+    return { ok: true, error: null, state: announce() }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      state: getServerState()
+    }
+  }
+}
+
+/** Changes the password, which signs every other device out and keeps this one. */
+export function changePassword(change: PasswordChange): Promise<ServerAuthResult> {
+  return changeAccount((session) => session.changePassword(change))
+}
+
+export function changeEmail(change: EmailChange): Promise<ServerAuthResult> {
+  return changeAccount((session) => session.changeEmail(change))
+}
+
+export function changeUsername(username: string): Promise<ServerAuthResult> {
+  return changeAccount((session) => session.changeUsername(username))
 }
 
 /**

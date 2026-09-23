@@ -1,5 +1,6 @@
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
+using Foxfire.Api.Features.Account;
 using Foxfire.Api.Features.Auth;
 using Foxfire.Api.Startup;
 using MediatR;
@@ -22,6 +23,13 @@ namespace Foxfire.Api.Endpoints;
 /// signing out are not. A household behind one address reloading a few tabs at
 /// once must not lock itself out, and a refresh token is not something anybody
 /// can guess their way into.
+///
+/// Changing the account behind a session is here too, for two reasons. The
+/// refresh cookie is scoped to these routes, and a password change answers with
+/// a session exactly as signing in does — the caller keeps the device in front
+/// of them and every other one is cut. The two routes that check a password are
+/// rate limited with the rest; renaming yourself is not, because there is
+/// nothing to guess.
 /// </summary>
 public static class AuthEndpoints
 {
@@ -70,6 +78,30 @@ public static class AuthEndpoints
 
         auth.MapGet("/me", (ISender sender, CancellationToken cancellationToken) =>
                 sender.SendAsync(new GetCurrentUserRequest(), cancellationToken))
+            .RequireAuthorization();
+
+        auth.MapPost("/password", async (
+                    [FromBody] ChangePasswordRequest request,
+                    HttpContext http,
+                    ISender sender,
+                    CancellationToken cancellationToken) =>
+                SessionTransport.Deliver(http, await sender.Send(request, cancellationToken)))
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimits.Auth);
+
+        auth.MapPatch("/email", (
+                    [FromBody] ChangeEmailRequest request,
+                    ISender sender,
+                    CancellationToken cancellationToken) =>
+                sender.SendAsync(request, cancellationToken))
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimits.Auth);
+
+        auth.MapPatch("/username", (
+                    [FromBody] ChangeUsernameRequest request,
+                    ISender sender,
+                    CancellationToken cancellationToken) =>
+                sender.SendAsync(request, cancellationToken))
             .RequireAuthorization();
     }
 }

@@ -162,6 +162,28 @@ export interface InvitePreview {
   message: string
 }
 
+/** What a server will say about a reset link without anybody signing in. */
+export interface PasswordResetPreview {
+  usable: boolean
+  serverName: string
+  /** Whose account the link sets, so nobody types a password for the wrong one. */
+  username: string | null
+  email: string | null
+  message: string
+}
+
+/** Changing the password of the account you are signed in to. */
+export interface PasswordChange {
+  currentPassword: string
+  newPassword: string
+}
+
+/** Changing the address you sign in with. */
+export interface EmailChange {
+  email: string
+  currentPassword: string
+}
+
 /* -------------------------------------------------------------------------- */
 /* Server administration                                                      */
 /* -------------------------------------------------------------------------- */
@@ -178,6 +200,31 @@ export interface AdminUser {
   linkedRiotAccounts: number
   /** Live sessions — roughly, machines signed in. */
   activeSessions: number
+  /**
+   * The reset link outstanding for them, or null.
+   *
+   * On the member rather than behind a call of its own, so the list can say who
+   * is waiting on one — and so the admin who made a link an hour ago can copy
+   * it again instead of replacing it.
+   */
+  passwordReset: AdminPasswordReset | null
+}
+
+/**
+ * A password reset link, as the admin who made it sees it.
+ *
+ * The same arrangement as an invite, and for the same reason: this server sends
+ * no mail, so the link is readable and copyable and goes wherever the community
+ * actually talks. What differs is what it is worth — an invite makes an
+ * account, this hands one over — so it lasts hours rather than a fortnight, and
+ * there is never more than one outstanding per member.
+ */
+export interface AdminPasswordReset {
+  id: string
+  userId: string
+  link: string
+  createdAt: string
+  expiresAt: string
 }
 
 /** What to change about somebody. Undefined leaves a field alone. */

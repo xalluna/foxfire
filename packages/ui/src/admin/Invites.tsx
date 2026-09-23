@@ -1,15 +1,13 @@
 import { useState } from 'react'
 import clsx from 'clsx'
-import type { AdminActionResult, AdminInvite, AdminUser, AdminUserPatch } from '@foxfire/core'
+import type { AdminActionResult, AdminInvite } from '@foxfire/core'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, inputClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
 import * as Icon from '../components/icons'
 
-export interface ServerManagementPageProps {
-  users: AdminUser[]
-  usersLoading: boolean
+export interface InvitesPageProps {
   invites: AdminInvite[]
   invitesLoading: boolean
   publicSignup: boolean
@@ -19,28 +17,19 @@ export interface ServerManagementPageProps {
   /** Resolves with the invite, or the one already outstanding for that address. */
   onCreateInvite: (email: string) => Promise<AdminInvite>
   onRevokeInvite: (id: string) => Promise<AdminActionResult>
-  onUpdateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
-  onDeleteUser: (id: string) => Promise<AdminActionResult>
   onCopy: (text: string) => void
 }
 
 /**
- * Administering the server you are signed in to.
+ * How somebody gets an account on this server.
  *
- * Shown only when the active session says you are an admin, which decides what
- * to draw and nothing else — the server checks the role on every request, and
- * would refuse all of this to somebody demoted a minute ago whose window has
- * not caught up.
- *
- * Deliberately not where secrets are. The Riot API key, the connection strings
- * and the signing keys are environment configuration: changing one is an edit
- * and a restart, not a button, and putting a disabled field here for each of
- * them would only suggest otherwise. What is here is what can safely change
- * underneath a server that is running.
+ * The switch and the invite list are one page because they are one decision:
+ * invites only matter while public sign-up is off, and turning it off is what
+ * makes them the way in. Who is already here is the Members page — a server
+ * with forty people on it should not make an admin scroll past all of them to
+ * reach the box that sends an invite.
  */
-export function ServerManagementPage({
-  users,
-  usersLoading,
+export function InvitesPage({
   invites,
   invitesLoading,
   publicSignup,
@@ -48,10 +37,8 @@ export function ServerManagementPage({
   onSetPublicSignup,
   onCreateInvite,
   onRevokeInvite,
-  onUpdateUser,
-  onDeleteUser,
   onCopy
-}: ServerManagementPageProps): JSX.Element {
+}: InvitesPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -66,8 +53,8 @@ export function ServerManagementPage({
 
   return (
     <SettingsPage
-      title="Server management"
-      intro="You are an administrator on this server. Everything here changes while it runs — the Riot API key, the database and the signing keys are set in its configuration and need a restart."
+      title="Invites"
+      intro="Who can make an account here, and the links that let them. Foxfire sends mail only if this server has SMTP set up, so every link is also yours to copy and send however your community talks."
     >
       {error !== null && (
         <SettingsCard>
@@ -109,14 +96,6 @@ export function ServerManagementPage({
         onRevoke={(id) => act(() => onRevokeInvite(id))}
         onCopy={onCopy}
         onError={setError}
-      />
-
-      <Users
-        users={users}
-        loading={usersLoading}
-        busy={busy}
-        onUpdate={(id, patch) => act(() => onUpdateUser(id, patch))}
-        onDelete={(id) => act(() => onDeleteUser(id))}
       />
     </SettingsPage>
   )
@@ -261,113 +240,4 @@ function Invites({
       ))}
     </SettingsCard>
   )
-}
-
-/* -------------------------------------------------------------------------- */
-
-function Users({
-  users,
-  loading,
-  busy,
-  onUpdate,
-  onDelete
-}: {
-  users: AdminUser[]
-  loading: boolean
-  busy: boolean
-  onUpdate: (id: string, patch: AdminUserPatch) => void
-  onDelete: (id: string) => void
-}): JSX.Element {
-  const [confirming, setConfirming] = useState<string | null>(null)
-
-  return (
-    <SettingsCard
-      title="People"
-      description="Promoting or demoting somebody signs them out, so the change takes effect now rather than whenever their session happens to renew."
-    >
-      {loading && <SettingsRow label="Loading…" />}
-
-      {users.map((user) => (
-        <SettingsRow
-          key={user.id}
-          label={
-            <span className="flex items-center gap-2">
-              {user.username}
-              {user.isAdmin && (
-                <span className="rounded border border-accent-dim/40 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
-                  Admin
-                </span>
-              )}
-              {user.isDisabled && (
-                <span className="rounded border border-red/30 bg-red/10 px-1.5 py-0.5 text-[10px] text-red">
-                  Disabled
-                </span>
-              )}
-            </span>
-          }
-          description={
-            `${user.email} · ${plural(user.linkedRiotAccounts, 'League account')}` +
-            ` · ${plural(user.activeSessions, 'session')}`
-          }
-          control={
-            confirming === user.id ? (
-              <>
-                <span className="text-2xs text-red">Remove {user.username}?</span>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={ghostButtonClass}
-                  onClick={() => setConfirming(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={ghostButtonClass}
-                  onClick={() => {
-                    setConfirming(null)
-                    onDelete(user.id)
-                  }}
-                >
-                  Remove
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={ghostButtonClass}
-                  onClick={() => onUpdate(user.id, { isAdmin: !user.isAdmin })}
-                >
-                  {user.isAdmin ? 'Demote' : 'Make admin'}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={ghostButtonClass}
-                  onClick={() => onUpdate(user.id, { isDisabled: !user.isDisabled })}
-                >
-                  {user.isDisabled ? 'Enable' : 'Disable'}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={ghostButtonClass}
-                  onClick={() => setConfirming(user.id)}
-                >
-                  Remove
-                </button>
-              </>
-            )
-          }
-        />
-      ))}
-    </SettingsCard>
-  )
-}
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`
 }

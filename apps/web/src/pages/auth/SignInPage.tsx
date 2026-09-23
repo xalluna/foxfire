@@ -37,10 +37,17 @@ export function SignInPage(): JSX.Element {
       title="Sign in"
       footer={
         <>
-          New here?{' '}
-          <Link to="/register" className="text-accent underline-offset-2 hover:underline">
-            Make an account
-          </Link>
+          <p>
+            New here?{' '}
+            <Link to="/register" className="text-accent underline-offset-2 hover:underline">
+              Make an account
+            </Link>
+          </p>
+          {/* No self-service reset: this server sends no mail, so there is
+              nowhere to send a link except through whoever runs it. */}
+          <p className="mt-1 text-2xs text-text-mute">
+            Forgotten your password? Ask this server&rsquo;s administrator for a reset link.
+          </p>
         </>
       }
     >

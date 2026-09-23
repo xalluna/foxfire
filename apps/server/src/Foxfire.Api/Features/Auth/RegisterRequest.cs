@@ -192,7 +192,7 @@ internal sealed class RegisterRequestHandler(
         CancellationToken cancellationToken)
     {
         var verified = InviteToken.Verify(token, authOptions.Value.InviteSigningKeyBytes, time.GetUtcNow());
-        if (verified.Status != InviteTokenStatus.Valid) return null;
+        if (verified.Status != SignedTokenStatus.Valid) return null;
 
         var invite = await db.Invites.FirstOrDefaultAsync(i => i.Id == verified.InviteId, cancellationToken);
         if (invite is null || !invite.IsOpen(time.GetUtcNow())) return null;

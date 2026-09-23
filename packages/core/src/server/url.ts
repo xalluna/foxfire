@@ -73,14 +73,16 @@ export function normaliseServerUrl(raw: string): NormalisedUrl | UrlProblem {
 }
 
 /**
- * Pulls the invite code out of whatever the user pasted.
+ * Pulls the code out of whatever the user pasted — an invite, or a password
+ * reset.
  *
  * They are handed a link and told to paste a code, so they will paste both, in
  * either order, and sometimes with the angle brackets a chat client wrapped it
  * in. Taking the last path segment of anything that parses as a URL, and the
- * trimmed string otherwise, covers all of it.
+ * trimmed string otherwise, covers all of it. Nothing here is particular to
+ * either kind of link, which is why both use it.
  */
-export function inviteTokenFrom(pasted: string): string {
+export function tokenFromLink(pasted: string): string {
   const trimmed = (pasted ?? '').trim().replace(/^<|>$/g, '')
   if (!trimmed) return ''
 

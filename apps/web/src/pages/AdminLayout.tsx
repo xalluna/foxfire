@@ -3,7 +3,15 @@ import { Link, Outlet } from '@tanstack/react-router'
 import { EmptyState, Icon } from '@foxfire/ui'
 import { useAuth } from '../session/session'
 
-function Tab({ to, exact, children }: { to: '/admin' | '/admin/data'; exact?: boolean; children: ReactNode }): JSX.Element {
+function Tab({
+  to,
+  exact,
+  children
+}: {
+  to: '/admin' | '/admin/invites' | '/admin/data'
+  exact?: boolean
+  children: ReactNode
+}): JSX.Element {
   return (
     <Link
       to={to}
@@ -43,8 +51,9 @@ export function AdminLayout(): JSX.Element {
       {/* Not a scroll container, for the reason in WebPlayerLayout. */}
       <nav className="flex gap-1 border-b border-hairline px-4 max-md:px-2">
         <Tab to="/admin" exact>
-          Members &amp; invites
+          Members
         </Tab>
+        <Tab to="/admin/invites">Invites</Tab>
         <Tab to="/admin/data">Data &amp; storage</Tab>
       </nav>
       <Outlet />

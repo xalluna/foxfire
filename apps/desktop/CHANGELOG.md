@@ -7,6 +7,40 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.14.0] — 2026-09-23
+
+Looking after your account without leaving the app, and the server's own pages split in two so a
+community with a long member list is still readable. Needs Foxfire Server 0.3.0.
+
+### Added
+
+- **Change your email, password or name** from Settings › Server, where your account already was.
+  Changing your email or your password asks for your current password; changing your password signs
+  out every other device and keeps this one, so a password that had got out is worth nothing
+  anywhere.
+- **Confirm password when making an account.** Two boxes rather than one, because a password nobody
+  can read is a password nobody can check — and a typo used to mean a sign-in that could never work.
+- **Reset links, for whoever administers a server.** Settings › Members now offers a reset link for
+  any member: copy it, send it however your community talks, and they set a new password in a
+  browser. It lasts a day, works once, and making a new one withdraws the last. Nothing about their
+  account changes until they use it.
+- **Members and Invites are separate pages** in Settings, where Server management used to be one.
+  Members filters by name or address and opens a line for the detail and the actions; Invites keeps
+  public sign-up beside the invites it governs.
+- **The sign-in form says what to do about a forgotten password**: ask whoever runs the server for a
+  reset link.
+
+### Changed
+
+- **Needs Foxfire Server 0.3.0.** Everything above is the server's to answer, and a server that has
+  not been updated will say so.
+
+### Under the hood
+
+- The Members and Invites screens are shared with the web client, as Server management was.
+- The rule that a password is at least twelve characters lives in one place now, rather than in the
+  desktop's form, the web client's, and the server.
+
 ## [0.13.0] — 2026-09-21
 
 Foxfire Server 0.2.0 hosts a web client of its own, so the people on your server can read everybody's
@@ -986,6 +1020,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0
 [0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0

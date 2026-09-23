@@ -1,27 +1,28 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
-import { ServerManagementPage } from '@foxfire/ui'
+import { InvitesPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { queryKeys } from '../queries/keys'
 
-/** People and access on the server you administer: sign-up, invites, members. */
-export function ServerManagementScreen(): JSX.Element {
+/** How somebody gets an account on the server you administer. */
+export function InvitesScreen(): JSX.Element {
   const client = useClient()
   const platform = usePlatform()
   const queryClient = useQueryClient()
 
-  const users = useQuery({ queryKey: queryKeys.admin.users(), queryFn: () => client.admin.users() })
-  const invites = useQuery({ queryKey: queryKeys.admin.invites(), queryFn: () => client.admin.invites() })
+  const invites = useQuery({
+    queryKey: queryKeys.admin.invites(),
+    queryFn: () => client.admin.invites()
+  })
+
   const settings = useQuery({
     queryKey: queryKeys.admin.settings(),
     queryFn: () => client.admin.getSettings()
   })
 
-  /** Every action here can change what all three lists show. */
+  /** Under one key, because taking an invite adds a member and spends the invite. */
   const refresh = (): void => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users() })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.invites() })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.all() })
   }
 
   const thenRefresh = async <T,>(run: Promise<T>): Promise<T> => {
@@ -33,9 +34,7 @@ export function ServerManagementScreen(): JSX.Element {
   }
 
   return (
-    <ServerManagementPage
-      users={users.data ?? []}
-      usersLoading={users.isPending}
+    <InvitesPage
       invites={invites.data ?? []}
       invitesLoading={invites.isPending}
       publicSignup={settings.data?.publicSignup ?? true}
@@ -45,8 +44,6 @@ export function ServerManagementScreen(): JSX.Element {
       }}
       onCreateInvite={(email) => thenRefresh(client.admin.createInvite(email))}
       onRevokeInvite={(id): Promise<AdminActionResult> => thenRefresh(client.admin.revokeInvite(id))}
-      onUpdateUser={(id, patch) => thenRefresh(client.admin.updateUser(id, patch))}
-      onDeleteUser={(id) => thenRefresh(client.admin.deleteUser(id))}
       onCopy={(text) => void platform.copyText(text)}
     />
   )

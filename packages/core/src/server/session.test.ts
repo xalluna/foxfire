@@ -318,4 +318,117 @@ describe('createServerSession', () => {
     expect(store.value).toBeNull()
     expect(s.user()).toBeNull()
   })
+  it('takes the fresh pair a password change answers with, under the renewal lock', async () => {
+    // The server ends every session on the account and mints one. If the
+    // replacement were not adopted, the device that just changed its password
+    // would be signed out a quarter of an hour later; if a renewal ran
+    // alongside it, it would spend a token the change was about to revoke.
+    const store = memoryStore(null)
+    const order: string[] = []
+    const server = fakeServer({
+      'POST /auth/login': [json(session('a-1', 15 * 60_000, 'r-1'))],
+      'POST /auth/password': [json(session('a-2', 15 * 60_000, 'r-2'))]
+    })
+
+    const s = createServerSession({
+      baseUrl: 'https://fox.example',
+      identity: DESKTOP,
+      tokenTransport: 'body',
+      store,
+      deviceLabel: 'This PC',
+      refreshLock: {
+        async run(renew) {
+          order.push('locked')
+          try {
+            return await renew()
+          } finally {
+            order.push('released')
+          }
+        }
+      },
+      fetch: server.fetch
+    })
+
+    await s.login({ email: 'faker@example.com', password: 'the old one' })
+
+    const user = await s.changePassword({
+      currentPassword: 'the old one',
+      newPassword: 'a-long-enough-password'
+    })
+
+    const change = server.calls.at(-1)!
+
+    expect(user).toEqual(USER)
+    expect(change.path).toBe('/auth/password')
+    expect(change.headers.Authorization).toBe('Bearer a-1')
+    expect(change.body).toEqual({
+      currentPassword: 'the old one',
+      newPassword: 'a-long-enough-password',
+      deviceLabel: 'This PC'
+    })
+    expect(store.value).toBe('r-2')
+    expect(order).toEqual(['locked', 'released'])
+  })
+
+  it('signs in whoever a reset link was for, from a link or a bare code', async () => {
+    const store = memoryStore(null)
+    const server = fakeServer({
+      'POST /password-resets/tok-1/redeem': [json(session('a-1', 15 * 60_000, 'r-1'))]
+    })
+
+    const s = createServerSession({
+      baseUrl: 'https://fox.example',
+      identity: DESKTOP,
+      tokenTransport: 'body',
+      store,
+      fetch: server.fetch
+    })
+
+    // The whole link, as somebody would paste it out of a chat window.
+    const user = await s.redeemPasswordReset(
+      'https://fox.example/reset-password/tok-1',
+      'a-long-enough-password'
+    )
+
+    expect(user).toEqual(USER)
+    expect(server.calls.at(-1)?.body).toEqual({
+      newPassword: 'a-long-enough-password',
+      deviceLabel: undefined
+    })
+    expect(store.value).toBe('r-1')
+  })
+
+  it('drops the access token after a change of name, so its claims catch up', async () => {
+    const renamed = { ...USER, username: 'Faker2' }
+    const store = memoryStore(null)
+    const refreshed: string[] = []
+    const server = fakeServer({
+      'POST /auth/login': [json(session('a-1', 15 * 60_000, 'r-1'))],
+      'PATCH /auth/username': [json(renamed)],
+      'POST /auth/refresh': [json(session('a-2', 15 * 60_000, 'r-2'))],
+      'GET /dashboard': [json({ ok: true })]
+    })
+
+    const s = createServerSession({
+      baseUrl: 'https://fox.example',
+      identity: DESKTOP,
+      tokenTransport: 'body',
+      store,
+      onUserRefreshed: (user) => refreshed.push(user.username),
+      fetch: server.fetch
+    })
+
+    await s.login({ email: 'faker@example.com', password: 'correct horse battery' })
+    await s.changeUsername('Faker2')
+
+    expect(s.user()).toEqual(renamed)
+    expect(refreshed).toEqual(['Faker2'])
+
+    // The next request renews rather than carrying a token that still says
+    // Faker — one refresh, then the call itself.
+    await s.request('/dashboard')
+
+    expect(server.calls.map((call) => call.path)).toContain('/auth/refresh')
+    expect(server.calls.at(-1)?.headers.Authorization).toBe('Bearer a-2')
+  })
 })
