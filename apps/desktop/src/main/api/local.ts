@@ -204,5 +204,20 @@ export const localApi: ServerBackedApi = {
             getLeagueEntries(db, account.id).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
         }))
     }
+  },
+
+  /**
+   * Nothing to hold here. A recording on YouTube in local-only mode lives on
+   * the recording's own row, and reaches a match row through `local`; the
+   * server's copy is the thing a community shares, and there is no community.
+   */
+  matchRecordings: {
+    get: async () => null,
+    attach: async () => ({
+      ok: false,
+      reason: 'failed',
+      message: 'Connect to a Foxfire Server to share a recording with other people.'
+    }),
+    detach: async () => ({ ok: false, error: 'There is no server to remove it from.' })
   }
 }

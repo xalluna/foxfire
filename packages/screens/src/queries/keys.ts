@@ -38,6 +38,14 @@ export const queryKeys = {
    */
   matchSummary: (accountId: string, matchId: string) => ['matchList', accountId, 'match', matchId] as const,
 
+  /**
+   * One player's recording of one game, markers and all. Under their match list
+   * too, so the refresh that puts a recording on the row reaches the page
+   * playing it.
+   */
+  matchRecording: (accountId: string, matchId: string) =>
+    ['matchList', accountId, 'recording', matchId] as const,
+
   matchDetail: (matchId: string) => ['matchDetail', matchId] as const,
 
   rankHistory: (accountId?: string, queueType?: QueueType, range?: RankRange) =>

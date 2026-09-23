@@ -230,3 +230,101 @@ describe('matchContextItems on a platform that cannot do everything', () => {
     ])
   })
 })
+
+/**
+ * Recordings, and whose they are.
+ *
+ * A recording is one player's screen, so every item here follows the row's
+ * player: the server only ever puts a recording on the row of the account it
+ * belongs to, and writing one is for that account's owner. The same game in
+ * somebody else's history is a different row with different answers.
+ */
+describe('matchContextItems and recordings', () => {
+  const RECORDING_ACTIONS = {
+    onCopyId: () => {},
+    onOpenDetails: () => {},
+    onWatchRecording: () => {},
+    onUploadRecording: () => {},
+    onAttachRecordingLink: () => {},
+    onDetachRecording: () => {}
+  }
+  const ON_YOUTUBE = { youtubeVideoId: 'dQw4w9WgXcQ', privacy: 'unlisted' as const, hasEvents: true }
+  const LOCAL = { recordingId: 7, replayId: null }
+  const item = (items: ReturnType<typeof matchContextItems>, label: string) =>
+    items.find((candidate) => candidate.label.startsWith(label))
+  const labels = (items: ReturnType<typeof matchContextItems>) => items.map((candidate) => candidate.label)
+
+  it('lets a browser watch a recording the server holds for this row', () => {
+    const items = matchContextItems({ ...MATCH, recording: ON_YOUTUBE }, RECORDING_ACTIONS, {
+      isMine: false,
+      serverMode: true
+    })
+    expect(item(items, 'Watch recording')?.disabledReason).toBeUndefined()
+  })
+
+  it('says there is nothing to watch on a row whose player has no recording', () => {
+    const items = matchContextItems(MATCH, RECORDING_ACTIONS, { isMine: false, serverMode: true })
+    expect(item(items, 'Watch recording')?.disabledReason).toBe('No recording for this game')
+  })
+
+  it('offers nothing that writes a recording on somebody else’s account', () => {
+    const items = matchContextItems({ ...MATCH, local: LOCAL, recording: ON_YOUTUBE }, RECORDING_ACTIONS, {
+      isMine: false,
+      serverMode: true
+    })
+    expect(labels(items)).not.toContain('Upload recording to YouTube')
+    expect(labels(items).some((label) => label.includes('YouTube link'))).toBe(false)
+    expect(labels(items)).not.toContain('Remove recording from server')
+  })
+
+  it('lets an admin take a recording off somebody else’s game, and nothing more', () => {
+    const items = matchContextItems({ ...MATCH, recording: ON_YOUTUBE }, RECORDING_ACTIONS, {
+      isMine: false,
+      isAdmin: true,
+      serverMode: true
+    })
+    expect(labels(items)).toContain('Remove recording from server')
+    expect(labels(items).some((label) => label.includes('YouTube link'))).toBe(false)
+  })
+
+  it('offers an upload of this machine’s recording until it is on YouTube', () => {
+    const own = { isMine: true, serverMode: true }
+    expect(labels(matchContextItems({ ...MATCH, local: LOCAL }, RECORDING_ACTIONS, own))).toContain(
+      'Upload recording to YouTube'
+    )
+
+    const pending = matchContextItems(
+      { ...MATCH, local: { ...LOCAL, recordingUploadPending: true } },
+      RECORDING_ACTIONS,
+      own
+    )
+    expect(item(pending, 'Upload recording')?.disabledReason).toBe('Uploading…')
+
+    const uploaded = matchContextItems(
+      { ...MATCH, local: { ...LOCAL, recordingVideoId: 'dQw4w9WgXcQ' } },
+      RECORDING_ACTIONS,
+      own
+    )
+    expect(labels(uploaded)).not.toContain('Upload recording to YouTube')
+    expect(labels(uploaded)).toContain('Replace YouTube link…')
+  })
+
+  it('attaches a link from a browser with nothing on disk, but only on a server', () => {
+    const web = { onCopyId: () => {}, onOpenDetails: () => {}, onAttachRecordingLink: () => {} }
+    expect(labels(matchContextItems(MATCH, web, { isMine: true, serverMode: true }))).toContain(
+      'Attach YouTube link…'
+    )
+
+    // Local-only, a link has to hang off a recording on this disk; there is
+    // nowhere else to keep it.
+    expect(labels(matchContextItems(MATCH, web, {}))).not.toContain('Attach YouTube link…')
+    expect(labels(matchContextItems({ ...MATCH, local: LOCAL }, web, {}))).toContain('Attach YouTube link…')
+  })
+
+  it('never offers an upload in a browser, which has no file to send', () => {
+    const web = { onCopyId: () => {}, onOpenDetails: () => {}, onWatchRecording: () => {} }
+    expect(labels(matchContextItems(MATCH, web, { isMine: true, serverMode: true }))).not.toContain(
+      'Upload recording to YouTube'
+    )
+  })
+})

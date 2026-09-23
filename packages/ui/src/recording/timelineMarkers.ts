@@ -1,4 +1,4 @@
-import type { RecordingEvent } from '@shared/types'
+import type { RecordingEvent } from '@foxfire/core'
 
 /**
  * Turning a game's worth of events into marks on a seek bar.

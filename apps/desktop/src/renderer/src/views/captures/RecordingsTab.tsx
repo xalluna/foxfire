@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Asset, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { youtubeWatchUrl } from '@foxfire/core/youtube'
+import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { openUploadDialog } from '../../youtube/uploadDialog'
+import { uploadPending, uploadStatusText } from '../../youtube/uploadStatus'
 import type { Account, Recording } from '@shared/types'
 
 /**
@@ -43,9 +47,24 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
     void queryClient.invalidateQueries({ queryKey: ['matchList', account.id] })
   }
 
+  const [deleting, setDeleting] = useState<Recording | null>(null)
+  const [forgetting, setForgetting] = useState<Recording | null>(null)
+  const [attaching, setAttaching] = useState<Recording | null>(null)
+
   const remove = useMutation({
     mutationFn: (recordingId: number) => window.api.recordings.remove(recordingId),
-    onSuccess: refresh
+    onSuccess: () => {
+      setDeleting(null)
+      refresh()
+    }
+  })
+
+  const forget = useMutation({
+    mutationFn: (recordingId: number) => window.api.recordings.forget(recordingId),
+    onSuccess: () => {
+      setForgetting(null)
+      refresh()
+    }
   })
 
   const cleanup = useMutation({
@@ -115,27 +134,76 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
               <RecordingRow
                 key={recording.id}
                 recording={recording}
-                onDelete={() => remove.mutate(recording.id)}
+                onDelete={() => setDeleting(recording)}
+                onForget={() => setForgetting(recording)}
+                onAttachLink={() => setAttaching(recording)}
               />
             ))}
           </ul>
         )}
       </div>
+
+      {deleting && (
+        <ConfirmDialog
+          title="Delete this recording?"
+          message={
+            deleting.youtube
+              ? 'The video file on this PC is deleted to free the space. The recording stays, and goes on playing from YouTube with its markers.'
+              : 'The video file and the recording are both deleted from this PC. This cannot be undone.'
+          }
+          confirmLabel={deleting.youtube ? 'Delete the file' : 'Delete'}
+          danger
+          busy={remove.isPending}
+          onConfirm={() => remove.mutate(deleting.id)}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+
+      {forgetting && (
+        <ConfirmDialog
+          title="Forget this recording?"
+          message={
+            forgetting.youtube
+              ? 'It comes off this PC, markers and all. The video stays on YouTube, and anything your server holds stays there.'
+              : 'It comes off this list. The file is already gone.'
+          }
+          confirmLabel="Forget"
+          danger
+          busy={forget.isPending}
+          onConfirm={() => forget.mutate(forgetting.id)}
+          onCancel={() => setForgetting(null)}
+        />
+      )}
+
+      {attaching && (
+        <AttachLinkDialog
+          replacing={attaching.youtube !== null}
+          withMarkers
+          onAttach={(videoId, replace) => window.api.youtube.attachLink(attaching.id, videoId, replace)}
+          onClose={() => setAttaching(null)}
+        />
+      )}
     </div>
   )
 }
 
 function RecordingRow({
   recording,
-  onDelete
+  onDelete,
+  onForget,
+  onAttachLink
 }: {
   recording: Recording
   onDelete: () => void
+  onForget: () => void
+  onAttachLink: () => void
 }): JSX.Element {
   const assets = useAssetManifest()
   const match = recording.match
   const championId = match?.championId ?? recording.selfChampionId
-  const playable = recording.fileExists
+  const onDisk = recording.fileExists
+  // A recording on YouTube still plays after its file has gone.
+  const playable = onDisk || recording.youtube !== null
 
   return (
     <li
@@ -170,8 +238,9 @@ function RecordingRow({
           {' · '}
           {recording.durationSeconds !== null ? formatClock(recording.durationSeconds) : '—'}
           {' · '}
-          {formatBytes(recording.fileBytes)}
+          {recording.fileDeleted ? 'file deleted' : formatBytes(recording.fileBytes)}
         </p>
+        <YouTubeLine recording={recording} onAttachLink={onAttachLink} />
       </div>
 
       {match && (
@@ -195,16 +264,32 @@ function RecordingRow({
         >
           Watch
         </button>
+        {onDisk && !recording.youtube && !uploadPending(recording.upload) && (
+          <button
+            type="button"
+            onClick={() => openUploadDialog(recording.id)}
+            title="Upload to YouTube"
+            className="rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
+          >
+            Upload
+          </button>
+        )}
         <IconButton
           label="Show in folder"
-          disabled={!playable}
+          disabled={!onDisk}
           onClick={() => void window.api.recordings.reveal(recording.id)}
         >
           <Icon.Folder width={13} height={13} />
         </IconButton>
-        <IconButton label="Delete recording" onClick={onDelete} danger>
-          <Icon.Trash width={13} height={13} />
-        </IconButton>
+        {onDisk ? (
+          <IconButton label={recording.youtube ? 'Delete the file' : 'Delete recording'} onClick={onDelete} danger>
+            <Icon.Trash width={13} height={13} />
+          </IconButton>
+        ) : (
+          <IconButton label="Forget this recording" onClick={onForget} danger>
+            <Icon.Close width={13} height={13} />
+          </IconButton>
+        )}
       </div>
     </li>
   )
@@ -218,7 +303,7 @@ function RecordingRow({
  * something real about their sync.
  */
 function BindBadge({ recording }: { recording: Recording }): JSX.Element | null {
-  if (!recording.fileExists) {
+  if (!recording.fileExists && !recording.fileDeleted) {
     return <Badge tone="warning">File missing</Badge>
   }
   if (recording.bindState === 'pending') {
@@ -228,6 +313,118 @@ function BindBadge({ recording }: { recording: Recording }): JSX.Element | null 
     return <Badge tone="neutral">No match entry</Badge>
   }
   return null
+}
+
+/**
+ * Where the recording stands with YouTube, and what can be done about it, in one line.
+ *
+ * Under the row rather than as more buttons beside it: most rows have nothing
+ * going on, and the ones that do need a sentence (why an upload stopped, why
+ * the server said no) more than they need another icon.
+ */
+function YouTubeLine({ recording, onAttachLink }: { recording: Recording; onAttachLink: () => void }): JSX.Element {
+  const upload = recording.upload
+  const youtube = recording.youtube
+  const status = uploadStatusText(recording)
+
+  const parts: JSX.Element[] = []
+
+  if (status) {
+    parts.push(
+      <span key="status" className={upload?.state === 'failed' ? 'text-red' : 'text-text-dim'}>
+        {status}
+      </span>
+    )
+    if (upload?.error && upload.state !== 'uploading') {
+      parts.push(
+        <span key="why" className="text-text-mute">
+          {upload.error}
+        </span>
+      )
+    }
+    if (uploadPending(upload)) {
+      parts.push(
+        <LineButton key="cancel" onClick={() => void window.api.youtube.cancel(recording.id)}>
+          Cancel
+        </LineButton>
+      )
+    } else if ((upload?.state === 'failed' || upload?.state === 'cancelled') && recording.fileExists && !youtube) {
+      parts.push(
+        <LineButton key="retry" onClick={() => void window.api.youtube.retry(recording.id)}>
+          Try again
+        </LineButton>
+      )
+    }
+  }
+
+  if (youtube) {
+    parts.push(
+      <span key="on" className="text-teal">
+        On YouTube{youtube.privacy ? ` · ${youtube.privacy}` : ''}
+        {youtube.source === 'link' ? ' · linked' : ''}
+      </span>
+    )
+    if (youtube.forcedPrivate) {
+      parts.push(
+        <span key="forced" className="text-amber">
+          made private until Foxfire passes YouTube&rsquo;s review
+        </span>
+      )
+    }
+    parts.push(
+      <a key="open" href={youtubeWatchUrl(youtube.videoId)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+        Open
+      </a>
+    )
+
+    if (recording.attachment?.state === 'attached') {
+      parts.push(
+        <span key="server" className="text-text-mute">
+          on your server
+        </span>
+      )
+    } else if (recording.attachment?.state === 'conflict') {
+      parts.push(
+        <span key="conflict" className="text-amber">
+          {recording.attachment.message ?? 'Your server already has a recording of this game.'}
+        </span>,
+        <LineButton key="replace" onClick={() => void window.api.youtube.reattach(recording.id)}>
+          Replace it
+        </LineButton>
+      )
+    } else if (recording.attachment?.state === 'not_owner' || recording.attachment?.state === 'failed') {
+      parts.push(
+        <span key="refused" className="text-text-mute">
+          {recording.attachment.message ?? 'Not on your server.'}
+        </span>
+      )
+    }
+  }
+
+  parts.push(
+    <LineButton key="link" onClick={onAttachLink}>
+      {youtube ? 'Replace link' : 'Attach a YouTube link'}
+    </LineButton>
+  )
+
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs">
+      {parts.map((part, index) => (
+        <span key={part.key ?? index} className="inline-flex items-center gap-2">
+          {index > 0 && <span className="text-text-mute/50">·</span>}
+          {part}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+function LineButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }): JSX.Element {
+  return (
+    <button type="button" onClick={onClick} className="text-accent transition hover:underline">
+      {children}
+    </button>
+  )
 }
 
 function Badge({

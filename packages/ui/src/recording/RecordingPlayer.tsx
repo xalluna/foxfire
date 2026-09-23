@@ -1,12 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Icon, formatClock } from '@foxfire/ui'
+import type { RecordingEvent } from '@foxfire/core'
+import * as Icon from '../components/icons'
+import { formatClock } from '../lib/matchStats'
 import { EventTimeline } from './EventTimeline'
+import { INITIAL_PLAYBACK, type PlaybackController, type PlaybackState, type PlayerSource } from './playback'
 import { adjacentEvent, seekTargetFor } from './timelineMarkers'
-import type { RecordingEvent } from '@shared/types'
 
 /**
- * The video and its controls.
+ * A recording, from wherever it is: the file on this machine, or its copy on YouTube.
+ *
+ * The two look deliberately different. A file is Foxfire's own player, with
+ * its own controls, slow motion and thumbnails on the seek bar. A YouTube copy
+ * keeps YouTube's controls — quality, captions and fullscreen are YouTube's to
+ * offer, and nothing may be drawn over its frame — with the marker strip and
+ * the event buttons underneath, which is what makes it a recording rather than
+ * a video.
+ */
+export function RecordingPlayer({
+  source,
+  events
+}: {
+  source: PlayerSource
+  events: readonly RecordingEvent[]
+}): JSX.Element {
+  return source.kind === 'file' ? (
+    <FilePlayer src={source.src} events={events} />
+  ) : (
+    <YouTubePlayer videoId={source.videoId} mount={source.mount} events={events} />
+  )
+}
+
+/**
+ * The file on this machine, and its controls.
  *
  * Hand-built rather than `<video controls>`: the native bar is a Chromium
  * widget that looks nothing like the rest of the app, and there is no way to
@@ -21,7 +47,7 @@ const SPEEDS = [0.25, 0.5, 1, 1.5, 2] as const
 /** Arrow-key jump. Long enough to cover ground, short enough to stay oriented. */
 const NUDGE_SECONDS = 5
 
-export function RecordingPlayer({
+function FilePlayer({
   src,
   events
 }: {
@@ -164,7 +190,7 @@ export function RecordingPlayer({
       </div>
 
       <EventTimeline
-        src={src}
+        preview={src}
         events={events}
         duration={duration}
         currentTime={currentTime}
@@ -225,6 +251,137 @@ export function RecordingPlayer({
             {fullscreen ? <Icon.Minimize /> : <Icon.Maximize />}
           </ControlButton>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A copy on YouTube, in YouTube's own player, with Foxfire's markers beneath it.
+ *
+ * The frame is YouTube's from edge to edge: at least 200 pixels each way,
+ * which is YouTube's floor, and nothing layered on top of it. Everything
+ * Foxfire adds sits below — the marker strip, the event buttons, the time —
+ * and drives the frame through the controller the platform mounted.
+ */
+function YouTubePlayer({
+  videoId,
+  mount,
+  events
+}: {
+  videoId: string
+  mount: (container: HTMLElement, videoId: string) => PlaybackController
+  events: readonly RecordingEvent[]
+}): JSX.Element {
+  const frameRef = useRef<HTMLDivElement>(null)
+  const controllerRef = useRef<PlaybackController | null>(null)
+  const [state, setState] = useState<PlaybackState>(INITIAL_PLAYBACK)
+
+  useEffect(() => {
+    const container = frameRef.current
+    if (!container) return
+
+    const controller = mount(container, videoId)
+    controllerRef.current = controller
+    const unsubscribe = controller.subscribe(setState)
+
+    return () => {
+      unsubscribe()
+      controller.destroy()
+      controllerRef.current = null
+      setState(INITIAL_PLAYBACK)
+    }
+  }, [mount, videoId])
+
+  const { currentTime, duration, playing } = state
+
+  const seek = useCallback(
+    (seconds: number) => {
+      const bounded = duration > 0 ? Math.min(seconds, duration) : seconds
+      controllerRef.current?.seek(Math.max(0, bounded))
+    },
+    [duration]
+  )
+
+  const jumpEvent = useCallback(
+    (direction: -1 | 1) => {
+      const target = adjacentEvent(events, currentTime, direction)
+      if (target) seek(seekTargetFor(target.videoTime))
+    },
+    [currentTime, events, seek]
+  )
+
+  // Only while focus is on the page. Once somebody clicks into YouTube's
+  // frame, its own keys take over and these never arrive — which is right:
+  // two players answering one key press would each undo the other.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null
+      if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return
+
+      switch (event.key) {
+        case ' ':
+          event.preventDefault()
+          if (playing) controllerRef.current?.pause()
+          else controllerRef.current?.play()
+          break
+        case 'ArrowLeft':
+          seek(currentTime - NUDGE_SECONDS)
+          break
+        case 'ArrowRight':
+          seek(currentTime + NUDGE_SECONDS)
+          break
+        case ',':
+          jumpEvent(-1)
+          break
+        case '.':
+          jumpEvent(1)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [currentTime, jumpEvent, playing, seek])
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-canvas">
+      <div className="relative min-h-[200px] min-w-[200px] flex-1 bg-black">
+        {/* Absolutely filling the area rather than sized by percentage, which a
+            flex item's height does not resolve. Kept mounted even when the
+            video fails, so the frame the controller owns is torn down by the
+            controller rather than by React. */}
+        <div ref={frameRef} className={clsx('absolute inset-0', state.error && 'hidden')} />
+        {state.error && (
+          <div className="absolute inset-0 flex items-center justify-center p-8 text-center">
+            <div>
+              <p className="font-display text-lg text-text">This recording will not play</p>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-text-dim">{state.error}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <EventTimeline events={events} duration={duration} currentTime={currentTime} onSeek={seek} />
+
+      <div className="flex items-center gap-2 border-t border-hairline px-4 py-2">
+        <ControlButton label="Previous event (,)" onClick={() => jumpEvent(-1)}>
+          <Icon.SkipBack />
+        </ControlButton>
+        <ControlButton label="Next event (.)" onClick={() => jumpEvent(1)}>
+          <Icon.SkipForward />
+        </ControlButton>
+
+        <span className="ml-1 text-sm tabular-nums text-text-dim">
+          {formatClock(Math.round(currentTime))}
+          <span className="text-text-mute"> / {formatClock(Math.round(duration))}</span>
+        </span>
+
+        <span className="ml-auto text-2xs text-text-mute">
+          {events.length === 0
+            ? 'Playing from YouTube · no markers came with this recording'
+            : 'Playing from YouTube'}
+        </span>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import type { Position } from '@foxfire/core'
+import type { Position, RecordingEvent, YouTubePrivacy } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -59,7 +59,12 @@ export type {
   ServerAdminSettings,
   AdminActionResult,
   PasswordChange,
-  EmailChange
+  EmailChange,
+  YouTubePrivacy,
+  MatchRecording,
+  MatchRecordingSummary,
+  AttachRecordingInput,
+  AttachRecordingOutcome
 } from '@foxfire/core'
 
 /**
@@ -336,22 +341,111 @@ export interface Recording {
   durationSeconds: number | null
   selfChampionId: number | null
   match: LinkedMatchInfo | null
+
+  /**
+   * The file was deleted on purpose, and the row kept because the recording
+   * is on YouTube. Distinct from `fileExists`, which also turns false for a
+   * file that went missing behind the app's back.
+   */
+  fileDeleted: boolean
+  /** The copy on YouTube, once there is one. */
+  youtube: RecordingYouTube | null
+  /** An upload of this recording, queued, running, or finished. */
+  upload: RecordingUpload | null
+  /** Whether the active server has been told about the video. Null in local-only mode. */
+  attachment: RecordingAttachment | null
 }
 
-/** Which side of an event the tracked player was on. */
-export type RecordingEventRole = 'kill' | 'death' | 'assist' | 'multikill'
+/**
+ * The events a recording carries. Defined in @foxfire/core now that they
+ * travel to a server with the video; re-exported so the desktop's imports stay put.
+ */
+export type { RecordingEvent, RecordingEventRole } from '@foxfire/core'
 
-export interface RecordingEvent {
-  /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
-  eventId: number
-  name: string
-  /** Seconds on the game clock, as the game reported it. */
-  gameTime: number
-  /** Seconds into the video file — gameTime minus the offset captured at record start. */
-  videoTime: number
-  role: RecordingEventRole
-  /** The other player for a kill or death, the streak size for a multikill. */
-  label: string | null
+/** A recording's copy on YouTube. */
+export interface RecordingYouTube {
+  videoId: string
+  /** As YouTube reported it, which is not always what was asked for. */
+  privacy: YouTubePrivacy | null
+  /** Asked for public or unlisted and given private: the Google project has not been audited yet. */
+  forcedPrivate: boolean
+  source: 'upload' | 'link'
+  title: string | null
+  /** Epoch milliseconds. */
+  at: number
+}
+
+export type UploadState =
+  | 'queued'
+  | 'uploading'
+  | 'paused'
+  | 'waiting_quota'
+  | 'waiting_auth'
+  | 'failed'
+  | 'done'
+  | 'cancelled'
+
+/** An upload, as the Recordings tab draws it. */
+export interface RecordingUpload {
+  state: UploadState
+  trigger: 'manual' | 'auto'
+  bytesSent: number
+  fileBytes: number | null
+  /** Why it stopped, or what it is waiting for, in words. */
+  error: string | null
+  /** When the queue will try again, epoch milliseconds, when it is waiting on something. */
+  resumesAt: number | null
+}
+
+export type AttachmentState = 'attached' | 'conflict' | 'not_owner' | 'failed'
+
+export interface RecordingAttachment {
+  state: AttachmentState
+  message: string | null
+}
+
+/** What the upload form opens with, from the templates in settings. */
+export interface UploadDraft {
+  recordingId: number
+  title: string
+  description: string
+  privacy: YouTubePrivacy
+  durationSeconds: number | null
+}
+
+/** What the upload form sends back. */
+export interface UploadRequest {
+  recordingId: number
+  title: string
+  description: string
+  privacy: YouTubePrivacy
+}
+
+/** Foxfire's Google connection on this machine, and the queue behind it. */
+export interface YouTubeState {
+  /**
+   * Whether this build carries Foxfire's Google client at all. A build made
+   * without it — a contributor's, or CI's — has no uploads, and says so rather
+   * than offering a button that cannot work.
+   */
+  configured: boolean
+  /** The Google account uploads go to, once connected. */
+  email: string | null
+  /** A sign-in is open in the browser, waiting for Google to hand it back. */
+  connecting: boolean
+  /** Why the last connect failed, or why the connection was dropped. */
+  error: string | null
+  /** The queue is holding because a game is on. */
+  pausedForGame: boolean
+  /** YouTube's daily upload quota is spent until this time, epoch milliseconds. */
+  quotaResumesAt: number | null
+}
+
+export interface YouTubeSettings {
+  /** Put every new recording on YouTube once it finds its match. Off unless somebody turns it on. */
+  autoUpload: boolean
+  defaultPrivacy: YouTubePrivacy
+  titleTemplate: string
 }
 
 /** Everything a recording window needs, fetched once when it opens. */

@@ -24,6 +24,7 @@ export {
   type ContextMenuState
 } from './components/ContextMenu'
 export { CopyLinkButton } from './components/CopyLinkButton'
+export { ConfirmDialog, Dialog, DialogActions } from './components/Dialog'
 export { Disclaimer } from './components/Disclaimer'
 export { EmptyState } from './components/EmptyState'
 export { ErrorBoundary } from './components/ErrorBoundary'
@@ -42,6 +43,24 @@ export { Segmented } from './components/Segmented'
 export { MatchListSkeleton, MatchRowSkeleton, Skeleton } from './components/Skeleton'
 export { SyncProgressBar } from './components/SyncProgressBar'
 export * as Icon from './components/icons'
+
+// Recordings
+export { AttachLinkDialog } from './recording/AttachLinkDialog'
+export { EventTimeline } from './recording/EventTimeline'
+export {
+  INITIAL_PLAYBACK,
+  type PlaybackController,
+  type PlaybackState,
+  type PlayerSource,
+  type YouTubeMount
+} from './recording/playback'
+export {
+  RecordingHeader,
+  recordingActionClass,
+  recordingPrimaryActionClass,
+  type RecordingHeaderFacts
+} from './recording/RecordingHeader'
+export { RecordingPlayer } from './recording/RecordingPlayer'
 
 // Settings primitives
 export { SettingsCard, SettingsPage } from './components/settings/SettingsCard'

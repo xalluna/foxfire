@@ -1,8 +1,26 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
-import clsx from 'clsx'
-import { Asset, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
-import { RecordingPlayer } from './RecordingPlayer'
+import { usePlatform } from '@foxfire/screens'
+import { youtubeWatchUrl } from '@foxfire/core/youtube'
+import {
+  AttachLinkDialog,
+  EmptyState,
+  Icon,
+  MatchListSkeleton,
+  RecordingHeader,
+  RecordingPlayer,
+  Segmented,
+  recordingActionClass,
+  recordingPrimaryActionClass,
+  type PlayerSource,
+  type RecordingHeaderFacts
+} from '@foxfire/ui'
+import { useRecordingUpdates, useYouTubeUpdates } from '../hooks/useDesktopUpdates'
+import { YouTubeUploadDialogHost } from '../youtube/YouTubeUploadDialog'
+import { openUploadDialog } from '../youtube/uploadDialog'
+import { uploadPending, uploadStatusText } from '../youtube/uploadStatus'
+import { youtubeHostMount } from './youtubeHostMount'
 import type { Recording } from '@shared/types'
 
 /**
@@ -13,6 +31,11 @@ import type { Recording } from '@shared/types'
  * gone — so unlike the telemetry panel and the LP editor this is not a
  * singleton on the main side. See recordingWindow.ts.
  *
+ * Once a recording is on YouTube it plays from there by default, with a switch
+ * back to the file while the file is still on this disk: YouTube is the copy
+ * everybody else watches, and the file is the one with thumbnails on the seek
+ * bar and slow motion.
+ *
  * Loads the same renderer bundle as everything else, at `/recording/<id>` —
  * see router.tsx.
  */
@@ -21,18 +44,26 @@ function recordingIdFrom(param: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
+type Source = 'youtube' | 'file'
+
 export function RecordingApp(): JSX.Element {
   const { id } = useParams({ from: '/_window/recording/$id' })
   const recordingId = recordingIdFrom(id)
+  const mount = usePlatform().youtube ?? youtubeHostMount
+
+  // An upload finishing, a link attached, the file deleted — all change what
+  // this window can play, so it follows the same broadcasts the list does.
+  useRecordingUpdates()
+  useYouTubeUpdates()
 
   const detail = useQuery({
-    queryKey: ['recordingDetail', recordingId],
+    queryKey: ['recordings', 'detail', recordingId],
     queryFn: () => window.api.recordings.detail(recordingId!),
-    enabled: recordingId !== null,
-    // The recording never changes once it has stopped, so there is nothing to
-    // refetch and a window left open overnight costs nothing.
-    staleTime: Infinity
+    enabled: recordingId !== null
   })
+
+  const [chosen, setChosen] = useState<Source | null>(null)
+  const [attaching, setAttaching] = useState(false)
 
   if (recordingId === null) {
     return (
@@ -71,12 +102,73 @@ export function RecordingApp(): JSX.Element {
   }
 
   const { recording, events } = detail.data
+  const videoId = recording.youtube?.videoId ?? null
+  const hasFile = recording.fileExists
+
+  // YouTube once there is a copy there, the file otherwise — and whichever is
+  // left when the one somebody picked goes away underneath them.
+  const preferred: Source = chosen ?? (videoId ? 'youtube' : 'file')
+  const source: Source | null =
+    preferred === 'youtube' ? (videoId ? 'youtube' : hasFile ? 'file' : null) : hasFile ? 'file' : videoId ? 'youtube' : null
+
+  const playerSource: PlayerSource | null =
+    source === 'youtube' && videoId
+      ? { kind: 'youtube', videoId, mount }
+      : source === 'file'
+        ? { kind: 'file', src: `recording://media/${recording.id}` }
+        : null
 
   return (
     <Shell>
-      <RecordingHeader recording={recording} />
-      {recording.fileExists ? (
-        <RecordingPlayer src={`recording://media/${recording.id}`} events={events} />
+      <RecordingHeader
+        facts={factsFor(recording)}
+        status={statusFor(recording)}
+        actions={
+          <>
+            {videoId && hasFile && (
+              <Segmented
+                options={[
+                  ['youtube', 'YouTube'],
+                  ['file', 'This PC']
+                ]}
+                value={source ?? 'youtube'}
+                onChange={setChosen}
+              />
+            )}
+            {hasFile && !videoId && !uploadPending(recording.upload) && (
+              <button type="button" className={recordingActionClass} onClick={() => openUploadDialog(recording.id)}>
+                Upload to YouTube
+              </button>
+            )}
+            <button type="button" className={recordingActionClass} onClick={() => setAttaching(true)}>
+              {videoId ? 'Replace YouTube link' : 'Attach YouTube link'}
+            </button>
+            {videoId && (
+              <a
+                href={youtubeWatchUrl(videoId)}
+                target="_blank"
+                rel="noreferrer"
+                className={`${recordingActionClass} inline-flex items-center gap-1.5`}
+              >
+                <Icon.ExternalLink width={13} height={13} />
+                Open on YouTube
+              </a>
+            )}
+            {recording.match && (
+              <button
+                type="button"
+                onClick={() => void window.api.recordings.showMatch(recording.accountId, recording.match!.matchId)}
+                className={recordingPrimaryActionClass}
+              >
+                View match history
+              </button>
+            )}
+          </>
+        }
+      />
+
+      {playerSource ? (
+        <RecordingPlayer key={source} source={playerSource} events={events} />
       ) : (
         <EmptyState
           icon={<Icon.Film />}
@@ -85,6 +177,16 @@ export function RecordingApp(): JSX.Element {
           tone="warning"
         />
       )}
+
+      {attaching && (
+        <AttachLinkDialog
+          replacing={videoId !== null}
+          withMarkers
+          onAttach={(id, replace) => window.api.youtube.attachLink(recording.id, id, replace)}
+          onClose={() => setAttaching(false)}
+        />
+      )}
+      <YouTubeUploadDialogHost canOpenSettings={false} />
     </Shell>
   )
 }
@@ -93,79 +195,28 @@ function Shell({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className="flex h-screen flex-col bg-canvas text-text">{children}</div>
 }
 
-/**
- * Champion, KDA, result and a way back to the match.
- *
- * The link is why a recording is not a dead end: the video shows what happened and
- * the match row shows the numbers, and reading one against the other is most of
- * the value. It focuses the main window rather than duplicating the detail
- * panel here, which would be a second copy of a component built for a 320px
- * column inside a window shaped for video.
- */
-function RecordingHeader({ recording }: { recording: Recording }): JSX.Element {
-  const assets = useAssetManifest()
+function factsFor(recording: Recording): RecordingHeaderFacts {
   const match = recording.match
-  const championId = match?.championId ?? recording.selfChampionId
+  return {
+    championId: match?.championId ?? recording.selfChampionId,
+    championName: match?.championName ?? null,
+    queueId: match?.queueId ?? recording.queueId,
+    gameMode: match?.gameMode ?? null,
+    durationSeconds: recording.durationSeconds,
+    playedAt: recording.startedAt,
+    win: match ? match.win : null,
+    kills: match?.kills ?? null,
+    deaths: match?.deaths ?? null,
+    assists: match?.assists ?? null
+  }
+}
 
-  return (
-    <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
-      <Asset
-        src={assets && championId !== null ? championIconUrl(assets, championId) : null}
-        className="h-9 w-9"
-        rounded="rounded-md"
-      />
-
-      <div className="min-w-0">
-        <p className="truncate font-display text-base text-text">
-          {assets && championId !== null
-            ? championName(assets, championId, match?.championName)
-            : (match?.championName ?? 'Recording')}
-        </p>
-        <p className="text-2xs text-text-mute">
-          {match ? queueName(match.queueId, match.gameMode) : queueName(recording.queueId, null)}
-          {' · '}
-          {recording.durationSeconds !== null ? formatClock(recording.durationSeconds) : '—'}
-          {' · '}
-          {formatAge(recording.startedAt)}
-        </p>
-      </div>
-
-      {match && (
-        <>
-          <span
-            className={clsx(
-              'ml-2 rounded border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide',
-              match.win ? 'border-teal/30 bg-teal/10 text-teal' : 'border-red/30 bg-red/10 text-red'
-            )}
-          >
-            {match.win ? 'Victory' : 'Defeat'}
-          </span>
-          <span className="text-sm tabular-nums text-text-dim">
-            {match.kills} / <span className="text-red">{match.deaths}</span> / {match.assists}
-            <span className="ml-1.5 text-text-mute">
-              {kdaRatio(match.kills, match.deaths, match.assists)} KDA
-            </span>
-          </span>
-        </>
-      )}
-
-      <div className="ml-auto flex items-center gap-2">
-        {recording.bindState === 'pending' && (
-          <span className="text-2xs text-text-mute">Still looking for this game…</span>
-        )}
-        {recording.bindState === 'unmatched' && (
-          <span className="text-2xs text-text-mute">No match history entry</span>
-        )}
-        {match && (
-          <button
-            type="button"
-            onClick={() => void window.api.recordings.showMatch(recording.accountId, match.matchId)}
-            className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
-          >
-            View match history
-          </button>
-        )}
-      </div>
-    </header>
-  )
+/** The quiet note beside the buttons: where the upload is, or the bind. */
+function statusFor(recording: Recording): string | undefined {
+  const upload = uploadStatusText(recording)
+  if (upload) return upload
+  if (recording.youtube?.forcedPrivate) return 'Private on YouTube until Foxfire passes YouTube’s review'
+  if (recording.bindState === 'pending') return 'Still looking for this game…'
+  if (recording.bindState === 'unmatched') return 'No match history entry'
+  return undefined
 }

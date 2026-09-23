@@ -96,6 +96,49 @@ the window and the tray, and it is refused while a game is on or a recording is 
 it installs on the next quit. The Releases page stays the way in for a first install, which is why
 the repository is public.
 
+## How recordings reach YouTube
+
+A recording starts as an OBS file on one PC. From 0.14.0 it can go to YouTube, and from there be
+watched by everybody on a server — on the desktop and in the browser. The rule everything follows:
+**a recording is one player's view of one game**. A server keys it on (match, Riot account), never on
+the match alone, so in a game two members recorded each history plays its own and no other history
+offers either. That rule lives in the row query in `MatchReads.MatchListAsync`, which is where to
+look if a recording ever turns up on the wrong history.
+
+The path, in `apps/desktop/src/main/youtube`:
+
+- **Connect** once per install, in Settings › YouTube: Google's installed-app flow (system browser,
+  a one-request server on 127.0.0.1, PKCE), scopes `youtube.upload` and `openid email` only. The
+  refresh token is a secret in `keyStore`; nothing that crosses IPC carries it.
+- **Upload** through a queue in SQLite (`youtube_uploads`), one at a time, using YouTube's resumable
+  protocol so an upload survives a restart. It holds from champ select until the game is over, and
+  while OBS is recording; it waits out the quota until midnight Pacific. The uploader chooses title,
+  description and privacy every time — YouTube requires it — prefilled from the templates in
+  `@foxfire/core/youtube`.
+- **Attach** on the server, owner only, with the markers from this PC's database: whenever an
+  upload finishes, a recording finds its game, a server sync completes, or the active server
+  changes. `recording_attachments` remembers what each server was told, so a recording somebody took
+  off the server stays off.
+
+The player is shared (`packages/ui/src/recording`) and takes a mount function for YouTube, because
+the two clients reach YouTube's frame differently. The web loads the IFrame API into its page — the
+CSP in `SpaHosting.cs` allows exactly that script and the `youtube-nocookie.com` frame — and makes
+the frame itself so it can carry `referrerpolicy`, since YouTube refuses to play for a page that
+sends no Referer. The desktop never loads Google's script into a window that has the preload's
+bridge: the player lives on `foxfire-youtube://player`, a page with no preload, framed by the
+recording window and driven over postMessage, and main puts `https://com.brandonbarr.foxfire/` on
+its requests as the Referer. Nothing may be drawn over YouTube's player; the markers sit beneath it.
+
+Electron accepts `registerSchemesAsPrivileged` once. Every scheme of ours is in the single call in
+`main/schemes.ts` — registering a new one anywhere else silently unregisters the others.
+
+The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and
+`MAIN_VITE_YOUTUBE_CLIENT_SECRET` (repository secrets in the release workflow; `.env.local` for
+development). Without them the build has no uploads and says so. The quota is the Google project's,
+shared by every install; until YouTube's audit passes, every upload is forced private.
+`apps/desktop/docs/YOUTUBE_SETUP.md` covers the project, the reviews and the secrets, and
+`apps/desktop/docs/PRIVACY.md` is the policy Google needs a URL for.
+
 ## Patch notes
 
 `apps/desktop/CHANGELOG.md` is the source of truth for what the desktop app shipped when. GitHub Releases are

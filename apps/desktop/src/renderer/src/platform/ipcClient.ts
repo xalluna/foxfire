@@ -48,6 +48,14 @@ export function createIpcClient(api: Api): FoxfireClient {
 
     seasons: api.seasons,
     search: api.search,
+
+    // Answered by the server when connected to one; local-only has none, and
+    // says so rather than pretending.
+    matchRecordings: {
+      get: api.matchRecordings.get,
+      attach: api.matchRecordings.attach,
+      detach: api.matchRecordings.detach
+    },
     assets: api.assets,
 
     admin: {
@@ -71,7 +79,8 @@ export function createIpcClient(api: Api): FoxfireClient {
     events: {
       onSyncProgress: api.sync.onProgress,
       onRankEdited: api.rank.onEdited,
-      onRankChanged: api.lcu.onRankChanged
+      onRankChanged: api.lcu.onRankChanged,
+      onRecordingChanged: api.matchRecordings.onChanged
     }
   }
 }

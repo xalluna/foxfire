@@ -84,7 +84,7 @@ import {
 } from '../telemetry/queries'
 import { openTelemetryWindow } from '../telemetryWindow'
 import { openLpEditorWindow } from '../lpEditorWindow'
-import { openRecordingWindow } from '../recordingWindow'
+import { openRecordingWindow, openRemoteRecordingWindow } from '../recordingWindow'
 import {
   clearObsPassword,
   getCaptureSettings,
@@ -93,6 +93,7 @@ import {
 } from '../services/captureSettings'
 import { getCaptureStatus, refreshCapture } from '../capture/captureService'
 import {
+  forgetRecording,
   getDiskUsage,
   getRecordingDetail,
   listRecordings,
@@ -100,6 +101,12 @@ import {
   removeRecording,
   revealRecording
 } from '../services/recordingService'
+import { attachLink, reattach } from '../youtube/attach'
+import { draftFor } from '../youtube/drafts'
+import { cancelConnect, connectYouTube, disconnectYouTube } from '../youtube/oauth'
+import { cancelUpload, enqueue, kick, retryUpload } from '../youtube/queue'
+import { getYouTubeSettings, setYouTubeSettings } from '../youtube/settings'
+import { broadcastYouTubeState, youTubeState } from '../youtube/state'
 import { grabSourceScreenshot, readObsConfig } from '../obs/config'
 import { validateObs } from '../obs/validate'
 import { managedPreviewSource } from '../obs/provision'
@@ -121,7 +128,10 @@ import type {
   ServerAdminSettings,
   ServerCredentials,
   ServerRegistration,
-  SeasonInput
+  SeasonInput,
+  AttachRecordingInput,
+  UploadRequest,
+  YouTubeSettings
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 
@@ -222,6 +232,21 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.dashboard.matchDetail, (_e, matchId: string) =>
     serverBacked().dashboard.matchDetail(matchId)
+  )
+  ipcMain.handle(CH.dashboard.matchSummary, (_e, accountId: string, matchId: string) =>
+    serverBacked().dashboard.matchSummary?.(accountId, matchId) ?? null
+  )
+
+  ipcMain.handle(CH.matchRecordings.get, (_e, accountId: string, matchId: string) =>
+    serverBacked().matchRecordings.get(accountId, matchId)
+  )
+  ipcMain.handle(
+    CH.matchRecordings.attach,
+    (_e, accountId: string, matchId: string, input: AttachRecordingInput) =>
+      serverBacked().matchRecordings.attach(accountId, matchId, input)
+  )
+  ipcMain.handle(CH.matchRecordings.detach, (_e, accountId: string, matchId: string) =>
+    serverBacked().matchRecordings.detach(accountId, matchId)
   )
 
   ipcMain.handle(CH.sync.start, (_e, accountId: string) => serverBacked().sync.start(accountId))
@@ -364,7 +389,37 @@ export function registerIpcHandlers(): void {
     removeOldestRecordings(accountId, count)
   )
   ipcMain.handle(CH.recordings.open, (_e, recordingId: number) => openRecordingWindow(recordingId))
+  ipcMain.handle(CH.recordings.openRemote, (_e, accountId: string, matchId: string) =>
+    openRemoteRecordingWindow(accountId, matchId)
+  )
   ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
+  ipcMain.handle(CH.recordings.forget, (_e, recordingId: number) => forgetRecording(recordingId))
+
+  /* YouTube. The Google tokens stay in this process; the renderer asks for
+     things to happen and is told what the state became. */
+  ipcMain.handle(CH.youtube.getState, () => youTubeState())
+  ipcMain.handle(CH.youtube.connect, async () => {
+    await connectYouTube()
+    // Anything that was waiting for a connection can go now.
+    kick()
+    broadcastYouTubeState()
+  })
+  ipcMain.handle(CH.youtube.cancelConnect, () => cancelConnect())
+  ipcMain.handle(CH.youtube.disconnect, async () => {
+    await disconnectYouTube()
+    broadcastYouTubeState()
+    kick()
+  })
+  ipcMain.handle(CH.youtube.getSettings, () => getYouTubeSettings())
+  ipcMain.handle(CH.youtube.setSettings, (_e, patch: Partial<YouTubeSettings>) => setYouTubeSettings(patch))
+  ipcMain.handle(CH.youtube.draft, (_e, recordingId: number) => draftFor(recordingId))
+  ipcMain.handle(CH.youtube.enqueue, (_e, request: UploadRequest) => enqueue(request))
+  ipcMain.handle(CH.youtube.cancel, (_e, recordingId: number) => cancelUpload(recordingId))
+  ipcMain.handle(CH.youtube.retry, (_e, recordingId: number) => retryUpload(recordingId))
+  ipcMain.handle(CH.youtube.attachLink, (_e, recordingId: number, videoId: string, replace: boolean) =>
+    attachLink(recordingId, videoId, replace)
+  )
+  ipcMain.handle(CH.youtube.reattach, (_e, recordingId: number) => reattach(recordingId, true))
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */
   ipcMain.handle(CH.replays.list, (_e, accountId: string) => listReplays(accountId))

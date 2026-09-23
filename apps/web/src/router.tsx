@@ -135,7 +135,13 @@ const routeTree = root.addChildren([
   authed.addChildren([
     home,
     players,
-    player.player.addChildren([player.dashboard, player.champions, player.rank, player.lpEditor]),
+    player.player.addChildren([
+      player.dashboard,
+      player.champions,
+      player.rank,
+      player.lpEditor,
+      player.recording
+    ]),
     match,
     account,
     admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData])

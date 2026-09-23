@@ -2,7 +2,7 @@ import { createServerData, type ServerMatchSummary } from '@foxfire/core/server'
 import { getServerState, serverApi } from '../services/serverService'
 import { getDb } from '../db'
 import { getSetting, setSetting } from '../db/repositories/appSettings.repo'
-import { getRecordingIdsForMatches } from '../db/repositories/recordings.repo'
+import { getRecordingArtefactsForMatches } from '../db/repositories/recordings.repo'
 import { getReplayIdsForMatches } from '../db/repositories/replays.repo'
 import { accountContext } from './accountContext'
 import type { ServerBackedApi } from './types'
@@ -75,7 +75,12 @@ export const httpApi: ServerBackedApi = {
 
     matchList: async (accountId, limit, offset, queueId) =>
       withLocalArtefacts(accountId, await shared.dashboard.matchList(accountId, limit, offset, queueId))
-  }
+  },
+
+  // The same routes the web client calls. Attaching from here, with the
+  // markers this machine captured, goes through youtube/attach.ts instead;
+  // this is the plain path, for a link with nothing on this disk behind it.
+  matchRecordings: serverApi().matchRecordings
 }
 
 /**
@@ -110,14 +115,21 @@ async function withLocalArtefacts(
   const db = getDb()
   const matchIds = rows.map((row) => row.matchId)
 
-  const recordings = getRecordingIdsForMatches(db, await accountContext(accountId), matchIds)
+  const recordings = getRecordingArtefactsForMatches(db, await accountContext(accountId), matchIds)
   const replays = getReplayIdsForMatches(db, matchIds)
 
-  return rows.map((row) => ({
-    ...row,
-    local: {
-      recordingId: recordings.get(row.matchId) ?? null,
-      replayId: replays.get(row.matchId) ?? null
+  // The server's own `recording` — a video attached on the server for this
+  // row's player — passes straight through; `local` is only what is here.
+  return rows.map((row) => {
+    const recording = recordings.get(row.matchId)
+    return {
+      ...row,
+      local: {
+        recordingId: recording?.recordingId ?? null,
+        recordingVideoId: recording?.videoId ?? null,
+        recordingUploadPending: recording?.uploadPending ?? false,
+        replayId: replays.get(row.matchId) ?? null
+      }
     }
-  }))
+  })
 }

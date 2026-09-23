@@ -8,7 +8,8 @@ import type {
   ServerState,
   SyncProgressEvent,
   ImportProgress,
-  UpdateState
+  UpdateState,
+  YouTubeState
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -94,7 +95,19 @@ const api: Api = {
     get: (accountId) => ipcRenderer.invoke(CH.dashboard.get, accountId),
     matchList: (accountId, limit, offset, queueId) =>
       ipcRenderer.invoke(CH.dashboard.matchList, accountId, limit, offset, queueId),
-    matchDetail: (matchId) => ipcRenderer.invoke(CH.dashboard.matchDetail, matchId)
+    matchDetail: (matchId) => ipcRenderer.invoke(CH.dashboard.matchDetail, matchId),
+    matchSummary: (accountId, matchId) => ipcRenderer.invoke(CH.dashboard.matchSummary, accountId, matchId)
+  },
+  matchRecordings: {
+    get: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.get, accountId, matchId),
+    attach: (accountId, matchId, input) =>
+      ipcRenderer.invoke(CH.matchRecordings.attach, accountId, matchId, input),
+    detach: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.detach, accountId, matchId),
+    onChanged: (cb) => {
+      const listener = (_e: IpcRendererEvent, event: { accountId: string; matchId: string }): void => cb(event)
+      ipcRenderer.on(CH.matchRecordings.changed, listener)
+      return () => ipcRenderer.removeListener(CH.matchRecordings.changed, listener)
+    }
   },
   sync: {
     start: (accountId) => ipcRenderer.invoke(CH.sync.start, accountId),
@@ -201,6 +214,28 @@ const api: Api = {
         cb(accountId, matchId)
       ipcRenderer.on(CH.recordings.showMatch, listener)
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
+    },
+    forget: (recordingId) => ipcRenderer.invoke(CH.recordings.forget, recordingId),
+    openRemote: (accountId, matchId) => ipcRenderer.invoke(CH.recordings.openRemote, accountId, matchId)
+  },
+  youtube: {
+    getState: () => ipcRenderer.invoke(CH.youtube.getState),
+    connect: () => ipcRenderer.invoke(CH.youtube.connect),
+    cancelConnect: () => ipcRenderer.invoke(CH.youtube.cancelConnect),
+    disconnect: () => ipcRenderer.invoke(CH.youtube.disconnect),
+    getSettings: () => ipcRenderer.invoke(CH.youtube.getSettings),
+    setSettings: (patch) => ipcRenderer.invoke(CH.youtube.setSettings, patch),
+    draft: (recordingId) => ipcRenderer.invoke(CH.youtube.draft, recordingId),
+    enqueue: (request) => ipcRenderer.invoke(CH.youtube.enqueue, request),
+    cancel: (recordingId) => ipcRenderer.invoke(CH.youtube.cancel, recordingId),
+    retry: (recordingId) => ipcRenderer.invoke(CH.youtube.retry, recordingId),
+    attachLink: (recordingId, videoId, replace) =>
+      ipcRenderer.invoke(CH.youtube.attachLink, recordingId, videoId, replace),
+    reattach: (recordingId) => ipcRenderer.invoke(CH.youtube.reattach, recordingId),
+    onChanged: (cb) => {
+      const listener = (_e: IpcRendererEvent, state: YouTubeState): void => cb(state)
+      ipcRenderer.on(CH.youtube.changed, listener)
+      return () => ipcRenderer.removeListener(CH.youtube.changed, listener)
     }
   },
   // Synchronous and local: webUtils reads the path off a File the user already

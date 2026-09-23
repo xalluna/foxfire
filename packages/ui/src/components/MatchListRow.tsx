@@ -220,14 +220,16 @@ export function MatchListRow({
         and the menu is where the two are told apart.
       */}
       <span className="ml-2 w-3.5 shrink-0" title={watchableTitle(match)}>
-        {(holdsLocally(match) || match.sharedReplay) && (
+        {(holdsLocally(match) || match.recording || match.sharedReplay) && (
           <Icon.Film
             width={14}
             height={14}
-            // Dimmer for a replay that is on the server rather than on this
-            // disk. It is still a game with something to watch, which is what
-            // the marker promises — one click further away than the others.
-            className={holdsLocally(match) ? 'text-accent/60' : 'text-text-mute/50'}
+            // Dimmer only for a replay that is on the server rather than on
+            // this disk. A recording on YouTube plays straight from the menu,
+            // which is as close as a file here is, so it gets the full mark.
+            className={
+              holdsLocally(match) || match.recording ? 'text-accent/60' : 'text-text-mute/50'
+            }
           />
         )}
       </span>
@@ -258,7 +260,9 @@ function holdsLocally(match: MatchSummary): boolean {
 
 /** What the row marker promises, which depends on which artefacts exist. */
 function watchableTitle(match: MatchSummary): string | undefined {
-  const hasRecording = (match.local?.recordingId ?? null) !== null
+  // A recording on YouTube is this row's player's own, like one on this disk;
+  // the server only ever puts it on the row of the account it belongs to.
+  const hasRecording = (match.local?.recordingId ?? null) !== null || Boolean(match.recording)
   const hasReplay = (match.local?.replayId ?? null) !== null
 
   if (hasRecording && hasReplay) return 'Recording and Riot replay — right-click to watch'

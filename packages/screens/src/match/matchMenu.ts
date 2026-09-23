@@ -37,15 +37,34 @@ export function lpWriteBlockedReason(isMine?: boolean): string | null {
 }
 
 /**
- * Why a game has no OBS recording, or null when it does.
+ * Why a game has no recording to watch, or null when it does.
  *
  * Stated rather than hidden, exactly as the LP reasons are: "why does this game
  * have footage and that one not?" is a real question, and an item that silently
  * disappears from half the rows cannot answer it.
+ *
+ * Two places a recording can be: this machine's disk, and YouTube by way of a
+ * server. Both are this row's player's own — a server only puts a recording on
+ * the row of the account it belongs to — so the same game in somebody else's
+ * history says there is nothing to watch, which is the truth for that view.
  */
 export function recordingBlockedReason(match: MatchSummary): string | null {
-  if ((match.local?.recordingId ?? null) === null) return 'No recording for this game'
+  if ((match.local?.recordingId ?? null) === null && !match.recording) return 'No recording for this game'
   return null
+}
+
+/**
+ * Whether this machine's recording of the game could go to YouTube, and why not.
+ *
+ * Null means the item is not offered at all: nothing on this disk to upload,
+ * somebody else's account, or already there. A string is the item offered but
+ * disabled — an upload of this game is already on its way.
+ */
+function uploadState(match: MatchSummary, isMine?: boolean): 'offer' | 'pending' | null {
+  if (isMine === false) return null
+  if ((match.local?.recordingId ?? null) === null) return null
+  if (match.local?.recordingVideoId || match.recording) return null
+  return match.local?.recordingUploadPending ? 'pending' : 'offer'
 }
 
 /**
@@ -97,14 +116,31 @@ export interface MatchMenuActions {
   onEditLp?: () => void
   onClearLp?: () => void
   onWatchRecording?: () => void
+  /** Puts this machine's recording on YouTube. Desktop only. */
+  onUploadRecording?: () => void
+  /** Attaches a video somebody uploaded themselves. */
+  onAttachRecordingLink?: () => void
+  /** Takes the server's recording off this game. The video stays on YouTube. */
+  onDetachRecording?: () => void
   onWatchReplay?: () => void
   onDownloadReplay?: () => void
+}
+
+/** Who is looking and where, as far as the menu needs to know. */
+export interface MatchMenuContext {
+  expandable?: boolean
+  /** Undefined in local-only mode; false when a server says somebody else claimed the account. */
+  isMine?: boolean
+  /** An admin may take a recording off anybody's game, though never put one on. */
+  isAdmin?: boolean
+  /** Connected to a server, where a link can be attached with nothing on this disk behind it. */
+  serverMode?: boolean
 }
 
 export function matchContextItems(
   match: MatchSummary,
   actions: MatchMenuActions,
-  { expandable = true, isMine }: { expandable?: boolean; isMine?: boolean } = {}
+  { expandable = true, isMine, isAdmin = false, serverMode = false }: MatchMenuContext = {}
 ): ContextMenuItem[] {
   const blocked = lpEditBlockedReason(match, isMine)
   const notYours = lpWriteBlockedReason(isMine)
@@ -124,6 +160,31 @@ export function matchContextItems(
       onSelect: actions.onWatchRecording,
       ...(noRecording ? { disabledReason: noRecording } : {})
     })
+  }
+
+  // Putting footage on YouTube, or a link to some that is already there. Only
+  // on your own rows: a recording is a claim about whose screen it was, and
+  // the server refuses it for anybody else's account.
+  const upload = uploadState(match, isMine)
+  if (upload && actions.onUploadRecording) {
+    items.push({
+      label: 'Upload recording to YouTube',
+      onSelect: actions.onUploadRecording,
+      ...(upload === 'pending' ? { disabledReason: 'Uploading…' } : {})
+    })
+  }
+
+  const hasLocalRecording = (match.local?.recordingId ?? null) !== null
+  if (actions.onAttachRecordingLink && isMine !== false && (serverMode || hasLocalRecording)) {
+    items.push({
+      label:
+        match.recording || match.local?.recordingVideoId ? 'Replace YouTube link…' : 'Attach YouTube link…',
+      onSelect: actions.onAttachRecordingLink
+    })
+  }
+
+  if (match.recording && actions.onDetachRecording && (isMine === true || isAdmin)) {
+    items.push({ label: 'Remove recording from server', onSelect: actions.onDetachRecording })
   }
 
   if (actions.onWatchReplay) {

@@ -37,6 +37,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         public List<SyncProgressEvent> Progress { get; } = [];
         public List<Guid> RankEdited { get; } = [];
         public List<Guid> RankChanged { get; } = [];
+        public List<(Guid AccountId, string MatchId)> RecordingChanged { get; } = [];
         public int KeyRejections { get; private set; }
 
         public Task SyncProgressAsync(SyncProgressEvent progress, CancellationToken cancellationToken = default)
@@ -54,6 +55,12 @@ public class ServerEventTests(FoxfireServerFixture server)
         public Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default)
         {
             lock (_gate) RankChanged.Add(riotAccountId);
+            return Task.CompletedTask;
+        }
+
+        public Task RecordingChangedAsync(Guid riotAccountId, string matchId, CancellationToken cancellationToken = default)
+        {
+            lock (_gate) RecordingChanged.Add((riotAccountId, matchId));
             return Task.CompletedTask;
         }
 
@@ -238,6 +245,39 @@ public class ServerEventTests(FoxfireServerFixture server)
 
         Assert.Equal(System.Net.HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Empty(events.RankEdited);
+    }
+
+    [Fact]
+    public async Task Attaching_and_removing_a_recording_tells_every_window_which_row_changed()
+    {
+        var (host, client, events, accountId, matchId) = await RiggedAsync();
+        await using var _host = host;
+        using var _client = client;
+
+        var uri = new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording", UriKind.Relative);
+
+        (await client.PutAsJsonAsync(uri, new { youtubeVideoId = "dQw4w9WgXcQ", source = "link" }))
+            .EnsureSuccessStatusCode();
+        (await client.DeleteAsync(uri)).EnsureSuccessStatusCode();
+
+        // The game as well as the account: the row that changed is that
+        // account's row for that game, and nobody else's view of it.
+        Assert.Equal([(accountId, matchId), (accountId, matchId)], events.RecordingChanged);
+    }
+
+    [Fact]
+    public async Task A_recording_that_was_refused_tells_nobody()
+    {
+        var (host, client, events, accountId, matchId) = await RiggedAsync();
+        await using var _host = host;
+        using var _client = client;
+
+        var refused = await client.PutAsJsonAsync(
+            new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording", UriKind.Relative),
+            new { youtubeVideoId = "nope", source = "link" });
+
+        Assert.False(refused.IsSuccessStatusCode);
+        Assert.Empty(events.RecordingChanged);
     }
 
     [Fact]

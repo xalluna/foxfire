@@ -7,12 +7,15 @@ import type {
   AdminUser,
   AdminUserPatch,
   AssetManifest,
+  AttachRecordingInput,
+  AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
+  MatchRecording,
   MatchSummary,
   PlayerSearchResult,
   QueueType,
@@ -115,6 +118,26 @@ export interface FoxfireData {
      */
     players: (query: string) => Promise<PlayerSearchResult[]>
   }
+  /**
+   * The YouTube recordings a server holds, one per game per account.
+   *
+   * Keyed by the pair on purpose: a recording is one player's screen, so the
+   * account whose history is open is part of the question. Only that account's
+   * owner can attach one; its owner or an admin can take it off again, which
+   * never touches the video on YouTube.
+   *
+   * Optional because local-only has no server to hold one. There, a recording
+   * that went to YouTube keeps its video on the desktop's own recording row.
+   */
+  matchRecordings?: {
+    get: (accountId: string, matchId: string) => Promise<MatchRecording | null>
+    attach: (
+      accountId: string,
+      matchId: string,
+      input: AttachRecordingInput
+    ) => Promise<AttachRecordingOutcome>
+    detach: (accountId: string, matchId: string) => Promise<AdminActionResult>
+  }
 }
 
 /** Stops listening. Every subscription below hands one back. */
@@ -205,5 +228,7 @@ export interface FoxfireClient extends FoxfireData {
     onRankEdited: (cb: (accountId: string) => void) => Unsubscribe
     /** A League client recorded a rank that moved. */
     onRankChanged: (cb: (accountId: string) => void) => Unsubscribe
+    /** A recording was attached to one account's game, replaced, or taken off it. */
+    onRecordingChanged: (cb: (event: { accountId: string; matchId: string }) => void) => Unsubscribe
   }
 }

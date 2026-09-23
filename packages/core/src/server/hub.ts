@@ -10,6 +10,8 @@ export interface HubHandlers {
   onRankEdited?(accountId: string): void
   /** A League client reported a rank that moved. */
   onRankChanged?(accountId: string): void
+  /** A recording was attached to one account's game, replaced, or taken off it. */
+  onRecordingChanged?(event: { accountId: string; matchId: string }): void
   /** Riot has refused the server's own key. */
   onKeyInvalid?(): void
 }
@@ -69,6 +71,11 @@ export function createHub(options: HubOptions): ServerHub {
   connection.on('sync:progress', (event: SyncProgressEvent) => handlers.onSyncProgress?.(event))
   connection.on('rank:edited', (accountId: string) => handlers.onRankEdited?.(accountId))
   connection.on('lcu:rankChanged', (accountId: string) => handlers.onRankChanged?.(accountId))
+  // The server says riotAccountId, which is what its accounts are called there;
+  // the screens call the same thing accountId.
+  connection.on('recording:changed', (event: { riotAccountId: string; matchId: string }) =>
+    handlers.onRecordingChanged?.({ accountId: event.riotAccountId, matchId: event.matchId })
+  )
   connection.on('settings:keyInvalid', () => handlers.onKeyInvalid?.())
 
   connection.onreconnected(() => log.info('Reconnected to the server'))

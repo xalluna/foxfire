@@ -8,6 +8,8 @@
 export { createFixtureClient, runFixtureImport } from './fixtureClient'
 export { KEY_EXPIRED, MOCK_SERVER_URL, delay, fail, scenario, type Scenario } from './scenario'
 export { DEV_SEASONS } from './seasons'
+export { createFakeYouTubeMount } from './fakeYouTube'
+export { FIXTURE_VIDEO_ID, fixtureDescription, fixtureEvents, fixtureRecording } from './recordings'
 export { DDRAGON_MANIFEST } from './ddragonManifest'
 export {
   C,
@@ -31,6 +33,7 @@ export {
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
+  MATCH_RECORDINGS,
   RANK_SNAPSHOTS,
   championStatsFor,
   matchIdAt

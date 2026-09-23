@@ -117,6 +117,13 @@ const recording = createRoute({
   component: lazyRouteComponent(() => import('./recording/RecordingApp'), 'RecordingApp')
 })
 
+/** A recording with no file on this machine, played from YouTube. See windowRoutes.remoteRecording. */
+const remoteRecording = createRoute({
+  getParentRoute: () => windows,
+  path: 'recording/match/$accountId/$matchId',
+  component: lazyRouteComponent(() => import('./recording/RemoteRecordingApp'), 'RemoteRecordingApp')
+})
+
 /**
  * The LP editor's window. Its own route rather than the shared `lp` page, which
  * sits under a player and so under the main window's header; the window is
@@ -136,7 +143,7 @@ const routeTree = root.addChildren([
     search,
     settings
   ]),
-  windows.addChildren([telemetry, archives, recording, lpEditor])
+  windows.addChildren([telemetry, archives, recording, remoteRecording, lpEditor])
 ])
 
 /**

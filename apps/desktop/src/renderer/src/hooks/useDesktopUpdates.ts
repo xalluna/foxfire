@@ -49,3 +49,22 @@ export function useReplayUpdates(): void {
     })
   }, [queryClient])
 }
+
+/**
+ * Keeps Settings › YouTube and the Recordings tab's upload column current.
+ *
+ * The connection and the queue are pushed as one state; the rows carry each
+ * upload's progress, so they are refetched too — but not the match lists,
+ * which have nothing to show for a byte count and would otherwise refetch
+ * every second of an upload.
+ */
+export function useYouTubeUpdates(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return window.api.youtube.onChanged((state) => {
+      queryClient.setQueryData(['youtubeState'], state)
+      queryClient.invalidateQueries({ queryKey: ['recordings'] })
+    })
+  }, [queryClient])
+}

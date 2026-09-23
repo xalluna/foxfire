@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isPlayer, parsePlayerSlug, paths, playerSlug } from '@foxfire/core/routes'
-import { CopyLinkButton, Icon, MatchPage } from '@foxfire/ui'
-import { useClient } from '../client/context'
+import { CopyLinkButton, Icon, MatchPage, recordingActionClass } from '@foxfire/ui'
+import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
+import { recordingBlockedReason } from '../match/matchMenu'
 import { queryKeys } from '../queries/keys'
 
 /** Whether a failed read was the server saying it has no such thing. */
@@ -22,6 +23,7 @@ function isNotFound(error: unknown): boolean {
  */
 export function MatchScreen({ matchId, player }: { matchId: string; player?: string }): JSX.Element {
   const client = useClient()
+  const platform = usePlatform()
   const share = useShareLink()
 
   const accounts = useQuery({
@@ -63,9 +65,23 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
         )
       }
       actions={
-        share && (
-          <CopyLinkButton onCopy={() => share(paths.match(matchId, account ? { player: account } : {}))} />
-        )
+        <>
+          {/* Only when the link named a player, and only theirs: with nobody
+              named there is no one whose screen to show. */}
+          {account && summary.data && platform.watchRecording && recordingBlockedReason(summary.data) === null && (
+            <button
+              type="button"
+              className={`${recordingActionClass} inline-flex items-center gap-1.5`}
+              onClick={() => platform.watchRecording?.({ account, match: summary.data! })}
+            >
+              <Icon.Film width={13} height={13} />
+              Watch {account.gameName}&rsquo;s recording
+            </button>
+          )}
+          {share && (
+            <CopyLinkButton onCopy={() => share(paths.match(matchId, account ? { player: account } : {}))} />
+          )}
+        </>
       }
       summary={summary.data}
       summaryLoading={account !== null && readSummary !== undefined && summary.isLoading}

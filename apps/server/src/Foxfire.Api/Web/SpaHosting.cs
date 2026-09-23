@@ -31,11 +31,18 @@ public sealed class SpaHosting
     /// page. 'wasm-unsafe-eval' is for sql.js, which reads a stats.db in the
     /// browser for an admin importing one; it compiles WebAssembly and allows
     /// nothing else. Styles allow inline because the charts set sizes in style
-    /// attributes. Everything else is this origin or nothing.
+    /// attributes.
+    ///
+    /// YouTube is the one other party, for recordings: its IFrame API script,
+    /// which is what lets the marker strip under a recording seek the video,
+    /// and the privacy-enhanced player it drives, in a frame. Nothing from
+    /// YouTube is drawn in the page itself. Everything else is this origin or
+    /// nothing.
     /// </summary>
     private const string ContentSecurityPolicy =
         "default-src 'self'; "
-        + "script-src 'self' 'wasm-unsafe-eval'; "
+        + "script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com; "
+        + "frame-src https://www.youtube-nocookie.com; "
         + "style-src 'self' 'unsafe-inline'; "
         + "img-src 'self' data: https://ddragon.leagueoflegends.com; "
         + "connect-src 'self' https://ddragon.leagueoflegends.com; "

@@ -276,6 +276,7 @@ api.MapDashboardEndpoints();
 api.MapRankEndpoints();
 api.MapSearchEndpoints();
 api.MapReplayEndpoints();
+api.MapRecordingEndpoints();
 api.MapImportEndpoints();
 app.MapHub<FoxfireHub>(FoxfireHub.Path);
 

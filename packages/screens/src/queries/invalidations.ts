@@ -7,6 +7,7 @@ export type DataEvent =
   | { kind: 'syncProgress'; event: SyncProgressEvent }
   | { kind: 'rankEdited'; accountId: string }
   | { kind: 'rankChanged'; accountId: string }
+  | { kind: 'recordingChanged'; accountId: string; matchId: string }
   | { kind: 'seasonsSaved' }
 
 /**
@@ -55,6 +56,12 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
       // reading can settle a game on whichever account was playing, and a
       // refetch of a list nobody is looking at costs nothing.
       return [queryKeys.rankHistory(), queryKeys.matchLists(), queryKeys.dashboard()]
+
+    case 'recordingChanged':
+      // One account's row for one game, and the recording page if it is open.
+      // Both live under that account's match list; the same game in anybody
+      // else's history is somebody else's view of it and has not changed.
+      return [queryKeys.matchList(event.accountId)]
 
     case 'seasonsSaved':
       // Every picker, every scoped aggregate and every LP chip is derived from

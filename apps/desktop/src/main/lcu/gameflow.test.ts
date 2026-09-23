@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isGameEndTransition, isPlayingPhase } from './gameflow'
+import { isGameEndTransition, isPlayingPhase, isUploadQuietPhase } from './gameflow'
 
 describe('isPlayingPhase', () => {
   it('counts both InProgress and Reconnect as being in a game', () => {
@@ -62,5 +62,19 @@ describe('isGameEndTransition', () => {
   it('does not fire when the phase is unchanged', () => {
     expect(isGameEndTransition('InProgress', 'InProgress')).toBe(false)
     expect(isGameEndTransition('EndOfGame', 'EndOfGame')).toBe(false)
+  })
+})
+
+describe('isUploadQuietPhase', () => {
+  it('holds uploads from champ select until the game has finished reporting', () => {
+    for (const phase of ['ChampSelect', 'GameStart', 'InProgress', 'Reconnect', 'WaitingForStats', 'PreEndOfGame']) {
+      expect(isUploadQuietPhase(phase)).toBe(true)
+    }
+  })
+
+  it('lets them run in the lobby, in queue, and once the game is over', () => {
+    for (const phase of [null, 'None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'EndOfGame']) {
+      expect(isUploadQuietPhase(phase)).toBe(false)
+    }
   })
 })

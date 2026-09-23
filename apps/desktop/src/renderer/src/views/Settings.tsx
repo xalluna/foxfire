@@ -32,6 +32,7 @@ import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
 import { UpdateSettings } from '../components/UpdateSettings'
+import { YouTubeSettings } from '../components/YouTubeSettings'
 import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
 
 /**
@@ -51,6 +52,7 @@ export type SettingsCategory =
   | 'riot-key'
   | 'rank'
   | 'capture'
+  | 'youtube'
   | 'replays'
   | 'telemetry'
   | 'about'
@@ -99,6 +101,7 @@ const GROUPS: NavItem[][] = [
   ],
   [
     { id: 'capture', label: 'Game capture', icon: <Icon.Film /> },
+    { id: 'youtube', label: 'YouTube', icon: <Icon.ExternalLink /> },
     { id: 'replays', label: 'Riot replays', icon: <Icon.Replay /> }
   ],
   [
@@ -172,6 +175,7 @@ export function Settings({ category }: { category?: string }): JSX.Element {
         {active === 'riot-key' && <RiotKeySettings />}
         {active === 'rank' && <RankTrackingSettings />}
         {active === 'capture' && <CaptureSettings />}
+        {active === 'youtube' && <YouTubeSettings />}
         {active === 'replays' && <ReplaySettings />}
         {active === 'telemetry' && <TelemetrySettings />}
         {active === 'about' && <AboutSettings />}

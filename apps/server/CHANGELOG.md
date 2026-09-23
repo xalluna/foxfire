@@ -20,7 +20,8 @@ invites, and can track a League account nobody here has claimed; and the pages
 that run a server are split so that a community with forty people on it is still
 readable. It also serves Foxfire 0.14.0, the first desktop that updates itself —
 which makes the allow list here the thing that decides which build your members
-are running.
+are running. And recordings: a game somebody put on YouTube from their desktop
+plays from their match history, for everybody here, in the browser too.
 
 ### Added
 
@@ -65,8 +66,22 @@ are running.
   the same state an imported one is in, and whoever it belongs to can still claim it from the
   desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
   appear in, and what removing one should mean is a question for another release.
+- **Recordings on YouTube, one per player per game.** A desktop that uploads a recording attaches it
+  to its owner's game here, with the kill, death and assist markers it captured. The match row offers
+  "Watch recording" to everybody — but only on that player's history: in a game two members recorded,
+  each history plays its own, and nobody else's history offers either. Only the account's owner can
+  attach one; the owner or an admin can take it off again, and the video stays on YouTube either way.
+- **Watch recordings in a browser.** "Watch recording" opens a page of its own, at
+  `/players/<name>/recordings/<game>`, with YouTube's player and the markers beneath it — click one to
+  jump to the fight. The link can be copied and shared.
+- **Attach a YouTube link from the browser**, on your own games, for a video you uploaded yourself.
+  One attached from a browser has no markers; those come from the desktop that recorded the game.
 
 ### Changed
+
+- **The web client's content security policy allows YouTube's player**: the privacy-enhanced
+  player at `youtube-nocookie.com` in a frame, and YouTube's IFrame API script, which is what lets the
+  markers seek the video. Nothing else from YouTube is allowed, and nothing is drawn over its player.
 
 
 - **The address in `ADMIN_EMAIL` is now pinned to the account that holds it.**
@@ -133,6 +148,15 @@ are running.
 - Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
   accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
   adding a tracked account, refusing a duplicate, and the sync cooldown.
+- One new table, `MatchRecordings`, keyed on the game and the Riot account — the account's id rather
+  than its puuid, which is re-resolved whenever the server's Riot key changes. It stores the YouTube
+  video id and the markers as sent, never the video. Deleting a game takes its recordings with it.
+- `GET`, `PUT` and `DELETE /api/riot-accounts/{id}/matches/{matchId}/recording`. A second attach
+  answers 409 `recording_exists` unless it says `replace`.
+- A new hub event, `recording:changed`, carrying the account and the game, so the rows showing that
+  player's view of that game refresh everywhere.
+- Tests against a real SQL Server cover owner-only attaching (admins included in the refusal), the
+  one-perspective rule on match rows, replacing, removing, validation, and the event.
 
 ## [0.2.0] — 2026-09-21
 

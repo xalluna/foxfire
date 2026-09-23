@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Icon, formatClock } from '@foxfire/ui'
+import type { RecordingEvent } from '@foxfire/core'
+import * as Icon from '../components/icons'
+import { formatClock } from '../lib/matchStats'
 import { clusterEvents, describeCluster, leadEvent, seekTargetFor } from './timelineMarkers'
-import type { RecordingEvent } from '@shared/types'
 
 /**
  * The seek bar, marked with everything that happened to you.
@@ -15,6 +16,11 @@ import type { RecordingEvent } from '@shared/types'
  * multikills. A bar carrying every turret and dragon in the game is a smear,
  * and "what happened to me at fourteen minutes" is the question a recording is
  * opened to answer.
+ *
+ * Drawn under the video, never over it, which for a YouTube copy is a rule and
+ * not a taste: nothing may sit on top of YouTube's player. The hover preview
+ * needs a second decoder of the same video, so only a file on this machine
+ * gets one; over YouTube the bar still shows the time under the pointer.
  */
 
 const ROLE_STYLE: Record<RecordingEvent['role'], string> = {
@@ -31,14 +37,14 @@ function RoleGlyph({ role }: { role: RecordingEvent['role'] }): JSX.Element {
 }
 
 export function EventTimeline({
-  src,
+  preview,
   events,
   duration,
   currentTime,
   onSeek
 }: {
-  /** Same source as the player, for the hover preview's own decoder. */
-  src: string
+  /** Same source as the player, for the hover preview's own decoder. Absent means no thumbnails. */
+  preview?: string
   events: readonly RecordingEvent[]
   duration: number
   currentTime: number
@@ -95,7 +101,7 @@ export function EventTimeline({
 
     video.addEventListener('seeked', draw)
     return () => video.removeEventListener('seeked', draw)
-  }, [])
+  }, [preview])
 
   useEffect(() => {
     const video = previewRef.current
@@ -117,8 +123,10 @@ export function EventTimeline({
           className="pointer-events-none absolute bottom-full z-10 mb-1 -translate-x-1/2 rounded-md border border-hairline bg-canvas p-1 shadow-flyout"
           style={{ left: hover.x }}
         >
-          <canvas ref={canvasRef} width={192} height={108} className="rounded bg-surface-2" />
-          <p className="mt-1 text-center text-2xs tabular-nums text-text-dim">
+          {preview && (
+            <canvas ref={canvasRef} width={192} height={108} className="rounded bg-surface-2" />
+          )}
+          <p className={clsx('text-center text-2xs tabular-nums text-text-dim', preview && 'mt-1')}>
             {formatClock(Math.round(hover.time))}
           </p>
         </div>
@@ -186,7 +194,7 @@ export function EventTimeline({
       </div>
 
       {/* Off-screen and muted: it exists only to decode single frames. */}
-      <video ref={previewRef} src={src} muted preload="metadata" className="hidden" />
+      {preview && <video ref={previewRef} src={preview} muted preload="metadata" className="hidden" />}
     </div>
   )
 }

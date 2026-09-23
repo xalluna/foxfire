@@ -2,6 +2,8 @@ import type { Platform } from '@foxfire/screens'
 import type { ImportProgress } from '@foxfire/core'
 import type { Api } from '@shared/api'
 import { LcuIndicator } from '../components/LcuIndicator'
+import { youtubeHostMount } from '../recording/youtubeHostMount'
+import { openUploadDialog } from '../youtube/uploadDialog'
 
 /**
  * What this machine can do that a browser cannot, as the shared screens ask
@@ -23,7 +25,29 @@ export function createDesktopPlatform(api: Api): Platform {
     openLpEditor: ({ account, queueType, matchId }) =>
       void api.rank.openEditor(account.id, queueType, matchId),
 
-    watchRecording: (recordingId) => void api.recordings.open(recordingId),
+    // The file on this disk when there is one — it plays from YouTube anyway
+    // if it has gone up, with a switch back to the file. Otherwise the
+    // server's copy: somebody else's recording, or this machine's own after
+    // its file was forgotten.
+    watchRecording: ({ account, match }) => {
+      const recordingId = match.local?.recordingId ?? null
+      if (recordingId !== null) void api.recordings.open(recordingId)
+      else void api.recordings.openRemote(account.id, match.matchId)
+    },
+
+    youtube: youtubeHostMount,
+
+    uploadRecording: ({ match }) => {
+      const recordingId = match.local?.recordingId ?? null
+      if (recordingId !== null) openUploadDialog(recordingId)
+    },
+
+    // Through this machine's recording when it has one, so the markers go
+    // with the link; otherwise the screen attaches through the server itself.
+    attachRecordingLink: async ({ match, videoId, replace }) => {
+      const recordingId = match.local?.recordingId ?? null
+      return recordingId === null ? null : api.youtube.attachLink(recordingId, videoId, replace)
+    },
 
     launchReplay: async (replayId) => {
       const result = await api.replays.open(replayId)

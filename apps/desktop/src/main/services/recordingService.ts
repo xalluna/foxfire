@@ -4,7 +4,7 @@ import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
-import { authedRequest, isServerMode } from './serverService'
+import { authedRequest, getServerState, isServerMode } from './serverService'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import {
   bindRecording,
@@ -16,10 +16,15 @@ import {
   getRecordingEvents,
   getRecordingFilePath,
   getRecordingUsage,
+  getRecordingIdentity,
   getRecordings,
+  markFileDeleted,
   markRecordingUnmatched,
   takenMatchIds
 } from '../db/repositories/recordings.repo'
+import { reconcileAttachments } from '../youtube/attach'
+import { onRecordingSettled } from '../youtube/autoUpload'
+import { cancelUpload } from '../youtube/queue'
 import {
   BIND_RETRY_HORIZON_MS,
   findMatchForRecording,
@@ -43,7 +48,7 @@ export async function listRecordings(accountId: string): Promise<Recording[]> {
 
 export function getRecordingDetail(recordingId: number): RecordingDetail | null {
   const db = getDb()
-  const recording = getRecording(db, recordingId)
+  const recording = getRecording(db, recordingId, getServerState().activeUrl)
   if (!recording) return null
   return { recording, events: getRecordingEvents(db, recordingId) }
 }
@@ -58,19 +63,52 @@ export function getDiskUsage(): RecordingDiskUsage {
   }
 }
 
-/** Deletes the row and the file it points at. */
+/**
+ * Deletes a recording's file, and its row unless the recording is on YouTube.
+ *
+ * On YouTube, the file is the only thing that goes: the row stays, with its
+ * markers and its video, so the recording still plays — which is what freeing
+ * the disk of a recording that is already somewhere else should mean. Forget
+ * is what takes the row. Neither touches YouTube or a server.
+ */
 export function removeRecording(recordingId: number): void {
-  const path = deleteRecording(getDb(), recordingId)
-  if (path) {
-    try {
-      rmSync(path, { force: true })
-    } catch (err) {
-      // The row is already gone, so the recording has left the app either way.
-      // A file locked by a player still open on it is the usual cause.
-      log.debug('Could not delete recording file', { path, error: String(err) })
-    }
+  const db = getDb()
+  const identity = getRecordingIdentity(db, recordingId)
+  if (!identity) return
+
+  // An upload reading the file has to stop before the file goes.
+  cancelUpload(recordingId)
+
+  if (identity.youtubeVideoId) {
+    deleteFile(identity.filePath)
+    markFileDeleted(db, recordingId, Date.now())
+  } else {
+    deleteFile(deleteRecording(db, recordingId))
   }
   broadcastRecordingsChanged()
+}
+
+/**
+ * Forgets a recording entirely: the row, its markers and its upload.
+ *
+ * Offered once the file is gone. The video stays on YouTube, and a server's
+ * copy stays on the server, where it belongs to that account's history now.
+ */
+export function forgetRecording(recordingId: number): void {
+  cancelUpload(recordingId)
+  deleteFile(deleteRecording(getDb(), recordingId))
+  broadcastRecordingsChanged()
+}
+
+function deleteFile(path: string | null): void {
+  if (!path) return
+  try {
+    rmSync(path, { force: true })
+  } catch (err) {
+    // The recording has left the app either way. A file locked by a player
+    // still open on it is the usual cause.
+    log.debug('Could not delete recording file', { path, error: String(err) })
+  }
 }
 
 /** The one-click cleanup offered when the advisory cap is crossed. */
@@ -220,6 +258,7 @@ export async function bindPendingRecordings(
 
   let bound = 0
   const claimed = new Set<string>()
+  const settled: number[] = []
 
   for (const recording of pending) {
     const result = findMatchForRecording(recording,
@@ -233,6 +272,7 @@ export async function bindPendingRecordings(
     if (result) {
       bindRecording(db, recording.id, result.matchId)
       claimed.add(result.matchId)
+      settled.push(recording.id)
       bound += 1
       log.info('Bound recording to match', {
         recordingId: recording.id,
@@ -241,10 +281,17 @@ export async function bindPendingRecordings(
       })
     } else if (allowGiveUp && shouldGiveUpBinding(recording, now)) {
       markRecordingUnmatched(db, recording.id)
+      settled.push(recording.id)
       log.info('Recording left unmatched; keeping the footage', { recordingId: recording.id })
     }
   }
 
   if (bound > 0) broadcastRecordingsChanged()
+
+  // A recording that now knows its game can go to YouTube by itself, if that
+  // is turned on, and one already there can be attached on the server.
+  for (const id of settled) void onRecordingSettled(id)
+  if (bound > 0) void reconcileAttachments()
+
   return bound
 }

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { ChampionStats, MatchDetail, MatchParticipant, MatchSummary } from '@shared/types'
 import type { MatchDto } from '../../riot/types'
+import { PENDING_UPLOAD_STATES } from './recordings.repo'
 
 /** Persists a match and all 10 participants atomically. Idempotent — re-storing a known match is a no-op. */
 export function insertMatch(db: DatabaseSync, match: MatchDto): void {
@@ -113,6 +114,8 @@ interface MatchSummaryRow {
   is_demotion: number | null
   has_manual_rank: number
   recording_id: number | null
+  recording_video_id: string | null
+  recording_upload_pending: number | null
   replay_id: number | null
 }
 
@@ -162,6 +165,18 @@ export function getMatchSummaries(
                 WHERE rp.match_id = p.match_id
                   AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
                 ORDER BY rp.id DESC LIMIT 1) AS recording_id,
+              -- Its copy on YouTube, and whether an upload of it is on its way,
+              -- so the menu offers an upload only where there is not one.
+              (SELECT rp.youtube_video_id FROM recordings rp
+                WHERE rp.match_id = p.match_id
+                  AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
+                ORDER BY rp.id DESC LIMIT 1) AS recording_video_id,
+              (SELECT 1 FROM recordings rp
+                 JOIN youtube_uploads yu ON yu.recording_id = rp.id
+                WHERE rp.match_id = p.match_id
+                  AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
+                  AND yu.state IN (${PENDING_UPLOAD_STATES})
+                LIMIT 1) AS recording_upload_pending,
               -- The Riot replay, if one was ingested. Deliberately not scoped
               -- to the account, unlike the recording above: a .rofl is one file
               -- per game on this machine and serves whoever played it, so a game
@@ -232,7 +247,12 @@ export function getMatchSummaries(
             isDemotion: row.is_demotion === 1
           },
     hasManualRank: row.has_manual_rank === 1,
-    local: { recordingId: row.recording_id, replayId: row.replay_id }
+    local: {
+      recordingId: row.recording_id,
+      recordingVideoId: row.recording_video_id,
+      recordingUploadPending: row.recording_upload_pending === 1,
+      replayId: row.replay_id
+    }
   }))
 }
 

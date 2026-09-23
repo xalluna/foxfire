@@ -8,7 +8,8 @@ import type {
 } from '@foxfire/core'
 import { paths, rankQueueParam } from '@foxfire/core/routes'
 import type { Platform } from '@foxfire/screens'
-import { createFixtureClient, runFixtureImport } from '@foxfire/screens/dev'
+import { createFakeYouTubeMount, createFixtureClient, runFixtureImport } from '@foxfire/screens/dev'
+import { createWebYouTubeMount } from '../platform/youtubePlayer'
 import { replaceServerInfoSource } from '../serverInfo'
 import { useAuth } from '../session/session'
 
@@ -106,6 +107,15 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
     copyText: (text) => navigator.clipboard.writeText(text),
     openLpEditor: ({ account, queueType, matchId }) =>
       navigate(paths.lpEditor(account, { queue: rankQueueParam(queueType), match: matchId })),
+    watchRecording: ({ account, match }) => navigate(paths.recording(account, match.matchId)),
+    // A stand-in with a running clock by default, which is enough to judge the
+    // marker strip against and needs no network. ?youtube=real plays the
+    // fixture video through YouTube's own player instead, to check the
+    // IFrame API wiring end to end.
+    youtube:
+      new URLSearchParams(window.location.search).get('youtube') === 'real'
+        ? createWebYouTubeMount()
+        : createFakeYouTubeMount(),
     downloadReplay: async () => ({ ok: false, message: 'The harness has no blob store to download from.' }),
     statsDbImport: {
       pick: async () => ({ source: null, label: 'stats.db' }),

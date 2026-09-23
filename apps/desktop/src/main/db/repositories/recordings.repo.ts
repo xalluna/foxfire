@@ -2,11 +2,14 @@ import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
 import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
 import type {
+  AttachmentState,
   Recording,
   RecordingBindState,
   RecordingEvent,
   RecordingEventRole,
-  LinkedMatchInfo
+  LinkedMatchInfo,
+  UploadState,
+  YouTubePrivacy
 } from '@shared/types'
 
 /** What is known about a recording at the moment it starts. */
@@ -41,6 +44,23 @@ interface RecordingRow {
   game_time_offset: number
   self_champion_id: number | null
   roster_json: string | null
+  youtube_video_id: string | null
+  youtube_privacy: string | null
+  youtube_forced_private: number
+  youtube_source: string | null
+  youtube_title: string | null
+  youtube_at: number | null
+  file_deleted_at: number | null
+  // Null unless an upload has been queued.
+  u_state: string | null
+  u_trigger: string | null
+  u_confirmed_offset: number | null
+  u_file_bytes: number | null
+  u_last_error: string | null
+  u_next_attempt_at: number | null
+  // Null unless the active server has been told about the video.
+  a_state: string | null
+  a_message: string | null
   // All null unless the recording is bound and the match is still stored.
   m_game_creation: number | null
   m_game_duration: number | null
@@ -59,17 +79,26 @@ interface RecordingRow {
  *
  * Selected alongside the recording rather than fetched per row: the Recordings view
  * and every match row context menu both need it, and it is the same single
- * query either way.
+ * query either way. So are its upload and whether the active server has its
+ * video — the first bind parameter, which is that server's key or null.
  */
 const SELECT_RECORDING = `
   SELECT r.id, r.account_id, r.match_id, r.bind_state, r.file_path, r.file_bytes,
          r.queue_id, r.started_at, r.ended_at, r.game_time_offset,
          r.self_champion_id, r.roster_json,
+         r.youtube_video_id, r.youtube_privacy, r.youtube_forced_private, r.youtube_source,
+         r.youtube_title, r.youtube_at, r.file_deleted_at,
+         u.state AS u_state, u.trigger AS u_trigger, u.confirmed_offset AS u_confirmed_offset,
+         u.file_bytes AS u_file_bytes, u.last_error AS u_last_error,
+         u.next_attempt_at AS u_next_attempt_at,
+         a.state AS a_state, a.message AS a_message,
          m.game_creation AS m_game_creation, m.game_duration AS m_game_duration,
          m.game_mode AS m_game_mode, m.queue_id AS m_queue_id,
          p.win AS m_win, p.champion_id AS m_champion_id, p.champion_name AS m_champion_name,
          p.kills AS m_kills, p.deaths AS m_deaths, p.assists AS m_assists
     FROM recordings r
+    LEFT JOIN youtube_uploads u ON u.recording_id = r.id
+    LEFT JOIN recording_attachments a ON a.recording_id = r.id AND a.server_key = ?
     LEFT JOIN matches m ON m.match_id = r.match_id
     LEFT JOIN match_participants p
       ON p.match_id = r.match_id
@@ -104,14 +133,39 @@ function toRecording(row: RecordingRow): Recording {
     // Checked on read rather than trusted from the row: the recording folder is an
     // ordinary one the user can open in Explorer, and a file deleted from under
     // us should read as missing rather than as a recording that fails to play.
-    fileExists: existsSync(row.file_path),
+    fileExists: row.file_deleted_at === null && existsSync(row.file_path),
     queueId: row.queue_id,
     startedAt: row.started_at,
     endedAt: row.ended_at,
     durationSeconds:
       row.ended_at === null ? null : Math.round((row.ended_at - row.started_at) / 1000),
     selfChampionId: row.self_champion_id,
-    match: toMatchInfo(row)
+    match: toMatchInfo(row),
+    fileDeleted: row.file_deleted_at !== null,
+    youtube:
+      row.youtube_video_id === null
+        ? null
+        : {
+            videoId: row.youtube_video_id,
+            privacy: row.youtube_privacy as YouTubePrivacy | null,
+            forcedPrivate: row.youtube_forced_private === 1,
+            source: row.youtube_source === 'link' ? 'link' : 'upload',
+            title: row.youtube_title,
+            at: row.youtube_at ?? 0
+          },
+    upload:
+      row.u_state === null
+        ? null
+        : {
+            state: row.u_state as UploadState,
+            trigger: row.u_trigger === 'auto' ? 'auto' : 'manual',
+            bytesSent: row.u_confirmed_offset ?? 0,
+            fileBytes: row.u_file_bytes,
+            error: row.u_last_error,
+            resumesAt: row.u_next_attempt_at
+          },
+    attachment:
+      row.a_state === null ? null : { state: row.a_state as AttachmentState, message: row.a_message }
   }
 }
 
@@ -204,15 +258,118 @@ export function getRecordings(db: DatabaseSync, account: AccountContext): Record
         WHERE ${ownedBy('r.account_id', 'r.riot_id')}
         ORDER BY r.started_at DESC`
     )
-    .all(...ownedByParams(account)) as unknown as RecordingRow[]
+    .all(account.serverKey, ...ownedByParams(account)) as unknown as RecordingRow[]
   return rows.map(toRecording)
 }
 
-export function getRecording(db: DatabaseSync, recordingId: number): Recording | null {
-  const row = db.prepare(`${SELECT_RECORDING} WHERE r.id = ?`).get(recordingId) as unknown as
+/** One recording. `serverKey` decides whose attachment it reports; null reports none. */
+export function getRecording(
+  db: DatabaseSync,
+  recordingId: number,
+  serverKey: string | null = null
+): Recording | null {
+  const row = db.prepare(`${SELECT_RECORDING} WHERE r.id = ?`).get(serverKey, recordingId) as unknown as
     | RecordingRow
     | undefined
   return row ? toRecording(row) : null
+}
+
+/** Whose a recording is, which game, and what is already on YouTube — what the uploader works from. */
+export interface RecordingIdentity {
+  id: number
+  accountId: string
+  riotId: string | null
+  serverKey: string | null
+  matchId: string | null
+  filePath: string
+  fileDeleted: boolean
+  youtubeVideoId: string | null
+  youtubePrivacy: YouTubePrivacy | null
+  youtubeSource: 'upload' | 'link' | null
+  youtubeTitle: string | null
+  durationSeconds: number | null
+}
+
+export function getRecordingIdentity(db: DatabaseSync, recordingId: number): RecordingIdentity | null {
+  const row = db
+    .prepare(
+      `SELECT id, account_id, riot_id, server_key, match_id, file_path, file_deleted_at,
+              youtube_video_id, youtube_privacy, youtube_source, youtube_title, started_at, ended_at
+         FROM recordings WHERE id = ?`
+    )
+    .get(recordingId) as unknown as
+    | {
+        id: number
+        account_id: string
+        riot_id: string | null
+        server_key: string | null
+        match_id: string | null
+        file_path: string
+        file_deleted_at: number | null
+        youtube_video_id: string | null
+        youtube_privacy: string | null
+        youtube_source: string | null
+        youtube_title: string | null
+        started_at: number
+        ended_at: number | null
+      }
+    | undefined
+
+  if (!row) return null
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    riotId: row.riot_id,
+    serverKey: row.server_key,
+    matchId: row.match_id,
+    filePath: row.file_path,
+    fileDeleted: row.file_deleted_at !== null,
+    youtubeVideoId: row.youtube_video_id,
+    youtubePrivacy: row.youtube_privacy as YouTubePrivacy | null,
+    youtubeSource: row.youtube_source as 'upload' | 'link' | null,
+    youtubeTitle: row.youtube_title,
+    durationSeconds: row.ended_at === null ? null : Math.round((row.ended_at - row.started_at) / 1000)
+  }
+}
+
+/** What YouTube said when an upload finished, or what somebody linked. */
+export interface YouTubeCopy {
+  videoId: string
+  privacy: YouTubePrivacy | null
+  forcedPrivate: boolean
+  source: 'upload' | 'link'
+  title: string | null
+  at: number
+}
+
+export function setYouTubeCopy(db: DatabaseSync, recordingId: number, copy: YouTubeCopy): void {
+  db.prepare(
+    `UPDATE recordings
+        SET youtube_video_id = ?, youtube_privacy = ?, youtube_forced_private = ?,
+            youtube_source = ?, youtube_title = ?, youtube_at = ?
+      WHERE id = ?`
+  ).run(
+    copy.videoId,
+    copy.privacy,
+    copy.forcedPrivate ? 1 : 0,
+    copy.source,
+    copy.title,
+    copy.at,
+    recordingId
+  )
+}
+
+/**
+ * The file is gone on purpose; the row stays because the recording is on YouTube.
+ *
+ * Not the same as the file going missing, which is still reported: this is a
+ * recording whose video lives elsewhere now, and nothing is wrong with it.
+ */
+export function markFileDeleted(db: DatabaseSync, recordingId: number, at: number): void {
+  db.prepare('UPDATE recordings SET file_deleted_at = ?, file_bytes = NULL WHERE id = ?').run(
+    at,
+    recordingId
+  )
 }
 
 export function getRecordingEvents(db: DatabaseSync, recordingId: number): RecordingEvent[] {
@@ -344,13 +501,21 @@ export interface RecordingUsageRow {
   unmatchedCount: number
 }
 
+/**
+ * What the recordings take up on this disk.
+ *
+ * Only rows with a file: one whose file was deleted to free space, and kept
+ * because it is on YouTube, takes up nothing, and the warning this feeds is
+ * about the disk.
+ */
 export function getRecordingUsage(db: DatabaseSync): RecordingUsageRow {
   const row = db
     .prepare(
       `SELECT COALESCE(SUM(file_bytes), 0) AS total_bytes,
               COUNT(*) AS count,
               SUM(CASE WHEN bind_state = 'unmatched' THEN 1 ELSE 0 END) AS unmatched
-         FROM recordings`
+         FROM recordings
+        WHERE file_deleted_at IS NULL`
     )
     .get() as unknown as { total_bytes: number; count: number; unmatched: number | null }
 
@@ -363,13 +528,20 @@ export function getRecordingUsage(db: DatabaseSync): RecordingUsageRow {
 
 /** How many recording files are no longer on disk, for the missing-files warning. */
 export function countMissingFiles(db: DatabaseSync): number {
-  const rows = db.prepare('SELECT file_path FROM recordings').all() as unknown as Array<{
+  // A file deleted on purpose is not missing; the row says where it went.
+  const rows = db
+    .prepare('SELECT file_path FROM recordings WHERE file_deleted_at IS NULL')
+    .all() as unknown as Array<{
     file_path: string
   }>
   return rows.filter((row) => !existsSync(row.file_path)).length
 }
 
-/** The N oldest recordings for an account — what the cleanup button deletes. */
+/**
+ * The N oldest recordings for an account that still have a file — what the
+ * cleanup button deletes. One whose file is already gone frees nothing, so it
+ * is not one of the N.
+ */
 export function getOldestRecordingIds(
   db: DatabaseSync,
   account: AccountContext,
@@ -379,6 +551,7 @@ export function getOldestRecordingIds(
     .prepare(
       `SELECT id FROM recordings
         WHERE ${ownedBy('account_id', 'riot_id')}
+          AND file_deleted_at IS NULL
         ORDER BY started_at ASC LIMIT ?`
     )
     .all(...ownedByParams(account), count) as unknown as Array<{ id: number }>
@@ -396,29 +569,51 @@ export function getOldestRecordingIds(
  * Scoped to the account, unlike replays: a game two people played together is
  * one match row each, and only one of them has the footage.
  */
-export function getRecordingIdsForMatches(
+export function getRecordingArtefactsForMatches(
   db: DatabaseSync,
   account: AccountContext,
   matchIds: string[]
-): Map<string, number> {
+): Map<string, RecordingArtefact> {
   if (matchIds.length === 0) return new Map()
 
   const placeholders = matchIds.map(() => '?').join(', ')
   const rows = db
     .prepare(
-      `SELECT match_id, MAX(id) AS id
-         FROM recordings
-        WHERE match_id IN (${placeholders})
-          AND ${ownedBy('account_id', 'riot_id')}
-        GROUP BY match_id`
+      `SELECT r.match_id, r.id, r.youtube_video_id,
+              CASE WHEN u.state IN (${PENDING_UPLOAD_STATES}) THEN 1 ELSE 0 END AS pending
+         FROM recordings r
+         LEFT JOIN youtube_uploads u ON u.recording_id = r.id
+        WHERE r.id IN (
+              SELECT MAX(id) FROM recordings
+               WHERE match_id IN (${placeholders})
+                 AND ${ownedBy('account_id', 'riot_id')}
+               GROUP BY match_id)`
     )
     .all(...matchIds, ...ownedByParams(account)) as unknown as Array<{
     match_id: string
     id: number
+    youtube_video_id: string | null
+    pending: number
   }>
 
-  return new Map(rows.map((row) => [row.match_id, row.id]))
+  return new Map(
+    rows.map((row) => [
+      row.match_id,
+      { recordingId: row.id, videoId: row.youtube_video_id, uploadPending: row.pending === 1 }
+    ])
+  )
 }
+
+/** What a match row needs to know about this machine's recording of the game. */
+export interface RecordingArtefact {
+  recordingId: number
+  videoId: string | null
+  /** An upload is queued or under way, so the row does not offer another. */
+  uploadPending: boolean
+}
+
+/** Upload states that mean "on its way", as SQL. */
+export const PENDING_UPLOAD_STATES = "'queued', 'uploading', 'paused', 'waiting_quota', 'waiting_auth'"
 
 /**
  * Which of these matches a recording already claims.

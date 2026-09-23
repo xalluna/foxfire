@@ -21,7 +21,14 @@ import { observeRateLimiter } from './telemetry/limiter'
 import { startResourceSampling, stopResourceSampling } from './telemetry/resources'
 import { startRetention, stopRetention } from './telemetry/retention'
 import { openTelemetryWindow } from './telemetryWindow'
-import { registerRecordingProtocol, registerRecordingScheme } from './recordingProtocol'
+import { registerRecordingProtocol } from './recordingProtocol'
+import { registerPrivilegedSchemes } from './schemes'
+import { registerYouTubeHostProtocol } from './youtube/hostProtocol'
+import { installYouTubeReferer } from './youtube/referer'
+import { reconcileAttachments } from './youtube/attach'
+import { initYouTubeQueue, onUploadFinished, stopYouTubeQueue } from './youtube/queue'
+import { onServerSyncComplete } from './server/hub'
+import { onServerState } from './services/serverService'
 import { migrateUserData, verifyMigration } from './migrateUserData'
 import { initCapture, stopCapture } from './capture/captureService'
 import { pinLegacyCaptureFolder } from './services/captureSettings'
@@ -60,8 +67,9 @@ installCrashHandlers()
 
 // Must run before the app is ready — Electron will not accept a privileged
 // scheme afterwards. See recordingProtocol.ts for why the recording window cannot
-// simply point a <video> at a file:// URL.
-registerRecordingScheme()
+// simply point a <video> at a file:// URL, and shared/youtubeHost.ts for why
+// YouTube's player gets an origin of its own.
+registerPrivilegedSchemes()
 
 /**
  * One process at a time.
@@ -122,6 +130,8 @@ function bootstrap(): void {
   startRetention(() => peekTelemetryDb())
   initSettings()
   registerRecordingProtocol()
+  registerYouTubeHostProtocol()
+  installYouTubeReferer()
   registerIpcHandlers()
   globalShortcut.register(TELEMETRY_ACCELERATOR, openTelemetryWindow)
   // Before the window, because it decides whether there is one to look at: an
@@ -150,6 +160,7 @@ function bootstrap(): void {
   // its push channel open again.
   resumeActiveServer()
   catchUpOnLaunch()
+  initYouTube()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -173,6 +184,31 @@ function bootstrap(): void {
 function startsHidden(installed: PendingInstall | null): boolean {
   if (!getBackgroundSettings().runInTray) return false
   return installed?.relaunchHidden === true || process.argv.includes(HIDDEN_FLAG)
+}
+
+/**
+ * Recordings on YouTube: the upload queue, and telling the server about them.
+ *
+ * The queue resumes whatever was on its way when the app last quit. A server
+ * is told about a recording's video whenever something that decides whether it
+ * should be changes — an upload finishing, the server finishing a sync (which
+ * is when a recording can first find its game there), and signing in to or
+ * switching servers.
+ */
+function initYouTube(): void {
+  initYouTubeQueue()
+
+  onUploadFinished(() => void reconcileAttachments())
+
+  onServerSyncComplete((accountId) => {
+    void bindPendingRecordings(accountId)
+      .catch(() => 0)
+      .then(() => reconcileAttachments())
+  })
+
+  onServerState(() => void reconcileAttachments())
+
+  void reconcileAttachments()
 }
 
 /**
@@ -253,6 +289,9 @@ app.on('will-quit', () => {
   stopLcuWatcher()
   stopReplayWatcher()
   stopCapture()
+  // Before the database closes: the chunk in flight is abandoned, and the
+  // upload resumes from YouTube's own record of it next launch.
+  stopYouTubeQueue()
   // Only quits an OBS this app started; one the user was already running,
   // possibly mid-stream, is left alone.
   quitLaunchedObs()

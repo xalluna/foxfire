@@ -8,7 +8,7 @@ import {
   type ReactNode
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Navigate, Outlet, createRoute, useParams, type AnyRoute } from '@tanstack/react-router'
+import { Link, Navigate, Outlet, createRoute, useParams, type AnyRoute } from '@tanstack/react-router'
 import type { Account } from '@foxfire/core'
 import { isPlayer, parsePlayerSlug, playerSlug } from '@foxfire/core/routes'
 import { EmptyState, Icon, type MatchFocus } from '@foxfire/ui'
@@ -18,6 +18,7 @@ import { ChampionsScreen } from '../screens/ChampionsScreen'
 import { DashboardScreen } from '../screens/DashboardScreen'
 import { LpEditorScreen } from '../screens/LpEditorScreen'
 import { RankScreen } from '../screens/RankScreen'
+import { RecordingScreen } from '../screens/RecordingScreen'
 import {
   DEFAULT_RANK_RANGE,
   queueIdFrom,
@@ -72,7 +73,7 @@ function Unwrapped({ children }: PlayerLayoutProps): JSX.Element {
 
 /**
  * The player pages, under `players/$slug`: the profile and history at the index,
- * then `champions`, `rank` and `lp`.
+ * then `champions`, `rank`, `lp` and `recordings/$matchId`.
  *
  * Built once here and mounted by each app under a parent of its own, so the web
  * client and the desktop agree on every path and every search param — the same
@@ -138,7 +139,15 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
     component: LpEditorRoute
   })
 
-  return { player, dashboard, champions, rank, lpEditor }
+  // A recording is one player's screen, so it lives under the player: the same
+  // game under somebody else's slug is their recording, or none.
+  const recording = createRoute({
+    getParentRoute: () => player,
+    path: 'recordings/$matchId',
+    component: RecordingRoute
+  })
+
+  return { player, dashboard, champions, rank, lpEditor, recording }
 }
 
 /**
@@ -264,6 +273,29 @@ function RankRoute(): JSX.Element {
       onQueueTypeChange={(queueType) => setSearch({ queue: rankQueueSearchFor(queueType) })}
       range={search.range ?? DEFAULT_RANK_RANGE}
       onRangeChange={(range) => setSearch({ range: rankRangeSearchFor(range) })}
+    />
+  )
+}
+
+function RecordingRoute(): JSX.Element {
+  const account = usePlayer()
+  const { matchId } = useParams({ strict: false }) as { matchId: string }
+
+  return (
+    <RecordingScreen
+      account={account}
+      matchId={matchId}
+      back={
+        <Link
+          to="/players/$slug"
+          params={{ slug: playerSlug(account) }}
+          search={{ match: matchId } as never}
+          className="inline-flex items-center gap-1.5 text-sm text-text-dim transition hover:text-accent"
+        >
+          <Icon.ChevronDown width={14} height={14} className="rotate-90" />
+          {account.gameName}&rsquo;s history
+        </Link>
+      }
     />
   )
 }

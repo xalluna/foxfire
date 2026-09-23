@@ -17,7 +17,8 @@ import './styles/index.css'
  * production bundle entirely.
  */
 async function start(): Promise<void> {
-  if (import.meta.env.DEV && !window.api) {
+  const mocked = import.meta.env.DEV && !window.api
+  if (mocked) {
     const { installMockApi } = await import('./dev/mockApi')
     installMockApi()
   }
@@ -26,7 +27,14 @@ async function start(): Promise<void> {
   // machine can do. Both are window.api underneath; the main process still
   // decides where every answer comes from.
   const client = createIpcClient(window.api)
-  const platform = createDesktopPlatform(window.api)
+  let platform = createDesktopPlatform(window.api)
+
+  // A browser has no foxfire-youtube:// page to frame YouTube in, so the
+  // harness plays recordings on the same stand-in the web client's does.
+  if (mocked) {
+    const { createFakeYouTubeMount } = await import('@foxfire/screens/dev')
+    platform = { ...platform, youtube: createFakeYouTubeMount() }
+  }
   const queryClient = createQueryClient()
 
   // Every window loads this bundle, and the router picks what it shows from the
