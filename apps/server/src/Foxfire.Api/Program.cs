@@ -270,6 +270,7 @@ var api = app.MapGroup(ApiPaths.Base);
 api.MapVersionEndpoints();
 api.MapAuthEndpoints();
 api.MapInviteEndpoints();
+api.MapPasswordResetEndpoints();
 api.MapAdminSettingsEndpoints();
 api.MapAdminUserEndpoints();
 api.MapAdminStorageEndpoints();

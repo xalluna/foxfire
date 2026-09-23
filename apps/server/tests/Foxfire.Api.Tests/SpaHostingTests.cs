@@ -19,6 +19,11 @@ public class SpaHostingTests(FoxfireServerFixture server)
     [InlineData("/players/Faker-KR1/rank?queue=flex")]
     [InlineData("/matches/KR_7123?player=Faker-KR1")]
     [InlineData("/search")]
+    // Both kinds of link the server hands out. A token is two base64 halves
+    // joined by a dot, which the framework's own fallback would take for a
+    // missing file — so every invite and every reset link would 404.
+    [InlineData("/invite/ZmF1eC1pbnZpdGU.c2lnbmF0dXJl")]
+    [InlineData("/reset-password/ZmF1eC1yZXNldA.c2lnbmF0dXJl")]
     public async Task A_page_address_is_the_web_client(string path)
     {
         using var browser = server.AnonymousClient();

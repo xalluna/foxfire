@@ -35,6 +35,11 @@ public sealed record TokenPair(
 /// spent. That makes a stolen token detectable rather than merely possible —
 /// presenting an already-spent token means the chain it was copied from is still
 /// running somewhere, and the whole chain is cut.
+///
+/// Only a rotation counts as spent. A token revoked by signing out, by an admin,
+/// or by a password change signing every other device out is simply refused:
+/// nothing continues from it, so there is no chain to cut — and cutting one
+/// would end the session that had just replaced it.
 /// </summary>
 public sealed class TokenService(
     FoxfireDbContext db,
@@ -122,12 +127,23 @@ public sealed class TokenService(
 
         var now = time.GetUtcNow();
 
-        // Already spent, and being presented again. The legitimate holder has
-        // the replacement, so this is a copy — and the safe reading of a copy in
-        // use is that the chain is compromised. Cut all of it and make everybody
-        // on this account sign in again.
+        // Revoked, and being presented again. Which revocation it was decides
+        // what that means.
+        //
+        // Replaced means spent by a rotation: the legitimate holder has the
+        // replacement, so this is a copy, and the safe reading of a copy in use
+        // is that the chain is compromised. Cut all of it and make everybody on
+        // this account sign in again.
+        //
+        // Revoked without a replacement is a sign-out, an admin, or a password
+        // change ending every other session. Nothing continues from it, so it is
+        // refused on its own — the way an expiry is. Cutting the account here
+        // would sign out the device that just changed the password, using the
+        // pair it was handed a moment ago.
         if (stored.RevokedAt is not null)
         {
+            if (stored.ReplacedById is null) return null;
+
             logger.LogWarning(
                 "A spent refresh token was replayed for user {UserId}; revoking every session on that account",
                 stored.UserId);

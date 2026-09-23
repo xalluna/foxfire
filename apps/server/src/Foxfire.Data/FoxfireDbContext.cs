@@ -26,6 +26,7 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Invite> Invites => Set<Invite>();
+    public DbSet<PasswordReset> PasswordResets => Set<PasswordReset>();
     public DbSet<RiotAccount> RiotAccounts => Set<RiotAccount>();
     public DbSet<ServerSetting> ServerSettings => Set<ServerSetting>();
 
