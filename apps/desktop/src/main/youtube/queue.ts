@@ -122,6 +122,44 @@ export function kick(): void {
 
 /** Queues a recording for YouTube. Replaces a finished, failed or cancelled upload of it. */
 export function enqueue(request: UploadRequest, trigger: 'manual' | 'auto' = 'manual'): void {
+  insert(request, trigger, Date.now())
+  log.info('Queued an upload', { recordingId: request.recordingId, trigger })
+  changed()
+  kick()
+}
+
+/**
+ * Queues a batch, in the order given.
+ *
+ * Written one row at a time but announced once: fifty broadcasts, each
+ * refetching the Recordings tab, would be the list redrawing itself fifty
+ * times for one click. The queue works oldest-queued first, so each row is
+ * stamped a millisecond after the last and the batch goes up in the order it
+ * arrived. A recording that cannot be queued — its file gone since the list
+ * was drawn — is reported rather than failing the rest.
+ */
+export function enqueueMany(
+  requests: readonly UploadRequest[],
+  trigger: 'manual' | 'auto' = 'manual'
+): Array<{ recordingId: number; reason: string }> {
+  const refused: Array<{ recordingId: number; reason: string }> = []
+  const start = Date.now()
+
+  requests.forEach((request, index) => {
+    try {
+      insert(request, trigger, start + index)
+    } catch (err) {
+      refused.push({ recordingId: request.recordingId, reason: err instanceof Error ? err.message : String(err) })
+    }
+  })
+
+  log.info('Queued a batch of uploads', { queued: requests.length - refused.length, refused: refused.length })
+  changed()
+  kick()
+  return refused
+}
+
+function insert(request: UploadRequest, trigger: 'manual' | 'auto', at: number): void {
   const db = getDb()
   const identity = getRecordingIdentity(db, request.recordingId)
   if (!identity) throw new Error('That recording is no longer on this machine.')
@@ -139,11 +177,8 @@ export function enqueue(request: UploadRequest, trigger: 'manual' | 'auto' = 'ma
       privacy: request.privacy,
       fileBytes: statSync(identity.filePath).size
     },
-    Date.now()
+    at
   )
-  log.info('Queued an upload', { recordingId: request.recordingId, trigger })
-  changed()
-  kick()
 }
 
 /** Stops an upload and leaves it cancelled. The part YouTube already has is simply abandoned. */

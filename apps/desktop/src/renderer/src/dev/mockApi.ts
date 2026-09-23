@@ -33,6 +33,7 @@ import type {
   ImportProgress,
   UpdateState,
   AttachRecordingOutcome,
+  BulkUploadResult,
   UploadDraft,
   YouTubeSettings,
   YouTubeState
@@ -810,6 +811,8 @@ export const mockApi: Api = {
       )
     },
     enqueue: (): Promise<void> => delay(undefined, 200, false),
+    enqueueMany: (recordingIds: number[]): Promise<BulkUploadResult> =>
+      delay({ queued: recordingIds.length, skipped: [] }, 400, false),
     cancel: (): Promise<void> => delay(undefined, 100, false),
     retry: (): Promise<void> => delay(undefined, 100, false),
     attachLink: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),

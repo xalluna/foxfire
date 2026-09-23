@@ -287,6 +287,8 @@ export interface RecordingIdentity {
   youtubePrivacy: YouTubePrivacy | null
   youtubeSource: 'upload' | 'link' | null
   youtubeTitle: string | null
+  /** Epoch milliseconds. */
+  startedAt: number
   durationSeconds: number | null
 }
 
@@ -328,6 +330,7 @@ export function getRecordingIdentity(db: DatabaseSync, recordingId: number): Rec
     youtubePrivacy: row.youtube_privacy as YouTubePrivacy | null,
     youtubeSource: row.youtube_source as 'upload' | 'link' | null,
     youtubeTitle: row.youtube_title,
+    startedAt: row.started_at,
     durationSeconds: row.ended_at === null ? null : Math.round((row.ended_at - row.started_at) / 1000)
   }
 }
@@ -612,8 +615,17 @@ export interface RecordingArtefact {
   uploadPending: boolean
 }
 
-/** Upload states that mean "on its way", as SQL. */
-export const PENDING_UPLOAD_STATES = "'queued', 'uploading', 'paused', 'waiting_quota', 'waiting_auth'"
+/** Upload states that mean "on its way": it will carry on by itself. */
+export const PENDING_UPLOAD_STATE_LIST: readonly UploadState[] = [
+  'queued',
+  'uploading',
+  'paused',
+  'waiting_quota',
+  'waiting_auth'
+]
+
+/** The same, as SQL. */
+export const PENDING_UPLOAD_STATES = PENDING_UPLOAD_STATE_LIST.map((state) => `'${state}'`).join(', ')
 
 /**
  * Which of these matches a recording already claims.

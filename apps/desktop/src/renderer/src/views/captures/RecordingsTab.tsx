@@ -1,11 +1,32 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { youtubeWatchUrl } from '@foxfire/core/youtube'
-import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { BulkUploadDialog } from '../../youtube/BulkUploadDialog'
 import { openUploadDialog } from '../../youtube/uploadDialog'
 import { uploadPending, uploadStatusText } from '../../youtube/uploadStatus'
-import type { Account, Recording } from '@shared/types'
+import type { Account, BulkUploadResult, Recording } from '@shared/types'
+
+/** Whether a recording could go to YouTube now: a file to send, and nothing already sent or on its way. */
+function canUpload(recording: Recording): boolean {
+  return recording.fileExists && recording.youtube === null && !uploadPending(recording.upload)
+}
+
+/** A sentence on what a batch did, for the line above the list. */
+function describeBatch(result: BulkUploadResult): string {
+  const queued =
+    result.queued === 0
+      ? 'Nothing was queued.'
+      : `Queued ${result.queued} upload${result.queued === 1 ? '' : 's'} — they go up one at a time, oldest game first.`
+  if (result.skipped.length === 0) return queued
+
+  // Grouped by reason: fifty copies of "It is already on YouTube." say one thing.
+  const reasons = new Map<string, number>()
+  for (const { reason } of result.skipped) reasons.set(reason, (reasons.get(reason) ?? 0) + 1)
+  const left = [...reasons].map(([reason, n]) => `${n} left out: ${reason}`).join(' ')
+  return `${queued} ${left}`
+}
 
 /**
  * Every recording, bound to a match or not.
@@ -51,6 +72,13 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   const [forgetting, setForgetting] = useState<Recording | null>(null)
   const [attaching, setAttaching] = useState<Recording | null>(null)
 
+  // Recordings picked for a batch upload. Held as ids and read back against
+  // the current list, so a row that stopped being eligible — its upload
+  // started, its file went — drops out of the selection by itself.
+  const [picked, setPicked] = useState<ReadonlySet<number>>(new Set())
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [batchNote, setBatchNote] = useState<string | null>(null)
+
   const remove = useMutation({
     mutationFn: (recordingId: number) => window.api.recordings.remove(recordingId),
     onSuccess: () => {
@@ -72,7 +100,20 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
     onSuccess: refresh
   })
 
-  const rows = recordings.data ?? []
+  const rows = useMemo(() => recordings.data ?? [], [recordings.data])
+  const eligible = useMemo(() => rows.filter(canUpload), [rows])
+  const selected = useMemo(() => eligible.filter((recording) => picked.has(recording.id)), [eligible, picked])
+  const allPicked = eligible.length > 0 && selected.length === eligible.length
+
+  const toggle = (recordingId: number): void => {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (next.has(recordingId)) next.delete(recordingId)
+      else next.add(recordingId)
+      return next
+    })
+  }
+
   const overCap =
     usage.data && usage.data.softCapBytes > 0 && usage.data.totalBytes > usage.data.softCapBytes
 
@@ -119,6 +160,51 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         </p>
       )}
 
+      {eligible.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-text-dim">
+            <input
+              type="checkbox"
+              className={checkboxClass}
+              checked={allPicked}
+              onChange={() => setPicked(allPicked ? new Set() : new Set(eligible.map((recording) => recording.id)))}
+            />
+            Select all {eligible.length} not on YouTube
+          </label>
+
+          <div className="ml-auto flex items-center gap-3">
+            {selected.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPicked(new Set())}
+                className="text-2xs text-text-mute transition hover:text-text"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={selected.length === 0}
+              onClick={() => setBulkOpen(true)}
+              className={primaryButtonClass}
+            >
+              {selected.length === 0
+                ? 'Upload selected'
+                : `Upload ${selected.length} to YouTube`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {batchNote && (
+        <p className="mt-3 flex items-start gap-2 rounded-md border border-accent-dim/40 bg-accent/10 px-4 py-2.5 text-2xs leading-relaxed text-accent">
+          <span className="min-w-0 flex-1">{batchNote}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setBatchNote(null)} className="shrink-0 opacity-70 hover:opacity-100">
+            <Icon.Close width={12} height={12} />
+          </button>
+        </p>
+      )}
+
       <div className="mt-4 overflow-hidden rounded-lg border border-hairline bg-surface/40">
         {recordings.isPending ? (
           <MatchListSkeleton rows={5} />
@@ -134,6 +220,9 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
               <RecordingRow
                 key={recording.id}
                 recording={recording}
+                selectable={eligible.length > 0}
+                selected={picked.has(recording.id) && canUpload(recording)}
+                onToggleSelected={canUpload(recording) ? () => toggle(recording.id) : undefined}
                 onDelete={() => setDeleting(recording)}
                 onForget={() => setForgetting(recording)}
                 onAttachLink={() => setAttaching(recording)}
@@ -183,17 +272,37 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
           onClose={() => setAttaching(null)}
         />
       )}
+
+      {bulkOpen && (
+        <BulkUploadDialog
+          recordings={selected}
+          onClose={() => setBulkOpen(false)}
+          onQueued={(result) => {
+            setPicked(new Set())
+            setBatchNote(describeBatch(result))
+            refresh()
+          }}
+        />
+      )}
     </div>
   )
 }
 
 function RecordingRow({
   recording,
+  selectable,
+  selected,
+  onToggleSelected,
   onDelete,
   onForget,
   onAttachLink
 }: {
   recording: Recording
+  /** The list is offering a batch upload, so every row keeps a column for the box. */
+  selectable: boolean
+  selected: boolean
+  /** Absent for a row that cannot go to YouTube, which gets an empty column instead. */
+  onToggleSelected?: () => void
   onDelete: () => void
   onForget: () => void
   onAttachLink: () => void
@@ -218,6 +327,18 @@ function RecordingRow({
               : 'border-l-hairline'
       )}
     >
+      {selectable &&
+        (onToggleSelected ? (
+          <input
+            type="checkbox"
+            aria-label="Select for upload"
+            className={checkboxClass}
+            checked={selected}
+            onChange={onToggleSelected}
+          />
+        ) : (
+          <span className="w-4 shrink-0" />
+        ))}
       <Asset
         src={assets && championId !== null ? championIconUrl(assets, championId) : null}
         className="h-9 w-9"

@@ -102,6 +102,7 @@ import {
   revealRecording
 } from '../services/recordingService'
 import { attachLink, reattach } from '../youtube/attach'
+import { enqueueBatch } from '../youtube/bulk'
 import { draftFor } from '../youtube/drafts'
 import { cancelConnect, connectYouTube, disconnectYouTube } from '../youtube/oauth'
 import { cancelUpload, enqueue, kick, retryUpload } from '../youtube/queue'
@@ -131,6 +132,7 @@ import type {
   SeasonInput,
   AttachRecordingInput,
   UploadRequest,
+  YouTubePrivacy,
   YouTubeSettings
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
@@ -414,6 +416,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.youtube.setSettings, (_e, patch: Partial<YouTubeSettings>) => setYouTubeSettings(patch))
   ipcMain.handle(CH.youtube.draft, (_e, recordingId: number) => draftFor(recordingId))
   ipcMain.handle(CH.youtube.enqueue, (_e, request: UploadRequest) => enqueue(request))
+  ipcMain.handle(CH.youtube.enqueueMany, (_e, recordingIds: number[], privacy: YouTubePrivacy) =>
+    enqueueBatch(recordingIds, privacy)
+  )
   ipcMain.handle(CH.youtube.cancel, (_e, recordingId: number) => cancelUpload(recordingId))
   ipcMain.handle(CH.youtube.retry, (_e, recordingId: number) => retryUpload(recordingId))
   ipcMain.handle(CH.youtube.attachLink, (_e, recordingId: number, videoId: string, replace: boolean) =>

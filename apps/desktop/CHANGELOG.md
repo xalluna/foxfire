@@ -51,6 +51,10 @@ watch them from your match history, markers and all. Needs Foxfire Server 0.3.0.
   after a restart.
 - **Upload every game automatically**, if you turn it on. Each recording goes up once it has found
   its game, with the title and privacy you set in Settings.
+- **Upload a backlog in one go.** Captures › Recordings has a box on every recording that is not on
+  YouTube yet, and "Select all": pick fifty, choose who can watch once, and they are queued with a
+  title and description each from your template, oldest game first. What does not fit in YouTube's
+  daily allowance waits and carries on by itself the next day.
 - **Everybody on your server can watch.** A recording on YouTube is attached to your game on your
   Foxfire Server, and "Watch recording" plays it from your match history — for you, for your friends,
   and in a browser. It is your view of the game and nobody else's: in a game two of you recorded,

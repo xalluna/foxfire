@@ -112,6 +112,46 @@ function queueStates(): Recording[] {
   ]
 }
 
+/** Fifty-odd recorded games, none of them uploaded, for ?scenario=youtube-backlog. */
+function backlog(): Recording[] {
+  const champions = [C.Viktor, C.Ahri, C.Syndra, C.Orianna, C.Zed, C.Lux, C.Yone, C.Qiyana]
+  return Array.from({ length: 55 }, (_, i) => {
+    const startedAt = NOW - (i + 1) * 5 * 60 * 60_000
+    const championId = champions[i % champions.length]!
+    const win = i % 3 !== 0
+    return {
+      id: 100 + i,
+      accountId: '1',
+      matchId: matchIdAt(10 + i),
+      bindState: i % 11 === 10 ? 'unmatched' : 'bound',
+      fileBytes: 1_100_000_000 + (i % 7) * 90_000_000,
+      fileExists: true,
+      queueId: 420,
+      startedAt,
+      endedAt: startedAt + (1_500 + (i % 9) * 60) * 1000,
+      durationSeconds: 1_500 + (i % 9) * 60,
+      selfChampionId: championId,
+      match:
+        i % 11 === 10
+          ? null
+          : {
+              matchId: matchIdAt(10 + i),
+              gameCreation: startedAt - 120_000,
+              gameDuration: 1_500 + (i % 9) * 60,
+              gameMode: 'CLASSIC',
+              queueId: 420,
+              win,
+              championId,
+              championName: null,
+              kills: 3 + (i % 9),
+              deaths: 1 + (i % 6),
+              assists: 4 + (i % 8)
+            },
+      ...NOT_ON_YOUTUBE
+    } satisfies Recording
+  })
+}
+
 /**
  * Recordings, covering the states the Recordings view has to draw.
  *
@@ -188,7 +228,8 @@ export const RECORDINGS: Record<string, Recording[]> = {
       match: null,
       ...NOT_ON_YOUTUBE
     },
-    ...(scenario === 'youtube-queue' ? queueStates() : [])
+    ...(scenario === 'youtube-queue' ? queueStates() : []),
+    ...(scenario === 'youtube-backlog' ? backlog() : [])
   ],
   2: []
 }

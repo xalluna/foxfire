@@ -188,6 +188,8 @@ export const CH = {
     /** The upload form's starting point for one recording, from the templates. */
     draft: 'youtube:draft',
     enqueue: 'youtube:enqueue',
+    /** Many recordings at once, titled from the template, with one privacy for all. */
+    enqueueMany: 'youtube:enqueueMany',
     cancel: 'youtube:cancel',
     retry: 'youtube:retry',
     /** Attaches a hand-uploaded video to a recording on this disk, markers and all. */

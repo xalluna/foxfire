@@ -227,6 +227,7 @@ const api: Api = {
     setSettings: (patch) => ipcRenderer.invoke(CH.youtube.setSettings, patch),
     draft: (recordingId) => ipcRenderer.invoke(CH.youtube.draft, recordingId),
     enqueue: (request) => ipcRenderer.invoke(CH.youtube.enqueue, request),
+    enqueueMany: (recordingIds, privacy) => ipcRenderer.invoke(CH.youtube.enqueueMany, recordingIds, privacy),
     cancel: (recordingId) => ipcRenderer.invoke(CH.youtube.cancel, recordingId),
     retry: (recordingId) => ipcRenderer.invoke(CH.youtube.retry, recordingId),
     attachLink: (recordingId, videoId, replace) =>

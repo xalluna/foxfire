@@ -421,6 +421,12 @@ export interface UploadRequest {
   privacy: YouTubePrivacy
 }
 
+/** What queueing a batch did: how many went into the queue, and why the rest did not. */
+export interface BulkUploadResult {
+  queued: number
+  skipped: Array<{ recordingId: number; reason: string }>
+}
+
 /** Foxfire's Google connection on this machine, and the queue behind it. */
 export interface YouTubeState {
   /**

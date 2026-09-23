@@ -47,8 +47,10 @@ import type {
   SyncProgressEvent,
   UpdateState,
   AttachRecordingOutcome,
+  BulkUploadResult,
   UploadDraft,
   UploadRequest,
+  YouTubePrivacy,
   YouTubeSettings,
   YouTubeState
 } from './types'
@@ -319,6 +321,12 @@ export interface Api {
     /** What the upload form opens with for a recording, from the templates. */
     draft: (recordingId: number) => Promise<UploadDraft>
     enqueue: (request: UploadRequest) => Promise<void>
+    /**
+     * Queues many recordings at once, oldest game first, each titled and
+     * described from the templates, all with one privacy. Recordings that
+     * cannot go — already on YouTube, file gone — are reported, not queued.
+     */
+    enqueueMany: (recordingIds: number[], privacy: YouTubePrivacy) => Promise<BulkUploadResult>
     cancel: (recordingId: number) => Promise<void>
     retry: (recordingId: number) => Promise<void>
     /** Attaches a video somebody uploaded themselves to a recording on this disk, with its markers. */
