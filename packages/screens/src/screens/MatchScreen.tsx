@@ -4,7 +4,7 @@ import { isPlayer, parsePlayerSlug, paths, playerSlug } from '@foxfire/core/rout
 import { CopyLinkButton, Icon, MatchPage, recordingActionClass } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
-import { recordingBlockedReason } from '../match/matchMenu'
+import { recordingBlockedReason, withoutServerRecording } from '../match/matchMenu'
 import { queryKeys } from '../queries/keys'
 
 /** Whether a failed read was the server saying it has no such thing. */
@@ -48,6 +48,9 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
     retry: (count, error) => !isNotFound(error) && count < 1
   })
 
+  // As on the history: no server recording where nothing here can play it.
+  const row = summary.data && !platform.youtube ? withoutServerRecording(summary.data) : summary.data
+
   const notFound = (detail.isSuccess && detail.data === null) || (detail.isError && isNotFound(detail.error))
 
   return (
@@ -68,11 +71,11 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
         <>
           {/* Only when the link named a player, and only theirs: with nobody
               named there is no one whose screen to show. */}
-          {account && summary.data && platform.watchRecording && recordingBlockedReason(summary.data) === null && (
+          {account && row && platform.watchRecording && recordingBlockedReason(row) === null && (
             <button
               type="button"
               className={`${recordingActionClass} inline-flex items-center gap-1.5`}
-              onClick={() => platform.watchRecording?.({ account, match: summary.data! })}
+              onClick={() => platform.watchRecording?.({ account, match: row })}
             >
               <Icon.Film width={13} height={13} />
               Watch {account.gameName}&rsquo;s recording
@@ -83,7 +86,7 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
           )}
         </>
       }
-      summary={summary.data}
+      summary={row}
       summaryLoading={account !== null && readSummary !== undefined && summary.isLoading}
       detail={detail.data}
       detailLoading={detail.isLoading}

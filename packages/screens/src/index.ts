@@ -38,6 +38,7 @@ export {
   matchContextItems,
   recordingBlockedReason,
   replayBlockedReason,
+  withoutServerRecording,
   type MatchMenuActions,
   type MatchMenuContext
 } from './match/matchMenu'

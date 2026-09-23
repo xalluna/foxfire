@@ -54,6 +54,19 @@ export function recordingBlockedReason(match: MatchSummary): string | null {
 }
 
 /**
+ * A row as a client that cannot play YouTube should see it: without the
+ * recording a server holds.
+ *
+ * A server can hold one while this client was built without YouTube — see the
+ * apps' feature switches — and a marker promising a recording that nothing
+ * here can play, or a menu offering to watch it, would be a promise broken on
+ * the click. The row's own files on this disk are left as they are.
+ */
+export function withoutServerRecording(match: MatchSummary): MatchSummary {
+  return match.recording ? { ...match, recording: null } : match
+}
+
+/**
  * Whether this machine's recording of the game could go to YouTube, and why not.
  *
  * Null means the item is not offered at all: nothing on this disk to upload,

@@ -24,6 +24,7 @@ import { Captures } from './views/Captures'
 import { Home } from './views/Home'
 import { LiveGame } from './views/LiveGame'
 import { Settings } from './views/Settings'
+import { YOUTUBE_ENABLED } from '@shared/features'
 
 /*
  * Every window this app opens, as one route table.
@@ -143,7 +144,14 @@ const routeTree = root.addChildren([
     search,
     settings
   ]),
-  windows.addChildren([telemetry, archives, recording, remoteRecording, lpEditor])
+  windows.addChildren([
+    telemetry,
+    archives,
+    recording,
+    // Somebody else's recording, from YouTube — only in a build that has it.
+    ...(YOUTUBE_ENABLED ? [remoteRecording] : []),
+    lpEditor
+  ])
 ])
 
 /**

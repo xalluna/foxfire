@@ -66,16 +66,6 @@ wrong there is still a record of it after the container has been restarted.
   the same state an imported one is in, and whoever it belongs to can still claim it from the
   desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
   appear in, and what removing one should mean is a question for another release.
-- **Recordings on YouTube, one per player per game.** A desktop that uploads a recording attaches it
-  to its owner's game here, with the kill, death and assist markers it captured. The match row offers
-  "Watch recording" to everybody — but only on that player's history: in a game two members recorded,
-  each history plays its own, and nobody else's history offers either. Only the account's owner can
-  attach one; the owner or an admin can take it off again, and the video stays on YouTube either way.
-- **Watch recordings in a browser.** "Watch recording" opens a page of its own, at
-  `/players/<name>/recordings/<game>`, with YouTube's player and the markers beneath it — click one to
-  jump to the fight. The link can be copied and shared.
-- **Attach a YouTube link from the browser**, on your own games, for a video you uploaded yourself.
-  One attached from a browser has no markers; those come from the desktop that recorded the game.
 
 - **Logs that outlast the container.** Everything the server logs is kept in the blob store it
   already uses for replays, in a `logs` container of its own, one file an hour, for 30 days — so the
@@ -96,10 +86,6 @@ wrong there is still a record of it after the container has been restarted.
   whether somebody has been guessing passwords.
 
 ### Changed
-
-- **The web client's content security policy allows YouTube's player**: the privacy-enhanced
-  player at `youtube-nocookie.com` in a frame, and YouTube's IFrame API script, which is what lets the
-  markers seek the video. Nothing else from YouTube is allowed, and nothing is drawn over its player.
 
 
 - **The address in `ADMIN_EMAIL` is now pinned to the account that holds it.**
@@ -166,15 +152,29 @@ wrong there is still a record of it after the container has been restarted.
 - Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
   accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
   adding a tracked account, refusing a duplicate, and the sync cooldown.
-- One new table, `MatchRecordings`, keyed on the game and the Riot account — the account's id rather
-  than its puuid, which is re-resolved whenever the server's Riot key changes. It stores the YouTube
-  video id and the markers as sent, never the video. Deleting a game takes its recordings with it.
-- `GET`, `PUT` and `DELETE /api/riot-accounts/{id}/matches/{matchId}/recording`. A second attach
-  answers 409 `recording_exists` unless it says `replace`.
-- A new hub event, `recording:changed`, carrying the account and the game, so the rows showing that
-  player's view of that game refresh everywhere.
-- Tests against a real SQL Server cover owner-only attaching (admins included in the refusal), the
-  one-perspective rule on match rows, replacing, removing, validation, and the event.
+- **Recordings on YouTube are in this build, switched off.** A desktop attaching the video it
+  uploaded to its owner's game, every member watching it from that player's history — and only that
+  player's — in the desktop or on a page of its own in the browser, and attaching a link by hand, are
+  all written, and none of it is served until Foxfire's Google project has been through YouTube's
+  review. Whether a build has it is decided when it is compiled, by the `FOXFIRE_FEATURE_YOUTUBE`
+  repository variable, for the server and the web client inside it together; this release was made
+  without it, so there are no recording routes, a match row's `recording` is always null, and the
+  content security policy lets nothing of YouTube's in. What turning it on brings:
+  - `GET`, `PUT` and `DELETE /api/riot-accounts/{id}/matches/{matchId}/recording`. Only the
+    account's owner can attach — admins included in the refusal — and the owner or an admin can
+    remove. A second attach answers 409 `recording_exists` unless it says `replace`.
+  - A new hub event, `recording:changed`, carrying the account and the game, so the rows showing that
+    player's view of that game refresh everywhere.
+  - The web client's content security policy allows YouTube's privacy-enhanced player at
+    `youtube-nocookie.com` in a frame, and YouTube's IFrame API script, which is what lets the
+    markers seek the video. Nothing else from YouTube, and nothing drawn over its player.
+  - Tests against a real SQL Server for owner-only attaching, the one-perspective rule on match rows,
+    replacing, removing, validation and the event. CI builds and tests the server both ways.
+- One new table, `MatchRecordings`, created whether or not a build serves recordings, so turning them
+  on later needs no migration of its own. It is keyed on the game and the Riot account — the
+  account's id rather than its puuid, which is re-resolved whenever the server's Riot key changes —
+  and stores the YouTube video id and the markers as sent, never the video. Deleting a game takes its
+  recordings with it.
 
 - Logging goes through Serilog, behind the `ILogger` everything already wrote to. The blob lines are
   compact JSON with the message rendered and as its template, and the trace id on each. The sinks a

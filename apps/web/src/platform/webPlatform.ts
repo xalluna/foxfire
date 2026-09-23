@@ -1,6 +1,7 @@
 import { paths, rankQueueParam } from '@foxfire/core/routes'
 import type { ServerApi } from '@foxfire/core/server'
-import type { Platform } from '@foxfire/screens'
+import type { Platform, RecordingTarget } from '@foxfire/screens'
+import { YOUTUBE_ENABLED } from '../features'
 import { importStatsDbFile, pickStatsDb } from './statsDb'
 import { createWebYouTubeMount } from './youtubePlayer'
 
@@ -15,6 +16,8 @@ import { createWebYouTubeMount } from './youtubePlayer'
  * Recordings are the exception that became possible: one somebody put on
  * YouTube is on the internet rather than on a disk, so a browser can play it
  * — on a page of its own, with the markers the desktop captured beneath it.
+ * Only in a build made with YouTube, though — see ../features.ts. Without it
+ * there is no player, and so nothing on a row offers one.
  */
 export function createWebPlatform({
   api,
@@ -33,11 +36,15 @@ export function createWebPlatform({
     openLpEditor: ({ account, queueType, matchId }) =>
       navigate(paths.lpEditor(account, { queue: rankQueueParam(queueType), match: matchId })),
 
-    // Only ever the row's own player's recording: the server puts one on a row
-    // for the account whose history it is, and the page asks for that pair.
-    watchRecording: ({ account, match }) => navigate(paths.recording(account, match.matchId)),
+    ...(YOUTUBE_ENABLED
+      ? {
+          // Only ever the row's own player's recording: the server puts one on a
+          // row for the account whose history it is, and the page asks for that pair.
+          watchRecording: ({ account, match }: RecordingTarget) => navigate(paths.recording(account, match.matchId)),
 
-    youtube: createWebYouTubeMount(),
+          youtube: createWebYouTubeMount()
+        }
+      : {}),
 
     // The server hands out a URL signed for a quarter of an hour, and the
     // browser downloads from the blob store directly. That URL must be https

@@ -130,6 +130,32 @@ the match alone, so in a game two members recorded each history plays its own an
 offers either. That rule lives in the row query in `MatchReads.MatchListAsync`, which is where to
 look if a recording ever turns up on the wrong history.
 
+**It is switched off at build time, everywhere, by one switch.** `FOXFIRE_FEATURE_YOUTUBE` in the
+environment of a build — `1`, `true`, `yes` or `on` — is what includes it, and the release workflows
+read it from the repository variable of the same name, so the installer, the server and the web client
+inside the server are always built with the same answer. Unset, it is off:
+
+- **The desktop and the web client** get `__FEATURE_YOUTUBE__` as a literal from Vite's `define`
+  (`tooling/vite/features.ts`), read through `YOUTUBE_ENABLED` in `apps/desktop/src/shared/features.ts`
+  and `apps/web/src/features.ts`. Main registers no `youtube.*` or `matchRecordings.*` IPC, no
+  `foxfire-youtube://` scheme and no queue; the renderer draws no Settings page, upload button or
+  link; and the bundler drops the rest, the Google client included. The desktop's vitest config
+  turns it on, so the tests cover the code that ships switched off.
+- **The shared screens** have no switch of their own. They offer recordings only where the platform
+  hands them a YouTube player (`platform.youtube`), and strip a server's `recording` off a row where
+  it does not — so a switched-off client never promises a video it has nothing to play in.
+- **The server** compiles it out: Directory.Build.props defines `FEATURE_YOUTUBE`, read through
+  `BuildFeatures.YouTubeRecordings` in `Foxfire.Core`. Off, there are no recording routes (they fall
+  to the API's JSON 404, which a switched-on desktop reads as "this server takes no recordings" and
+  retries later), the row's `recording` is always null, and the CSP has nothing of YouTube's. The
+  `MatchRecordings` table is migrated either way, so switching it on needs no migration. The tests
+  for it are inside `#if FEATURE_YOUTUBE`, and CI runs the server's suites both ways.
+
+Run a harness with it on by setting the variable first — `FOXFIRE_FEATURE_YOUTUBE=1 npm run dev:web`
+in a POSIX shell, `$env:FOXFIRE_FEATURE_YOUTUBE='1'; npm run dev:web` in PowerShell; the server is
+`FOXFIRE_FEATURE_YOUTUBE=1 dotnet test apps/server`. It is an environment variable rather than a
+`.env` entry, because it is read by the build configs, not by the code they build.
+
 The path, in `apps/desktop/src/main/youtube`:
 
 - **Connect** once per install, in Settings › YouTube: Google's installed-app flow (system browser,

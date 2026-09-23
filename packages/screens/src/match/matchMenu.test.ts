@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadBlockedReason, matchContextItems } from './matchMenu'
+import { downloadBlockedReason, matchContextItems, withoutServerRecording } from './matchMenu'
 import type { MatchSummary } from '@foxfire/core'
 
 /**
@@ -326,5 +326,20 @@ describe('matchContextItems and recordings', () => {
     expect(labels(matchContextItems(MATCH, web, { isMine: true, serverMode: true }))).not.toContain(
       'Upload recording to YouTube'
     )
+  })
+})
+
+describe('withoutServerRecording', () => {
+  it('takes the server’s recording off a row, and leaves what is on this disk', () => {
+    const row = {
+      ...MATCH,
+      recording: { youtubeVideoId: 'dQw4w9WgXcQ', privacy: 'unlisted' as const, hasEvents: true },
+      local: { recordingId: 7, replayId: null }
+    }
+    const stripped = withoutServerRecording(row)
+    expect(stripped.recording).toBeNull()
+    expect(stripped.local?.recordingId).toBe(7)
+    // With nothing to take off, the row is returned as it came.
+    expect(withoutServerRecording(MATCH)).toBe(MATCH)
   })
 })

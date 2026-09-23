@@ -92,6 +92,14 @@ async function attachTo(plan: AttachPlan, serverKey: string): Promise<AttachReco
     const message = err instanceof Error ? err.message : String(err)
 
     if (err instanceof ServerError) {
+      // The route itself is missing: a server built without recordings, or one
+      // from before them. That says nothing about this recording, so nothing is
+      // written — a 'failed' row would keep it off the server for good, even
+      // after the host turns recordings on.
+      if (err.code === 'not_found') {
+        log.debug('The server has no recordings to attach to', { recordingId: plan.recordingId })
+        return { ok: false, reason: 'failed', message: 'This server does not take recordings.' }
+      }
       if (err.code === 'recording_exists') {
         record('conflict', message)
         return { ok: false, reason: 'exists', message }

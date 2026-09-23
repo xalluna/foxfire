@@ -297,7 +297,15 @@ api.MapDashboardEndpoints();
 api.MapRankEndpoints();
 api.MapSearchEndpoints();
 api.MapReplayEndpoints();
-api.MapRecordingEndpoints();
+
+// Only in a build made with YouTube — see Foxfire.Core/BuildFeatures.cs. Without it
+// the routes fall through to the JSON 404 below, which a desktop built with
+// YouTube reads as a server that has no recordings rather than as a refusal.
+if (BuildFeatures.YouTubeRecordings)
+{
+    api.MapRecordingEndpoints();
+}
+
 api.MapImportEndpoints();
 app.MapHub<FoxfireHub>(FoxfireHub.Path);
 

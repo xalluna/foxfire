@@ -12,8 +12,7 @@ changes you would never notice while using the app.
 Foxfire updates itself, search looks through the people your server tracks rather than strangers on
 Riot, and you can look after your own account without leaving the app. A new version now arrives
 quietly in the background and waits for you to restart — never in the middle of a game — and the
-patch notes travel with it. Your recordings can go to YouTube, where everybody on your server can
-watch them from your match history, markers and all. Needs Foxfire Server 0.3.0.
+patch notes travel with it. Needs Foxfire Server 0.3.0.
 
 ### Added
 
@@ -43,34 +42,7 @@ watch them from your match history, markers and all. Needs Foxfire Server 0.3.0.
   admin starts tracking somebody and where a claim is taken back.
 - **The sign-in form says what to do about a forgotten password**: ask whoever runs the server for a
   reset link.
-- **Recordings on YouTube.** Connect your YouTube channel in Settings › YouTube, and any recording can
-  go up from the Recordings tab, from the recording itself, or from its game's right-click menu. You
-  choose the title, description and who can watch; the description lists your kills and deaths as
-  timestamps, which YouTube turns into chapters. Uploads run in the background one at a time, pause
-  while you are in a game — from champ select until it is over — and pick up where they left off
-  after a restart.
-- **Upload every game automatically**, if you turn it on. Each recording goes up once it has found
-  its game, with the title and privacy you set in Settings.
-- **Upload a backlog in one go.** Captures › Recordings has a box on every recording that is not on
-  YouTube yet, and "Select all": pick fifty, choose who can watch once, and they are queued with a
-  title and description each from your template, oldest game first. What does not fit in YouTube's
-  daily allowance waits and carries on by itself the next day.
-- **Everybody on your server can watch.** A recording on YouTube is attached to your game on your
-  Foxfire Server, and "Watch recording" plays it from your match history — for you, for your friends,
-  and in a browser. It is your view of the game and nobody else's: in a game two of you recorded,
-  your history plays yours and theirs plays theirs.
-- **Watch your friends' recordings** from their history, with their kill and death markers, in a
-  window of its own.
-- **Attach a YouTube link** to a recording you uploaded yourself. From the recording on your PC the
-  markers go with it, so the video has to be the same file, uncut.
-- **A recording on YouTube plays from YouTube**, with a switch back to the file while it is still on
-  your PC — the file is the one with thumbnails on the seek bar and slow motion.
-
 ### Changed
-
-- **Deleting a recording that is on YouTube frees the disk and keeps the recording.** The file goes;
-  the recording stays, plays from YouTube and keeps its markers. **Forget** takes it off your PC
-  altogether. Neither touches YouTube or your server.
 
 - **Connected to a server, Foxfire installs the version that server accepts** rather than the
   newest one that exists. A server only talks to the builds it knows, so updating past it would
@@ -127,22 +99,32 @@ watch them from your match history, markers and all. Needs Foxfire Server 0.3.0.
   ad-hoc lookup service is gone.
 - Database migration 014: the YouTube copy on each recording, whether its file was deleted on
   purpose, the upload queue, and which servers have been told about each video.
-- Uploads use YouTube's resumable protocol in 8 MiB chunks and save their place after every one. The
-  daily quota is waited out until midnight Pacific time; other failures back off from thirty seconds
-  to an hour.
-- The Google sign-in is the installed-app flow — the system browser, a one-request server on
-  127.0.0.1, and PKCE — asking only to upload and for the account's email. The refresh token is
-  encrypted with the other secrets.
-- YouTube's player runs in a page on a scheme of its own, `foxfire-youtube://`, with no preload, so
-  Google's script never shares a window with the bridge to the main process. The two talk over
-  postMessage, and that page's requests carry `https://com.brandonbarr.foxfire/` as their Referer,
-  which is how YouTube identifies a desktop app.
-- Both privileged schemes are registered in the one call Electron allows.
-- The Google client is built into release installers from repository secrets. The client secret is
-  optional and only sent when a build has one; a build without the client id has no uploads and says
-  so. See `apps/desktop/docs/YOUTUBE_SETUP.md`.
+- **Recordings on YouTube are in this build, switched off.** Uploading a recording to YouTube,
+  attaching the video to its game on a server, and playing it from there with Foxfire's markers
+  beneath YouTube's player are all written, and none of it can be reached until Foxfire's Google
+  project has been through YouTube's review. Whether a build has it is decided when the installer is
+  made, by the `FOXFIRE_FEATURE_YOUTUBE` repository variable, and this release was made without it:
+  there is no YouTube page in Settings, nothing offers an upload, and neither the `foxfire-youtube://`
+  scheme nor the Google client is in the bundle. What turning it on brings:
+  - Uploads use YouTube's resumable protocol in 8 MiB chunks and save their place after every one.
+    The daily quota is waited out until midnight Pacific time; other failures back off from thirty
+    seconds to an hour.
+  - The Google sign-in is the installed-app flow — the system browser, a one-request server on
+    127.0.0.1, and PKCE — asking only to upload and for the account's email. The refresh token is
+    encrypted with the other secrets.
+  - YouTube's player runs in a page on a scheme of its own, `foxfire-youtube://`, with no preload,
+    so Google's script never shares a window with the bridge to the main process. The two talk over
+    postMessage, and that page's requests carry `https://com.brandonbarr.foxfire/` as their Referer,
+    which is how YouTube identifies a desktop app. It is registered in the one call to
+    `registerSchemesAsPrivileged` Electron allows, beside `recording://`.
+  - The Google client is built into the installer from repository secrets. The client secret is
+    optional and only sent when a build has one; a build without the client id has no uploads and
+    says so.
+  - A server built without recordings answers their routes with a plain 404, and a desktop with
+    them keeps its videos to attach once the server has them, rather than counting them refused.
+  - `apps/desktop/docs/YOUTUBE_SETUP.md` is how to turn it on, and `apps/desktop/docs/PRIVACY.md`
+    the privacy policy the Google review asks for.
 - The recording player, its timeline and its markers are shared with the web client now.
-- A privacy policy for the YouTube connection, in `apps/desktop/docs/PRIVACY.md`.
 
 ## [0.13.0] — 2026-09-21
 

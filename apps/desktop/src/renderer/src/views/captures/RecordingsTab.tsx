@@ -7,10 +7,14 @@ import { BulkUploadDialog } from '../../youtube/BulkUploadDialog'
 import { openUploadDialog } from '../../youtube/uploadDialog'
 import { uploadPending, uploadStatusText } from '../../youtube/uploadStatus'
 import type { Account, BulkUploadResult, Recording } from '@shared/types'
+import { YOUTUBE_ENABLED } from '@shared/features'
 
-/** Whether a recording could go to YouTube now: a file to send, and nothing already sent or on its way. */
+/**
+ * Whether a recording could go to YouTube now: a file to send, and nothing
+ * already sent or on its way. Never, in a build made without YouTube.
+ */
 function canUpload(recording: Recording): boolean {
-  return recording.fileExists && recording.youtube === null && !uploadPending(recording.upload)
+  return YOUTUBE_ENABLED && recording.fileExists && recording.youtube === null && !uploadPending(recording.upload)
 }
 
 /** A sentence on what a batch did, for the line above the list. */
@@ -236,11 +240,11 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         <ConfirmDialog
           title="Delete this recording?"
           message={
-            deleting.youtube
+            YOUTUBE_ENABLED && deleting.youtube
               ? 'The video file on this PC is deleted to free the space. The recording stays, and goes on playing from YouTube with its markers.'
               : 'The video file and the recording are both deleted from this PC. This cannot be undone.'
           }
-          confirmLabel={deleting.youtube ? 'Delete the file' : 'Delete'}
+          confirmLabel={YOUTUBE_ENABLED && deleting.youtube ? 'Delete the file' : 'Delete'}
           danger
           busy={remove.isPending}
           onConfirm={() => remove.mutate(deleting.id)}
@@ -252,7 +256,7 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         <ConfirmDialog
           title="Forget this recording?"
           message={
-            forgetting.youtube
+            YOUTUBE_ENABLED && forgetting.youtube
               ? 'It comes off this PC, markers and all. The video stays on YouTube, and anything your server holds stays there.'
               : 'It comes off this list. The file is already gone.'
           }
@@ -311,8 +315,10 @@ function RecordingRow({
   const match = recording.match
   const championId = match?.championId ?? recording.selfChampionId
   const onDisk = recording.fileExists
-  // A recording on YouTube still plays after its file has gone.
-  const playable = onDisk || recording.youtube !== null
+  // A recording on YouTube still plays after its file has gone — in a build
+  // that has YouTube to play it from.
+  const onYouTube = YOUTUBE_ENABLED && recording.youtube !== null
+  const playable = onDisk || onYouTube
 
   return (
     <li
@@ -361,7 +367,7 @@ function RecordingRow({
           {' · '}
           {recording.fileDeleted ? 'file deleted' : formatBytes(recording.fileBytes)}
         </p>
-        <YouTubeLine recording={recording} onAttachLink={onAttachLink} />
+        {YOUTUBE_ENABLED && <YouTubeLine recording={recording} onAttachLink={onAttachLink} />}
       </div>
 
       {match && (
@@ -385,7 +391,7 @@ function RecordingRow({
         >
           Watch
         </button>
-        {onDisk && !recording.youtube && !uploadPending(recording.upload) && (
+        {canUpload(recording) && (
           <button
             type="button"
             onClick={() => openUploadDialog(recording.id)}
@@ -403,7 +409,7 @@ function RecordingRow({
           <Icon.Folder width={13} height={13} />
         </IconButton>
         {onDisk ? (
-          <IconButton label={recording.youtube ? 'Delete the file' : 'Delete recording'} onClick={onDelete} danger>
+          <IconButton label={onYouTube ? 'Delete the file' : 'Delete recording'} onClick={onDelete} danger>
             <Icon.Trash width={13} height={13} />
           </IconButton>
         ) : (

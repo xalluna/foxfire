@@ -22,6 +22,7 @@ import { openUploadDialog } from '../youtube/uploadDialog'
 import { uploadPending, uploadStatusText } from '../youtube/uploadStatus'
 import { youtubeHostMount } from './youtubeHostMount'
 import type { Recording } from '@shared/types'
+import { YOUTUBE_ENABLED } from '@shared/features'
 
 /**
  * A window that owns one recording.
@@ -102,7 +103,8 @@ export function RecordingApp(): JSX.Element {
   }
 
   const { recording, events } = detail.data
-  const videoId = recording.youtube?.videoId ?? null
+  // A build without YouTube plays the file and nothing else, whatever the row says.
+  const videoId = YOUTUBE_ENABLED ? (recording.youtube?.videoId ?? null) : null
   const hasFile = recording.fileExists
 
   // YouTube once there is a copy there, the file otherwise — and whichever is
@@ -135,14 +137,16 @@ export function RecordingApp(): JSX.Element {
                 onChange={setChosen}
               />
             )}
-            {hasFile && !videoId && !uploadPending(recording.upload) && (
+            {YOUTUBE_ENABLED && hasFile && !videoId && !uploadPending(recording.upload) && (
               <button type="button" className={recordingActionClass} onClick={() => openUploadDialog(recording.id)}>
                 Upload to YouTube
               </button>
             )}
-            <button type="button" className={recordingActionClass} onClick={() => setAttaching(true)}>
-              {videoId ? 'Replace YouTube link' : 'Attach YouTube link'}
-            </button>
+            {YOUTUBE_ENABLED && (
+              <button type="button" className={recordingActionClass} onClick={() => setAttaching(true)}>
+                {videoId ? 'Replace YouTube link' : 'Attach YouTube link'}
+              </button>
+            )}
             {videoId && (
               <a
                 href={youtubeWatchUrl(videoId)}
@@ -186,7 +190,7 @@ export function RecordingApp(): JSX.Element {
           onClose={() => setAttaching(false)}
         />
       )}
-      <YouTubeUploadDialogHost canOpenSettings={false} />
+      {YOUTUBE_ENABLED && <YouTubeUploadDialogHost canOpenSettings={false} />}
     </Shell>
   )
 }
@@ -213,9 +217,9 @@ function factsFor(recording: Recording): RecordingHeaderFacts {
 
 /** The quiet note beside the buttons: where the upload is, or the bind. */
 function statusFor(recording: Recording): string | undefined {
-  const upload = uploadStatusText(recording)
+  const upload = YOUTUBE_ENABLED ? uploadStatusText(recording) : null
   if (upload) return upload
-  if (recording.youtube?.forcedPrivate) return 'Private on YouTube until Foxfire passes YouTube’s review'
+  if (YOUTUBE_ENABLED && recording.youtube?.forcedPrivate) return 'Private on YouTube until Foxfire passes YouTube’s review'
   if (recording.bindState === 'pending') return 'Still looking for this game…'
   if (recording.bindState === 'unmatched') return 'No match history entry'
   return undefined

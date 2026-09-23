@@ -36,8 +36,11 @@ export function useRecordingActions(account: Account): {
   const [detachBusy, setDetachBusy] = useState(false)
   const [detachError, setDetachError] = useState<string | null>(null)
 
-  const serverRecordings = client.matchRecordings
-  const canAttach = platform.attachRecordingLink !== undefined || serverRecordings !== undefined
+  // Attaching and removing are YouTube's, so only where YouTube plays: a client
+  // built without it has no player, and offers neither.
+  const youtube = platform.youtube !== undefined
+  const serverRecordings = youtube ? client.matchRecordings : undefined
+  const canAttach = youtube && (platform.attachRecordingLink !== undefined || serverRecordings !== undefined)
 
   const refresh = (): void => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.matchList(account.id) })

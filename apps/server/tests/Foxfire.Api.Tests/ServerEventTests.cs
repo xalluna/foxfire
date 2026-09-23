@@ -247,6 +247,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         Assert.Empty(events.RankEdited);
     }
 
+#if FEATURE_YOUTUBE
     [Fact]
     public async Task Attaching_and_removing_a_recording_tells_every_window_which_row_changed()
     {
@@ -279,6 +280,7 @@ public class ServerEventTests(FoxfireServerFixture server)
         Assert.False(refused.IsSuccessStatusCode);
         Assert.Empty(events.RecordingChanged);
     }
+#endif
 
     [Fact]
     public async Task A_rank_that_moved_tells_every_window()

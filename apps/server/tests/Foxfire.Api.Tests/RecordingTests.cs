@@ -1,3 +1,4 @@
+#if FEATURE_YOUTUBE
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -289,3 +290,47 @@ public class RecordingTests(FoxfireServerFixture server)
         Assert.False(await db.MatchRecordings.AnyAsync(r => r.MatchId == matchId));
     }
 }
+#else
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+namespace Foxfire.Api.Tests;
+
+/// <summary>
+/// A server built without YouTube: there is no route for a recording at all.
+///
+/// The answer is the API's own JSON 404, and its code matters. A desktop built
+/// with YouTube reads <c>not_found</c> as a server that takes no recordings, and
+/// keeps its own to attach once the server does, rather than marking them as
+/// refused for good.
+/// </summary>
+[Collection(FoxfireServerCollection.Name)]
+public class RecordingsSwitchedOffTests(FoxfireServerFixture server)
+{
+    [Fact]
+    public async Task A_recording_has_no_route_to_attach_read_or_remove_it()
+    {
+        var client = server.Client();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var session = await server.RegisterAsync(client, $"Off{suffix}", $"off-{suffix}@example.com");
+        using var member = FoxfireServerFixture.Authenticated(client, session);
+
+        var uri = new Uri($"/api/riot-accounts/{Guid.NewGuid()}/matches/NA1_1/recording", UriKind.Relative);
+
+        HttpResponseMessage[] responses =
+        [
+            await member.PutAsJsonAsync(uri, new { youtubeVideoId = "dQw4w9WgXcQ", source = "link" }),
+            await member.GetAsync(uri),
+            await member.DeleteAsync(uri)
+        ];
+
+        foreach (var response in responses)
+        {
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("not_found", body.GetProperty("error").GetString());
+        }
+    }
+}
+#endif

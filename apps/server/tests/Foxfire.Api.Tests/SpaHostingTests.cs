@@ -49,10 +49,17 @@ public class SpaHostingTests(FoxfireServerFixture server)
         Assert.Contains("frame-ancestors 'none'", csp, StringComparison.Ordinal);
         Assert.Contains("https://ddragon.leagueoflegends.com", csp, StringComparison.Ordinal);
 
+#if FEATURE_YOUTUBE
         // A recording plays in YouTube's privacy-enhanced player, driven by its
         // IFrame API — and that is the only frame and the only foreign script.
         Assert.Contains("frame-src https://www.youtube-nocookie.com;", csp, StringComparison.Ordinal);
         Assert.Contains("script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com;", csp, StringComparison.Ordinal);
+#else
+        // A build without recordings lets nothing of YouTube's into the page.
+        Assert.Contains("script-src 'self' 'wasm-unsafe-eval';", csp, StringComparison.Ordinal);
+        Assert.DoesNotContain("youtube", csp, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("frame-src", csp, StringComparison.Ordinal);
+#endif
 
         Assert.Equal("noindex, nofollow", string.Join(",", headers.GetValues("X-Robots-Tag")));
         Assert.Equal("same-origin", string.Join(",", headers.GetValues("Referrer-Policy")));

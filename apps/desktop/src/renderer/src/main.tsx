@@ -7,6 +7,7 @@ import { ScreensProvider, createQueryClient } from '@foxfire/screens'
 import { createIpcClient } from './platform/ipcClient'
 import { createDesktopPlatform } from './platform/desktopPlatform'
 import { router } from './router'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import './styles/index.css'
 
 /**
@@ -31,7 +32,7 @@ async function start(): Promise<void> {
 
   // A browser has no foxfire-youtube:// page to frame YouTube in, so the
   // harness plays recordings on the same stand-in the web client's does.
-  if (mocked) {
+  if (mocked && YOUTUBE_ENABLED) {
     const { createFakeYouTubeMount } = await import('@foxfire/screens/dev')
     platform = { ...platform, youtube: createFakeYouTubeMount() }
   }

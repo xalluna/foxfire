@@ -1,3 +1,5 @@
+import { YOUTUBE_ENABLED } from '@shared/features'
+
 /**
  * Foxfire's Google client, as this build was made with it.
  *
@@ -21,6 +23,7 @@ export interface GoogleClient {
 }
 
 export function youtubeClient(): GoogleClient | null {
+  if (!YOUTUBE_ENABLED) return null
   const clientId = import.meta.env.MAIN_VITE_YOUTUBE_CLIENT_ID?.trim()
   const clientSecret = import.meta.env.MAIN_VITE_YOUTUBE_CLIENT_SECRET?.trim()
   return clientId ? { clientId, clientSecret: clientSecret || null } : null

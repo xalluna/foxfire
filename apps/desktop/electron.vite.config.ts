@@ -1,7 +1,13 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { featureDefines } from '../../tooling/vite/features'
 import { fsAllow } from '../../tooling/vite/fsAllow'
+
+// The same build-time feature switches for all three halves, so main, the
+// preload and the renderer cannot be built disagreeing about whether a feature
+// exists. See tooling/vite/features.ts and src/shared/features.ts.
+const features = featureDefines()
 
 /**
  * Why @foxfire/core ends up inside the main and preload bundles.
@@ -16,6 +22,7 @@ import { fsAllow } from '../../tooling/vite/fsAllow'
  */
 export default defineConfig({
   main: {
+    define: features,
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
@@ -31,6 +38,7 @@ export default defineConfig({
     }
   },
   preload: {
+    define: features,
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
@@ -46,6 +54,7 @@ export default defineConfig({
     }
   },
   renderer: {
+    define: features,
     root: 'src/renderer',
     resolve: {
       alias: {

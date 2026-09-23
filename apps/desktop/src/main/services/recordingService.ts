@@ -25,6 +25,7 @@ import {
 import { reconcileAttachments } from '../youtube/attach'
 import { onRecordingSettled } from '../youtube/autoUpload'
 import { cancelUpload } from '../youtube/queue'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import {
   BIND_RETRY_HORIZON_MS,
   findMatchForRecording,
@@ -70,6 +71,9 @@ export function getDiskUsage(): RecordingDiskUsage {
  * markers and its video, so the recording still plays — which is what freeing
  * the disk of a recording that is already somewhere else should mean. Forget
  * is what takes the row. Neither touches YouTube or a server.
+ *
+ * A build without YouTube has nothing to play one from, so there it deletes
+ * the row too — what its Recordings tab says Delete does.
  */
 export function removeRecording(recordingId: number): void {
   const db = getDb()
@@ -79,7 +83,7 @@ export function removeRecording(recordingId: number): void {
   // An upload reading the file has to stop before the file goes.
   cancelUpload(recordingId)
 
-  if (identity.youtubeVideoId) {
+  if (YOUTUBE_ENABLED && identity.youtubeVideoId) {
     deleteFile(identity.filePath)
     markFileDeleted(db, recordingId, Date.now())
   } else {
@@ -290,8 +294,10 @@ export async function bindPendingRecordings(
 
   // A recording that now knows its game can go to YouTube by itself, if that
   // is turned on, and one already there can be attached on the server.
-  for (const id of settled) void onRecordingSettled(id)
-  if (bound > 0) void reconcileAttachments()
+  if (YOUTUBE_ENABLED) {
+    for (const id of settled) void onRecordingSettled(id)
+    if (bound > 0) void reconcileAttachments()
+  }
 
   return bound
 }

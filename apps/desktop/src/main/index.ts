@@ -22,6 +22,7 @@ import { startResourceSampling, stopResourceSampling } from './telemetry/resourc
 import { startRetention, stopRetention } from './telemetry/retention'
 import { openTelemetryWindow } from './telemetryWindow'
 import { registerRecordingProtocol } from './recordingProtocol'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import { registerPrivilegedSchemes } from './schemes'
 import { registerYouTubeHostProtocol } from './youtube/hostProtocol'
 import { installYouTubeReferer } from './youtube/referer'
@@ -130,8 +131,10 @@ function bootstrap(): void {
   startRetention(() => peekTelemetryDb())
   initSettings()
   registerRecordingProtocol()
-  registerYouTubeHostProtocol()
-  installYouTubeReferer()
+  if (YOUTUBE_ENABLED) {
+    registerYouTubeHostProtocol()
+    installYouTubeReferer()
+  }
   registerIpcHandlers()
   globalShortcut.register(TELEMETRY_ACCELERATOR, openTelemetryWindow)
   // Before the window, because it decides whether there is one to look at: an
@@ -160,7 +163,8 @@ function bootstrap(): void {
   // its push channel open again.
   resumeActiveServer()
   catchUpOnLaunch()
-  initYouTube()
+  bindAfterServerSyncs()
+  if (YOUTUBE_ENABLED) initYouTube()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -187,25 +191,34 @@ function startsHidden(installed: PendingInstall | null): boolean {
 }
 
 /**
+ * Connected to a server, a recording can first find its game when the
+ * server's sync of that account lands — so that is when to look, rather than
+ * at the next launch. Then, with YouTube, tell the server about any video
+ * that can now be attached: after the binding, so the pass sees what it bound.
+ */
+function bindAfterServerSyncs(): void {
+  onServerSyncComplete((accountId) => {
+    void bindPendingRecordings(accountId)
+      .catch(() => 0)
+      .then(() => {
+        if (YOUTUBE_ENABLED) void reconcileAttachments()
+      })
+  })
+}
+
+/**
  * Recordings on YouTube: the upload queue, and telling the server about them.
+ * Only in a build made with the feature — see shared/features.ts.
  *
  * The queue resumes whatever was on its way when the app last quit. A server
  * is told about a recording's video whenever something that decides whether it
- * should be changes — an upload finishing, the server finishing a sync (which
- * is when a recording can first find its game there), and signing in to or
- * switching servers.
+ * should be changes — an upload finishing, a server finishing a sync (see
+ * bindAfterServerSyncs), and signing in to or switching servers.
  */
 function initYouTube(): void {
   initYouTubeQueue()
 
   onUploadFinished(() => void reconcileAttachments())
-
-  onServerSyncComplete((accountId) => {
-    void bindPendingRecordings(accountId)
-      .catch(() => 0)
-      .then(() => reconcileAttachments())
-  })
-
   onServerState(() => void reconcileAttachments())
 
   void reconcileAttachments()

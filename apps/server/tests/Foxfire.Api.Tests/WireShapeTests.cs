@@ -267,6 +267,7 @@ public class WireShapeTests(FoxfireServerFixture server)
             "recording");
     }
 
+#if FEATURE_YOUTUBE
     [Fact]
     public async Task A_recording_carries_every_field_the_player_page_reads()
     {
@@ -318,6 +319,7 @@ public class WireShapeTests(FoxfireServerFixture server)
 
         AssertHasAll(rows[0].GetProperty("recording"), "youtubeVideoId", "privacy", "hasEvents");
     }
+#endif
 
     [Fact]
     public async Task A_dashboard_carries_the_three_things_the_account_page_opens_with()

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@foxfire/screens'
+import { YOUTUBE_ENABLED } from '@shared/features'
 
 /*
  * The refreshes only the desktop needs. Sync progress, LP edits and League
@@ -62,6 +63,8 @@ export function useYouTubeUpdates(): void {
   const queryClient = useQueryClient()
 
   useEffect(() => {
+    // A build without YouTube has nothing that would ever send one.
+    if (!YOUTUBE_ENABLED) return
     return window.api.youtube.onChanged((state) => {
       queryClient.setQueryData(['youtubeState'], state)
       queryClient.invalidateQueries({ queryKey: ['recordings'] })

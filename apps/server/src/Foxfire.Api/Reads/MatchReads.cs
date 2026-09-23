@@ -257,10 +257,17 @@ public sealed class MatchReads(FoxfireDbContext db)
                 // one player's view: the same game in somebody else's history
                 // answers with their recording or with nothing, and a search
                 // row with no account (a null id) answers with nothing.
+                //
+                // A build without YouTube asks nothing: the field is always
+                // null, and the query carries no subquery for it.
+#if FEATURE_YOUTUBE
                 Recording = db.MatchRecordings
                     .Where(r => r.MatchId == x.p.MatchId && r.RiotAccountId == riotAccountId)
                     .Select(r => new MatchRecordingSummary(r.YouTubeVideoId, r.Privacy, r.EventsJson != null))
                     .FirstOrDefault()
+#else
+                Recording = (MatchRecordingSummary?)null
+#endif
             })
             .ToListAsync(cancellationToken);
 

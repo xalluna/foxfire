@@ -9,6 +9,7 @@ import { CaptureIndicator } from './components/CaptureIndicator'
 import { LiveNavIcon } from './components/LiveNavIcon'
 import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
 import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import { useKeyRejected, useServerHealth } from './hooks/useKeyStatus'
 import { useUpdates } from './hooks/useUpdates'
 import { useNavSlug } from './hooks/usePlayerNavigation'
@@ -302,7 +303,7 @@ export function AppShell(): JSX.Element {
         <Outlet />
       </div>
 
-      <YouTubeUploadDialogHost />
+      {YOUTUBE_ENABLED && <YouTubeUploadDialogHost />}
     </div>
   )
 }

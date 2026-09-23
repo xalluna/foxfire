@@ -11,7 +11,7 @@ import { paths } from '@foxfire/core/routes'
 import { DashboardPage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
-import { matchContextItems } from '../match/matchMenu'
+import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
 import { useRecordingActions } from '../match/useRecordingActions'
 import { queryKeys } from '../queries/keys'
@@ -152,6 +152,10 @@ export function DashboardScreen({
     })
   }
 
+  // A client that cannot play YouTube is not offered the server's recordings.
+  const flat = matches.data?.pages.flat() ?? []
+  const rows = platform.youtube ? flat : flat.map(withoutServerRecording)
+
   return (
     <>
       {recordings.dialogs}
@@ -166,7 +170,7 @@ export function DashboardScreen({
             ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))
             : undefined
         }
-        matches={matches.data?.pages.flat() ?? []}
+        matches={rows}
         matchesLoading={matches.isLoading}
         hasMoreMatches={matches.hasNextPage}
         loadingMoreMatches={matches.isFetchingNextPage}

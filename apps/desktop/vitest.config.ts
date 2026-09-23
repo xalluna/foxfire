@@ -2,6 +2,11 @@ import { resolve } from 'path'
 import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  // Tests exercise what a build with every feature on would do. A switched-off
+  // build runs less of the same code, not different code.
+  define: {
+    __FEATURE_YOUTUBE__: 'true'
+  },
   resolve: {
     alias: {
       '@shared': resolve(__dirname, 'src/shared')

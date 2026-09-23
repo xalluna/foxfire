@@ -2,8 +2,31 @@
 
 Foxfire uploads to YouTube with each person's own Google sign-in, through **one Google Cloud
 project that belongs to Foxfire**. This is the setup for that project, and for building an installer
-that carries it. A build made without it — a contributor's, or CI's — simply has no YouTube uploads,
-and says so in Settings › YouTube.
+that carries it. A build with YouTube switched on but made without the client — a contributor's, or
+CI's — simply has no uploads, and says so in Settings › YouTube.
+
+## Switching it on
+
+Recordings on YouTube ship **switched off**, in the desktop, the server and the web client alike,
+until the project below has been through Google's verification and YouTube's audit. Nothing about
+it can be turned on by somebody holding a build: it is decided when the build is made.
+
+1. Finish everything below — the project, the reviews, and the repository secrets.
+2. In the repository's **Settings › Secrets and variables › Actions › Variables**, add
+   `FOXFIRE_FEATURE_YOUTUBE` with the value `1`. Both release workflows read it: the desktop's
+   installer, the server, and the web client built into the server all take the same answer.
+3. Cut a server release and a desktop release — the server first, as always. A server built without
+   the switch has no recording routes, and a desktop with it simply keeps its videos to attach until
+   its server has them; the other way round, a server with it and a desktop without, offers nothing
+   to upload with but plays whatever the web client attaches.
+
+Taking the variable away again and releasing switches it back off. Videos already attached stay in
+the database, unserved, and come back when it is next on.
+
+For development, set the same variable in the shell before starting anything —
+`$env:FOXFIRE_FEATURE_YOUTUBE='1'` in PowerShell, `export FOXFIRE_FEATURE_YOUTUBE=1` elsewhere — for
+`npm run dev`, `npm run dev:web`, `npm run dev:mock -w @foxfire/web`, a packaged build, or
+`dotnet test apps/server`. It is not read from `.env.local`: the build configs read it, not the app.
 
 ## The project
 
@@ -84,8 +107,8 @@ bakes into the main process:
 
 ## Checking a build
 
-In a packaged build (`npm run build -w @foxfire/desktop`, then `npx electron-builder --win --dir` in
-`apps/desktop`):
+In a packaged build made with the switch on (`FOXFIRE_FEATURE_YOUTUBE=1` in the environment, then
+`npm run build -w @foxfire/desktop` and `npx electron-builder --win --dir` in `apps/desktop`):
 
 1. Settings › YouTube › **Connect YouTube** opens Google in the browser and comes back connected.
 2. Upload a short recording from Captures › Recordings; quit Foxfire half way, reopen it, and the

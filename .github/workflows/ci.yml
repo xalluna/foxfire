@@ -74,8 +74,20 @@ jobs:
           fi
 
   server:
+    # Once with each build-time feature switched off and once with all of them
+    # on, because the server compiles a switched-off feature out rather than
+    # skipping it — so its code, and the tests that exist only for it, are
+    # never built at all in the other half. The release builds whichever the
+    # repository variables say; this is what keeps both of them building.
+    name: server (${{ matrix.features }})
+    strategy:
+      fail-fast: false
+      matrix:
+        features: [off, on]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FOXFIRE_FEATURE_YOUTUBE: ${{ matrix.features == 'on' && '1' || '' }}
     defaults:
       run:
         shell: bash
