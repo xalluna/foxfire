@@ -380,6 +380,44 @@ namespace Foxfire.Data.Migrations
                     b.ToTable("MatchRanks");
                 });
 
+            modelBuilder.Entity("Foxfire.Data.Entities.PasswordReset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("RedeemedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UserId", "RedeemedAt");
+
+                    b.ToTable("PasswordResets");
+                });
+
             modelBuilder.Entity("Foxfire.Data.Entities.RankSnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -873,6 +911,23 @@ namespace Foxfire.Data.Migrations
                     b.Navigation("Match");
 
                     b.Navigation("RiotAccount");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.PasswordReset", b =>
+                {
+                    b.HasOne("Foxfire.Data.Entities.FoxfireUser", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId");
+
+                    b.HasOne("Foxfire.Data.Entities.FoxfireUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Foxfire.Data.Entities.RankSnapshot", b =>

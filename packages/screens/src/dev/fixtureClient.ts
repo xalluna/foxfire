@@ -2,6 +2,7 @@ import type {
   Account,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminReplay,
   AdminUser,
   AdminUserPatch,
@@ -208,7 +209,8 @@ let mockUsers: AdminUser[] = [
     isDisabled: false,
     createdAt: '2026-06-01T10:00:00.000Z',
     linkedRiotAccounts: 2,
-    activeSessions: 1
+    activeSessions: 1,
+    passwordReset: null
   },
   {
     id: 'u-2',
@@ -218,7 +220,16 @@ let mockUsers: AdminUser[] = [
     isDisabled: false,
     createdAt: '2026-07-14T18:30:00.000Z',
     linkedRiotAccounts: 1,
-    activeSessions: 2
+    activeSessions: 2,
+    // One member arrives with a link outstanding, so the harness shows the
+    // panel without anybody having to make one first.
+    passwordReset: {
+      id: 'r-1',
+      userId: 'u-2',
+      link: 'https://foxfire.example.com/reset-password/SGVsbG9SZXNldExpbmtGb3JIYXJuZXNz.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU',
+      createdAt: '2026-09-21T20:00:00.000Z',
+      expiresAt: '2026-09-22T20:00:00.000Z'
+    }
   },
   {
     id: 'u-3',
@@ -228,7 +239,8 @@ let mockUsers: AdminUser[] = [
     isDisabled: true,
     createdAt: '2026-08-02T09:15:00.000Z',
     linkedRiotAccounts: 0,
-    activeSessions: 0
+    activeSessions: 0,
+    passwordReset: null
   }
 ]
 
@@ -559,6 +571,34 @@ export function createFixtureClient(): FoxfireClient {
         }
 
         mockUsers = mockUsers.filter((u) => u.id !== id)
+        return delay({ ok: true, error: null }, 200, false)
+      },
+
+      createPasswordReset: (userId: string): Promise<AdminPasswordReset> => {
+        const user = mockUsers.find((u) => u.id === userId)
+
+        if (user?.isDisabled) {
+          return Promise.reject(
+            new Error(`${user.username} is disabled, so a reset link would not get them in. Enable them first.`)
+          )
+        }
+
+        const reset: AdminPasswordReset = {
+          id: `r-${Date.now()}`,
+          userId,
+          link: `https://foxfire.example.com/reset-password/${btoa(userId).replace(/=/g, '')}-harness-token.aaaaaaaaaaaa`,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString()
+        }
+
+        // A newer link replaces whatever was outstanding, the way the server
+        // does it — there is never more than one live per account.
+        mockUsers = mockUsers.map((u) => (u.id === userId ? { ...u, passwordReset: reset } : u))
+        return delay(reset, 300, false)
+      },
+
+      revokePasswordReset: (userId: string): Promise<AdminActionResult> => {
+        mockUsers = mockUsers.map((u) => (u.id === userId ? { ...u, passwordReset: null } : u))
         return delay({ ok: true, error: null }, 200, false)
       },
 

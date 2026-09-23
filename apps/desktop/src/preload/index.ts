@@ -7,7 +7,8 @@ import type {
   ReplayImportProgress,
   ServerState,
   SyncProgressEvent,
-  ImportProgress
+  ImportProgress,
+  UpdateState
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -17,6 +18,17 @@ const api: Api = {
   app: {
     getVersion: () => ipcRenderer.invoke(CH.app.getVersion)
   },
+  updates: {
+    getState: () => ipcRenderer.invoke(CH.updates.getState),
+    check: () => ipcRenderer.invoke(CH.updates.check),
+    restart: () => ipcRenderer.invoke(CH.updates.restart),
+    dismissNote: () => ipcRenderer.invoke(CH.updates.dismissNote),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, state: UpdateState): void => cb(state)
+      ipcRenderer.on(CH.updates.changed, handler)
+      return () => ipcRenderer.removeListener(CH.updates.changed, handler)
+    }
+  },
   server: {
     getState: () => ipcRenderer.invoke(CH.server.getState),
     probe: (url) => ipcRenderer.invoke(CH.server.probe, url),
@@ -24,6 +36,9 @@ const api: Api = {
     register: (url, registration) => ipcRenderer.invoke(CH.server.register, url, registration),
     login: (url, credentials) => ipcRenderer.invoke(CH.server.login, url, credentials),
     logout: () => ipcRenderer.invoke(CH.server.logout),
+    changePassword: (change) => ipcRenderer.invoke(CH.server.changePassword, change),
+    changeEmail: (change) => ipcRenderer.invoke(CH.server.changeEmail, change),
+    changeUsername: (username) => ipcRenderer.invoke(CH.server.changeUsername, username),
     setActive: (url) => ipcRenderer.invoke(CH.server.setActive, url),
     forget: (url) => ipcRenderer.invoke(CH.server.forget, url),
     onChanged: (cb) => {
@@ -36,6 +51,8 @@ const api: Api = {
     users: () => ipcRenderer.invoke(CH.serverAdmin.users),
     updateUser: (id, patch) => ipcRenderer.invoke(CH.serverAdmin.updateUser, id, patch),
     deleteUser: (id) => ipcRenderer.invoke(CH.serverAdmin.deleteUser, id),
+    createPasswordReset: (userId) => ipcRenderer.invoke(CH.serverAdmin.createPasswordReset, userId),
+    revokePasswordReset: (userId) => ipcRenderer.invoke(CH.serverAdmin.revokePasswordReset, userId),
     invites: () => ipcRenderer.invoke(CH.serverAdmin.invites),
     createInvite: (email) => ipcRenderer.invoke(CH.serverAdmin.createInvite, email),
     revokeInvite: (id) => ipcRenderer.invoke(CH.serverAdmin.revokeInvite, id),

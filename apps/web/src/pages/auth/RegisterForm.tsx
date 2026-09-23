@@ -1,12 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { fieldLabelClass, inputClass, primaryButtonClass, readonlyInputClass } from '@foxfire/ui'
+import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
 import { describeError } from '../../serverInfo'
 import { register } from '../../session/session'
 import { FormError } from './AuthLayout'
-
-/** Identity counts length, not character classes — see Program.cs on the server. */
-const MINIMUM_PASSWORD = 12
 
 /**
  * Making an account, with or without an invite.
@@ -27,13 +25,15 @@ export function RegisterForm({
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState(invitedEmail ?? '')
   const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
-    if (password.length < MINIMUM_PASSWORD) {
-      setError(`A password is at least ${MINIMUM_PASSWORD} characters. Length is what makes one hard to guess.`)
+    const problem = passwordProblem(password, confirmation)
+    if (problem !== null) {
+      setError(problem)
       return
     }
 
@@ -94,6 +94,21 @@ export function RegisterForm({
           className={`${inputClass} w-full`}
         />
         <span className="block text-2xs text-text-mute">At least {MINIMUM_PASSWORD} characters.</span>
+      </label>
+
+      <label className="block space-y-1">
+        <span className={fieldLabelClass}>Confirm password</span>
+        <input
+          type="password"
+          autoComplete="new-password"
+          required
+          value={confirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
+          className={`${inputClass} w-full`}
+        />
+        <span className="block text-2xs text-text-mute">
+          Typed twice because a password nobody can read is a password nobody can check.
+        </span>
       </label>
 
       <FormError message={error} />

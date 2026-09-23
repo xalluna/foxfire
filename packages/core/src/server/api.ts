@@ -2,6 +2,7 @@ import type {
   Account,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminReplay,
   AdminUser,
   AdminUserPatch,
@@ -269,6 +270,28 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
       deleteUser: (id: string) =>
         attempt(() => request<void>(`/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' })),
+
+      /**
+       * Makes a link that lets somebody set a new password, replacing whatever
+       * was outstanding for them.
+       *
+       * Throws rather than answering with a result, like createInvite and for
+       * the same reason: what the caller wants is the link, and there is
+       * nothing to show if there is not one.
+       */
+      createPasswordReset: (userId: string) =>
+        request<AdminPasswordReset>(
+          `/admin/users/${encodeURIComponent(userId)}/password-reset`,
+          { method: 'POST' }
+        ),
+
+      /** Withdraws the link outstanding for somebody, if there is one. */
+      revokePasswordReset: (userId: string) =>
+        attempt(() =>
+          request<void>(`/admin/users/${encodeURIComponent(userId)}/password-reset`, {
+            method: 'DELETE'
+          })
+        ),
 
       invites: () => request<AdminInvite[]>('/admin/invites/'),
 

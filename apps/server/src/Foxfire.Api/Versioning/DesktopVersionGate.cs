@@ -24,9 +24,9 @@ public sealed class AllowAnyDesktopVersionAttribute : Attribute;
 /// Desktops are judged by version, against an exact allow list. A build that is
 /// on the list but behind gets served normally, with a header saying it is
 /// behind. That is the grace window: without it, a host upgrading their server
-/// cuts off every friend at once, and with no auto-update on the desktop yet,
-/// "cut off" means "until each of them notices and downloads a new installer by
-/// hand".
+/// cuts off every friend at once. From 0.14.0 a desktop uses that window to
+/// update itself to the recommended build, so the window is what turns an
+/// upgrade here into something nobody else has to act on.
 ///
 /// The web client is judged by the API version its page was built against. It
 /// ships inside this server, so a mismatch only ever means a tab left open

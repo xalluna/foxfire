@@ -18,13 +18,20 @@ import {
   primaryButtonClass,
   type SettingsNavItem
 } from '@foxfire/ui'
-import { ServerDataScreen, ServerManagementScreen, useIsServerAdmin } from '@foxfire/screens'
+import {
+  InvitesScreen,
+  LeagueAccountsScreen,
+  MembersScreen,
+  ServerDataScreen,
+  useIsServerAdmin
+} from '@foxfire/screens'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { useServerHealth } from '../hooks/useKeyStatus'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
+import { UpdateSettings } from '../components/UpdateSettings'
 import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
 
 /**
@@ -37,7 +44,9 @@ import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
  */
 export type SettingsCategory =
   | 'server'
-  | 'server-admin'
+  | 'server-members'
+  | 'server-invites'
+  | 'server-accounts'
   | 'server-data'
   | 'riot-key'
   | 'rank'
@@ -81,7 +90,9 @@ interface NavItem extends SettingsNavItem<SettingsCategory> {
 const GROUPS: NavItem[][] = [
   [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
-    { id: 'server-admin', label: 'Server management', icon: <Icon.Settings />, adminOnly: true },
+    { id: 'server-members', label: 'Members', icon: <Icon.Settings />, adminOnly: true },
+    { id: 'server-invites', label: 'Invites', icon: <Icon.Link />, adminOnly: true },
+    { id: 'server-accounts', label: 'League accounts', icon: <Icon.Server />, adminOnly: true },
     { id: 'server-data', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
     { id: 'riot-key', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
@@ -154,7 +165,9 @@ export function Settings({ category }: { category?: string }): JSX.Element {
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
         {active === 'server' && <ServerSettings />}
-        {active === 'server-admin' && <ServerManagementScreen />}
+        {active === 'server-members' && <MembersScreen />}
+        {active === 'server-invites' && <InvitesScreen />}
+        {active === 'server-accounts' && <LeagueAccountsScreen />}
         {active === 'server-data' && <ServerDataScreen />}
         {active === 'riot-key' && <RiotKeySettings />}
         {active === 'rank' && <RankTrackingSettings />}
@@ -313,6 +326,8 @@ function AboutSettings(): JSX.Element {
           label="Version"
           control={<span className="text-sm tabular-nums text-text-dim">{version.data ?? '—'}</span>}
         />
+
+        <UpdateSettings />
 
         <SettingsBlock>
           <Disclaimer />

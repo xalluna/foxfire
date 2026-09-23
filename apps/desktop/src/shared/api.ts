@@ -7,6 +7,7 @@ import type {
   Account,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
   AppSettingsPublic,
@@ -17,11 +18,13 @@ import type {
   CaptureSettings,
   CaptureStatus,
   ClientArchive,
+  EmailChange,
   IdentityReport,
   InvitePreview,
   LcuStatus,
   LiveClient,
   ObsValidation,
+  PasswordChange,
   QueueType,
   Recording,
   RecordingDetail,
@@ -41,7 +44,8 @@ import type {
   ServerAdminSettings,
   ServerRegistration,
   ServerState,
-  SyncProgressEvent
+  SyncProgressEvent,
+  UpdateState
 } from './types'
 import type {
   LcuTelemetry,
@@ -85,6 +89,23 @@ export interface Api {
     getVersion: () => Promise<string>
   }
   /**
+   * Keeping this copy of Foxfire current.
+   *
+   * The renderer decides nothing here: which version may be installed is the
+   * active server's business and the main process asks it. This is the offer
+   * and the two answers to it.
+   */
+  updates: {
+    getState: () => Promise<UpdateState>
+    /** Asks now rather than waiting for the next scheduled check. */
+    check: () => Promise<UpdateState>
+    /** Installs what was downloaded. Refused while a game or recording is on. */
+    restart: () => Promise<void>
+    /** Drops the "what's new" note shown once after an update. */
+    dismissNote: () => Promise<void>
+    onChanged: (cb: (state: UpdateState) => void) => () => void
+  }
+  /**
    * Joining a Foxfire server, and choosing which one answers.
    *
    * Everything here is about the connection itself rather than the data
@@ -102,6 +123,17 @@ export interface Api {
     login: (url: string, credentials: ServerCredentials) => Promise<ServerAuthResult>
     /** Signs out of the active server and forgets its credential. */
     logout: () => Promise<ServerState>
+    /**
+     * Changes the password on the active server, and keeps this PC signed in.
+     *
+     * Every other device is signed out — the server revokes the lot and issues
+     * this one a fresh pair, which the session adopts on the way through.
+     */
+    changePassword: (change: PasswordChange) => Promise<ServerAuthResult>
+    /** Changes the address this account signs in with. Other devices stay signed in. */
+    changeEmail: (change: EmailChange) => Promise<ServerAuthResult>
+    /** Changes the name shown beside your games. */
+    changeUsername: (username: string) => Promise<ServerAuthResult>
     /** Null is local-only mode. Not the same as signing out: the credential stays. */
     setActive: (url: string | null) => Promise<ServerState>
     forget: (url: string) => Promise<ServerState>
@@ -119,6 +151,10 @@ export interface Api {
     users: () => Promise<AdminUser[]>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
+    /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
+    createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
+    /** Withdraws the reset link outstanding for somebody, if there is one. */
+    revokePasswordReset: (userId: string) => Promise<AdminActionResult>
     invites: () => Promise<AdminInvite[]>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>

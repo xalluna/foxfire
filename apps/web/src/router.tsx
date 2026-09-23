@@ -8,15 +8,18 @@ import {
 } from '@tanstack/react-router'
 import { EmptyState, Icon } from '@foxfire/ui'
 import {
+  InvitesScreen,
+  LeagueAccountsScreen,
+  MembersScreen,
   PlayersScreen,
   ServerDataScreen,
-  ServerManagementScreen,
   createMatchRoute,
   createPlayerRoutes,
   parseSearch,
   stringifySearch,
   validatePlayersSearch
 } from '@foxfire/screens'
+import { AccountPage } from './pages/AccountPage'
 import { AdminLayout } from './pages/AdminLayout'
 import { HomePage } from './pages/HomePage'
 import { UpgradeOverlay } from './pages/UpgradeOverlay'
@@ -24,6 +27,7 @@ import { WebPlayerLayout } from './pages/WebPlayerLayout'
 import { WebShell } from './pages/WebShell'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RegisterPage } from './pages/auth/RegisterPage'
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { SignInPage } from './pages/auth/SignInPage'
 import { safeRedirect } from './routes/redirect'
 import { useAuth } from './session/session'
@@ -79,6 +83,14 @@ const invite = createRoute({
   component: InvitePage
 })
 
+// No guard, like the invite page and for the same reason: somebody following
+// one of these cannot sign in, which is the whole point of the link.
+const resetPassword = createRoute({
+  getParentRoute: () => root,
+  path: 'reset-password/$token',
+  component: ResetPasswordPage
+})
+
 const authed = createRoute({
   getParentRoute: () => root,
   id: '_authed',
@@ -103,20 +115,30 @@ const player = createPlayerRoutes(authed, { layout: WebPlayerLayout })
 
 const match = createMatchRoute(authed)
 
+const account = createRoute({ getParentRoute: () => authed, path: 'account', component: AccountPage })
+
 const admin = createRoute({ getParentRoute: () => authed, path: 'admin', component: AdminLayout })
-const adminMembers = createRoute({ getParentRoute: () => admin, path: '/', component: ServerManagementScreen })
+const adminMembers = createRoute({ getParentRoute: () => admin, path: '/', component: MembersScreen })
+const adminInvites = createRoute({ getParentRoute: () => admin, path: 'invites', component: InvitesScreen })
+const adminAccounts = createRoute({
+  getParentRoute: () => admin,
+  path: 'accounts',
+  component: LeagueAccountsScreen
+})
 const adminData = createRoute({ getParentRoute: () => admin, path: 'data', component: ServerDataScreen })
 
 const routeTree = root.addChildren([
   signIn,
   register,
   invite,
+  resetPassword,
   authed.addChildren([
     home,
     players,
     player.player.addChildren([player.dashboard, player.champions, player.rank, player.lpEditor]),
     match,
-    admin.addChildren([adminMembers, adminData])
+    account,
+    admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData])
   ])
 ])
 

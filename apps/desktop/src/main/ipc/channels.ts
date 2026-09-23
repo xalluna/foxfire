@@ -4,6 +4,16 @@ export const CH = {
   app: {
     getVersion: 'app:getVersion'
   },
+  // Keeping this copy current. `changed` is pushed on every move the updater
+  // makes, because the window and the tray both draw from it and must not be
+  // able to disagree about whether an update is waiting.
+  updates: {
+    getState: 'updates:getState',
+    check: 'updates:check',
+    restart: 'updates:restart',
+    dismissNote: 'updates:dismissNote',
+    changed: 'updates:changed'
+  },
   // Joining, leaving and switching Foxfire servers. Separate from `settings`,
   // which is the Riot API key and its limits: that is configuration for
   // local-only mode, and connected to a server this machine holds no key at
@@ -15,6 +25,9 @@ export const CH = {
     register: 'server:register',
     login: 'server:login',
     logout: 'server:logout',
+    changePassword: 'server:changePassword',
+    changeEmail: 'server:changeEmail',
+    changeUsername: 'server:changeUsername',
     setActive: 'server:setActive',
     forget: 'server:forget',
     changed: 'server:changed'
@@ -27,6 +40,8 @@ export const CH = {
     users: 'serverAdmin:users',
     updateUser: 'serverAdmin:updateUser',
     deleteUser: 'serverAdmin:deleteUser',
+    createPasswordReset: 'serverAdmin:createPasswordReset',
+    revokePasswordReset: 'serverAdmin:revokePasswordReset',
     invites: 'serverAdmin:invites',
     createInvite: 'serverAdmin:createInvite',
     revokeInvite: 'serverAdmin:revokeInvite',

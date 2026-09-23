@@ -4,6 +4,7 @@ import type {
   AdminActionResult,
   AdminReplay,
   AdminInvite,
+  AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
   RiotIdInput,
@@ -55,6 +56,15 @@ export async function updateUser(id: string, patch: AdminUserPatch): Promise<Adm
 
 export async function deleteUser(id: string): Promise<AdminActionResult> {
   return serverApi().admin.deleteUser(id)
+}
+
+/** Makes a reset link for somebody, replacing whatever was outstanding for them. */
+export async function createPasswordReset(userId: string): Promise<AdminPasswordReset> {
+  return serverApi().admin.createPasswordReset(userId)
+}
+
+export async function revokePasswordReset(userId: string): Promise<AdminActionResult> {
+  return serverApi().admin.revokePasswordReset(userId)
 }
 
 export async function listInvites(): Promise<AdminInvite[]> {
