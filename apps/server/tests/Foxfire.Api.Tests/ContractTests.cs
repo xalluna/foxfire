@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Core;
 
 namespace Foxfire.Api.Tests;
 
@@ -21,7 +22,7 @@ public class VersionTests(FoxfireServerFixture server)
 
         Assert.NotNull(version);
         Assert.Equal(FoxfireServerFixture.ServerName, version.ServerName);
-        Assert.Equal(1, version.ApiVersion);
+        Assert.Equal(DesktopCompatibility.ApiVersion, version.ApiVersion);
         Assert.Equal(FoxfireServerFixture.CurrentDesktop, version.RecommendedDesktop);
     }
 

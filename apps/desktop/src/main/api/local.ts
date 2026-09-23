@@ -1,7 +1,7 @@
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { getDb } from '../db'
-import { getAccountById } from '../db/repositories/accounts.repo'
+import { getAccountById, getLeagueEntries } from '../db/repositories/accounts.repo'
 import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
 import {
@@ -16,7 +16,6 @@ import { readSyncState, startSync } from '../services/syncService'
 import { getMasteryData } from '../services/masteryService'
 import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
-import { searchSummoner } from '../services/searchService'
 import { rangeBounds } from '@foxfire/core'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
 import type { Account } from '@shared/types'
@@ -178,7 +177,32 @@ export const localApi: ServerBackedApi = {
     save: async (seasons) => saveSeasons(getDb(), seasons)
   },
 
+  /**
+   * The finder, over this machine's own accounts.
+   *
+   * Local-only mode has no community to search, so this is a short list — but
+   * the screen is the same one a connected client draws, and answering it here
+   * is what lets that be true. Search used to reach Riot for any ID in the
+   * world; it reads the database now, on both sides of the connection.
+   */
   search: {
-    summoner: async (input) => searchSummoner(input)
+    players: async (query) => {
+      const needle = query.trim().toLowerCase()
+      const db = getDb()
+
+      return getAccounts()
+        .filter(
+          (account) =>
+            needle.length === 0 ||
+            account.gameName.toLowerCase().includes(needle) ||
+            account.tagLine.toLowerCase().includes(needle) ||
+            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
+        )
+        .map((account) => ({
+          account: wire(account),
+          soloEntry:
+            getLeagueEntries(db, account.id).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
+        }))
+    }
   }
 }

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Foxfire.Core;
 
 namespace Foxfire.Api.Tests;
 
@@ -205,8 +206,9 @@ public class WebClientTests(FoxfireServerFixture server)
         using var anonymous = server.AnonymousClient();
         anonymous.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session!.AccessToken);
 
+        var served = DesktopCompatibility.WebApiVersions[0];
         var named = await anonymous.PostAsync(
-            Api("/api/hub/negotiate?negotiateVersion=1&client=web&apiVersion=1"), content: null);
+            Api($"/api/hub/negotiate?negotiateVersion=1&client=web&apiVersion={served}"), content: null);
         var stale = await anonymous.PostAsync(
             Api("/api/hub/negotiate?negotiateVersion=1&client=web&apiVersion=99"), content: null);
         var unnamed = await anonymous.PostAsync(Api("/api/hub/negotiate?negotiateVersion=1"), content: null);

@@ -45,6 +45,7 @@ const api: Api = {
     storedReplays: () => ipcRenderer.invoke(CH.serverAdmin.storedReplays),
     removeReplay: (matchId) => ipcRenderer.invoke(CH.serverAdmin.removeReplay, matchId),
     forceUnlink: (riotAccountId) => ipcRenderer.invoke(CH.serverAdmin.forceUnlink, riotAccountId),
+    addRiotAccount: (input) => ipcRenderer.invoke(CH.serverAdmin.addRiotAccount, input),
     chooseDatabase: () => ipcRenderer.invoke(CH.serverAdmin.chooseDatabase),
     importDatabase: (filePath) => ipcRenderer.invoke(CH.serverAdmin.importDatabase, filePath),
     onImportProgress: (cb) => {
@@ -236,7 +237,7 @@ const api: Api = {
     openWindow: () => ipcRenderer.invoke(CH.archives.openWindow)
   },
   search: {
-    summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)
+    players: (query) => ipcRenderer.invoke(CH.search.players, query)
   },
   telemetry: {
     getState: () => ipcRenderer.invoke(CH.telemetry.getState),

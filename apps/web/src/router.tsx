@@ -8,17 +8,17 @@ import {
 } from '@tanstack/react-router'
 import { EmptyState, Icon } from '@foxfire/ui'
 import {
-  SearchScreen,
+  PlayersScreen,
   ServerDataScreen,
   ServerManagementScreen,
   createMatchRoute,
   createPlayerRoutes,
   parseSearch,
-  stringifySearch
+  stringifySearch,
+  validatePlayersSearch
 } from '@foxfire/screens'
 import { AdminLayout } from './pages/AdminLayout'
 import { HomePage } from './pages/HomePage'
-import { PlayersPage } from './pages/PlayersPage'
 import { UpgradeOverlay } from './pages/UpgradeOverlay'
 import { WebPlayerLayout } from './pages/WebPlayerLayout'
 import { WebShell } from './pages/WebShell'
@@ -92,14 +92,16 @@ const authed = createRoute({
 
 const home = createRoute({ getParentRoute: () => authed, path: '/', component: HomePage })
 
-const players = createRoute({ getParentRoute: () => authed, path: 'players', component: PlayersPage })
+const players = createRoute({
+  getParentRoute: () => authed,
+  path: 'players',
+  validateSearch: validatePlayersSearch,
+  component: PlayersScreen
+})
 
 const player = createPlayerRoutes(authed, { layout: WebPlayerLayout })
 
 const match = createMatchRoute(authed)
-
-// Unwrapped: SearchPage sets its own width, and has to — see the note there.
-const search = createRoute({ getParentRoute: () => authed, path: 'search', component: SearchScreen })
 
 const admin = createRoute({ getParentRoute: () => authed, path: 'admin', component: AdminLayout })
 const adminMembers = createRoute({ getParentRoute: () => admin, path: '/', component: ServerManagementScreen })
@@ -114,7 +116,6 @@ const routeTree = root.addChildren([
     players,
     player.player.addChildren([player.dashboard, player.champions, player.rank, player.lpEditor]),
     match,
-    search,
     admin.addChildren([adminMembers, adminData])
   ])
 ])

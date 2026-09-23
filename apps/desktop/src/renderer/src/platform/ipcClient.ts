@@ -62,7 +62,8 @@ export function createIpcClient(api: Api): FoxfireClient {
       storage: api.serverAdmin.storage,
       storedReplays: api.serverAdmin.storedReplays,
       removeReplay: api.serverAdmin.removeReplay,
-      forceUnlink: api.serverAdmin.forceUnlink
+      forceUnlink: api.serverAdmin.forceUnlink,
+      addRiotAccount: api.serverAdmin.addRiotAccount
     },
 
     events: {

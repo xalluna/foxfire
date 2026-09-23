@@ -173,8 +173,8 @@ export function matchContextItems(
     {
       label: 'Open match details',
       onSelect: actions.onOpenDetails,
-      // Ad-hoc search results are never stored, so there is no detail to open.
-      ...(expandable ? {} : { disabledReason: 'Not available for search results' })
+      // The match page is already the detail, so there is nowhere to open.
+      ...(expandable ? {} : { disabledReason: 'You are already looking at it' })
     }
   )
 

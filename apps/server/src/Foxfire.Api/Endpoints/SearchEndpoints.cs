@@ -6,20 +6,20 @@ using MediatR;
 namespace Foxfire.Api.Endpoints;
 
 /// <summary>
-/// Looking somebody up who is not on this server.
+/// Finding somebody this server tracks.
 ///
-/// Rate limited per address: every search is a live call to Riot on the one key
-/// the whole community shares.
+/// Still rate limited per address, though it no longer calls Riot: the query is
+/// an unindexed substring scan over every tracked account, and the limit that
+/// used to protect the API key now protects the database.
 /// </summary>
 public static class SearchEndpoints
 {
     public static void MapSearchEndpoints(this IEndpointRouteBuilder app) =>
         app.MapGet("/search", (
-                    string gameName,
-                    string tagLine,
+                    string? q,
                     ISender sender,
                     CancellationToken cancellationToken) =>
-                sender.SendAsync(new SearchSummonerRequest(gameName, tagLine), cancellationToken))
+                sender.SendAsync(new SearchPlayersRequest(q), cancellationToken))
             .WithTags("Search")
             .RequireAuthorization()
             .RequireRateLimiting(RateLimits.Search);

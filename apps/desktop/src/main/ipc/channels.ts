@@ -36,6 +36,7 @@ export const CH = {
     storedReplays: 'serverAdmin:storedReplays',
     removeReplay: 'serverAdmin:removeReplay',
     forceUnlink: 'serverAdmin:forceUnlink',
+    addRiotAccount: 'serverAdmin:addRiotAccount',
     chooseDatabase: 'serverAdmin:chooseDatabase',
     importDatabase: 'serverAdmin:importDatabase',
     importProgress: 'serverAdmin:importProgress'
@@ -184,7 +185,7 @@ export const CH = {
     openWindow: 'archives:openWindow'
   },
   search: {
-    summoner: 'search:summoner'
+    players: 'search:players'
   },
   assets: {
     get: 'assets:get'

@@ -46,7 +46,7 @@ export { DashboardScreen } from './screens/DashboardScreen'
 export { LpEditorScreen } from './screens/LpEditorScreen'
 export { MatchScreen } from './screens/MatchScreen'
 export { RankScreen } from './screens/RankScreen'
-export { SearchScreen } from './screens/SearchScreen'
+export { PlayersScreen } from './screens/PlayersScreen'
 export { SeasonsCard } from './screens/SeasonsCard'
 export { ServerDataScreen } from './screens/ServerDataScreen'
 export { ServerManagementScreen } from './screens/ServerManagementScreen'
@@ -69,11 +69,13 @@ export {
   validateDashboardSearch,
   validateLpEditorSearch,
   validateMatchSearch,
+  validatePlayersSearch,
   validateRankSearch,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
   type MatchSearch,
+  type PlayersSearch,
   type QueueSearch,
   type RankSearch
 } from './routes/params'

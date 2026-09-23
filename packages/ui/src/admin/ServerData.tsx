@@ -6,12 +6,15 @@ import type {
   AdminReplay,
   ImportProgress,
   ImportResult,
+  RiotIdInput,
   ServerStorageUsage
 } from '@foxfire/core'
 import { inputClass } from '../components/settings/controls'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, primaryButtonClass } from '../components/settings/controls'
+import { parseRiotId, formatRiotId } from '../lib/riotId'
+import { randomExampleRiotId } from '../lib/exampleRiotId'
 import { EmptyState } from '../components/EmptyState'
 import * as Icon from '../components/icons'
 
@@ -37,6 +40,13 @@ export interface ServerDataPageProps {
   accounts: Account[] | undefined
   onUnlink: (accountId: string) => Promise<AdminActionResult>
 
+  /**
+   * Starts tracking an account nobody here has claimed, and backfills it.
+   * Throws with the server's reason when the Riot ID resolves to nothing, or
+   * to somebody this server already has.
+   */
+  onAddAccount: (input: RiotIdInput) => Promise<Account>
+
   replays: AdminReplay[] | undefined
   onRemoveReplay: (matchId: string) => Promise<AdminActionResult>
 }
@@ -61,6 +71,7 @@ export function ServerDataPage({
   onSaveReplayCap,
   accounts,
   onUnlink,
+  onAddAccount,
   replays,
   onRemoveReplay
 }: ServerDataPageProps): JSX.Element {
@@ -114,6 +125,7 @@ export function ServerDataPage({
       {storage !== undefined && (
         <StorageCard storage={storage} replayCap={replayCap} onSaveReplayCap={onSaveReplayCap} />
       )}
+      <TrackedAccountsCard accounts={accounts} onAdd={onAddAccount} />
       <LinkedAccountsCard accounts={accounts} onUnlink={onUnlink} />
       <ReplayLibraryCard replays={replays} onRemove={onRemoveReplay} />
     </SettingsPage>
@@ -143,6 +155,116 @@ function useRowAction(run: (id: string) => Promise<AdminActionResult>): {
         .finally(() => setPendingId(null))
     }
   }
+}
+
+/**
+ * Starting to track somebody nobody here has claimed.
+ *
+ * The one place an admin is deliberately special-cased. Everywhere else on this
+ * server an admin is an ordinary member with powers over people and access
+ * rather than over other people's data — but this spends the community's Riot
+ * key on somebody who has not asked to be here and grows the database by
+ * however many games they have played, which is a decision about the server.
+ *
+ * The account arrives unclaimed, the same state an imported one is in, and
+ * whoever it really belongs to can still claim it the ordinary way. A backfill
+ * starts immediately: an account added and then left empty until somebody
+ * thought to press refresh would read as one that did not work.
+ */
+function TrackedAccountsCard({
+  accounts,
+  onAdd
+}: {
+  accounts: Account[] | undefined
+  onAdd: (input: RiotIdInput) => Promise<Account>
+}): JSX.Element {
+  const [example] = useState(randomExampleRiotId)
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [added, setAdded] = useState<string | null>(null)
+
+  const parsed = parseRiotId(value)
+  const tracked = accounts?.length ?? 0
+
+  const submit = (): void => {
+    if (!parsed) {
+      setError(`A Riot ID is a name and a tag, like ${example}.`)
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    setAdded(null)
+
+    onAdd(parsed)
+      .then((account) => {
+        setAdded(formatRiotId(account.gameName, account.tagLine))
+        setValue('')
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <SettingsCard
+      title="Tracked League accounts"
+      description={
+        'Anybody on this server can find a tracked account and read its history — every game, and '
+        + 'what each one was worth on the ladder. Adding one does not claim it for anybody: it arrives '
+        + 'unclaimed, and whoever it belongs to can still link it from the desktop.'
+      }
+    >
+      <SettingsBlock
+        label="Add an account"
+        description={
+          'Resolved through Riot as it is saved, so a Riot ID that does not exist is refused rather '
+          + 'than filed. The backfill starts straight away and runs at the lowest priority, behind '
+          + 'anything somebody is waiting on.'
+        }
+      >
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit()
+          }}
+        >
+          <input
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setError(null)
+            }}
+            placeholder={example}
+            spellCheck={false}
+            aria-label="Riot ID"
+            className={clsx(inputClass, 'flex-1')}
+          />
+          <button type="submit" className={primaryButtonClass} disabled={busy || value.trim().length === 0}>
+            {busy ? 'Adding…' : 'Add'}
+          </button>
+        </form>
+
+        {error !== null && <p className="mt-2 text-2xs text-red">{error}</p>}
+        {added !== null && (
+          <p className="mt-2 text-2xs text-text-mute">
+            Now tracking <span className="text-text">{added}</span>. Its history is being fetched.
+          </p>
+        )}
+      </SettingsBlock>
+
+      <SettingsRow
+        label="Accounts tracked"
+        description="Everything this server keeps history for, claimed or not."
+        control={
+          <span className="text-sm tabular-nums text-text-dim">
+            {accounts === undefined ? '—' : tracked}
+          </span>
+        }
+      />
+    </SettingsCard>
+  )
 }
 
 /**

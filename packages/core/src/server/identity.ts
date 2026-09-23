@@ -20,7 +20,7 @@ export type ClientIdentity =
  * lists the versions it serves in DesktopCompatibility.WebApiVersions, and a
  * web client built for one missing from there would be refused on every call.
  */
-export const WEB_API_VERSION = 1
+export const WEB_API_VERSION = 2
 
 /** What every request says the caller is. */
 export const CLIENT_HEADER = 'X-Foxfire-Client'

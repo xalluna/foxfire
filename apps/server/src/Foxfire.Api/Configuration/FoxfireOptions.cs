@@ -57,11 +57,16 @@ public sealed class RateLimitOptions
     public int AuthPerMinute { get; set; } = 20;
 
     /// <summary>
-    /// Searches. Every one is a live call to Riot on the server's one key, so
-    /// this is what keeps a single member from spending the whole community's
-    /// allowance.
+    /// Searches, which the finder sends as somebody types.
+    ///
+    /// It used to be 30, back when every search was fourteen Riot requests on
+    /// the community's one key and a spinner nobody would sit through twice.
+    /// A search reads the database now — an unindexed substring scan over the
+    /// tracked accounts, so still worth a limit, but a cheap one — and the
+    /// caller is a box being typed into rather than a button being pressed.
+    /// Thirty would have run out inside a couple of names.
     /// </summary>
-    public int SearchPerMinute { get; set; } = 30;
+    public int SearchPerMinute { get; set; } = 120;
 }
 
 /// <summary>The one Riot API key this server has.</summary>

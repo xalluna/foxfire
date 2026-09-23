@@ -45,7 +45,7 @@ services:
       Server__TrustedProxies: "${TRUSTED_PROXIES:-}"
       Server__TrustedNetworks: "${TRUSTED_PROXY_NETWORKS:-172.16.0.0/12}"
       RateLimit__AuthPerMinute: "${RATE_LIMIT_AUTH_PER_MINUTE:-20}"
-      RateLimit__SearchPerMinute: "${RATE_LIMIT_SEARCH_PER_MINUTE:-30}"
+      RateLimit__SearchPerMinute: "${RATE_LIMIT_SEARCH_PER_MINUTE:-120}"
       Riot__ApiKey: "${RIOT_API_KEY}"
       Riot__KeyType: "${RIOT_KEY_TYPE:-personal}"
       Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"

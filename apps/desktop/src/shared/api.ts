@@ -140,6 +140,7 @@ export interface Api {
      * and its games stay; only the claim goes.
      */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
+    addRiotAccount: (input: RiotIdInput) => Promise<Account>
     chooseDatabase: () => Promise<string | null>
     /**
      * Reads an old stats.db and pushes it at the active server.

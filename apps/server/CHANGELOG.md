@@ -11,6 +11,56 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.3.0] — 2026-09-23
+
+Search stopped being a live Riot lookup and became what it should always have been on a server that
+keeps history: a way to find the people on it. Admins can also track accounts nobody here has
+claimed, so a community's rivals and alumni can sit alongside its members.
+
+### Added
+
+- **Tracked League accounts, added by an admin.** Data & storage takes a Riot ID and starts tracking
+  it — resolved through Riot as it is saved, so a name that does not exist is refused rather than
+  filed, and backfilled straight away at the lowest priority. The account arrives claimed by nobody,
+  the same state an imported one is in, and whoever it belongs to can still claim it from the
+  desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
+  appear in, and what removing one should mean is a question for another release.
+
+### Changed
+
+- **Search finds the players this server tracks.** `GET /api/search` now takes `?q=` and answers out
+  of the database — every tracked account for a blank query, and whatever matches a name, a tag or a
+  whole Riot ID otherwise, each with its solo-queue rank. It used to resolve any Riot ID in the world
+  through fourteen Riot requests and answer with ten games that could carry no LP, because nothing
+  about a stranger is stored. In the browser this is the Players page, with a box at the top of it.
+- **Any member can start a sync, once every two minutes per account.** It used to be the owner's
+  alone. An account an admin tracks has no owner, nothing on this server syncs on a timer, and the
+  post-game ladder is armed by a desktop watching a League client nobody is running for it — so
+  owner-only meant its history froze on the day it arrived. The cooldown is read off the stored sync
+  timestamps, so a restart does not reopen the Riot budget. Recording a rank reading and writing LP
+  are still the owner's: those assert something about somebody's account rather than ask for what
+  Riot has already published.
+- **Desktop 0.14.0 or newer.** The contract version moved to 2. Older desktops are refused with 426
+  and told to update.
+
+### Removed
+
+- **The legacy root shim.** Desktop 0.12.0 called the API at the root, where the web client's pages
+  are, and every such request was moved under `/api` before routing. 0.12.0 is off the allow list, so
+  every desktop this server answers now asks for `/api` itself.
+
+### Under the hood
+
+- The per-address search limit went from 30 a minute to 120, and the finder waits
+  a quarter-second after the last keystroke before asking. Thirty was sized for a
+  search that cost fourteen Riot requests and was sent by pressing a button; this
+  one reads the database and is sent by typing, and thirty would have run out
+  inside a couple of names. `RATE_LIMIT_SEARCH_PER_MINUTE` still overrides it.
+- The finder is one screen shared by the web client and the desktop, so the two cannot drift.
+- Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
+  accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
+  adding a tracked account, refusing a duplicate, and the sync cooldown.
+
 ## [0.2.0] — 2026-09-21
 
 Foxfire in a browser. The server now hosts a web client of its own, so your
@@ -308,5 +358,6 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

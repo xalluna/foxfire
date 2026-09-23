@@ -7,6 +7,34 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.14.0] — 2026-09-23
+
+Search now looks through the people your server tracks instead of asking Riot about strangers — and
+what it finds is a full profile, with LP on every game.
+
+### Changed
+
+- **Search finds the players on your server.** Typing a name turns up the accounts your server keeps
+  history for, and opening one is the ordinary profile: every game, what each was worth in LP, the
+  rows that open for the scoreboard, and a replay to download where the server holds one. It used to
+  look up any Riot ID in the world and show ten games with no LP on them at all — nothing about a
+  stranger is stored, so there was never any to show. Searching costs no Riot requests now, so it is
+  as fast as the rest of the app and never queues behind a sync.
+- **Anybody can refresh any account.** Asking the server to fetch what it does not have used to be
+  the owner's alone. Accounts an admin tracks belong to nobody, so nobody would ever have refreshed
+  them; now any member can, and an account that was refreshed in the last two minutes is left alone
+  so a busy evening cannot spend the server's Riot budget twice over.
+- **Needs Foxfire Server 0.3.0.** Search asks the server a different question, so this version and
+  older servers cannot talk to each other. A server that has not been updated says so, and its host
+  needs to update it.
+
+### Under the hood
+
+- The Search page and the web client's Players page are one screen now, mounted under the name that
+  fits each app. Its query lives in the address, so a filtered list can be linked to.
+- Local-only mode searches its own database rather than Riot, the same as everywhere else, and the
+  ad-hoc lookup service is gone.
+
 ## [0.13.0] — 2026-09-21
 
 Foxfire Server 0.2.0 hosts a web client of its own, so the people on your server can read everybody's
@@ -986,6 +1014,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0
 [0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0

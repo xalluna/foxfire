@@ -79,6 +79,16 @@ export function ServerDataScreen(): JSX.Element {
         }
         return outcome
       }}
+      onAddAccount={async (input) => {
+        const account = await client.admin.addRiotAccount(input)
+        // The finder and every account list have a player in them that was not
+        // there a moment ago, and the backfill it just started will change what
+        // the server is holding.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.playerSearches() })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.storage() })
+        return account
+      }}
       replays={replays.data}
       onRemoveReplay={async (matchId) => {
         const outcome = await client.admin.removeReplay(matchId)

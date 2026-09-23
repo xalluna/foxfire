@@ -19,6 +19,10 @@ export const queryKeys = {
   connection: () => ['connection'] as const,
   assets: () => ['assets'] as const,
 
+  /** Every finder query, so one invalidation clears them all. */
+  playerSearches: () => ['playerSearch'] as const,
+  playerSearch: (query: string) => ['playerSearch', query] as const,
+
   dashboard: (accountId?: string) =>
     accountId === undefined ? (['dashboard'] as const) : (['dashboard', accountId] as const),
 

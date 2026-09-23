@@ -4,7 +4,7 @@ import { Icon, Logo } from '@foxfire/ui'
 import { useConnection } from '@foxfire/screens'
 import { signOut, useAuth } from '../session/session'
 
-function NavLink({ to, children }: { to: '/players' | '/search' | '/admin'; children: ReactNode }): JSX.Element {
+function NavLink({ to, children }: { to: '/players' | '/admin'; children: ReactNode }): JSX.Element {
   return (
     <Link
       to={to}
@@ -54,7 +54,6 @@ export function WebShell(): JSX.Element {
 
           <nav className="flex min-w-0 gap-0.5 overflow-x-auto">
             <NavLink to="/players">Players</NavLink>
-            <NavLink to="/search">Search</NavLink>
             {user?.isAdmin && <NavLink to="/admin">Admin</NavLink>}
           </nav>
 

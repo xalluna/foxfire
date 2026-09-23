@@ -37,8 +37,8 @@ function Tab({
  * Capped at 1280px, not narrower, because the dashboard brings its 320px stats
  * rail in at `xl:` — a viewport query, 1280px — and has no cap of its own. A
  * narrower box here still gets the rail on a wide screen, and the match rows
- * lose their items to the list's overflow-hidden. SearchPage explains the same
- * bargain.
+ * lose their items to the list's overflow-hidden. The desktop's LiveGame makes
+ * the same bargain at the same width.
  *
  * The tabs do not scroll sideways. Three fit the narrowest phone, and a scroll
  * container turns each tab's -mb-px — the pixel that overlaps the hairline —

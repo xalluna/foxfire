@@ -37,7 +37,7 @@ export type {
   SyncState,
   SyncTrigger,
   SyncProgressEvent,
-  AdHocSummonerResult,
+  PlayerSearchResult,
   RiotIdInput,
   AssetManifest,
   DashboardData,

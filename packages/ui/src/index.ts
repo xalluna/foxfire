@@ -75,7 +75,7 @@ export { DashboardPage, type DashboardPageProps, type MatchFocus } from './pages
 export { LpEditorPage } from './pages/LpEditorPage'
 export { MatchPage } from './pages/MatchPage'
 export { RankPage } from './pages/RankPage'
-export { SearchPage } from './pages/SearchPage'
+export { PlayersPage, type PlayerLink } from './pages/PlayersPage'
 export { RankInput, RankLabel, isApexTier } from './pages/RankInput'
 export { ServerDataPage, type ServerDataPageProps } from './admin/ServerData'
 export { ServerManagementPage, type ServerManagementPageProps } from './admin/ServerManagement'
