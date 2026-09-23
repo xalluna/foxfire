@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import type { GoogleClient } from './config'
 
 /**
  * The parts of signing in to Google that are only rules: what to ask for, how
@@ -66,6 +67,39 @@ export function buildAuthUrl(input: {
     prompt: 'consent'
   })
   return `${AUTH_ENDPOINT}?${params}`
+}
+
+/**
+ * The body of a request to Google's token endpoint, for this client.
+ *
+ * The secret goes only when the build has one. Without it the request leans
+ * on PKCE (for the code) and the refresh token itself (for a refresh), which
+ * is what Google's own guidance for an app that cannot keep a secret expects.
+ */
+export function tokenRequestBody(client: GoogleClient, fields: Record<string, string>): URLSearchParams {
+  const body = new URLSearchParams({ client_id: client.clientId, ...fields })
+  if (client.clientSecret) body.set('client_secret', client.clientSecret)
+  return body
+}
+
+/**
+ * What to say when the token endpoint refuses, in words.
+ *
+ * One refusal gets its own sentence: Google asking for a client secret this
+ * build was made without. That is not the person's to fix — the build needs
+ * the secret after all — and "client_secret is missing" would read as though
+ * it were.
+ */
+export function tokenErrorMessage(
+  client: GoogleClient,
+  body: { error?: string; error_description?: string },
+  fallback: string
+): string {
+  const said = `${body.error ?? ''} ${body.error_description ?? ''}`
+  if (!client.clientSecret && /client_secret/i.test(said)) {
+    return 'Google needs a client secret to sign in with this build, and it was made without one. See apps/desktop/docs/YOUTUBE_SETUP.md.'
+  }
+  return body.error_description ?? fallback
 }
 
 export type CallbackResult =

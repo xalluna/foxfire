@@ -16,11 +16,31 @@ and says so in Settings › YouTube.
    - Privacy policy: `https://github.com/xalluna/foxfire/blob/main/apps/desktop/docs/PRIVACY.md`.
    - Scopes: `openid`, `.../auth/userinfo.email` and `.../auth/youtube.upload`.
 4. **APIs & Services › Credentials › Create credentials › OAuth client ID**, application type
-   **Desktop app**. Keep the client id and the client secret.
+   **Desktop app**. Keep the client id, and the client secret in case it turns out to be needed.
 
-Google documents a Desktop client's secret as not confidential — it ships inside every installer —
-and what protects a sign-in is the PKCE verifier Foxfire makes for it. It is kept out of the
-repository anyway, so a fork builds without borrowing this project's quota.
+## What is, and is not, a secret here
+
+Nothing in the build is. The client id is in the address of every Google sign-in page, and Google
+documents installed apps as unable to keep a secret: anything built into the installer can be read
+back out of it. What protects a person's channel is theirs alone — the refresh token Google gives
+their copy of Foxfire, encrypted on their PC — plus the PKCE verifier Foxfire makes for every
+sign-in, and the fact that a Desktop client can only send a sign-in back to 127.0.0.1.
+
+**The client secret is optional.** Google lists it as optional when a code is exchanged with PKCE,
+so try a build without it first: if Connect works and an upload survives an hour (which needs a token
+refresh), ship without it, and the installer carries nothing that even looks like a secret. If
+Google refuses, the connect error says the build needs its secret; add it and rebuild.
+
+Both values stay out of the repository either way, so a fork builds without borrowing this project's
+quota. What does need guarding:
+
+- **The Google account that owns the project** — two-factor on. It controls the consent screen, the
+  secrets and the quota.
+- **The quota.** Anyone who pulls the client id out of an installer can upload with it using their
+  own Google account, and every upload counts against the project. Set a per-user limit in
+  **APIs & Services › Quotas**, and watch it. If the client is abused, create a new secret (or a new
+  client), ship an update with it, then disable the old one; copies that have not updated will ask
+  to connect again.
 
 ## Before anybody else can watch
 
@@ -54,12 +74,13 @@ bakes into the main process:
 
 | Variable | Value |
 |---|---|
-| `MAIN_VITE_YOUTUBE_CLIENT_ID` | the client id |
-| `MAIN_VITE_YOUTUBE_CLIENT_SECRET` | the client secret |
+| `MAIN_VITE_YOUTUBE_CLIENT_ID` | the client id — required for uploads at all |
+| `MAIN_VITE_YOUTUBE_CLIENT_SECRET` | the client secret — optional, sent only when set |
 
-- **Releases.** Add them as the repository secrets `YOUTUBE_OAUTH_CLIENT_ID` and
-  `YOUTUBE_OAUTH_CLIENT_SECRET`. `.github/workflows/release.yml` passes them to the installer build.
-- **Local development.** Put the two variables in `apps/desktop/.env.local`, which git ignores.
+- **Releases.** Add the id as the repository secret `YOUTUBE_OAUTH_CLIENT_ID`, and the secret as
+  `YOUTUBE_OAUTH_CLIENT_SECRET` only if Google turned out to need it. `.github/workflows/release.yml`
+  passes whichever exist to the installer build; one that is not set arrives empty and is left out.
+- **Local development.** Put the variables in `apps/desktop/.env.local`, which git ignores.
 
 ## Checking a build
 

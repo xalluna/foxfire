@@ -132,9 +132,12 @@ its requests as the Referer. Nothing may be drawn over YouTube's player; the mar
 Electron accepts `registerSchemesAsPrivileged` once. Every scheme of ours is in the single call in
 `main/schemes.ts` — registering a new one anywhere else silently unregisters the others.
 
-The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and
+The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and, optionally,
 `MAIN_VITE_YOUTUBE_CLIENT_SECRET` (repository secrets in the release workflow; `.env.local` for
-development). Without them the build has no uploads and says so. The quota is the Google project's,
+development). Neither is a security boundary — anything in an installer can be read back out, and
+Google treats installed apps as unable to keep a secret — so the secret is sent only when a build has
+one, and a build without a client id has no uploads and says so. What protects a channel is the
+user's own refresh token, PKCE, and the loopback-only redirect. The quota is the Google project's,
 shared by every install; until YouTube's audit passes, every upload is forced private.
 `apps/desktop/docs/YOUTUBE_SETUP.md` covers the project, the reviews and the secrets, and
 `apps/desktop/docs/PRIVACY.md` is the policy Google needs a URL for.

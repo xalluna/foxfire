@@ -134,8 +134,9 @@ watch them from your match history, markers and all. Needs Foxfire Server 0.3.0.
   postMessage, and that page's requests carry `https://com.brandonbarr.foxfire/` as their Referer,
   which is how YouTube identifies a desktop app.
 - Both privileged schemes are registered in the one call Electron allows.
-- The Google client is built into release installers from repository secrets. A build without them
-  has no uploads and says so. See `apps/desktop/docs/YOUTUBE_SETUP.md`.
+- The Google client is built into release installers from repository secrets. The client secret is
+  optional and only sent when a build has one; a build without the client id has no uploads and says
+  so. See `apps/desktop/docs/YOUTUBE_SETUP.md`.
 - The recording player, its timeline and its markers are shared with the web client now.
 - A privacy policy for the YouTube connection, in `apps/desktop/docs/PRIVACY.md`.
 

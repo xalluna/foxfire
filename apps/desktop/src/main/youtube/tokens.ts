@@ -1,7 +1,7 @@
 import { clearSecret, hasSecret, loadSecret, saveSecret } from '../security/keyStore'
 import { createLogger } from '../telemetry/logger'
 import { youtubeClient } from './config'
-import { TOKEN_ENDPOINT } from './oauthFlow'
+import { TOKEN_ENDPOINT, tokenRequestBody } from './oauthFlow'
 
 const log = createLogger('youtube')
 
@@ -75,9 +75,7 @@ export async function getAccessToken(): Promise<string> {
   const response = await fetch(TOKEN_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: client.clientId,
-      client_secret: client.clientSecret,
+    body: tokenRequestBody(client, {
       refresh_token: refresh,
       grant_type: 'refresh_token'
     })

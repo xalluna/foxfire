@@ -11,7 +11,9 @@ import {
   grantsUpload,
   parseCallback,
   REVOKE_ENDPOINT,
-  TOKEN_ENDPOINT
+  TOKEN_ENDPOINT,
+  tokenErrorMessage,
+  tokenRequestBody
 } from './oauthFlow'
 import { setConnectedEmail } from './settings'
 import { setConnecting, setYouTubeError } from './state'
@@ -109,10 +111,8 @@ export async function connectYouTube(): Promise<void> {
     const response = await fetch(TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
+      body: tokenRequestBody(client, {
         code,
-        client_id: client.clientId,
-        client_secret: client.clientSecret,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
         code_verifier: pkce.verifier
@@ -125,11 +125,12 @@ export async function connectYouTube(): Promise<void> {
       expires_in?: number
       id_token?: string
       scope?: string
+      error?: string
       error_description?: string
     }
 
     if (!response.ok || !tokens.access_token || !tokens.refresh_token) {
-      throw new Error(tokens.error_description ?? 'Google would not complete the sign-in.')
+      throw new Error(tokenErrorMessage(client, tokens, 'Google would not complete the sign-in.'))
     }
 
     if (!grantsUpload(tokens.scope)) {

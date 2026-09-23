@@ -193,9 +193,10 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           # Foxfire's Google client, baked into the main process so the
-          # installer can upload to YouTube. A dispatched run from a fork has
-          # neither, and builds an installer that says it has no uploads. See
-          # apps/desktop/docs/YOUTUBE_SETUP.md.
+          # installer can upload to YouTube. Not a security boundary: anything
+          # in an installer can be read back out. The secret is optional and
+          # left out when the repository has none; without the id, the
+          # installer says it has no uploads. See apps/desktop/docs/YOUTUBE_SETUP.md.
           MAIN_VITE_YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
           MAIN_VITE_YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
         run: |

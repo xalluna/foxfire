@@ -8,6 +8,8 @@ import {
   emailFromIdToken,
   grantsUpload,
   parseCallback,
+  tokenErrorMessage,
+  tokenRequestBody,
   UPLOAD_SCOPE
 } from './oauthFlow'
 import { nextPacificMidnight } from './quota'
@@ -58,6 +60,31 @@ describe('signing in to Google', () => {
     expect(grantsUpload(`openid ${UPLOAD_SCOPE} email`)).toBe(true)
     expect(grantsUpload('openid email')).toBe(false)
     expect(grantsUpload(undefined)).toBe(false)
+  })
+
+  it('sends the client secret only when the build has one', () => {
+    const fields = { code: 'abc', grant_type: 'authorization_code', code_verifier: 'v' }
+
+    const withSecret = tokenRequestBody({ clientId: 'id', clientSecret: 'shh' }, fields)
+    expect(withSecret.get('client_id')).toBe('id')
+    expect(withSecret.get('client_secret')).toBe('shh')
+    expect(withSecret.get('code_verifier')).toBe('v')
+
+    const without = tokenRequestBody({ clientId: 'id', clientSecret: null }, fields)
+    expect(without.has('client_secret')).toBe(false)
+    expect(without.get('code')).toBe('abc')
+  })
+
+  it('says so plainly when Google wants a secret this build was made without', () => {
+    const missing = { error: 'invalid_request', error_description: 'client_secret is missing.' }
+    expect(tokenErrorMessage({ clientId: 'id', clientSecret: null }, missing, 'fallback')).toMatch(
+      /made without one/
+    )
+    // With a secret in the build, Google's own words are the better answer.
+    expect(tokenErrorMessage({ clientId: 'id', clientSecret: 'shh' }, missing, 'fallback')).toBe(
+      'client_secret is missing.'
+    )
+    expect(tokenErrorMessage({ clientId: 'id', clientSecret: null }, {}, 'fallback')).toBe('fallback')
   })
 
   it('reads the address out of the ID token', () => {
