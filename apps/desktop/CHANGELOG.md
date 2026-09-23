@@ -9,11 +9,23 @@ changes you would never notice while using the app.
 
 ## [0.14.0] — 2026-09-23
 
-Looking after your account without leaving the app, and the server's own pages split in two so a
-community with a long member list is still readable. Needs Foxfire Server 0.3.0.
+Foxfire updates itself, and you can look after your own account without leaving the app. A new
+version now arrives quietly in the background and waits for you to restart — never in the middle of
+a game — and the patch notes travel with it, so what changed is in the app rather than on a page you
+would have to go and find. Needs Foxfire Server 0.3.0.
 
 ### Added
 
+- **Updates install themselves.** Foxfire looks for a new version shortly after it starts and a few
+  times a day after that, downloads it in the background, and then offers to restart. The offer
+  appears across the top of the window and in the tray menu, so it reaches you whether or not the
+  window is open. If you never take it, the update installs the next time you quit Foxfire.
+- **Nothing is installed in the middle of a game.** While a game is on, or while a game is being
+  recorded, the restart is refused and says which of the two it is waiting for — a restart then
+  would cost the LP reading or the recording that Foxfire was left running for.
+- **What's new, in the app.** Settings › About now has an Updates section: which version this is,
+  what the updater is doing, a button to check now, and the patch notes for the version arriving.
+  After an update lands, a line across the top of the window offers the same notes once.
 - **Change your email, password or name** from Settings › Server, where your account already was.
   Changing your email or your password asks for your current password; changing your password signs
   out every other device and keeps this one, so a password that had got out is worth nothing
@@ -32,11 +44,36 @@ community with a long member list is still readable. Needs Foxfire Server 0.3.0.
 
 ### Changed
 
-- **Needs Foxfire Server 0.3.0.** Everything above is the server's to answer, and a server that has
-  not been updated will say so.
+- **Connected to a server, Foxfire installs the version that server accepts** rather than the
+  newest one that exists. A server only talks to the builds it knows, so updating past it would
+  lock you out of your own community; this way an update can only ever move you to a build that
+  still works there. Local-only, it takes the newest version there is.
+- **A server that refuses this build now says what is being done about it.** The message named the
+  version to install and sent you to the releases page; it now tells you that version is already
+  downloading, and offers the restart when it is ready.
+- **Needs Foxfire Server 0.3.0.** Everything above that touches your account is the server's to
+  answer, and a server that has not been updated will say so.
+
+### Fixed
+
+- **"Start with Windows" no longer opens a window you did not ask for.** It always said it launches
+  hidden in the tray, and on Windows it never did — every sign-in put the window on screen. It now
+  starts in the tray, and an update started from the tray comes back to the tray rather than
+  reopening the window in front of whatever you were doing.
 
 ### Under the hood
 
+- Updates are read from this repository's own GitHub Releases: `latest.yml` beside the installer it
+  describes, which the release workflow has been attaching since 0.12.0 in anticipation of this.
+  Only the changed parts of an installer are downloaded where possible.
+- Which version to fetch is settled before anything is downloaded — the active server's
+  `recommendedDesktop` when there is one, the newest desktop release otherwise — and never a
+  version older than the one running.
+- Desktop releases now carry the Latest badge on the releases page, and server releases no longer
+  take it: the desktop installer is what somebody arriving at that page is looking for, and it is
+  where the updater reads the newest version from.
+- The version's changelog section is built into `latest.yml` by the release workflow, which is how
+  the notes reach the app at all.
 - The Members and Invites screens are shared with the web client, as Server management was.
 - The rule that a password is at least twelve characters lives in one place now, rather than in the
   desktop's form, the web client's, and the server.

@@ -16,7 +16,9 @@ commit, and there is no `[Unreleased]` section.
 Accounts you can look after. Everybody can change their own email, password and
 name; an admin can hand somebody a reset link the way they hand out invites; and
 the pages that run a server are split so that a community with forty people on
-it is still readable.
+it is still readable. It also serves Foxfire 0.14.0, the first desktop that
+updates itself — which makes the allow list here the thing that decides which
+build your members are running.
 
 ### Added
 
@@ -45,6 +47,11 @@ it is still readable.
   switch beside the invites it governs.
 - **The sign-in page says what to do about a forgotten password**: ask this
   server's administrator for a reset link.
+- **Serves Foxfire 0.14.0.** A desktop from 0.14.0 on reads `recommendedDesktop`
+  from `/version` and installs that build, so the allow list here decides which
+  version the people on your server are running. They move when you update the
+  server, and not before — a desktop never updates past what its server will
+  talk to.
 
 ### Changed
 
@@ -76,7 +83,11 @@ it is still readable.
   takes one over.
 - Reset previews and redemptions are rate limited per address, unlike the invite
   preview beside them.
-- Desktop 0.14.0 is now served.
+- Server releases are no longer marked as the repository's Latest release. That
+  badge is what a browser lands on, and what the desktop's updater reads the
+  newest desktop version from, so it belongs to the desktop installer. The
+  container image is unaffected: `:latest` on GHCR still follows every server
+  release.
 
 ## [0.2.0] — 2026-09-21
 

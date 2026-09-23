@@ -7,7 +7,8 @@ import type {
   ReplayImportProgress,
   ServerState,
   SyncProgressEvent,
-  ImportProgress
+  ImportProgress,
+  UpdateState
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -16,6 +17,17 @@ import { CH } from '../main/ipc/channels'
 const api: Api = {
   app: {
     getVersion: () => ipcRenderer.invoke(CH.app.getVersion)
+  },
+  updates: {
+    getState: () => ipcRenderer.invoke(CH.updates.getState),
+    check: () => ipcRenderer.invoke(CH.updates.check),
+    restart: () => ipcRenderer.invoke(CH.updates.restart),
+    dismissNote: () => ipcRenderer.invoke(CH.updates.dismissNote),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, state: UpdateState): void => cb(state)
+      ipcRenderer.on(CH.updates.changed, handler)
+      return () => ipcRenderer.removeListener(CH.updates.changed, handler)
+    }
   },
   server: {
     getState: () => ipcRenderer.invoke(CH.server.getState),

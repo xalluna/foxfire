@@ -7,6 +7,9 @@ import type { BackgroundSettings } from '@shared/types'
 const RUN_IN_TRAY = 'background.runInTray'
 const LAUNCH_AT_STARTUP = 'background.launchAtStartup'
 
+/** Passed to a launch that should come up as a tray icon and nothing else. */
+export const HIDDEN_FLAG = '--hidden'
+
 /**
  * Background behaviour, which the LCU watcher depends on.
  *
@@ -44,9 +47,13 @@ export function setBackgroundSettings(patch: Partial<BackgroundSettings>): Backg
 }
 
 function applyLaunchAtStartup(enabled: boolean): void {
-  // openAsHidden keeps a startup launch from stealing focus with a window the
-  // user did not ask to see; the tray icon is the only sign it is running.
-  app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true })
+  // A startup launch should not steal focus with a window the user did not ask
+  // to see; the tray icon is the only sign it is running. `openAsHidden` was
+  // meant to do that and never did on this platform — Electron honours it on
+  // macOS only, so every login opened the window anyway. The flag below is the
+  // Windows way to say it: it is passed to the executable, and the bootstrap
+  // reads it before deciding whether to show anything.
+  app.setLoginItemSettings({ openAtLogin: enabled, args: [HIDDEN_FLAG] })
 }
 
 function restartLcuWatcher(): void {

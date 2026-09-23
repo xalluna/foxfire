@@ -37,6 +37,12 @@ import { getBackgroundSettings, setBackgroundSettings } from '../services/backgr
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
 import {
+  checkForUpdates,
+  dismissInstalledNote,
+  getUpdateState,
+  restartToUpdate
+} from '../updater/updater'
+import {
   addReplayByPath,
   getReplayUsage,
   linkReplayToMatch,
@@ -134,6 +140,11 @@ import type { TelemetryRequestQuery } from '@shared/telemetry'
  */
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.app.getVersion, () => app.getVersion())
+
+  ipcMain.handle(CH.updates.getState, () => getUpdateState())
+  ipcMain.handle(CH.updates.check, () => checkForUpdates())
+  ipcMain.handle(CH.updates.restart, () => restartToUpdate())
+  ipcMain.handle(CH.updates.dismissNote, () => dismissInstalledNote())
 
   ipcMain.handle(CH.server.getState, () => getServerState())
   ipcMain.handle(CH.server.probe, (_e, url: string) => serverProbe(url))

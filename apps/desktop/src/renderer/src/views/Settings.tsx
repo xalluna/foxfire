@@ -25,6 +25,7 @@ import { useServerHealth } from '../hooks/useKeyStatus'
 import { ReplaySettings } from '../components/ReplaySettings'
 import { RankTrackingSettings } from '../components/RankTrackingSettings'
 import { TelemetrySettings } from '../components/TelemetrySettings'
+import { UpdateSettings } from '../components/UpdateSettings'
 import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
 
 /**
@@ -316,6 +317,8 @@ function AboutSettings(): JSX.Element {
           label="Version"
           control={<span className="text-sm tabular-nums text-text-dim">{version.data ?? '—'}</span>}
         />
+
+        <UpdateSettings />
 
         <SettingsBlock>
           <Disclaimer />
