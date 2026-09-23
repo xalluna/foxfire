@@ -11,7 +11,7 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
-## [0.2.1] — 2026-09-22
+## [0.3.0] — 2026-09-23
 
 Accepts Foxfire 0.14.0, the first desktop that updates itself — and which asks this server which
 version to update to.
@@ -327,6 +327,6 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
-[0.2.1]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.2.1
+[0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

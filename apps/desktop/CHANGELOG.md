@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
-## [0.14.0] — 2026-09-22
+## [0.14.0] — 2026-09-23
 
 Foxfire updates itself. A new version arrives quietly in the background and waits for you to
 restart — never in the middle of a game — and the patch notes travel with it, so what changed is
