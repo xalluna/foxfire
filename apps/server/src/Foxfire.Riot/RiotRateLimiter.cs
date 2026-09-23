@@ -179,7 +179,13 @@ public sealed class RiotRateLimiter : IDisposable
             if (_pump is { IsCompleted: false }) return;
             if (_queues.All(q => q.Count == 0)) return;
 
-            _pump = Task.Run(() => PumpAsync(_stopping.Token), CancellationToken.None);
+            // Without the caller's context. The pump outlives the request that
+            // happened to wake it, and would otherwise carry that request's
+            // trace id and log scope on every line it writes from then on.
+            using (ExecutionContext.SuppressFlow())
+            {
+                _pump = Task.Run(() => PumpAsync(_stopping.Token), CancellationToken.None);
+            }
         }
     }
 

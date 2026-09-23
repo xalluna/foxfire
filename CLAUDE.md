@@ -74,6 +74,31 @@ A server that has not been updated refuses a desktop newer than anything it know
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
 
+## Server logging
+
+The server logs through `ILogger<T>`, with Serilog behind it — `apps/server/src/Foxfire.Api/Logging`.
+Two destinations by default: the console, and a `logs` container in the blob store replays already
+use (one `.clef` file an hour, compact JSON, cleared after `Logs__RetentionDays`). Anything else is
+Serilog's own `Serilog` section: levels, and sinks under `Serilog__WriteTo__<label>__…`.
+docker-compose.yml has a commented block for each sink the server ships. Serilog cannot discover sinks
+in the single-file release build, so they are listed in `FoxfireLogging.ReaderOptions` — **a new sink
+is a package, a line there, and a case in `LoggingTests`**, or it is skipped without a word.
+
+Every request gets one line, and every line written during it carries its trace id, the client, the
+member and their address; the response carries the trace id as `X-Trace-Id`. A sync puts the account
+on its lines with a log scope, and so should any other long piece of background work.
+
+When you add a log line:
+
+- A message template, never interpolation — `"Linked {RiotId} to {UserId}"`. The properties are what
+  make the line searchable.
+- Never a token, password, API key, signed URL or request body. Emails and usernames are fine; the
+  audit lines rely on them.
+- **Warning** is something a host should look at. **Error** is something that failed and should not
+  have. **Information** is a thing that happened, **Debug** is how it happened.
+- Record who did something to whom — an admin's action, a sign-in — at the point it is decided,
+  not only as the request line that carried it.
+
 ## How the desktop updates itself
 
 From 0.14.0 the desktop keeps itself current, out of this repository's own Releases. The feed is one

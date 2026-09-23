@@ -77,6 +77,13 @@ WORKDIR /app
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin foxfire
 USER 10001
 
+# The one exception, and only if a host asks for it: logs written to files, for
+# which docker-compose.yml has a commented-out block. Made here, as the user the
+# server runs as, because a named volume mounted over a directory takes that
+# directory's owner — and over one that does not exist, it is root's and the
+# server cannot write to it.
+RUN mkdir /home/foxfire/logs
+
 COPY --from=build /app .
 
 # Plain HTTP inside the container. TLS is the reverse proxy's job: a

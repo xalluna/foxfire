@@ -4,6 +4,7 @@ using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Endpoints;
+using Foxfire.Api.Logging;
 using Foxfire.Api.Reads;
 using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
@@ -32,6 +33,7 @@ builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOpt
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.Section));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
+builder.Services.Configure<LogOptions>(builder.Configuration.GetSection(LogOptions.Section));
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new();
 var riotOptions = builder.Configuration.GetSection(RiotOptions.Section).Get<RiotOptions>() ?? new();
@@ -39,6 +41,7 @@ var authOptions = builder.Configuration.GetSection(AuthOptions.Section).Get<Auth
 var adminOptions = builder.Configuration.GetSection(AdminOptions.Section).Get<AdminOptions>() ?? new();
 var smtpOptions = builder.Configuration.GetSection(SmtpOptions.Section).Get<SmtpOptions>() ?? new();
 var rateLimitOptions = builder.Configuration.GetSection(RateLimitOptions.Section).Get<RateLimitOptions>() ?? new();
+var logOptions = builder.Configuration.GetSection(LogOptions.Section).Get<LogOptions>() ?? new();
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
 // Everything wrong with the configuration, in one message, before anything
@@ -46,7 +49,7 @@ var connectionString = builder.Configuration.GetConnectionString("Default");
 // missing settings, and a server that started degraded would be worse than one
 // that refused — half of these produce failures that look like something else.
 var problems = ConfigurationCheck.Validate(
-    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions);
+    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions, logOptions);
 if (problems.Count > 0)
 {
     var message = new StringBuilder()
@@ -59,6 +62,8 @@ if (problems.Count > 0)
     message.AppendLine().AppendLine("See apps/server/docker/.env.example for every setting and what it is for.");
     throw new InvalidOperationException(message.ToString());
 }
+
+builder.AddFoxfireLogging();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(DesktopCompatibility.AllowList);
@@ -233,11 +238,26 @@ builder.Services.AddFoxfireProxies();
 builder.Services.AddFoxfireRateLimits();
 
 var app = builder.Build();
+var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");
 
-await app.Services.PrepareDatabaseAsync(app.Lifetime.ApplicationStopping);
+try
+{
+    await app.Services.PrepareDatabaseAsync(app.Lifetime.ApplicationStopping);
+}
+catch (Exception ex)
+{
+    // The likeliest way for a server to die is here, at boot, on a database it
+    // cannot reach or a migration that will not apply. Written down and flushed
+    // before the process goes, because logs still waiting for their batch die
+    // with it — and these are the lines anybody will be looking for.
+    startup.LogCritical(ex, "Could not prepare the database, so Foxfire Server is stopping");
+    await app.DisposeAsync();
+    throw;
+}
 
 var spa = SpaHosting.Locate(app.Configuration, app.Environment);
 
+app.UseFoxfireRequestLogging();
 app.UseExceptionHandler();
 
 // First, so that everything after it — the rate limits above all — sees the
@@ -256,6 +276,7 @@ app.UseRateLimiter();
 app.UseDesktopVersionGate();
 
 app.UseAuthentication();
+app.UseRequestLogContext();
 app.UseAuthorization();
 
 // The handshake and the health check answer at the root as well as under the
@@ -290,7 +311,36 @@ api.MapFallback("{**path}", () => Results.Json(
 
 spa.MapFallback(app);
 
-var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Foxfire");
+var logs = app.Services.GetRequiredService<LogDestinations>();
+var otherSinks = app.Configuration.GetSection("Serilog:WriteTo").GetChildren()
+    .Select(sink => sink["Name"])
+    .OfType<string>()
+    .ToList();
+
+if (logs.Blob is not null)
+{
+    startup.LogInformation(
+        "Logs are kept in the blob store's '{Container}' container, {Retention}",
+        FoxfireLogging.ContainerName,
+        logOptions.RetentionDays == 0 ? "for good" : $"for {logOptions.RetentionDays} days");
+}
+else if (otherSinks.Count > 0)
+{
+    startup.LogInformation("Logs are not kept in the blob store, because {Reason}", logs.WhyNotBlob);
+}
+else
+{
+    startup.LogWarning(
+        "Logs are going to the console only, because {Reason}, and are lost when this container is. Set "
+        + "ConnectionStrings__Blob (or ConnectionStrings__Logs) to keep them, or send them elsewhere through "
+        + "Serilog__WriteTo — see apps/server/docker/docker-compose.yml.",
+        logs.WhyNotBlob);
+}
+
+if (otherSinks.Count > 0)
+{
+    startup.LogInformation("Logs are also going to {Sinks}, per Serilog__WriteTo", string.Join(", ", otherSinks));
+}
 
 if (spa.IsAvailable)
 {

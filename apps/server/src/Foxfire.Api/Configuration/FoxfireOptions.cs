@@ -195,6 +195,44 @@ public sealed class SmtpOptions
 }
 
 /// <summary>
+/// Where the server's logs go, beyond the console.
+///
+/// The destinations a host is likely to want are here. Anything else — levels,
+/// and any of the other sinks the server ships — is Serilog's own
+/// <c>Serilog</c> section, read as Serilog documents it; see Logging/FoxfireLogging.cs.
+/// </summary>
+public sealed class LogOptions
+{
+    public const string Section = "Logs";
+
+    /// <summary>
+    /// Whether logs are kept in the blob store, in a container of their own.
+    ///
+    /// On by default, because the blob store is already there — it is where
+    /// replays go — and a log that lives only in a container's stdout is gone the
+    /// moment the container is recreated, which is usually the moment after
+    /// something went wrong. Off is for a host sending logs somewhere else.
+    /// </summary>
+    public bool ToBlob { get; set; } = true;
+
+    /// <summary>
+    /// How the console writes: "text" for a person reading docker logs, or
+    /// "json" for a collector reading the container's output on their behalf.
+    /// </summary>
+    public string ConsoleFormat { get; set; } = "text";
+
+    /// <summary>
+    /// How many days of logs the blob store keeps. Zero keeps them for good, for
+    /// a host whose storage account already has a lifecycle policy doing this.
+    ///
+    /// Thirty is long enough to still have the logs when somebody mentions a
+    /// week later that something went wrong, and short enough that nobody has to
+    /// think about what a homelab's disk is holding.
+    /// </summary>
+    public int RetentionDays { get; set; } = 30;
+}
+
+/// <summary>
 /// Checks the whole configuration at once, before anything starts.
 ///
 /// All of it, in one message, rather than failing on the first missing value and
@@ -214,10 +252,12 @@ public static class ConfigurationCheck
         RiotOptions riot,
         AuthOptions auth,
         AdminOptions admin,
-        RateLimitOptions rateLimits)
+        RateLimitOptions rateLimits,
+        LogOptions logs)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(rateLimits);
+        ArgumentNullException.ThrowIfNull(logs);
 
         List<string> problems = [];
 
@@ -297,6 +337,17 @@ public static class ConfigurationCheck
         if (rateLimits.SearchPerMinute < 1)
         {
             problems.Add($"RateLimit__SearchPerMinute is {rateLimits.SearchPerMinute}; it has to be at least 1.");
+        }
+
+        if (logs.ConsoleFormat is not ("text" or "json"))
+        {
+            problems.Add($"Logs__ConsoleFormat must be 'text' or 'json', not '{logs.ConsoleFormat}'.");
+        }
+
+        if (logs.RetentionDays < 0)
+        {
+            problems.Add(
+                $"Logs__RetentionDays is {logs.RetentionDays}. Use a number of days, or 0 to keep logs for good.");
         }
 
         return problems;
