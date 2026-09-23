@@ -51,6 +51,7 @@ services:
       Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"
       Auth__InviteSigningKey: "${INVITE_SIGNING_KEY}"
       Admin__Email: "${ADMIN_EMAIL}"
+      Auth__PasswordResetLifetime: "${PASSWORD_RESET_LIFETIME:-24:00:00}"
       Smtp__Host: "${SMTP_HOST:-}"
       Smtp__Port: "${SMTP_PORT:-587}"
       Smtp__Username: "${SMTP_USERNAME:-}"
