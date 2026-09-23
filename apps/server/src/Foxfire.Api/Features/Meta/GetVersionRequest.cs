@@ -1,4 +1,3 @@
-using System.Reflection;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Services;
@@ -52,17 +51,12 @@ public sealed record GetVersionRequest : IDomainRequest<VersionResponse>;
 internal sealed class GetVersionRequestHandler(IOptions<ServerOptions> server, ServerSettingsService settings)
     : IDomainRequestHandler<GetVersionRequest, VersionResponse>
 {
-    private static readonly string Build =
-        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion.Split('+')[0]
-        ?? "0.0.0";
-
     public async Task<Response<VersionResponse>> Handle(
         GetVersionRequest request,
         CancellationToken cancellationToken) =>
         new VersionResponse(
             ServerName: server.Value.Name,
-            ServerVersion: Build,
+            ServerVersion: ServerBuild.Version,
             ApiVersion: DesktopCompatibility.ApiVersion,
             MinimumDesktop: DesktopCompatibility.AllowList.Minimum,
             RecommendedDesktop: DesktopCompatibility.AllowList.Recommended,

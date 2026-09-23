@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Logging;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 
@@ -44,7 +46,16 @@ public static class RateLimits
                     : TimeSpan.FromMinutes(1);
                 var seconds = Math.Max(1, (int)Math.Ceiling(wait.TotalSeconds));
 
-                var response = context.HttpContext.Response;
+                var http = context.HttpContext;
+                http.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger(typeof(RateLimits).FullName!)
+                    .LogWarning(
+                        "Turned {Address} away on the {Policy} limit for {Seconds} seconds",
+                        RequestLogging.ClientAddress(http) ?? "unknown",
+                        http.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ?? "unnamed",
+                        seconds);
+
+                var response = http.Response;
                 response.Headers[HeaderNames.RetryAfter] = seconds.ToString(CultureInfo.InvariantCulture);
 
                 // The shape every other failure on this server has, so a client

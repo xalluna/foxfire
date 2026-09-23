@@ -20,7 +20,8 @@ invites, and can track a League account nobody here has claimed; and the pages
 that run a server are split so that a community with forty people on it is still
 readable. It also serves Foxfire 0.14.0, the first desktop that updates itself —
 which makes the allow list here the thing that decides which build your members
-are running.
+are running. And the server now keeps its own logs, so that when something goes
+wrong there is still a record of it after the container has been restarted.
 
 ### Added
 
@@ -65,6 +66,24 @@ are running.
   the same state an imported one is in, and whoever it belongs to can still claim it from the
   desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
   appear in, and what removing one should mean is a question for another release.
+
+- **Logs that outlast the container.** Everything the server logs is kept in the blob store it
+  already uses for replays, in a `logs` container of its own, one file an hour, for 30 days — so the
+  record of what went wrong is still there after the restart that fixed it. Nothing to set up: under
+  docker-compose that store is the Azurite beside it. `LOG_RETENTION_DAYS` changes how long,
+  `LOG_CONNECTION_STRING` keeps them in a different storage account, and `LOG_LEVEL` how much.
+- **Logs somewhere else, if you already have somewhere.** A file on a volume, an OpenTelemetry
+  collector (and so Grafana, Datadog, Honeycomb or Azure Monitor), Seq or Application Insights —
+  docker-compose.yml has a block for each to uncomment. `LOG_TO_BLOB=false` stops keeping them in the
+  blob store as well, and `LOG_CONSOLE_FORMAT=json` is for a collector reading the container's output.
+- **Every response carries an `X-Trace-Id`.** When somebody tells you something broke, that id finds
+  the request in the logs, and every line the server wrote while handling it.
+- **One log line per request**: what was asked for, by which client and version, which member, from
+  what address, what it got back and how long it took. Never the query string, which is where the
+  hub's access token travels.
+- **Sign-ins are logged**: a sign-in, a wrong password, and an account locking itself after too many,
+  along with every request turned away by a rate limit — the lines you want when you are wondering
+  whether somebody has been guessing passwords.
 
 ### Changed
 
@@ -133,6 +152,24 @@ are running.
 - Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
   accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
   adding a tracked account, refusing a duplicate, and the sync cooldown.
+
+- Logging goes through Serilog, behind the `ILogger` everything already wrote to. The blob lines are
+  compact JSON with the message rendered and as its template, and the trace id on each. The sinks a
+  host can name are listed in code rather than discovered, because the single-file release archives
+  have no manifest for Serilog to search — and a sink it cannot find is skipped without a word. A test
+  configures each one exactly as docker-compose.yml spells it.
+- The health check, the handshake and the web client's own files log at Debug, since monitors and
+  updaters ask for the first two on a timer. A failed request is an Error, a rate-limited one a
+  Warning, and everything else Information.
+- Every line written during a sync carries the account and what started it. The Riot request pump no
+  longer inherits the context of whichever request first woke it, which would have put a long-finished
+  request's trace id on every line it wrote afterwards.
+- A database that cannot be reached or migrated at boot is logged as critical and flushed to the blob
+  store before the process exits, rather than lost in the unsent batch.
+- Old logs are cleared by a daily sweep, by age. The sink's own clean-up is left off: it lists the
+  whole container after every batch and counts by file rather than by day.
+- Serilog's own failures — a blob store that stops accepting writes — go to the console's error
+  stream, where they would otherwise go nowhere.
 
 ## [0.2.0] — 2026-09-21
 
