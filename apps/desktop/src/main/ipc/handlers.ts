@@ -19,6 +19,7 @@ import {
   createInvite,
   createPasswordReset,
   deleteUser,
+  addRiotAccount,
   forceUnlink,
   getStorageUsage,
   listStoredReplays,
@@ -36,6 +37,12 @@ import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
+import {
+  checkForUpdates,
+  dismissInstalledNote,
+  getUpdateState,
+  restartToUpdate
+} from '../updater/updater'
 import {
   addReplayByPath,
   getReplayUsage,
@@ -135,6 +142,11 @@ import type { TelemetryRequestQuery } from '@shared/telemetry'
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.app.getVersion, () => app.getVersion())
 
+  ipcMain.handle(CH.updates.getState, () => getUpdateState())
+  ipcMain.handle(CH.updates.check, () => checkForUpdates())
+  ipcMain.handle(CH.updates.restart, () => restartToUpdate())
+  ipcMain.handle(CH.updates.dismissNote, () => dismissInstalledNote())
+
   ipcMain.handle(CH.server.getState, () => getServerState())
   ipcMain.handle(CH.server.probe, (_e, url: string) => serverProbe(url))
   ipcMain.handle(CH.server.previewInvite, (_e, url: string, token: string) =>
@@ -172,6 +184,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.storedReplays, () => listStoredReplays())
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
   ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
+  ipcMain.handle(CH.serverAdmin.addRiotAccount, (_e, input: RiotIdInput) => addRiotAccount(input))
   ipcMain.handle(CH.serverAdmin.chooseDatabase, () => chooseImportDatabase())
   ipcMain.handle(CH.serverAdmin.importDatabase, (_e, filePath: string) => importDatabase(filePath))
   ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>
@@ -411,8 +424,8 @@ export function registerIpcHandlers(): void {
     main.webContents.send(CH.recordings.showMatch, accountId, matchId)
   })
 
-  ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) =>
-    serverBacked().search.summoner(input)
+  ipcMain.handle(CH.search.players, (_e, query: string) =>
+    serverBacked().search.players(query)
   )
 
   ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())

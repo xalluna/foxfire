@@ -1,6 +1,5 @@
 import type {
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
   AdminPasswordReset,
@@ -14,6 +13,7 @@ import type {
   MasteryData,
   MatchDetail,
   MatchSummary,
+  PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
@@ -242,11 +242,8 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     search: {
-      summoner: (input: RiotIdInput) =>
-        request<AdHocSummonerResult>(
-          `/search?gameName=${encodeURIComponent(input.gameName)}`
-            + `&tagLine=${encodeURIComponent(input.tagLine)}`
-        )
+      players: (query: string) =>
+        request<PlayerSearchResult[]>(`/search?q=${encodeURIComponent(query)}`)
     },
 
     replays: {
@@ -278,6 +275,13 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
             method: 'DELETE'
           })
         ),
+
+      /**
+       * Starts tracking an account nobody has claimed. Throws rather than
+       * answering with a result, because the caller wants the account back.
+       */
+      addRiotAccount: (input: RiotIdInput) =>
+        request<Account>('/admin/riot-accounts', { method: 'POST', body: input }),
 
       users: () => request<AdminUser[]>('/admin/users/'),
 

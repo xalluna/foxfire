@@ -37,7 +37,7 @@ export type {
   SyncState,
   SyncTrigger,
   SyncProgressEvent,
-  AdHocSummonerResult,
+  PlayerSearchResult,
   RiotIdInput,
   AssetManifest,
   DashboardData,
@@ -558,6 +558,67 @@ export interface ServerState {
    * is anything new arriving.
    */
   riotKeyRejected: boolean
+}
+
+/* -------------------------------------------------------------------------- */
+
+/** What the updater is doing, if anything. */
+export type UpdateStatus =
+  /** Not a packaged build, so there is nothing to update. */
+  | 'disabled'
+  | 'idle'
+  | 'checking'
+  | 'downloading'
+  /** Downloaded and verified. Installs on restart, or on the next quit. */
+  | 'ready'
+  | 'error'
+
+/** What is going on that a restart would interrupt. */
+export type UpdateBlocker = 'game' | 'recording'
+
+/**
+ * Everything the window and the tray need to say about updates.
+ *
+ * One shape for both, pushed on every change, because the two have to agree:
+ * an update offered in a banner while the tray menu still says the app is up
+ * to date would be a bug nobody could explain.
+ */
+export interface UpdateState {
+  status: UpdateStatus
+  /** The build running now. */
+  current: string
+  /** What is being fetched, or waiting to install. Null when neither. */
+  target: string | null
+  /** How far the download has got, 0-100. Null when nothing is downloading. */
+  percent: number | null
+  /** The target version's changelog section, as written in CHANGELOG.md. */
+  notes: string | null
+  /**
+   * Why restarting now would be a bad idea.
+   *
+   * A restart during a game loses the LP reading that game was played for, and
+   * during a recording it loses the recording. The offer stays on screen and
+   * the button is refused until whatever this names has finished.
+   */
+  blockedBy: UpdateBlocker | null
+  /**
+   * Set when a newer build exists and the active server will not take it.
+   *
+   * Not an error and not something this machine can fix: the server's allow
+   * list is what decides which build may run against it, so the remedy is its
+   * host updating the server. Said out loud so somebody knows to ask.
+   */
+  heldBy: { serverName: string; allows: string; newest: string } | null
+  /** The last failure, cleared by the next check that gets through. */
+  error: string | null
+  /**
+   * Set for the session that follows an update, and cleared once seen.
+   *
+   * The patch notes are the only account of what changed that reaches somebody
+   * who does not read the repository, so they are shown once on arrival rather
+   * than left for whoever thinks to open Settings.
+   */
+  justInstalled: { version: string; notes: string | null } | null
 }
 
 /**

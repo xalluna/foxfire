@@ -4,7 +4,7 @@ import { createMainWindow } from './window'
 import { closeDatabase, initDatabase } from './db'
 import { registerIpcHandlers } from './ipc/handlers'
 import { initSettings } from './services/settingsService'
-import { getBackgroundSettings, initBackground } from './services/backgroundService'
+import { HIDDEN_FLAG, getBackgroundSettings, initBackground } from './services/backgroundService'
 import { cancelAllPostGameSyncs } from './services/postGameSync'
 import { repairAttribution } from './services/rankHistoryService'
 import { serverBacked } from './api'
@@ -26,6 +26,8 @@ import { migrateUserData, verifyMigration } from './migrateUserData'
 import { initCapture, stopCapture } from './capture/captureService'
 import { pinLegacyCaptureFolder } from './services/captureSettings'
 import { quitLaunchedObs } from './obs/launch'
+import { takeCompletedInstall, type PendingInstall } from './updater/pending'
+import { initUpdater } from './updater/updater'
 
 /**
  * Opens the telemetry panel without needing the tray, which only exists when
@@ -122,14 +124,27 @@ function bootstrap(): void {
   registerRecordingProtocol()
   registerIpcHandlers()
   globalShortcut.register(TELEMETRY_ACCELERATOR, openTelemetryWindow)
+  // Before the window, because it decides whether there is one to look at: an
+  // update installed by the copy that just quit brings the app back the way it
+  // was left, and the record naming it is cleared by this read.
+  //
+  // Only in a packaged build. The dev build shares this database — userData is
+  // pinned to one directory for both, see the top of this file — and its
+  // version is Electron's own, so reading here would clear an installed copy's
+  // pending record on the way to not matching it.
+  const installed = app.isPackaged ? takeCompletedInstall(app.getVersion()) : null
+
   // After the window exists, so the watcher's status events have somewhere to
   // go on the very first tick.
-  attachTrayBehaviour(createMainWindow())
+  attachTrayBehaviour(createMainWindow({ show: !startsHidden(installed) }))
   initBackground()
   // After initBackground, so the LCU watcher it starts already has somewhere to
   // report a game to.
   initCapture()
   syncTray()
+  // After syncTray, so an update that is already downloaded has a tray menu to
+  // offer itself from.
+  initUpdater(installed)
   // Before the catch-up, which reads from whichever store owns the accounts:
   // signed in to a server when the app closed means reading from it now, with
   // its push channel open again.
@@ -141,6 +156,23 @@ function bootstrap(): void {
       attachTrayBehaviour(createMainWindow())
     }
   })
+}
+
+/**
+ * Whether this launch should come up as a tray icon and nothing else.
+ *
+ * Two launches nobody asked to see: the one Windows makes at login, which
+ * carries the flag the login item was registered with, and the one the
+ * installer makes after an update started from the tray, which carries nothing
+ * at all — NSIS relaunches the app with `--updated` and no way to say more, so
+ * the copy that asked for the restart wrote down where it was instead.
+ *
+ * Gated on tray mode in both cases. Without a tray icon a hidden window is an
+ * app with nothing on screen and no way back to it.
+ */
+function startsHidden(installed: PendingInstall | null): boolean {
+  if (!getBackgroundSettings().runInTray) return false
+  return installed?.relaunchHidden === true || process.argv.includes(HIDDEN_FLAG)
 }
 
 /**

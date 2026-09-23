@@ -2,9 +2,9 @@
  * Who a client says it is, which the server's version gate judges.
  *
  * Two kinds, judged two ways. A desktop sends its own version, and the server
- * holds an exact allow list of the builds it serves — there is no auto-update,
- * so which build somebody is running is the thing that decides whether the two
- * can talk. The web client ships inside the server that serves it, so its
+ * holds an exact allow list of the builds it serves — which is also what the
+ * desktop's updater reads to decide which build to be, so this handshake
+ * settles both whether the two can talk and what to install if they cannot. The web client ships inside the server that serves it, so its
  * version is never in doubt; what can go stale is a tab left open across an
  * upgrade, and that is caught by the API version the page was built against.
  */
@@ -20,7 +20,7 @@ export type ClientIdentity =
  * lists the versions it serves in DesktopCompatibility.WebApiVersions, and a
  * web client built for one missing from there would be refused on every call.
  */
-export const WEB_API_VERSION = 1
+export const WEB_API_VERSION = 2
 
 /** What every request says the caller is. */
 export const CLIENT_HEADER = 'X-Foxfire-Client'

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
 import { LinkAccountRow } from './LinkAccountRow'
+import { useUpdates } from '../hooks/useUpdates'
 import {
   SettingsCard,
   SettingsPage,
@@ -77,8 +78,8 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
       {state.upgradeRequired !== null && (
         <SettingsCard>
           <StatusRow tone="error">
-            This server needs Foxfire {state.upgradeRequired}. Until this copy is updated it will
-            not serve anything — download the new version from the releases page.
+            This server needs Foxfire {state.upgradeRequired}, and will not serve anything until
+            this copy is updated. <UpgradeRemedy required={state.upgradeRequired} />
           </StatusRow>
         </SettingsCard>
       )}
@@ -517,4 +518,52 @@ function Address({ url }: { url: string }): JSX.Element {
       <code className="select-text">{url}</code>
     </span>
   )
+}
+
+/**
+ * What is being done about a server that has refused this build.
+ *
+ * This sentence used to read "download the new version from the releases
+ * page", which was the whole of the remedy when nothing here could install
+ * anything. Now the app is already fetching the exact version the refusal
+ * named — the same one this page is complaining about — so the honest thing to
+ * say is how far that has got, and to offer the restart when it is ready.
+ */
+function UpgradeRemedy({ required }: { required: string }): JSX.Element {
+  const updates = useUpdates()
+
+  if (updates === null) return <>Foxfire is fetching it.</>
+
+  if (updates.status === 'disabled') {
+    return <>This is a development build, which does not update itself.</>
+  }
+
+  if (updates.target === required && updates.status === 'ready') {
+    if (updates.blockedBy !== null) {
+      return (
+        <>
+          It has been downloaded, and will install once this{' '}
+          {updates.blockedBy === 'recording' ? 'recording' : 'game'} has finished.
+        </>
+      )
+    }
+
+    return (
+      <>
+        It has been downloaded.{' '}
+        <button
+          onClick={() => void window.api.updates.restart()}
+          className="underline underline-offset-2 transition hover:text-text"
+        >
+          Restart Foxfire to install it.
+        </button>
+      </>
+    )
+  }
+
+  if (updates.target === required && updates.status === 'downloading') {
+    return <>It is downloading now{updates.percent === null ? '' : ` — ${updates.percent}%`}.</>
+  }
+
+  return <>Foxfire is fetching it; the About page says how that is going.</>
 }

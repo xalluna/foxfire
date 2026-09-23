@@ -34,7 +34,10 @@ coupled — they move independently. Compatibility is the server's to judge, two
 - **A desktop by its exact version**, against `DesktopCompatibility.Allowed` in
   `apps/server/src/Foxfire.Core`. A build that is not on the list is refused with 426. So **a PR
   that bumps the desktop's version adds that version to `Allowed` in the same change**, and a server
-  release is what ships it.
+  release is what ships it. From 0.14.0 that list decides more than who is served: a desktop
+  connected to a server updates itself to the newest version on *that server's* list — the
+  `recommendedDesktop` it publishes in `/version` — so a host updating their server is what moves
+  everybody on it, and an update can never carry somebody past what their own community accepts.
 - **The web client by the API version its page was built against** — `WEB_API_VERSION` in
   `packages/core/src/server/identity.ts`, admitted when it is in `DesktopCompatibility.WebApiVersions`.
   A test on the server side reads the TypeScript constant and fails if the two disagree. A tab left
@@ -70,6 +73,28 @@ the same PR that takes 0.12.0 off `Allowed`** — from then on every desktop the
 A server that has not been updated refuses a desktop newer than anything it knows, and names the
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
+
+## How the desktop updates itself
+
+From 0.14.0 the desktop keeps itself current, out of this repository's own Releases. The feed is one
+release's assets — `releases/download/desktop-v<version>/` — read by electron-updater's generic
+provider, which is also what keeps delta downloads working: it finds the installed build's blockmap
+by swapping the version inside that URL, and the version appears in both the tag and the file name.
+
+`apps/desktop/src/main/updater` holds it, and `target.ts` holds the rule worth knowing:
+
+- **Connected to a server** — install that server's `recommendedDesktop`, never what is newest. A
+  build past the server's allow list would be refused by it, so an update would lock somebody out
+  of their own community.
+- **Local-only** — install the newest desktop release, found from `releases/latest` (which answers
+  JSON with the tag on it, and costs none of `api.github.com`'s hourly budget).
+- **Server unreachable** — do nothing. Falling back to the newest release the moment a host's
+  machine is down installs the one build that server might refuse when it comes back.
+
+Nothing installs while the app is open except on request: the download is quiet, the offer sits in
+the window and the tray, and it is refused while a game is on or a recording is running. Otherwise
+it installs on the next quit. The Releases page stays the way in for a first install, which is why
+the repository is public.
 
 ## Patch notes
 
@@ -142,7 +167,10 @@ own workflow.
 
 When one PR bumps both apps, tag the server first. A desktop bump puts its version on the server's
 allow list, so the desktop that PR ships is refused by every server release before it — 0.13.0 also
-calls `/api`, which only Server 0.2.0 has — and its Release should not be the first to go out.
+calls `/api`, which only Server 0.2.0 has — and its Release should not be the first to go out. That
+ordering decides when the update reaches anybody, too: a desktop connected to a server installs the
+version *that server* names, so the desktop Release can sit there for a week and nobody moves until
+the server release carrying the new allow list is deployed. Local-only copies take it immediately.
 
 That tags the current commit as whatever version the app being released already names —
 `apps/desktop/package.json` for the desktop, `<VersionPrefix>` in
@@ -160,13 +188,17 @@ on never lands on main, and tagging it gives you a Release pointing at a commit 
 nothing.
 
 There is nothing to do by hand afterwards. The desktop workflow verifies the tag matches
-`package.json`, extracts that section, builds the Windows installer on a Windows runner, and
-publishes the Release with the installer, its `.blockmap` and `latest.yml` attached. The server
+`package.json`, extracts that section, builds the Windows installer on a Windows runner — with the
+section built into `latest.yml`, which is how the patch notes reach the app — and publishes the
+Release with the installer, its `.blockmap` and `latest.yml` attached, marked as the repository's
+**Latest** release. The server
 workflow does the same shape of thing on Linux: it runs the tests — including the ones that stand a
 real SQL Server up in a container, so a release cannot go out on a schema that does not migrate —
 then builds the web client, self-contained `linux-x64` and `win-x64` archives that carry it, and a
 container image that builds its own, pushes the image to GHCR, and publishes the Release with both
-archives attached.
+archives attached — explicitly **not** as Latest. Both apps release into one list, and that badge
+belongs to the desktop installer: it is where a browser lands from the Releases page, and where the
+updater reads the newest desktop version from.
 
 It builds before it publishes, and creates the Release as a draft that only becomes visible once the
 uploaded installer has been read back off the API at the size that was actually built. So a release

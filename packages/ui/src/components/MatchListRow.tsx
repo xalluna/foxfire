@@ -53,7 +53,7 @@ export function MatchListRow({
   onToggle: () => void
   /** Opens the row's menu. Omitted where there is nothing to act on. */
   onContextMenu?: (event: React.MouseEvent) => void
-  /** False for ad-hoc search results, which aren't stored and have no detail to open. */
+  /** False where the row is already the subject, as on the match page, and has nowhere to open. */
   expandable?: boolean
 }): JSX.Element {
   const assets = useAssetManifest()

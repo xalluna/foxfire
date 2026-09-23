@@ -38,9 +38,10 @@ public sealed record VersionResponse(
 ///
 /// Answers without authentication and without a client-version header, which is
 /// the entire point of it. A desktop that is too old has to be able to find
-/// that out and say so — "this server needs Foxfire 0.13" — before somebody
-/// types a password and gets an error they cannot act on. There is no
-/// auto-update yet, so the message is the whole remedy.
+/// that out and say so — "this server needs Foxfire 0.14" — before somebody
+/// types a password and gets an error they cannot act on. It is also what a
+/// desktop's updater asks, on a schedule and before anybody has signed in:
+/// <c>recommendedDesktop</c> is the build it will install.
 ///
 /// It gives away the server's name, its version and whether signup is open. All
 /// three are things anybody who could register would see anyway, and none of

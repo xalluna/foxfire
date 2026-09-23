@@ -62,13 +62,22 @@ describe('createServerApi', () => {
     await expect(api.admin.users()).rejects.toBeInstanceOf(ServerError)
   })
 
-  it('encodes a Riot ID into the search query', async () => {
-    const { calls, request } = recorder(() => ({}))
+  it('encodes a finder query, hash and all', async () => {
+    const { calls, request } = recorder(() => [])
     const api = createServerApi(request)
 
-    await api.search.summoner({ gameName: 'Hide on bush', tagLine: 'KR1' })
+    await api.search.players('Hide on bush#KR1')
 
-    expect(calls[0].path).toBe('/search?gameName=Hide%20on%20bush&tagLine=KR1')
+    expect(calls[0].path).toBe('/search?q=Hide%20on%20bush%23KR1')
+  })
+
+  it('asks for every tracked player when the query is blank', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.search.players('')
+
+    expect(calls[0].path).toBe('/search?q=')
   })
 
   describe('importer', () => {

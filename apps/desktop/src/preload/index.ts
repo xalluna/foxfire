@@ -7,7 +7,8 @@ import type {
   ReplayImportProgress,
   ServerState,
   SyncProgressEvent,
-  ImportProgress
+  ImportProgress,
+  UpdateState
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -16,6 +17,17 @@ import { CH } from '../main/ipc/channels'
 const api: Api = {
   app: {
     getVersion: () => ipcRenderer.invoke(CH.app.getVersion)
+  },
+  updates: {
+    getState: () => ipcRenderer.invoke(CH.updates.getState),
+    check: () => ipcRenderer.invoke(CH.updates.check),
+    restart: () => ipcRenderer.invoke(CH.updates.restart),
+    dismissNote: () => ipcRenderer.invoke(CH.updates.dismissNote),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, state: UpdateState): void => cb(state)
+      ipcRenderer.on(CH.updates.changed, handler)
+      return () => ipcRenderer.removeListener(CH.updates.changed, handler)
+    }
   },
   server: {
     getState: () => ipcRenderer.invoke(CH.server.getState),
@@ -50,6 +62,7 @@ const api: Api = {
     storedReplays: () => ipcRenderer.invoke(CH.serverAdmin.storedReplays),
     removeReplay: (matchId) => ipcRenderer.invoke(CH.serverAdmin.removeReplay, matchId),
     forceUnlink: (riotAccountId) => ipcRenderer.invoke(CH.serverAdmin.forceUnlink, riotAccountId),
+    addRiotAccount: (input) => ipcRenderer.invoke(CH.serverAdmin.addRiotAccount, input),
     chooseDatabase: () => ipcRenderer.invoke(CH.serverAdmin.chooseDatabase),
     importDatabase: (filePath) => ipcRenderer.invoke(CH.serverAdmin.importDatabase, filePath),
     onImportProgress: (cb) => {
@@ -241,7 +254,7 @@ const api: Api = {
     openWindow: () => ipcRenderer.invoke(CH.archives.openWindow)
   },
   search: {
-    summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)
+    players: (query) => ipcRenderer.invoke(CH.search.players, query)
   },
   telemetry: {
     getState: () => ipcRenderer.invoke(CH.telemetry.getState),

@@ -113,8 +113,8 @@ const sessions = new Map<string, ServerSession>()
  *
  * Latched rather than thrown away, for the same reason the Riot key rejection
  * is: it happens on some request nobody was watching, and the window has to be
- * able to ask later. Holds the version to install, which — with no auto-update
- * yet — is the entire remedy.
+ * able to ask later. Holds the version to install, which the updater reads as
+ * the version to fetch — see updater/target.ts.
  */
 let upgradeRequired: string | null = null
 
@@ -155,8 +155,14 @@ function secretName(url: string): string {
   return `server-${url}`
 }
 
-/** What this build tells every server it is. The server's allow list judges it. */
-function identity(): ClientIdentity {
+/**
+ * What this build tells every server it is. The server's allow list judges it.
+ *
+ * Exported because the updater asks the active server the same question this
+ * does — what it accepts — and a second spelling of who is asking is a second
+ * thing to keep in step.
+ */
+export function clientIdentity(): ClientIdentity {
   return { kind: 'desktop', version: app.getVersion() }
 }
 
@@ -167,7 +173,7 @@ function sessionFor(url: string): ServerSession {
   const session = createServerSession({
     baseUrl: url,
     basePath: API_BASE,
-    identity: identity(),
+    identity: clientIdentity(),
     tokenTransport: 'body',
     store: {
       load: () => loadSecret(secretName(url)),
@@ -349,7 +355,7 @@ export async function refreshServerInfo(): Promise<void> {
   const url = readActive()
   if (!url) return
 
-  const probed = await probeServer(url, identity())
+  const probed = await probeServer(url, clientIdentity())
   if (!probed.reachable) return
 
   const stored = readKnown().find((s) => s.url === url)
@@ -378,8 +384,27 @@ export function resumeActiveServer(): void {
 function announce(): ServerState {
   const state = getServerState()
   broadcast(CH.server.changed, state)
+  for (const listener of stateListeners) listener(state)
   syncHubConnection(state)
   return state
+}
+
+type StateListener = (state: ServerState) => void
+const stateListeners = new Set<StateListener>()
+
+/**
+ * The same announcement the windows get, for the main process.
+ *
+ * The updater needs it: which server is answering decides which build may be
+ * installed, and a refusal names the version to install straight away rather
+ * than at the next scheduled check. Pushed from here rather than pulled from
+ * there, because importing the updater into this file would make a cycle out of
+ * two modules that otherwise only need to know about each other in one
+ * direction — the same shape appIcon.ts uses for the tray.
+ */
+export function onServerState(listener: StateListener): () => void {
+  stateListeners.add(listener)
+  return () => stateListeners.delete(listener)
 }
 
 /**
@@ -403,7 +428,7 @@ function syncHubConnection(state: ServerState): void {
     return
   }
 
-  void connectHub(url, API_BASE, identity(), () => sessionFor(url).accessToken())
+  void connectHub(url, API_BASE, clientIdentity(), () => sessionFor(url).accessToken())
 
   // The announcement only reaches desktops that were listening when it
   // happened. One connecting to a server that has been degraded since last
@@ -432,7 +457,7 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
     }
   }
 
-  return probeServer(normalised.url, identity())
+  return probeServer(normalised.url, clientIdentity())
 }
 
 /** What a server will say about an invite code, before anybody has an account. */
@@ -453,7 +478,7 @@ export async function previewInvite(rawUrl: string, pasted: string): Promise<Inv
   try {
     // A server this install may never have joined, so no session: an invite is
     // readable by anybody who has the code, which is the point of it.
-    return await createTransport({ baseUrl: normalised.url, identity: identity() }).request<InvitePreview>(
+    return await createTransport({ baseUrl: normalised.url, identity: clientIdentity() }).request<InvitePreview>(
       `${API_BASE}/invites/${encodeURIComponent(token)}/preview`
     )
   } catch (err) {
@@ -500,7 +525,7 @@ async function authenticate(
 
     // The name is worth a round trip only here: it is what the server calls
     // itself, and it is what the sidebar shows from now on.
-    const probed = await probeServer(url, identity())
+    const probed = await probeServer(url, clientIdentity())
 
     const known = readKnown().filter((s) => s.url !== url)
     known.push({

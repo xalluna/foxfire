@@ -170,9 +170,9 @@ export interface MatchSummary {
    * Filled in by the desktop and nowhere else, and never on the wire. No server
    * can know what is on somebody's disk, and a browser has no disk to ask.
    * Absent means there is nothing to look for rather than that nothing was
-   * found — which is what stops a server's search results from advertising
-   * footage that does not exist, as they did while these were two bare fields
-   * that an absent value slipped past as `undefined !== null`.
+   * found — which is what stops a server's match rows from advertising footage
+   * that does not exist, as they did while these were two bare fields that an
+   * absent value slipped past as `undefined !== null`.
    */
   local?: LocalArtefacts
 }
@@ -426,16 +426,20 @@ export interface SyncProgressEvent {
   trigger: SyncTrigger
 }
 
-export interface AdHocSummonerResult {
-  profile: {
-    puuid: string
-    gameName: string
-    tagLine: string
-    profileIconId: number
-    summonerLevel: number
-  }
-  leagueEntries: LeagueEntry[]
-  recentMatches: MatchSummary[]
+/**
+ * One tracked player, as the finder lists them.
+ *
+ * The account is the same shape every other screen is handed, rather than a
+ * flattened copy of its fields — there is one answer to what `isMine` means and
+ * one row component that can draw either.
+ *
+ * Solo queue only. A list is scanned rather than studied, and a second ladder
+ * per row buys nothing a profile does not already say better.
+ */
+export interface PlayerSearchResult {
+  account: Account
+  /** Null for an account that has never been placed, or never synced. */
+  soloEntry: LeagueEntry | null
 }
 
 export interface RiotIdInput {

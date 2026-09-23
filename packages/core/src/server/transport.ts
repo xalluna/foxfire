@@ -41,8 +41,8 @@ export interface Transport {
  * Every request carries the client's identity, including the unauthenticated
  * ones, because the server decides what it will talk to before it decides who
  * is talking. A 426 comes back as a ServerError that names the version to
- * install — with no auto-update on the desktop, that string is the whole of
- * what a stranded user has to go on.
+ * install, which is what the desktop's updater then goes and fetches — the
+ * refusal is not only the explanation, it is the instruction.
  */
 export function createTransport(options: TransportOptions): Transport {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
