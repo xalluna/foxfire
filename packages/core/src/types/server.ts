@@ -112,20 +112,35 @@ export interface AdminReplay {
  * promise would have nothing to say for any of it.
  */
 export interface ImportProgress {
-  phase: 'accounts' | 'matches' | 'readings' | 'finishing' | 'done'
+  /**
+   * `comparing` is asking the server which of the file's games it already has,
+   * before any of their payloads are sent.
+   */
+  phase: 'accounts' | 'comparing' | 'matches' | 'readings' | 'finishing' | 'done'
   current: number
   /** Zero while finishing, which has no countable work. */
   total: number
 }
 
-/** What an import came to. */
+/**
+ * What an import came to.
+ *
+ * Every count of what was added has a partner for what was not, and the two are
+ * never the same number: running the same file a second time is supposed to add
+ * nothing, and "added nothing" has to be distinguishable from "could not read
+ * it" and from "the file had nothing new in it".
+ */
 export interface ImportResult {
   ok: boolean
   /** Why it could not run, when it could not. Null on success. */
   message: string | null
+  /** Accounts in the file that the server now recognises, new to it or not. */
   accounts: number
+  /** Added by this run. */
   matches: number
+  /** Added by this run. */
   readings: number
+  /** Added by this run. */
   seasons: number
   /** Games the server worked LP out for once everything had arrived. */
   attributed: number
@@ -136,6 +151,25 @@ export interface ImportResult {
    * plays under now, and that is not something a number can tell anybody.
    */
   unresolved: string[]
+  /** What the server already held, and so did not take again. */
+  alreadyThere: { matches: number; readings: number; seasons: number }
+  /** Games whose payload the server could not read. */
+  matchesFailed: number
+  /** Readings for an account that never resolved, or a queue the server does not track. */
+  readingsUnplaced: number
+  /**
+   * Games that were stored under an account's dead id by an earlier run and
+   * have now been moved onto the one that works, because this run finally
+   * resolved the account.
+   */
+  healed: number
+  /**
+   * The newest game and the newest rank reading *in the file*, in epoch
+   * milliseconds — null where it has none. It is how a run that added nothing
+   * tells "the server already has all of it" from "this copy of the file stops
+   * three days ago", which is what a file read without its write-ahead log does.
+   */
+  newest: { matchAt: number | null; readingAt: number | null }
 }
 
 /** Credentials for signing in to a server. */

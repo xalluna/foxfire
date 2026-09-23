@@ -4,19 +4,27 @@ import { importStatsDb, type ImportTarget, type SqlParam, type SqliteReader } fr
 /**
  * Asks for a stats.db, the way a browser can: a file input nobody sees.
  *
- * Resolves null when the picker is closed without a choice. Browsers only say
- * so by focusing the window again with nothing chosen, hence the listener.
+ * Resolves null when the picker is closed without a choice, which the `cancel`
+ * event says.
+ *
+ * The input is attached to the page, hidden, until the picker settles. A file
+ * input that exists only in a variable can be garbage-collected while the
+ * picker is open, and then `change` never fires: the promise never resolves and
+ * choosing a file appears to do nothing at all.
  */
 export function pickStatsDb(): Promise<{ source: File; label: string } | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.db,.sqlite,.sqlite3,application/vnd.sqlite3,application/x-sqlite3'
+    input.hidden = true
+    document.body.appendChild(input)
 
     let settled = false
     const settle = (file: File | null): void => {
       if (settled) return
       settled = true
+      input.remove()
       resolve(file ? { source: file, label: file.name } : null)
     }
 

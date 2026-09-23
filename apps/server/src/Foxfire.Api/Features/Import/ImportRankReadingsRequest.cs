@@ -49,19 +49,24 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
         var owners = await ImportTranslation.OwnersByPuuidAsync(db, cancellationToken);
 
         var accepted = 0;
+
+        // Kept apart, because they mean different things to somebody reading the
+        // tally: a reading the server already had is a repeat, and one it had no
+        // account or queue for is data that did not make it across.
         var skipped = 0;
+        var unplaced = 0;
 
         foreach (var incoming in request.Readings)
         {
             if (!owners.TryGetValue(incoming.Puuid, out var accountId))
             {
-                skipped++;
+                unplaced++;
                 continue;
             }
 
             if (RankedQueues.FromRiotName(incoming.QueueType) is null)
             {
-                skipped++;
+                unplaced++;
                 continue;
             }
 
@@ -120,7 +125,7 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return new ImportBatchResult(accepted, skipped, 0);
+        return new ImportBatchResult(accepted, skipped, 0, unplaced);
     }
 
     /// <summary>Drops the match link off any staged reading whose game is not here.</summary>

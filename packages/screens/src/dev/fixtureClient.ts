@@ -614,6 +614,9 @@ export function createFixtureClient(): FoxfireClient {
   }
 }
 
+/** How many times the harness's import has run, so each run can be a different outcome. */
+let fixtureImportRuns = 0
+
 /**
  * A stats.db import that reports its way through the phases and finishes with
  * a tally.
@@ -621,11 +624,23 @@ export function createFixtureClient(): FoxfireClient {
  * The harness has no file system and no server, so this is the one shape the
  * panel has to draw for real. Either platform's harness can hand it to the
  * Data & storage page.
+ *
+ * Each run is a different outcome, in turn, so all of them can be looked at by
+ * pressing the button: the first import of a file, the same file again three
+ * days later (mostly already there, some new, a few problems), and the same
+ * file again with nothing new in it.
  */
 export async function runFixtureImport(
   onProgress: (progress: ImportProgress) => void
 ): Promise<ImportResult> {
-  for (const [phase, total] of [['accounts', 3], ['matches', 412], ['readings', 190]] as const) {
+  const outcome = FIXTURE_IMPORTS[fixtureImportRuns++ % FIXTURE_IMPORTS.length]
+
+  for (const [phase, total] of [
+    ['accounts', 3],
+    ['comparing', outcome.total],
+    ['matches', outcome.matches],
+    ['readings', outcome.readings]
+  ] as const) {
     for (const current of [0, total / 2, total]) {
       onProgress({ phase, current: Math.round(current), total })
       await new Promise((resolve) => setTimeout(resolve, 120))
@@ -636,14 +651,79 @@ export async function runFixtureImport(
   await new Promise((resolve) => setTimeout(resolve, 400))
   onProgress({ phase: 'done', current: 0, total: 0 })
 
-  return {
-    ok: true,
-    message: null,
-    accounts: 3,
+  return outcome.result
+}
+
+const DAY = 86_400_000
+
+const FIXTURE_IMPORTS: Array<{
+  /** Games in the file. */
+  total: number
+  /** Payloads actually sent. */
+  matches: number
+  readings: number
+  result: ImportResult
+}> = [
+  {
+    total: 412,
     matches: 412,
     readings: 190,
-    seasons: 1,
-    attributed: 88,
-    unresolved: ['OldName#NA1']
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 412,
+      readings: 190,
+      seasons: 1,
+      attributed: 88,
+      unresolved: ['OldName#NA1'],
+      alreadyThere: { matches: 0, readings: 0, seasons: 0 },
+      matchesFailed: 0,
+      readingsUnplaced: 0,
+      healed: 0,
+      newest: { matchAt: Date.now() - 4 * DAY, readingAt: Date.now() - 4 * DAY }
+    }
+  },
+  {
+    total: 431,
+    matches: 19,
+    readings: 190,
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 17,
+      readings: 24,
+      seasons: 0,
+      attributed: 17,
+      unresolved: [],
+      alreadyThere: { matches: 412, readings: 166, seasons: 1 },
+      matchesFailed: 2,
+      readingsUnplaced: 5,
+      healed: 6,
+      newest: { matchAt: Date.now() - 3_600_000, readingAt: Date.now() - 3_000_000 }
+    }
+  },
+  {
+    total: 431,
+    matches: 0,
+    readings: 190,
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 0,
+      readings: 0,
+      seasons: 0,
+      attributed: 0,
+      unresolved: [],
+      alreadyThere: { matches: 431, readings: 190, seasons: 1 },
+      matchesFailed: 0,
+      readingsUnplaced: 0,
+      healed: 0,
+      // Stops where the last copy did — what a file read without its
+      // write-ahead log looks like.
+      newest: { matchAt: Date.now() - 3 * DAY, readingAt: Date.now() - 3 * DAY }
+    }
   }
-}
+]

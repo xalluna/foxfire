@@ -29,6 +29,13 @@ namespace Foxfire.Api.Endpoints;
 /// importing it would import a stale copy of something this server works out
 /// itself at the end.
 ///
+/// A file can be imported again. Somebody keeps using Foxfire on their own PC for
+/// a few more days and sends the newer copy: every batch skips what the server
+/// already holds, so what lands is what is new. Two things make that cheap
+/// rather than merely correct. An account whose id the server already has a
+/// record for is not looked up again, and /unstored-matches lets a client ask
+/// which games are worth sending before it sends any of their payloads.
+///
 /// Each batch arrives as a bare JSON array, which is why every route here wraps
 /// its body in a request rather than binding one directly.
 /// </summary>
@@ -45,6 +52,12 @@ public static class ImportEndpoints
                 ISender sender,
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ImportAccountsRequest(accounts), cancellationToken));
+
+        group.MapPost("/unstored-matches", (
+                [FromBody] IReadOnlyList<string> matchIds,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new UnstoredMatchesRequest(matchIds), cancellationToken));
 
         group.MapPost("/matches", (
                 [FromBody] IReadOnlyList<ImportMatch> matches,

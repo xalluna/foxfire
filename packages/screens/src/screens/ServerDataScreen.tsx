@@ -61,7 +61,13 @@ export function ServerDataScreen(): JSX.Element {
     <ServerDataPage
       importer={
         importer
-          ? { running, progress, result, onStart: () => void runImport() }
+          ? {
+              running,
+              progress,
+              result,
+              onStart: () => void runImport(),
+              inBrowser: platform.kind === 'web'
+            }
           : undefined
       }
       storage={storage.data}

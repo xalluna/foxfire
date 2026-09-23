@@ -5,8 +5,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Features.Import;
 
-/// <summary>How much of a batch landed.</summary>
-public sealed record ImportBatchResult(int Accepted, int Skipped, int Failed);
+/// <summary>
+/// How much of a batch landed, and what became of the rest.
+///
+/// Three different answers, kept apart because a person reading "nothing was
+/// imported" needs to know which: <paramref name="Skipped"/> is what the server
+/// already had, <paramref name="Failed"/> is what it could not read, and
+/// <paramref name="Unplaced"/> is what it could read but had nowhere to file —
+/// a reading for an account that never resolved, or for a queue it does not track.
+/// </summary>
+public sealed record ImportBatchResult(int Accepted, int Skipped, int Failed, int Unplaced = 0);
 
 /// <summary>A batch of something, out of somebody's stats.db.</summary>
 public interface IImportBatch

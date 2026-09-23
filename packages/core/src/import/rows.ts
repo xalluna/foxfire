@@ -21,6 +21,27 @@ export interface ImportAccountResult {
   accountId: string | null
   resolved: boolean
   message: string | null
+  /**
+   * Games already stored under this account's dead id that the server moved onto
+   * the one that works. Absent from a server that predates re-uploading.
+   */
+  healedMatches?: number
+}
+
+/**
+ * What the server made of one batch, in four answers rather than one.
+ *
+ * `skipped` is what it already had, `failed` is what it could not read and
+ * `unplaced` is what it could read but had nowhere to file — a reading for an
+ * account that never resolved. They are kept apart because "nothing was
+ * imported" means something different for each. A server that predates
+ * `unplaced` counts those as skipped.
+ */
+export interface ImportBatchOutcome {
+  accepted: number
+  skipped: number
+  failed: number
+  unplaced: number
 }
 
 export interface ImportSeasonRow {
