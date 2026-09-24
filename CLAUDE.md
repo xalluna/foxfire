@@ -64,12 +64,6 @@ and a browser opening `/search`. `/version` and `/health` answer at the root as 
 `/api`, permanently: they are how a client finds the API, and a health check should not have to
 change because the API moved.
 
-Desktop 0.12.0 predates `/api` and calls everything at the root. `Versioning/LegacyRootShim.cs`
-keeps it working: a request carrying `X-Foxfire-Client` (every desktop sends it, no browser opening
-a page does) that is not already under `/api` is moved there before routing. **Delete the shim in
-the same PR that takes 0.12.0 off `Allowed`** — from then on every desktop the server serves calls
-`/api` itself.
-
 No read answers with every League account on the server, because that number grows with the
 community rather than with the person asking. Your own accounts are a list
 (`/api/riot-accounts/mine`), anybody else's is one lookup (`/api/riot-accounts/{id}`,
