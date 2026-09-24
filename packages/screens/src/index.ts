@@ -38,6 +38,7 @@ export {
 } from './queries/favorites'
 export { invalidationsFor, type DataEvent } from './queries/invalidations'
 export { createQueryClient } from './queries/queryClient'
+export { nextOffset, pageItems, pageTotal } from './queries/paging'
 export { isSyncing, useSyncProgress, useSyncProgressStore } from './store/syncProgress'
 
 export {

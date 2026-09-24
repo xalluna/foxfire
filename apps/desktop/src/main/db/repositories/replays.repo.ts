@@ -131,24 +131,56 @@ export function createReplay(db: DatabaseSync, input: NewReplay): number {
 }
 
 /**
- * Every live replay for one account, plus the ones we cannot place yet.
+ * The replays an account's list shows: its own that are not deleted, and the
+ * ones nobody owns yet. One definition for the page, its count and its
+ * warnings, so the three can never be about different sets.
+ */
+const LISTED = (r: string): string =>
+  `${r}.deleted_at IS NULL AND (${ownedBy(`${r}.account_id`, `${r}.riot_id`)} OR ${r}.account_id IS NULL)`
+
+/**
+ * A page of the live replays for one account, plus the ones we cannot place
+ * yet, newest first.
  *
  * Unowned replays appear under whichever account is looking. They are the ones
  * whose match has not synced, and hiding them until it does would mean a replay
  * that exists on disk is unreachable from inside the app — the same failure the
  * Recordings tab exists to prevent.
  */
-export function getReplays(db: DatabaseSync, account: AccountContext): Replay[] {
+export function getReplays(
+  db: DatabaseSync,
+  account: AccountContext,
+  page: { limit: number; offset: number }
+): Replay[] {
   const rows = db
     .prepare(
       `${SELECT_REPLAY}
-        WHERE r.deleted_at IS NULL
-          AND (${ownedBy('r.account_id', 'r.riot_id')} OR r.account_id IS NULL)
-        ORDER BY r.recorded_at DESC`
+        WHERE ${LISTED('r')}
+        ORDER BY r.recorded_at DESC, r.id DESC
+        LIMIT ? OFFSET ?`
     )
-    .all(...ownedByParams(account)) as unknown as ReplayRow[]
+    .all(...ownedByParams(account), page.limit, page.offset) as unknown as ReplayRow[]
 
   return rows.map(toReplay)
+}
+
+/**
+ * Where each listed replay's file is and which patch it needs — every one,
+ * because the tab's warnings count the missing and the unplayable across the
+ * whole list, not the page on screen. Two columns, no joins, so it stays cheap
+ * however many there are.
+ */
+export function getReplayFileChecks(
+  db: DatabaseSync,
+  account: AccountContext
+): Array<{ filePath: string; patch: string | null }> {
+  return db
+    .prepare(
+      `SELECT r.file_path AS filePath, r.patch AS patch
+         FROM replays r
+        WHERE ${LISTED('r')}`
+    )
+    .all(...ownedByParams(account)) as unknown as Array<{ filePath: string; patch: string | null }>
 }
 
 export function getReplay(db: DatabaseSync, id: number): Replay | null {
@@ -235,9 +267,8 @@ export function getUsage(
       `SELECT COALESCE(SUM(file_bytes), 0) AS totalBytes,
               COUNT(*) AS count,
               SUM(CASE WHEN match_id IS NULL THEN 1 ELSE 0 END) AS unlinkedCount
-         FROM replays
-        WHERE deleted_at IS NULL
-          AND (${ownedBy('account_id', 'riot_id')} OR account_id IS NULL)`
+         FROM replays r
+        WHERE ${LISTED('r')}`
     )
     .get(...ownedByParams(account)) as {
     totalBytes: number

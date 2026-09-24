@@ -5,6 +5,7 @@ import { LeagueAccountsPage } from '@foxfire/ui'
 import { useClient } from '../client/context'
 import { useDebounced } from '../hooks/useDebounced'
 import { queryKeys } from '../queries/keys'
+import { nextOffset, pageItems } from '../queries/paging'
 
 /** Claims per page. Half of what a server answers one search with. */
 const PAGE_SIZE = 50
@@ -31,8 +32,7 @@ export function LeagueAccountsScreen(): JSX.Element {
     queryFn: ({ pageParam }) =>
       client.search.players(asked, { claimed: true, limit: PAGE_SIZE, offset: pageParam }),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < PAGE_SIZE ? undefined : allPages.reduce((count, page) => count + page.length, 0),
+    getNextPageParam: nextOffset,
     placeholderData: keepPreviousData
   })
 
@@ -50,7 +50,11 @@ export function LeagueAccountsScreen(): JSX.Element {
   return (
     <LeagueAccountsPage
       tracked={storage.data?.riotAccounts}
-      claimed={claimed.data?.pages.flatMap((page) => page.map((player) => player.account))}
+      claimed={
+        claimed.data === undefined
+          ? undefined
+          : pageItems(claimed.data, (player) => player.account.id).map((player) => player.account)
+      }
       claimedQuery={query}
       onClaimedQueryChange={setQuery}
       hasMoreClaimed={claimed.hasNextPage}

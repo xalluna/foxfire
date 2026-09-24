@@ -31,6 +31,9 @@ export function RankScreen({
   const HeaderExtra = usePlatform().slots?.rankHeaderExtra
   const share = useShareLink()
 
+  // Whole, not paged — the one list that grows which is fetched in one go. The
+  // graph needs every reading to draw its line, and the range bounds it: a few
+  // hundred for the thirty days the page opens on. See FoxfireData.rank.history.
   const history = useQuery({
     queryKey: queryKeys.rankHistory(account.id, queueType, range),
     queryFn: () => client.rank.history(account.id, queueType, range)

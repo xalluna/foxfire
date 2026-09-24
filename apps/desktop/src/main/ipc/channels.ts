@@ -42,7 +42,8 @@ export const CH = {
     deleteUser: 'serverAdmin:deleteUser',
     createPasswordReset: 'serverAdmin:createPasswordReset',
     revokePasswordReset: 'serverAdmin:revokePasswordReset',
-    invites: 'serverAdmin:invites',
+    openInvites: 'serverAdmin:openInvites',
+    usedInvites: 'serverAdmin:usedInvites',
     createInvite: 'serverAdmin:createInvite',
     revokeInvite: 'serverAdmin:revokeInvite',
     getSettings: 'serverAdmin:getSettings',
@@ -167,7 +168,9 @@ export const CH = {
     /** Removes a recording's row once its file is gone. Never touches YouTube or a server. */
     forget: 'recordings:forget',
     /** Opens a window for a recording this machine has no file of, from YouTube. */
-    openRemote: 'recordings:openRemote'
+    openRemote: 'recordings:openRemote',
+    /** Every recording that can go to YouTube, whole, for "select all". YouTube builds only. */
+    eligible: 'recordings:eligible'
   },
   // Putting recordings on YouTube. The Google connection lives in the main
   // process — its refresh token never crosses IPC — and the renderer only ever

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import type { PlayerSearchResult } from '@foxfire/core'
+import type { Page, PlayerSearchResult } from '@foxfire/core'
 import { playerSlug } from '@foxfire/core/routes'
 import { PlayerSearch } from '@foxfire/ui'
 import { useClient } from '../client/context'
@@ -9,6 +9,13 @@ import { useDebounced } from '../hooks/useDebounced'
 import { useFavorites, useFavoritesRefresher, useRefreshFavorites, useToggleFavorite } from '../queries/favorites'
 import { queryKeys } from '../queries/keys'
 import { MIN_QUERY_LENGTH, SUGGESTION_LIMIT, searchShortcutLabel, searchView } from './searchView'
+
+/**
+ * The players on a page of search. The box shows a page and never says how
+ * many more there are: ten is a list to pick from, not one to page through.
+ * At module scope so the selected list keeps its identity between renders.
+ */
+const playersOf = (page: Page<PlayerSearchResult>): PlayerSearchResult[] => page.items
 
 /**
  * Finding somebody, from the header of every page.
@@ -42,6 +49,7 @@ export function PlayerSearchBox({ className }: { className?: string }): JSX.Elem
 
   const suggestions = useQuery({
     ...suggest(asked),
+    select: playersOf,
     enabled: asked.length >= MIN_QUERY_LENGTH,
     placeholderData: keepPreviousData
   })
@@ -50,6 +58,7 @@ export function PlayerSearchBox({ className }: { className?: string }): JSX.Elem
   const yours = useQuery({
     queryKey: queryKeys.playerSearch('', 'mine'),
     queryFn: () => client.search.players('', { mine: true, limit: 100 }),
+    select: playersOf,
     enabled: opened
   })
 
@@ -117,8 +126,8 @@ export function PlayerSearchBox({ className }: { className?: string }): JSX.Elem
       onSubmit={async () => {
         const typed = query.trim()
         if (typed.length < MIN_QUERY_LENGTH) return null
-        const players = await queryClient.ensureQueryData(suggest(typed)).catch(() => [])
-        return players[0] ?? null
+        const page = await queryClient.ensureQueryData(suggest(typed)).catch(() => null)
+        return page?.items[0] ?? null
       }}
       onOpen={() => setOpened(true)}
       shortcut={searchShortcutLabel(typeof navigator === 'undefined' ? '' : navigator.platform)}

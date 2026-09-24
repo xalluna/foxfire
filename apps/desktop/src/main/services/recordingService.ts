@@ -18,6 +18,8 @@ import {
   getRecordingUsage,
   getRecordingIdentity,
   getRecordings,
+  getUploadableRecordings,
+  countRecordings,
   markFileDeleted,
   markRecordingUnmatched,
   takenMatchIds
@@ -33,7 +35,8 @@ import {
   type MatchCandidate
 } from '../capture/matchBinding'
 import { getCaptureSettings } from './captureSettings'
-import type { Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
+import type { Page, PageOptions, Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
+import { clampPage } from '@foxfire/core'
 
 import { accountContext } from '../api/accountContext'
 
@@ -43,8 +46,19 @@ export function broadcastRecordingsChanged(): void {
   broadcast(CH.recordings.changed)
 }
 
-export async function listRecordings(accountId: string): Promise<Recording[]> {
-  return getRecordings(getDb(), await accountContext(accountId))
+/** A page of an account's recordings, newest first, and how many there are. */
+export async function listRecordings(accountId: string, page?: PageOptions): Promise<Page<Recording>> {
+  const db = getDb()
+  const account = await accountContext(accountId)
+  return { items: getRecordings(db, account, clampPage(page)), total: countRecordings(db, account) }
+}
+
+/**
+ * Every recording of an account's that can go to YouTube — whole, for "select
+ * all". One of the two lists that grow which are not paged; see CLAUDE.md.
+ */
+export async function listUploadableRecordings(accountId: string): Promise<Recording[]> {
+  return getUploadableRecordings(getDb(), await accountContext(accountId))
 }
 
 export function getRecordingDetail(recordingId: number): RecordingDetail | null {

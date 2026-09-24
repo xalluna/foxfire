@@ -134,6 +134,15 @@ public class DesktopCompatibilityTests
         Assert.False(DesktopCompatibility.ServesWebApiVersion(0));
         Assert.False(DesktopCompatibility.ServesWebApiVersion(DesktopCompatibility.WebApiVersions.Max() + 1));
     }
+
+    [Fact]
+    public void A_page_built_before_lists_were_paged_is_told_to_reload()
+    {
+        // API 2 read search, match history and the admin lists as arrays, and
+        // every one of them is a page now. A tab still running that build would
+        // draw each of them empty rather than fail, so it is refused instead.
+        Assert.False(DesktopCompatibility.ServesWebApiVersion(2));
+    }
 }
 
 /// <summary>

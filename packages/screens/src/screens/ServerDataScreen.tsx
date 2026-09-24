@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ImportProgress, ImportResult } from '@foxfire/core'
 import { ServerDataPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { queryKeys } from '../queries/keys'
+import { nextOffset, pageItems } from '../queries/paging'
+
+/** Replays per page of the library. */
+const REPLAY_PAGE_SIZE = 50
 
 /**
  * The community's data: importing an old stats.db, what the server holds, who
@@ -23,9 +27,13 @@ export function ServerDataScreen(): JSX.Element {
     queryKey: queryKeys.admin.settings(),
     queryFn: () => client.admin.getSettings()
   })
-  const replays = useQuery({
+  // Biggest first, a page at a time: a long-running community's library runs to
+  // thousands, and the one somebody came to delete is usually near the top.
+  const replays = useInfiniteQuery({
     queryKey: queryKeys.admin.replays(),
-    queryFn: () => client.admin.storedReplays()
+    queryFn: ({ pageParam }) => client.admin.storedReplays({ limit: REPLAY_PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset
   })
 
   const importer = platform.statsDbImport
@@ -75,7 +83,10 @@ export function ServerDataScreen(): JSX.Element {
         await client.admin.setSettings({ replayByteCap: bytes })
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
       }}
-      replays={replays.data}
+      replays={replays.data === undefined ? undefined : pageItems(replays.data, (replay) => replay.matchId)}
+      hasMoreReplays={replays.hasNextPage}
+      loadingMoreReplays={replays.isFetchingNextPage}
+      onShowMoreReplays={() => void replays.fetchNextPage()}
       onRemoveReplay={async (matchId) => {
         const outcome = await client.admin.removeReplay(matchId)
         if (outcome.ok) {

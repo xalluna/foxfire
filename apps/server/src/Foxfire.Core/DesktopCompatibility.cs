@@ -110,8 +110,13 @@ public static class DesktopCompatibility
     /// Deliberately not the server's release version. The server will ship
     /// patches and features that change nothing a desktop can observe, and
     /// nobody should be told to update for those.
+    ///
+    /// 3: every list that grows answers with a page, { items, total }, rather
+    /// than an array — search, match history, the members, used invites and the
+    /// replay library — and the invites list is the open ones, with the used
+    /// ones on a route of their own.
     /// </summary>
-    public const int ApiVersion = 2;
+    public const int ApiVersion = 3;
 
     /// <summary>Every desktop version this server answers, in any order.</summary>
     public static readonly IReadOnlyList<string> Allowed = ["0.14.0"];
@@ -132,7 +137,7 @@ public static class DesktopCompatibility
     /// packages/core states the web client's side as WEB_API_VERSION, and a
     /// test holds the two together.
     /// </summary>
-    public static readonly IReadOnlyList<int> WebApiVersions = [2];
+    public static readonly IReadOnlyList<int> WebApiVersions = [3];
 
     /// <summary>Whether a web page built against this API version is served.</summary>
     public static bool ServesWebApiVersion(int apiVersion) => WebApiVersions.Contains(apiVersion);

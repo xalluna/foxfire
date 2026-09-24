@@ -1,4 +1,5 @@
 import type { Recording, RecordingUpload } from '@shared/types'
+import { isUploadPending } from '@shared/uploadEligibility'
 
 /** Percent of the file YouTube has, for an upload that knows its size. */
 export function uploadPercent(upload: RecordingUpload): number | null {
@@ -8,10 +9,7 @@ export function uploadPercent(upload: RecordingUpload): number | null {
 
 /** Whether an upload of this recording is on its way, in any state that will carry on by itself. */
 export function uploadPending(upload: RecordingUpload | null): boolean {
-  return (
-    upload !== null &&
-    ['queued', 'uploading', 'paused', 'waiting_quota', 'waiting_auth'].includes(upload.state)
-  )
+  return isUploadPending(upload)
 }
 
 /**

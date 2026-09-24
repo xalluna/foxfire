@@ -53,27 +53,26 @@ public sealed record SearchPlayersRequest(
     bool Mine = false,
     bool Claimed = false,
     int? Limit = null,
-    int? Offset = null) : IDomainRequest<IReadOnlyList<PlayerSearchResponse>>
+    int? Offset = null) : IDomainRequest<Page<PlayerSearchResponse>>
 {
-    /// <summary>A page, when the caller does not say — which is what Desktop 0.14 does.</summary>
-    public const int DefaultLimit = 50;
+    /// <summary>A page, when the caller does not say.</summary>
+    public const int DefaultLimit = PageRequest.DefaultLimit;
 
     /// <summary>The most one request is answered with, whatever it asks for.</summary>
-    public const int MaxLimit = 100;
+    public const int MaxLimit = PageRequest.MaxLimit;
 }
 
 internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentityContext me)
-    : IDomainRequestHandler<SearchPlayersRequest, IReadOnlyList<PlayerSearchResponse>>
+    : IDomainRequestHandler<SearchPlayersRequest, Page<PlayerSearchResponse>>
 {
-    public async Task<Response<IReadOnlyList<PlayerSearchResponse>>> Handle(
+    public async Task<Response<Page<PlayerSearchResponse>>> Handle(
         SearchPlayersRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var needle = (request.Q ?? "").Trim().ToLowerInvariant();
-        var limit = Math.Clamp(request.Limit ?? SearchPlayersRequest.DefaultLimit, 1, SearchPlayersRequest.MaxLimit);
-        var offset = Math.Max(request.Offset ?? 0, 0);
+        var page = PageRequest.Of(request.Limit, request.Offset);
 
         var accounts = db.RiotAccounts.Include(a => a.Owner).AsQueryable();
 
@@ -81,7 +80,7 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
         {
             // Nobody signed in has nothing of their own; compared as a null,
             // OwnerId would match every unclaimed account instead.
-            if (me.UserId is not { } userId) return Response<IReadOnlyList<PlayerSearchResponse>>.Success([]);
+            if (me.UserId is not { } userId) return Response<Page<PlayerSearchResponse>>.Success(Page<PlayerSearchResponse>.Empty);
             accounts = accounts.Where(a => a.OwnerId == userId);
         }
 
@@ -117,26 +116,22 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
         var found = await ordered
             .ThenBy(a => a.TagLine)
             .ThenBy(a => a.Id)
-            .Skip(offset)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+            .ToPageAsync(page, cancellationToken);
 
         // Fetched separately rather than as a join, because the rows are keyed
         // by (account, queue) and only one queue is wanted: a second small
         // query is easier to read than a grouped left join, and the set it runs
         // against is whatever the search already narrowed to.
         var solo = RankedQueue.SoloDuo.RiotName();
-        var ids = found.ConvertAll(a => a.Id);
+        var ids = found.Items.Select(a => a.Id).ToList();
 
         var entries = await db.LeagueEntries
             .Where(e => ids.Contains(e.RiotAccountId) && e.QueueType == solo)
             .ToDictionaryAsync(e => e.RiotAccountId, cancellationToken);
 
-        return Response<IReadOnlyList<PlayerSearchResponse>>.Success(
-        [
-            .. found.Select(a => new PlayerSearchResponse(
+        return Response<Page<PlayerSearchResponse>>.Success(
+            found.Map(a => new PlayerSearchResponse(
                 RiotAccountResponse.Describe(a, me.UserId),
-                entries.TryGetValue(a.Id, out var entry) ? LeagueEntryResponse.Describe(entry) : null))
-        ]);
+                entries.TryGetValue(a.Id, out var entry) ? LeagueEntryResponse.Describe(entry) : null)));
     }
 }

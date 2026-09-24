@@ -564,20 +564,45 @@ export type FavoriteOutcome =
   | { ok: false; reason: 'full'; favorites: FavoritePlayer[] }
 
 /**
+ * One page of a list that grows, and how long the whole list is.
+ *
+ * Every list whose length depends on time or on the size of the community —
+ * match history, the finder, the members, used invites, the replay library,
+ * the desktop's recordings and replays — answers with this rather than an
+ * array. `total` counts the list under the same filters, so a screen can say
+ * "120 members" rather than "50+" and knows it has reached the end without
+ * asking for an empty page.
+ *
+ * Lists that cannot grow past a handful stay arrays. So does rank history,
+ * which the graph needs whole; see `FoxfireData.rank.history`.
+ */
+export interface Page<T> {
+  items: T[]
+  total: number
+}
+
+/**
+ * Which page. Both are optional: a list answers with its first page when asked
+ * for nothing, and never with more than its cap however much is asked for.
+ */
+export interface PageOptions {
+  /** How many to answer with. Capped at 100; 50 when left out (20 for match history). */
+  limit?: number
+  offset?: number
+}
+
+/**
  * Which page of the finder, and of whom.
  *
- * A finder answers a page at a time, in name order, because a community is not
- * obliged to stay a size somebody can scroll. A page shorter than `limit` is
- * the last one.
+ * A finder answers a page at a time — closest first for a typed query, in
+ * name order for a blank one — because a community is not obliged to stay a
+ * size somebody can scroll.
  */
-export interface PlayerSearchOptions {
+export interface PlayerSearchOptions extends PageOptions {
   /** Only the accounts the caller has claimed. Locally that is every account. */
   mine?: boolean
   /** Only accounts somebody has claimed — the admin's list of claims to undo. */
   claimed?: boolean
-  /** How many to answer with. A server caps it at 100, and uses 50 when it is left out. */
-  limit?: number
-  offset?: number
 }
 
 export interface RiotIdInput {

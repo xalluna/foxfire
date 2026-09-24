@@ -12,6 +12,7 @@ import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
+import { ShowMoreButton } from '../components/ShowMore'
 import * as Icon from '../components/icons'
 import { formatAge } from '../lib/matchStats'
 import { useRowAction } from './rowAction'
@@ -40,7 +41,12 @@ export interface ServerDataPageProps {
   replayCap: number | undefined
   onSaveReplayCap: (bytes: number) => Promise<void>
 
+  /** The pages of the replay library fetched so far, biggest first. Undefined while the first loads. */
   replays: AdminReplay[] | undefined
+  /** Whether there is another page of the library after `replays`. */
+  hasMoreReplays: boolean
+  loadingMoreReplays: boolean
+  onShowMoreReplays: () => void
   onRemoveReplay: (matchId: string) => Promise<AdminActionResult>
 }
 
@@ -69,6 +75,9 @@ export function ServerDataPage({
   replayCap,
   onSaveReplayCap,
   replays,
+  hasMoreReplays,
+  loadingMoreReplays,
+  onShowMoreReplays,
   onRemoveReplay
 }: ServerDataPageProps): JSX.Element {
   return (
@@ -131,7 +140,13 @@ export function ServerDataPage({
       {storage !== undefined && (
         <StorageCard storage={storage} replayCap={replayCap} onSaveReplayCap={onSaveReplayCap} />
       )}
-      <ReplayLibraryCard replays={replays} onRemove={onRemoveReplay} />
+      <ReplayLibraryCard
+        replays={replays}
+        hasMore={hasMoreReplays}
+        loadingMore={loadingMoreReplays}
+        onShowMore={onShowMoreReplays}
+        onRemove={onRemoveReplay}
+      />
     </SettingsPage>
   )
 }
@@ -281,19 +296,26 @@ function ReplayCapRow({
 const GIGABYTE = 1024 * 1024 * 1024
 
 /**
- * The library, biggest first, with a way to remove one.
+ * The library, biggest first, a page at a time, with a way to remove one.
  *
  * Biggest rather than newest because the reason to open this list is that space
- * is needed, and nobody hunting for space scrolls past the first screen. Removal
- * is per replay and there is no "delete everything": the failure mode of a full
- * store is a refused upload, which is recoverable, and one click between a
- * community and its library is not.
+ * is needed, and somebody hunting for space rarely gets past the first page —
+ * but can, for the one replay they came to delete. Removal is per replay and
+ * there is no "delete everything": the failure mode of a full store is a
+ * refused upload, which is recoverable, and one click between a community and
+ * its library is not.
  */
 function ReplayLibraryCard({
   replays,
+  hasMore,
+  loadingMore,
+  onShowMore,
   onRemove
 }: {
   replays: AdminReplay[] | undefined
+  hasMore: boolean
+  loadingMore: boolean
+  onShowMore: () => void
   onRemove: (matchId: string) => Promise<AdminActionResult>
 }): JSX.Element {
   const remove = useRowAction(onRemove)
@@ -321,6 +343,8 @@ function ReplayLibraryCard({
           removing={remove.pendingId === replay.matchId}
         />
       ))}
+
+      {hasMore && <ShowMoreButton variant="settings" onClick={onShowMore} loading={loadingMore} />}
     </SettingsCard>
   )
 }

@@ -10,6 +10,7 @@ import { QueueFilter } from '../components/QueueFilter'
 import { RecentSummary } from '../components/RecentSummary'
 import { EmptyState } from '../components/EmptyState'
 import { MatchListSkeleton } from '../components/Skeleton'
+import { ShowMoreButton } from '../components/ShowMore'
 import * as Icon from '../components/icons'
 
 /** A request to show one game, from somewhere other than its row. */
@@ -208,15 +209,7 @@ export function DashboardPage({
             ))}
           </ul>
 
-          {hasMoreMatches && (
-            <button
-              onClick={onLoadMoreMatches}
-              disabled={loadingMoreMatches}
-              className="w-full border-t border-hairline py-2.5 text-sm text-text-dim transition hover:bg-surface hover:text-accent disabled:opacity-50"
-            >
-              {loadingMoreMatches ? 'Loading…' : 'Show more'}
-            </button>
-          )}
+          {hasMoreMatches && <ShowMoreButton onClick={onLoadMoreMatches} loading={loadingMoreMatches} />}
         </section>
       </div>
 

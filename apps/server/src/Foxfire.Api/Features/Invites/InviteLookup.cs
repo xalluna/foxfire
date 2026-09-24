@@ -26,8 +26,8 @@ public sealed record InviteResponse(
 /// Turning a token back into the invite it names, and an invite into the shape
 /// an admin reads.
 ///
-/// Shared by four handlers, which is why it is here rather than private to one
-/// of them.
+/// Shared by every invite handler, which is why it is here rather than private
+/// to one of them.
 /// </summary>
 internal static class InviteLookup
 {

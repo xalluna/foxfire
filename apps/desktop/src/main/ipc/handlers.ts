@@ -25,7 +25,8 @@ import {
   listStoredReplays,
   removeStoredReplay,
   getSettings as getServerAdminSettings,
-  listInvites,
+  listOpenInvites,
+  listUsedInvites,
   listUsers,
   revokeInvite,
   revokePasswordReset,
@@ -109,10 +110,12 @@ import { reconnectObs } from '../obs/client'
 import { getMainWindow } from '../window'
 import type {
   AdminUserPatch,
+  AdminUserQuery,
   BackgroundSettings,
   CaptureSettings,
   EmailChange,
   ManualRankEdit,
+  PageOptions,
   PasswordChange,
   PlayerSearchOptions,
   PlayerSearchResult,
@@ -169,7 +172,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
-  ipcMain.handle(CH.serverAdmin.users, () => listUsers())
+  ipcMain.handle(CH.serverAdmin.users, (_e, query?: AdminUserQuery) => listUsers(query))
   ipcMain.handle(CH.serverAdmin.updateUser, (_e, id: string, patch: AdminUserPatch) =>
     updateUser(id, patch)
   )
@@ -180,12 +183,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.revokePasswordReset, (_e, userId: string) =>
     revokePasswordReset(userId)
   )
-  ipcMain.handle(CH.serverAdmin.invites, () => listInvites())
+  ipcMain.handle(CH.serverAdmin.openInvites, () => listOpenInvites())
+  ipcMain.handle(CH.serverAdmin.usedInvites, (_e, page?: PageOptions) => listUsedInvites(page))
   ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
   ipcMain.handle(CH.serverAdmin.storage, () => getStorageUsage())
-  ipcMain.handle(CH.serverAdmin.storedReplays, () => listStoredReplays())
+  ipcMain.handle(CH.serverAdmin.storedReplays, (_e, page?: PageOptions) => listStoredReplays(page))
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
   ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
   ipcMain.handle(CH.serverAdmin.addRiotAccount, (_e, input: RiotIdInput) => addRiotAccount(input))
@@ -363,7 +367,7 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.recordings.list, (_e, accountId: string) => listRecordings(accountId))
+  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions) => listRecordings(accountId, page))
   ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
   ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
   ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
@@ -380,7 +384,7 @@ export function registerIpcHandlers(): void {
 
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */
-  ipcMain.handle(CH.replays.list, (_e, accountId: string) => listReplays(accountId))
+  ipcMain.handle(CH.replays.list, (_e, accountId: string, page?: PageOptions) => listReplays(accountId, page))
   ipcMain.handle(CH.replays.usage, (_e, accountId: string) => getReplayUsage(accountId))
   ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplay(replayId))
   ipcMain.handle(CH.replays.reveal, (_e, replayId: number) => revealReplay(replayId))

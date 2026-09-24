@@ -1,6 +1,10 @@
 import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
 import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
+import {
+  canUploadRecording,
+  PENDING_UPLOAD_STATES as PENDING_UPLOAD_STATES_SHARED
+} from '@shared/uploadEligibility'
 import type {
   AttachmentState,
   Recording,
@@ -251,15 +255,57 @@ export function insertRecordingEvents(
   }
 }
 
-export function getRecordings(db: DatabaseSync, account: AccountContext): Recording[] {
+/**
+ * A page of one account's recordings, newest first.
+ *
+ * The id breaks ties so a page boundary cannot fall between two recordings that
+ * started in the same millisecond and come back in the other order next time.
+ */
+export function getRecordings(
+  db: DatabaseSync,
+  account: AccountContext,
+  page: { limit: number; offset: number }
+): Recording[] {
   const rows = db
     .prepare(
       `${SELECT_RECORDING}
         WHERE ${ownedBy('r.account_id', 'r.riot_id')}
-        ORDER BY r.started_at DESC`
+        ORDER BY r.started_at DESC, r.id DESC
+        LIMIT ? OFFSET ?`
+    )
+    .all(account.serverKey, ...ownedByParams(account), page.limit, page.offset) as unknown as RecordingRow[]
+  return rows.map(toRecording)
+}
+
+/** How many recordings one account has — the total beside a page of {@link getRecordings}. */
+export function countRecordings(db: DatabaseSync, account: AccountContext): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM recordings r WHERE ${ownedBy('r.account_id', 'r.riot_id')}`)
+    .get(...ownedByParams(account)) as { n: number }
+  return row.n
+}
+
+/**
+ * Every recording of one account's that could go to YouTube, newest first.
+ *
+ * Whole rather than a page, deliberately: it is what "select all" on the
+ * Recordings tab selects, and the batch it starts reads each one's size and
+ * game. SQL narrows it to rows with a file, no video and no upload on its way;
+ * the shared rule then has the last word — it is the one the tab draws its
+ * checkboxes by, and it also checks that each file is still on disk.
+ */
+export function getUploadableRecordings(db: DatabaseSync, account: AccountContext): Recording[] {
+  const rows = db
+    .prepare(
+      `${SELECT_RECORDING}
+        WHERE ${ownedBy('r.account_id', 'r.riot_id')}
+          AND r.file_deleted_at IS NULL
+          AND r.youtube_video_id IS NULL
+          AND (u.state IS NULL OR u.state NOT IN (${PENDING_UPLOAD_STATES}))
+        ORDER BY r.started_at DESC, r.id DESC`
     )
     .all(account.serverKey, ...ownedByParams(account)) as unknown as RecordingRow[]
-  return rows.map(toRecording)
+  return rows.map(toRecording).filter(canUploadRecording)
 }
 
 /** One recording. `serverKey` decides whose attachment it reports; null reports none. */
@@ -615,17 +661,11 @@ export interface RecordingArtefact {
   uploadPending: boolean
 }
 
-/** Upload states that mean "on its way": it will carry on by itself. */
-export const PENDING_UPLOAD_STATE_LIST: readonly UploadState[] = [
-  'queued',
-  'uploading',
-  'paused',
-  'waiting_quota',
-  'waiting_auth'
-]
-
-/** The same, as SQL. */
-export const PENDING_UPLOAD_STATES = PENDING_UPLOAD_STATE_LIST.map((state) => `'${state}'`).join(', ')
+/**
+ * Upload states that mean "on its way" — it will carry on by itself — as SQL.
+ * The list is the shared rule's, so a query and the tab cannot disagree.
+ */
+export const PENDING_UPLOAD_STATES = PENDING_UPLOAD_STATES_SHARED.map((state) => `'${state}'`).join(', ')
 
 /**
  * Which of these matches a recording already claims.

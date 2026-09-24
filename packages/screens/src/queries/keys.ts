@@ -92,8 +92,13 @@ export const queryKeys = {
 
   admin: {
     all: () => ['admin'] as const,
-    users: () => ['admin', 'users'] as const,
+    /** Every page of the members, or of those matching `q` when one is given. */
+    users: (q?: string) =>
+      q === undefined ? (['admin', 'users'] as const) : (['admin', 'users', q] as const),
+    /** Both invite lists, so one invalidation refreshes the open and the used. */
     invites: () => ['admin', 'invites'] as const,
+    openInvites: () => ['admin', 'invites', 'open'] as const,
+    usedInvites: () => ['admin', 'invites', 'used'] as const,
     settings: () => ['admin', 'settings'] as const,
     storage: () => ['admin', 'storage'] as const,
     replays: () => ['admin', 'replays'] as const

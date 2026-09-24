@@ -217,7 +217,8 @@ export const RECORDING_EVENTS: RecordingEvent[] = [
  * Three rows, chosen to cover the three states the tab has to draw: one linked
  * and playable, one linked but recorded on a patch no installed client can run,
  * and one whose match has not synced so the row must fall back to the plain
- * form with no champion and no KDA.
+ * form with no champion and no KDA. Behind them, a couple of months of older
+ * games, so the tab has pages — some on patches nothing here can play.
  */
 export const MOCK_REPLAYS: Replay[] = [
   {
@@ -282,7 +283,37 @@ export const MOCK_REPLAYS: Replay[] = [
     recordedAt: Date.now() - 20 * 60_000,
     match: null,
     blockedReason: null
-  }
+  },
+  ...Array.from({ length: 60 }, (_, i): Replay => {
+    const playedAt = Date.now() - (41 + i) * 86_400_000
+    const patch = ['16.16', '16.15', '15.14'][i % 3]
+    const matchId = `NA1_53110${String(i).padStart(5, '0')}`
+    return {
+      id: 100 + i,
+      accountId: '1',
+      matchId,
+      fileExists: i % 29 !== 7,
+      fileBytes: 28_000_000 + (i % 7) * 900_000,
+      gameVersion: `${patch}.804.9184`,
+      patch,
+      durationSeconds: 1500 + (i % 11) * 60,
+      recordedAt: playedAt,
+      match: {
+        matchId,
+        gameCreation: playedAt,
+        gameDuration: 1500 + (i % 11) * 60,
+        gameMode: 'CLASSIC',
+        queueId: 420,
+        win: i % 2 === 0,
+        championId: [103, 64, 157, 22][i % 4],
+        championName: ['Ahri', 'LeeSin', 'Yasuo', 'Ashe'][i % 4],
+        kills: 3 + (i % 9),
+        deaths: 2 + (i % 6),
+        assists: 4 + (i % 10)
+      },
+      blockedReason: i % 29 === 7 ? 'Foxfire can no longer find this file' : patch === '16.16' ? null : `Needs a League client for patch ${patch}`
+    }
+  })
 ]
 
 export const MOCK_ROFL_SETTINGS: RoflSettings = {

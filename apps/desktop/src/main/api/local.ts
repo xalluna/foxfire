@@ -2,7 +2,7 @@ import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { getDb } from '../db'
 import { getAccountById, getLeagueEntries } from '../db/repositories/accounts.repo'
-import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
+import { countMatchSummaries, getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
 import {
   addAccount,
@@ -16,7 +16,14 @@ import { readSyncState, startSync } from '../services/syncService'
 import { getMasteryData } from '../services/masteryService'
 import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
-import { compareSearchResults, rangeBounds, searchRank } from '@foxfire/core'
+import {
+  clampPage,
+  compareSearchResults,
+  MATCH_PAGE_LIMIT_DEFAULT,
+  pageOf,
+  rangeBounds,
+  searchRank
+} from '@foxfire/core'
 import { isPlayer } from '@foxfire/core/routes'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
 import type { Account } from '@shared/types'
@@ -115,8 +122,13 @@ export const localApi: ServerBackedApi = {
     matchList: async (accountId, limit, offset, queueId) => {
       const db = getDb()
       const account = getAccountById(db, rowId(accountId))
-      if (!account) return []
-      return getMatchSummaries(db, account.puuid, limit, offset, queueId)
+      if (!account) return { items: [], total: 0 }
+
+      const page = clampPage({ limit, offset }, MATCH_PAGE_LIMIT_DEFAULT)
+      return {
+        items: getMatchSummaries(db, account.puuid, page.limit, page.offset, queueId),
+        total: countMatchSummaries(db, account.puuid, queueId)
+      }
     },
     matchDetail: async (matchId) => getMatchDetail(getDb(), matchId)
   },
@@ -203,17 +215,22 @@ export const localApi: ServerBackedApi = {
     // Mine and claimed are every account here, so neither narrows anything.
     players: async (query, options = {}) => {
       const db = getDb()
-      const offset = options.offset ?? 0
 
-      return getAccounts()
-        .filter((account) => searchRank(account, query) !== null)
-        .sort(compareSearchResults(query))
-        .slice(offset, options.limit === undefined ? undefined : offset + options.limit)
-        .map((account) => ({
+      const page = pageOf(
+        getAccounts()
+          .filter((account) => searchRank(account, query) !== null)
+          .sort(compareSearchResults(query)),
+        options
+      )
+
+      return {
+        total: page.total,
+        items: page.items.map((account) => ({
           account: wire(account),
           soloEntry:
             getLeagueEntries(db, account.id).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
         }))
+      }
     }
   },
 

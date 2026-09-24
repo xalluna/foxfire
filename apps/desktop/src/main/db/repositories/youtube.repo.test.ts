@@ -1,6 +1,10 @@
 import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { canUploadRecording } from '@shared/uploadEligibility'
 import { applyAllMigrations } from '../testMigrations'
 import type { AccountContext } from '../accountScope'
 import {
@@ -11,6 +15,7 @@ import {
   getRecordingArtefactsForMatches,
   getRecordingUsage,
   getRecordings,
+  getUploadableRecordings,
   markFileDeleted,
   setYouTubeCopy
 } from './recordings.repo'
@@ -26,6 +31,9 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 const ACCOUNT: AccountContext = { accountId: '1', riotId: 'Faker#NA1', serverKey: 'https://foxfire.example.com' }
 const T0 = 1_700_000_000_000
 const VIDEO = 'dQw4w9WgXcQ'
+
+/** More than any test here makes, so a read is every recording. */
+const EVERY = { limit: 100, offset: 0 }
 
 let db: DatabaseSyncType
 
@@ -114,7 +122,7 @@ describe('the upload queue', () => {
     enqueueUpload(db, job(id), T0)
     updateUpload(db, id, { state: 'uploading', confirmedOffset: 250_000 }, T0 + 1)
 
-    expect(getRecordings(db, ACCOUNT)[0]?.upload).toMatchObject({
+    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.upload).toMatchObject({
       state: 'uploading',
       bytesSent: 250_000,
       fileBytes: 1_000_000
@@ -171,8 +179,8 @@ describe('a recording on YouTube', () => {
       T0
     )
 
-    expect(getRecordings(db, ACCOUNT)[0]?.attachment).toEqual({ state: 'conflict', message: 'Already has one' })
-    expect(getRecordings(db, { ...ACCOUNT, serverKey: 'https://other.example.com' })[0]?.attachment).toBeNull()
+    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.attachment).toEqual({ state: 'conflict', message: 'Already has one' })
+    expect(getRecordings(db, { ...ACCOUNT, serverKey: 'https://other.example.com' }, EVERY)[0]?.attachment).toBeNull()
   })
 })
 
@@ -208,5 +216,74 @@ describe('attachCandidates', () => {
       [told, VIDEO],
       [untold, null]
     ])
+  })
+})
+
+describe('every recording that can go up', () => {
+  let folder: string
+
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), 'foxfire-eligible-'))
+  })
+
+  afterEach(() => {
+    rmSync(folder, { recursive: true, force: true })
+  })
+
+  /** A finished recording whose file is really there, which is the first thing eligibility asks. */
+  function onDisk(name: string, startedAt: number): number {
+    const path = join(folder, `${name}.mp4`)
+    writeFileSync(path, 'not really a video')
+    const id = createRecording(db, {
+      accountId: ACCOUNT.accountId,
+      riotId: ACCOUNT.riotId,
+      serverKey: null,
+      filePath: path,
+      queueId: 420,
+      startedAt,
+      gameTimeOffset: 40,
+      selfChampionId: 103,
+      roster: []
+    })
+    finishRecording(db, id, startedAt + 1_800_000, path, 1_000_000)
+    return id
+  }
+
+  const job = (recordingId: number) => ({
+    recordingId,
+    trigger: 'manual' as const,
+    title: 'Ahri',
+    description: '0:00 Start',
+    privacy: 'unlisted' as const,
+    fileBytes: 1_000_000
+  })
+
+  it('is every one with a file, no video and nothing on its way, newest first', () => {
+    const older = onDisk('older', T0)
+    const newer = onDisk('newer', T0 + 60_000)
+    const queued = onDisk('queued', T0 + 120_000)
+    const uploaded = onDisk('uploaded', T0 + 180_000)
+    const failed = onDisk('failed', T0 + 240_000)
+    recording('missing', T0 + 300_000)
+
+    enqueueUpload(db, job(queued), T0)
+    onYouTube(uploaded)
+    // A failed upload is not on its way, so the recording can be offered again.
+    enqueueUpload(db, job(failed), T0)
+    updateUpload(db, failed, { state: 'failed' }, T0 + 1)
+
+    expect(getUploadableRecordings(db, ACCOUNT).map((r) => r.id)).toEqual([failed, newer, older])
+  })
+
+  it('agrees with the rule the Recordings tab draws its checkboxes by', () => {
+    onDisk('a', T0)
+    const queued = onDisk('b', T0 + 60_000)
+    onYouTube(onDisk('c', T0 + 120_000))
+    recording('gone', T0 + 180_000)
+    enqueueUpload(db, job(queued), T0)
+
+    const byTheTab = getRecordings(db, ACCOUNT, EVERY).filter(canUploadRecording).map((r) => r.id)
+
+    expect(getUploadableRecordings(db, ACCOUNT).map((r) => r.id)).toEqual(byTheTab)
   })
 })

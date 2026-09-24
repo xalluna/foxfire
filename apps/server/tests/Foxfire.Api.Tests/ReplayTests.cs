@@ -367,22 +367,19 @@ public class ReplayTests(FoxfireServerFixture server)
             await db.SaveChangesAsync();
         }
 
-        var before = await client.GetFromJsonAsync<List<System.Text.Json.JsonElement>>(
+        var before = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(
             new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
-        Assert.NotNull(before);
         Assert.Equal(
             System.Text.Json.JsonValueKind.Null,
-            before[0].GetProperty("sharedReplay").ValueKind);
+            before.GetProperty("items")[0].GetProperty("sharedReplay").ValueKind);
 
         await UploadAsync(client, matchId, Rofl(matchId), patch: "15.14");
 
-        var after = await client.GetFromJsonAsync<List<System.Text.Json.JsonElement>>(
+        var after = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(
             new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
-        Assert.NotNull(after);
-
-        var shared = after[0].GetProperty("sharedReplay");
+        var shared = after.GetProperty("items")[0].GetProperty("sharedReplay");
         Assert.Equal("15.14", shared.GetProperty("patch").GetString());
         Assert.True(shared.GetProperty("fileBytes").GetInt64() > 0);
     }

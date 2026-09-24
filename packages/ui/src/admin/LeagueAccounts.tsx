@@ -7,6 +7,7 @@ import { ghostButtonClass, inputClass, primaryButtonClass } from '../components/
 import { parseRiotId, formatRiotId } from '../lib/riotId'
 import { randomExampleRiotId } from '../lib/exampleRiotId'
 import { EmptyState } from '../components/EmptyState'
+import { ShowMoreButton } from '../components/ShowMore'
 import * as Icon from '../components/icons'
 import { useRowAction } from './rowAction'
 
@@ -270,13 +271,7 @@ function LinkedAccountsCard({
         />
       ))}
 
-      {hasMore && (
-        <div className="flex justify-center px-4 py-3">
-          <button type="button" className={ghostButtonClass} onClick={onShowMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Show more'}
-          </button>
-        </div>
-      )}
+      {hasMore && <ShowMoreButton variant="settings" onClick={onShowMore} loading={loadingMore} />}
     </SettingsCard>
   )
 }

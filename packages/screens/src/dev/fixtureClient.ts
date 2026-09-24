@@ -6,6 +6,7 @@ import type {
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AssetManifest,
   AttachRecordingInput,
   AttachRecordingOutcome,
@@ -20,6 +21,8 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  Page,
+  PageOptions,
   PlayerSearchResult,
   QueueType,
   RankHistory,
@@ -33,6 +36,7 @@ import type {
 } from '@foxfire/core'
 import {
   compareSearchResults,
+  pageOf,
   rankMovement,
   rangeBounds,
   resetsBetween,
@@ -232,7 +236,16 @@ const MOCK_STORED_REPLAYS: AdminReplay[] = [
     fileBytes: 21_500_000,
     uploadedBy: null,
     uploadedAt: '2026-07-02T23:12:00.000Z'
-  }
+  },
+  // A long-running community's worth behind those, all smaller, so the library
+  // has pages to show more of. Generated from the index — the same every load.
+  ...Array.from({ length: 117 }, (_, i): AdminReplay => ({
+    matchId: `NA1_52${String(9_000_000 - i * 7919).padStart(8, '0')}`,
+    patch: ['15.16', '15.15', '15.14', '15.13'][i % 4],
+    fileBytes: 21_000_000 - i * 97_000,
+    uploadedBy: ['Faker', 'Sova', null, 'phantomduval'][i % 4],
+    uploadedAt: new Date(Date.UTC(2026, 6, 1) - i * 86_400_000).toISOString()
+  }))
 ]
 
 /**
@@ -283,7 +296,22 @@ let mockUsers: AdminUser[] = [
     linkedRiotAccounts: 0,
     activeSessions: 0,
     passwordReset: null
-  }
+  },
+  // Enough more that the page has pages: 120 people, in three of them.
+  ...Array.from({ length: 117 }, (_, i): AdminUser => {
+    const n = String(i + 1).padStart(3, '0')
+    return {
+      id: `u-gen-${n}`,
+      username: `Summoner${n}`,
+      email: `summoner${n}@example.net`,
+      isAdmin: false,
+      isDisabled: i % 23 === 0,
+      createdAt: new Date(Date.UTC(2026, 5, 1) + i * 3_600_000 * 11).toISOString(),
+      linkedRiotAccounts: i % 3,
+      activeSessions: i % 4 === 0 ? 0 : 1,
+      passwordReset: null
+    }
+  })
 ]
 
 let mockInvites: AdminInvite[] = [
@@ -306,8 +334,60 @@ let mockInvites: AdminInvite[] = [
     redeemedAt: '2026-07-14T18:30:00.000Z',
     redeemedBy: 'phantomduval',
     isOpen: false
-  }
+  },
+  {
+    id: 'i-3',
+    email: 'gon@example.com',
+    link: 'https://foxfire.example.com/invite/open-token-for-the-harness-only-bbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    createdAt: '2026-09-18T09:00:00.000Z',
+    expiresAt: '2026-10-02T09:00:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  {
+    id: 'i-4',
+    email: 'kurapika@example.com',
+    link: 'https://foxfire.example.com/invite/open-token-for-the-harness-only-ccccccccccccccccccccccccccc',
+    createdAt: '2026-09-20T15:30:00.000Z',
+    expiresAt: '2026-10-04T15:30:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  // Lapsed without being used. The server keeps it and sends it nowhere, so
+  // neither list should show it.
+  {
+    id: 'i-5',
+    email: 'lapsed@example.com',
+    link: 'https://foxfire.example.com/invite/lapsed-token-for-the-harness-only-dddddddddddddddddddddddd',
+    createdAt: '2026-08-01T12:00:00.000Z',
+    expiresAt: '2026-08-15T12:00:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: false
+  },
+  // Everybody else who joined by invitation, so the used list has pages.
+  ...Array.from({ length: 72 }, (_, i): AdminInvite => {
+    const n = String(i + 1).padStart(3, '0')
+    const created = Date.UTC(2026, 6, 1) - i * 2 * 86_400_000
+    return {
+      id: `i-gen-${n}`,
+      email: `summoner${n}@example.net`,
+      link: `https://foxfire.example.com/invite/used-token-${n}-for-the-harness-only-eeeeeeeeeeeeeeeeeeeeee`,
+      createdAt: new Date(created).toISOString(),
+      expiresAt: new Date(created + 14 * 86_400_000).toISOString(),
+      redeemedAt: new Date(created + 86_400_000).toISOString(),
+      redeemedBy: i % 17 === 0 ? null : `Summoner${n}`,
+      isOpen: false
+    }
+  })
 ]
+
+/** A member matches a search the way the server matches one: part of the name or the address, any case. */
+function isMemberMatch(user: AdminUser, needle: string): boolean {
+  return user.username.toLowerCase().includes(needle) || user.email.toLowerCase().includes(needle)
+}
 
 // Uncapped, which is the default a host has to choose away from.
 let mockServerSettings: ServerAdminSettings = {
@@ -421,14 +501,12 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         limit: number,
         offset: number,
         queueId: number | null
-      ): Promise<MatchSummary[]> => {
+      ): Promise<Page<MatchSummary>> => {
         // Filter before slicing, mirroring the real handler's SQL — otherwise the
         // harness pages differently to the app and hides paging bugs.
         const all = matchesFor(accountId).filter((m) => queueId === null || m.queueId === queueId)
-        return delay(
-          all.slice(offset, offset + limit).map((m) => withRecording(accountId, m)),
-          260
-        )
+        const page = pageOf(all, { limit, offset })
+        return delay({ ...page, items: page.items.map((m) => withRecording(accountId, m)) }, 260)
       },
       matchDetail: (matchId: string): Promise<MatchDetail | null> =>
         delay(MATCH_DETAILS[matchId] ?? null, 420),
@@ -599,23 +677,25 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     search: {
       // The same matching, ranking, filters and paging the server applies, so
       // the harness answers a half-typed name the way a real one does.
-      players: (query: string, options = {}): Promise<PlayerSearchResult[]> => {
-        const offset = options.offset ?? 0
-        const limit = options.limit ?? 50
+      players: (query: string, options = {}): Promise<Page<PlayerSearchResult>> => {
 
         const matches = everyone()
           .filter((account) => searchRank(account, query) !== null)
           .filter((account) => !options.mine || account.isMine !== false)
           .filter((account) => !options.claimed || account.ownerUsername != null)
           .sort(compareSearchResults(query))
-          .slice(offset, offset + limit)
+
+        const page = pageOf(matches, options)
 
         return delay(
-          matches.map((account) => ({
-            account,
-            soloEntry:
-              (LEAGUE_ENTRIES[account.id] ?? []).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
-          })),
+          {
+            total: page.total,
+            items: page.items.map((account) => ({
+              account,
+              soloEntry:
+                (LEAGUE_ENTRIES[account.id] ?? []).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
+            }))
+          },
           200
         )
       }
@@ -624,7 +704,14 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     favorites,
 
     admin: {
-      users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
+      users: (query: AdminUserQuery = {}): Promise<Page<AdminUser>> => {
+        const needle = (query.q ?? '').trim().toLowerCase()
+        const matching = mockUsers
+          .filter((user) => needle.length === 0 || isMemberMatch(user, needle))
+          .sort((a, b) => a.username.localeCompare(b.username))
+
+        return delay(pageOf(matching, query), 200, false)
+      },
 
       // Numbers a host would actually be looking at: a match history that is
       // nowhere near troubling a 10 GB database, beside replays that are the
@@ -633,9 +720,9 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         delay(
           {
             replaysConfigured: true,
-            replayCount: 46,
-            replayBytes: 1_412_000_000,
-            replayRecords: 46,
+            replayCount: MOCK_STORED_REPLAYS.length,
+            replayBytes: MOCK_STORED_REPLAYS.reduce((total, replay) => total + (replay.fileBytes ?? 0), 0),
+            replayRecords: MOCK_STORED_REPLAYS.length,
             matches: 4_812,
             matchParticipants: 48_120,
             riotAccounts: 7,
@@ -645,7 +732,8 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           220
         ),
 
-      storedReplays: (): Promise<AdminReplay[]> => delay(MOCK_STORED_REPLAYS, 240),
+      storedReplays: (page?: PageOptions): Promise<Page<AdminReplay>> =>
+        delay(pageOf(MOCK_STORED_REPLAYS, page), 240),
 
       removeReplay: (matchId: string): Promise<AdminActionResult> => {
         const index = MOCK_STORED_REPLAYS.findIndex((r) => r.matchId === matchId)
@@ -769,7 +857,26 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         return delay({ ok: true, error: null }, 200, false)
       },
 
-      invites: (): Promise<AdminInvite[]> => delay(mockInvites, 200, false),
+      // Open and used apart, as the server sends them; the lapsed one is in
+      // neither, as the server's is not.
+      openInvites: (): Promise<AdminInvite[]> =>
+        delay(
+          mockInvites.filter((i) => i.isOpen).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+          200,
+          false
+        ),
+
+      usedInvites: (page?: PageOptions): Promise<Page<AdminInvite>> =>
+        delay(
+          pageOf(
+            mockInvites
+              .filter((i) => i.redeemedAt !== null)
+              .sort((a, b) => (b.redeemedAt ?? '').localeCompare(a.redeemedAt ?? '')),
+            page
+          ),
+          200,
+          false
+        ),
 
       createInvite: (email: string): Promise<AdminInvite> => {
         const existing = mockInvites.find((i) => i.email === email && i.isOpen)
