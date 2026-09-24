@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Features.RiotAccounts;
 using Foxfire.Core;
 
 namespace Foxfire.Api.Tests;
@@ -599,10 +600,11 @@ public class RiotLinkTests(FoxfireServerFixture server)
     private static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
 
     [Fact]
-    public async Task A_member_sees_the_accounts_on_this_server()
+    public async Task Desktop_0_14s_list_of_every_account_still_answers_and_says_it_is_deprecated()
     {
-        // Everything here is visible to everybody on it, so this is a list of
-        // the server's accounts rather than only the caller's.
+        // Every account on the server in one answer, which nothing from Server
+        // 0.4.0 on asks for — but Desktop 0.14 reads nothing else, and it is on
+        // the allow list. Delete this test with the route.
         using var client = server.Client();
         var session = await server.RegisterAsync(client, "Looker", $"{Unique("look")}@example.com");
         FoxfireServerFixture.Authenticated(client, session);
@@ -610,6 +612,25 @@ public class RiotLinkTests(FoxfireServerFixture server)
         var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
 
         response.EnsureSuccessStatusCode();
+
+        // RFC 9745: the date it was deprecated, as "@" and Unix seconds.
+        Assert.True(response.Headers.TryGetValues("Deprecation", out var deprecation));
+        Assert.Equal(
+            $"@{WholeServerAccountList.DeprecatedSince.ToUnixTimeSeconds()}",
+            Assert.Single(deprecation));
+    }
+
+    [Fact]
+    public async Task Only_the_deprecated_list_says_it_is_deprecated()
+    {
+        using var client = server.Client();
+        var session = await server.RegisterAsync(client, "Current", $"{Unique("current")}@example.com");
+        FoxfireServerFixture.Authenticated(client, session);
+
+        var response = await client.GetAsync(new Uri("/api/riot-accounts/mine", UriKind.Relative));
+
+        response.EnsureSuccessStatusCode();
+        Assert.False(response.Headers.Contains("Deprecation"));
     }
 
     [Fact]

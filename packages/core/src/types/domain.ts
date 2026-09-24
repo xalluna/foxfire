@@ -546,6 +546,23 @@ export interface PlayerSearchResult {
   soloEntry: LeagueEntry | null
 }
 
+/**
+ * Which page of the finder, and of whom.
+ *
+ * A finder answers a page at a time, in name order, because a community is not
+ * obliged to stay a size somebody can scroll. A page shorter than `limit` is
+ * the last one.
+ */
+export interface PlayerSearchOptions {
+  /** Only the accounts the caller has claimed. Locally that is every account. */
+  mine?: boolean
+  /** Only accounts somebody has claimed — the admin's list of claims to undo. */
+  claimed?: boolean
+  /** How many to answer with. A server caps it at 100, and uses 50 when it is left out. */
+  limit?: number
+  offset?: number
+}
+
 export interface RiotIdInput {
   gameName: string
   tagLine: string

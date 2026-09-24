@@ -68,11 +68,10 @@ function webClient(routes: Record<string, () => Response>) {
     session,
     identity: WEB,
     home: { get: () => home, set: (id) => (home = id) },
-    fallbackToAnyAccount: false,
     assets: async () => ({}) as AssetManifest
   })
 
-  return { server, session, client }
+  return { server, session, client, remember: (id: string | null) => (home = id) }
 }
 
 describe('createServerClient', () => {
@@ -109,14 +108,50 @@ describe('createServerClient', () => {
   })
 
   it("opens on nobody rather than a stranger's profile when nothing is yours", async () => {
-    const { client, session } = webClient({
-      'GET /api/riot-accounts': json([account('1', false), account('2', false)])
+    const { client, session, server } = webClient({
+      'GET /api/riot-accounts/mine': json([])
     })
     await session.restore()
 
-    const accounts = await client.accounts.list()
+    await expect(client.accounts.getHome()).resolves.toBeNull()
 
-    expect(accounts.some((a) => a.isHomeAccount)).toBe(false)
+    // Nor does it go looking for one: nothing asks for every account.
+    expect(server.calls.some((c) => c.path === '/api/riot-accounts')).toBe(false)
+  })
+
+  it('opens on the account it remembers, even when that account is somebody else', async () => {
+    const { client, session, remember } = webClient({
+      'GET /api/riot-accounts/friend': json(account('friend', false)),
+      'GET /api/riot-accounts/mine': json([account('1', true)])
+    })
+    await session.restore()
+    remember('friend')
+
+    const home = await client.accounts.getHome()
+    const mine = await client.accounts.mine()
+
+    expect(home?.id).toBe('friend')
+    expect(home?.isHomeAccount).toBe(true)
+
+    // The rail is yours, and a friend's profile is not in it to be marked.
+    expect(mine.some((a) => a.isHomeAccount)).toBe(false)
+  })
+
+  it('opens on your own first account when the remembered one has gone', async () => {
+    const { client, session, remember } = webClient({
+      'GET /api/riot-accounts/mine': json([account('1', true), account('2', true)])
+    })
+    await session.restore()
+    remember('deleted')
+
+    await expect(client.accounts.getHome()).resolves.toMatchObject({ id: '1', isHomeAccount: true })
+  })
+
+  it('answers an account nobody here plays as with null, not an error', async () => {
+    const { client, session } = webClient({})
+    await session.restore()
+
+    await expect(client.accounts.find({ gameName: 'Nobody', tagLine: 'NA1' })).resolves.toBeNull()
   })
 
   it('answers a game the server does not hold for that player with null, not an error', async () => {

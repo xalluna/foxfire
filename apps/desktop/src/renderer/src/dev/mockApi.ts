@@ -72,9 +72,9 @@ import {
  * The shared half: League data, a server's admin surface, and the events that
  * refresh them. The same fixture client the web client's harness renders, so
  * the two review the same games; what is added below is only what a desktop
- * has and a browser does not.
+ * has and a browser does not — and, connected, whose each account is.
  */
-const fixture = createFixtureClient()
+const fixture = createFixtureClient({ describe: ownedAs })
 
 /**
  * The Google connection, as the three YouTube scenarios need it: a build with
@@ -198,6 +198,25 @@ function setServerState(next: ServerState): ServerState {
   serverState = next
   for (const listener of serverListeners) listener(next)
   return next
+}
+
+/** Accounts unlinked from Settings › Server this session: still tracked, nobody's. */
+const released = new Set<string>()
+
+/**
+ * Whose an account is, the way a server answers. Connected, Faker is you and
+ * any account the fixtures leave unowned is somebody else's — which is what the
+ * rail, Search and Settings › Server tell apart. Locally nothing is anybody's,
+ * as on a real local database, so the account passes through.
+ *
+ * A declaration rather than a const, because the fixture client above is built
+ * with it before this line is reached.
+ */
+function ownedAs(account: Account): Account {
+  if (serverState.session === null) return account
+  if (released.has(account.id)) return { ...account, isMine: false, ownerUsername: null }
+  if (account.isMine === undefined) return { ...account, isMine: false, ownerUsername: 'Chovy' }
+  return account
 }
 
 /**
@@ -568,6 +587,12 @@ export const mockApi: Api = {
 
   accounts: {
     ...fixture.accounts,
+    // On a server, removing is giving up the claim: the account stays, nobody's.
+    remove: async (accountId: string): Promise<Account[]> => {
+      if (serverState.session === null) return fixture.accounts.remove(accountId)
+      released.add(accountId)
+      return fixture.accounts.mine()
+    },
     add: (input): Promise<Account> =>
       delay(
         {

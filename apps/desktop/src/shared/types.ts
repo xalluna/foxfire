@@ -37,6 +37,7 @@ export type {
   SyncState,
   SyncTrigger,
   SyncProgressEvent,
+  PlayerSearchOptions,
   PlayerSearchResult,
   RiotIdInput,
   AssetManifest,

@@ -17,6 +17,7 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  PlayerSearchOptions,
   PlayerSearchResult,
   QueueType,
   RankHistory,
@@ -44,15 +45,36 @@ import type {
  * client; both belong to the desktop and are not here.
  */
 export interface FoxfireData {
+  /**
+   * Accounts, asked about one question at a time.
+   *
+   * There is no "every account". There used to be, and every screen held the
+   * whole list and searched it for whichever account it meant — which on a
+   * server is the whole community, fetched by every client on every launch.
+   * Yours are a list, because that is as many as one person plays on; anybody
+   * else's is one lookup, or a page of `search.players`.
+   */
   accounts: {
-    list: () => Promise<Account[]>
+    /**
+     * The accounts that are yours, with the home one marked. On a server, the
+     * ones you have claimed; locally, every account in this file.
+     */
+    mine: () => Promise<Account[]>
+    /** One account by id, or null when there is no such account. */
+    get: (accountId: string) => Promise<Account | null>
+    /** One account by Riot ID, in any capitalisation, or null when nobody here plays as it. */
+    find: (riotId: RiotIdInput) => Promise<Account | null>
+    /** The account this machine or browser opens on, or null when there is none to open. */
     getHome: () => Promise<Account | null>
     /**
-     * Stops following an account. On a server that gives up the claim and
-     * leaves the history, which is everybody's.
+     * Stops following an account, and answers with yours. On a server that
+     * gives up the claim and leaves the history, which is everybody's.
      */
     remove: (accountId: string) => Promise<Account[]>
-    /** Which account opens first. A preference of the machine or browser, never of the server. */
+    /**
+     * Which account opens first, answered with yours. A preference of the
+     * machine or browser, never of the server — and it may be somebody else's.
+     */
     setHome: (accountId: string) => Promise<Account[]>
   }
   dashboard: {
@@ -113,10 +135,11 @@ export interface FoxfireData {
   }
   search: {
     /**
-     * The tracked players matching a query, or every one of them when it is
-     * blank. Reads stored data only — no Riot call, on a server or a desktop.
+     * A page of the tracked players matching a query, or of everybody when it
+     * is blank, in name order. Reads stored data only — no Riot call, on a
+     * server or a desktop.
      */
-    players: (query: string) => Promise<PlayerSearchResult[]>
+    players: (query: string, options?: PlayerSearchOptions) => Promise<PlayerSearchResult[]>
   }
   /**
    * The YouTube recordings a server holds, one per game per account.

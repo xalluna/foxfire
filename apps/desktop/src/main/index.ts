@@ -247,7 +247,13 @@ function catchUpOnLaunch(): void {
   repairAttribution()
 
   void (async () => {
-    const accounts = await serverBacked().accounts.list()
+    // Only accounts this person has claimed. A sync spends the community's
+    // Riot budget, and one on somebody else's history the server refuses
+    // outright — sweeping every account on the server once meant a 403 per
+    // account nobody here owns, on every launch. Locally, every account in the
+    // file is yours. And a recording made on this PC was made on one of yours:
+    // the League client watcher only follows accounts this person has claimed.
+    const accounts = await serverBacked().accounts.mine()
 
     for (const account of accounts) {
       // Each swallowed separately, because a launch must not fail on one
@@ -255,14 +261,7 @@ function catchUpOnLaunch(): void {
       // sync, and an account the server refused is one account rather than the
       // sweep.
       void bindPendingRecordings(account.id).catch(() => undefined)
-
-      // Only accounts this person has claimed. On a server the list is every
-      // account anybody tracks, and a sync spends the community's Riot budget
-      // on somebody else's history — which the server refuses outright, so
-      // sweeping them all meant a 403 per unclaimed account on every launch.
-      // Undefined is local-only, where the file is yours and the question
-      // does not arise.
-      if (account.isMine !== false) void startSyncFor(account.id).catch(() => undefined)
+      void startSyncFor(account.id).catch(() => undefined)
     }
   })().catch(() => undefined)
 

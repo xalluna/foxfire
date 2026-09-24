@@ -1,7 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import type { Account, LcuStatus } from '@shared/types'
+import type { LcuStatus } from '@shared/types'
 import { SettingsRow, primaryButtonClass } from '@foxfire/ui'
+import { queryKeys, useAccountByRiotId } from '@foxfire/screens'
 
 /**
  * Claiming the League account this machine is signed in to.
@@ -16,10 +17,10 @@ import { SettingsRow, primaryButtonClass } from '@foxfire/ui'
  * League client running on this machine, signed in. That is what the button is
  * waiting for, and why it says which account it can see rather than asking.
  *
- * First claim wins and there is no undo from here — an admin unlinks. Hence a
- * button rather than doing it the moment the client appears: on a shared PC,
- * or a smurf somebody else is meant to have, silently taking it would be the
- * wrong default and the only remedy would be asking an admin.
+ * First claim wins. Hence a button rather than doing it the moment the client
+ * appears: on a shared PC, or a smurf somebody else is meant to have, silently
+ * taking it would be the wrong default. A claim of your own is given up from the
+ * linked rows above this one; anybody else's, only by an admin.
  */
 export function LinkAccountRow(): JSX.Element | null {
   const queryClient = useQueryClient()
@@ -32,10 +33,11 @@ export function LinkAccountRow(): JSX.Element | null {
     return window.api.lcu.onStatus(setStatus)
   }, [])
 
-  const accounts = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => window.api.accounts.list()
-  })
+  // Whoever the server has under the Riot ID the client is signed in to —
+  // yours, somebody else's, nobody's, or nobody at all.
+  const known = useAccountByRiotId(
+    status.state === 'disconnected' ? null : { gameName: status.gameName, tagLine: status.tagLine }
+  ).data
 
   if (status.state === 'disconnected') {
     return (
@@ -47,19 +49,10 @@ export function LinkAccountRow(): JSX.Element | null {
   }
 
   const riotId = `${status.gameName}#${status.tagLine}`
-  const known = matching(accounts.data, status.gameName, status.tagLine)
 
-  // Already yours. Said rather than hidden, because "did that work?" is the
-  // question somebody has right after pressing the button.
-  if (known?.isMine === true) {
-    return (
-      <SettingsRow
-        label={riotId}
-        description="Linked to you. Its games and rank are yours to edit."
-        control={<span className="text-2xs text-good">Linked</span>}
-      />
-    )
-  }
+  // Already yours, so it is among the linked rows above — which is also where
+  // "did that work?" is answered, the moment after pressing the button.
+  if (known?.isMine === true) return null
 
   // Somebody else got there first. Nothing this screen can do about it — the
   // whole point of first-claim-wins is that an admin is the escape hatch.
@@ -91,8 +84,8 @@ export function LinkAccountRow(): JSX.Element | null {
             window.api.accounts
               .link({ gameName: status.gameName, tagLine: status.tagLine })
               .then(() => {
-                // The rail, the dashboard and this row all read the same list.
-                void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+                // The rail, the linked rows above and this row all refresh.
+                void queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
               })
               .catch((err: Error) => setError(err.message))
               .finally(() => setBusy(false))
@@ -103,10 +96,4 @@ export function LinkAccountRow(): JSX.Element | null {
       }
     />
   )
-}
-
-/** The stored account for a Riot ID, if this server has one. Riot IDs are not case-sensitive. */
-function matching(accounts: Account[] | undefined, gameName: string, tagLine: string): Account | undefined {
-  const wanted = `${gameName}#${tagLine}`.toLowerCase()
-  return accounts?.find((a) => `${a.gameName}#${a.tagLine}`.toLowerCase() === wanted)
 }

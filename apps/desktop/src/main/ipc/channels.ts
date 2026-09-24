@@ -64,7 +64,9 @@ export const CH = {
     keyInvalid: 'settings:keyInvalid'
   },
   accounts: {
-    list: 'accounts:list',
+    mine: 'accounts:mine',
+    get: 'accounts:get',
+    find: 'accounts:find',
     getHome: 'accounts:getHome',
     add: 'accounts:add',
     link: 'accounts:link',

@@ -17,9 +17,15 @@ public static class SearchEndpoints
     public static void MapSearchEndpoints(this IEndpointRouteBuilder app) =>
         app.MapGet("/search", (
                     string? q,
+                    bool? mine,
+                    bool? claimed,
+                    int? limit,
+                    int? offset,
                     ISender sender,
                     CancellationToken cancellationToken) =>
-                sender.SendAsync(new SearchPlayersRequest(q), cancellationToken))
+                sender.SendAsync(
+                    new SearchPlayersRequest(q, mine ?? false, claimed ?? false, limit, offset),
+                    cancellationToken))
             .WithTags("Search")
             .RequireAuthorization()
             .RequireRateLimiting(RateLimits.Search);

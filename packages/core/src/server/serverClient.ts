@@ -14,12 +14,6 @@ export interface ServerClientOptions {
   identity: ClientIdentity
   /** Which account opens first, remembered wherever this client keeps preferences. */
   home: HomeAccountStore
-  /**
-   * Whether an account list with no home and nothing of your own opens on the
-   * first account anyway. The desktop does; a browser would rather show its
-   * list of players than a stranger's profile. See applyHomeAccount.
-   */
-  fallbackToAnyAccount: boolean
   /** Champion, item and rune art — Data Dragon, fetched by whoever runs this. */
   assets: () => Promise<AssetManifest>
   log?: Logger
@@ -59,7 +53,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
   const log = options.log ?? silentLogger
 
   const api = createServerApi(session.request, { log })
-  const data = createServerData(api, options.home, { fallbackToAny: options.fallbackToAnyAccount })
+  const data = createServerData(api, options.home)
 
   const syncListeners = new Set<(event: SyncProgressEvent) => void>()
   const editedListeners = new Set<(accountId: string) => void>()
