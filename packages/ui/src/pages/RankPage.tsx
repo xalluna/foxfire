@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { format } from 'date-fns'
 import type { QueueType, RankHistory, RankRange, Season } from '@foxfire/core'
-import { parseSeasonRange, seasonRange } from '@foxfire/core'
+import { parseSeasonRange, rankNetChange, seasonRange } from '@foxfire/core'
 import { EmptyState } from '../components/EmptyState'
 import { RankChart } from '../components/RankChart'
 import { Segmented } from '../components/Segmented'
@@ -40,7 +40,8 @@ export function RankPage({
   history: data,
   loading: isLoading,
   periods,
-  headerExtra
+  headerExtra,
+  back
 }: {
   queueType: QueueType
   onQueueTypeChange: (queueType: QueueType) => void
@@ -52,6 +53,8 @@ export function RankPage({
   periods: Season[] | undefined
   /** Beneath the heading: the desktop says here whether the League client is capturing LP. */
   headerExtra?: ReactNode
+  /** Above the heading: the way back to the profile this page hangs off. */
+  back?: ReactNode
 }): JSX.Element {
 
   const ranges: Array<[RankRange, string]> = [
@@ -70,22 +73,18 @@ export function RankPage({
   const snapshots = data?.snapshots ?? []
   const milestones = data?.milestones ?? []
   const latest = snapshots[snapshots.length - 1]
-  const first = snapshots[0]
 
-  // Only meaningful inside a single season. Across a reset the gap between the
-  // two ends is not LP anyone won or lost — it is the reset itself — and
-  // reporting it would be the same lie the chart avoids by breaking its line.
-  const netLp =
-    first &&
-    latest &&
-    first.ladderPosition !== null &&
-    latest.ladderPosition !== null &&
-    first.seasonId === latest.seasonId
-      ? latest.ladderPosition - first.ladderPosition
-      : null
+  // Counted from the reading before the period, so "30 days" includes the
+  // month's first game and says what the profile's card says. Only meaningful
+  // inside a single season: across a reset the gap between the two ends is not
+  // LP anyone won or lost — it is the reset itself — and reporting it would be
+  // the same lie the chart avoids by breaking its line.
+  const netLp = rankNetChange(data?.before, snapshots)
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 max-md:p-2">
+      {back}
+
       {/* On a phone the pickers drop beneath the heading instead of squeezing it. */}
       <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-start">
         <div>

@@ -43,6 +43,17 @@ describe('createServerApi', () => {
     ])
   })
 
+  it("asks for a queue's thirty-day trend, never its whole history", async () => {
+    const { calls, request } = recorder(() => ({ from: 0, to: 0, points: [], netLp: null }))
+    const api = createServerApi(request)
+
+    await api.rank.trend('acc-1', 'RANKED_SOLO_5x5')
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /riot-accounts/acc-1/rank/trend?queueType=RANKED_SOLO_5x5'
+    ])
+  })
+
   it('answers a refused admin write with the server\'s own message', async () => {
     const { request } = recorder(
       () => new ServerError('There has to be at least one administrator.', 409, 'last_admin')

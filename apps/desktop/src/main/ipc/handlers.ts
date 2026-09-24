@@ -262,6 +262,10 @@ export function registerIpcHandlers(): void {
       serverBacked().rank.history(accountId, queueType, range)
   )
 
+  ipcMain.handle(CH.rank.trend, (_e, accountId: string, queueType: QueueType) =>
+    serverBacked().rank.trend(accountId, queueType)
+  )
+
   ipcMain.handle(CH.rank.periods, (_e, accountId: string) =>
     serverBacked().rank.periods(accountId)
   )

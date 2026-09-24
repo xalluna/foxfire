@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import { parsePlayerSlug, paths, playerSlug } from '@foxfire/core/routes'
+import { parsePlayerSlug, paths } from '@foxfire/core/routes'
 import { CopyLinkButton, Icon, MatchPage, recordingActionClass } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
 import { recordingBlockedReason, withoutServerRecording } from '../match/matchMenu'
 import { useAccountByRiotId } from '../queries/accounts'
 import { queryKeys } from '../queries/keys'
+import { PlayerBackLink } from '../routes/PlayerBackLink'
 
 /** Whether a failed read was the server saying it has no such thing. */
 function isNotFound(error: unknown): boolean {
@@ -51,18 +51,7 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
 
   return (
     <MatchPage
-      back={
-        account && (
-          <Link
-            to="/players/$slug"
-            params={{ slug: playerSlug(account) }}
-            className="inline-flex items-center gap-1.5 text-sm text-text-dim transition hover:text-accent"
-          >
-            <Icon.ChevronDown width={14} height={14} className="rotate-90" />
-            {account.gameName}&rsquo;s profile
-          </Link>
-        )
-      }
+      back={account && <PlayerBackLink account={account} label="profile" />}
       actions={
         <>
           {/* Only when the link named a player, and only theirs: with nobody

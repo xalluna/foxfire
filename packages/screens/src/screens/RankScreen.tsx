@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Account, QueueType, RankRange } from '@foxfire/core'
 import { paths, rankQueueParam } from '@foxfire/core/routes'
@@ -19,13 +20,16 @@ export function RankScreen({
   queueType,
   onQueueTypeChange,
   range,
-  onRangeChange
+  onRangeChange,
+  back
 }: {
   account: Account
   queueType: QueueType
   onQueueTypeChange: (queueType: QueueType) => void
   range: RankRange
   onRangeChange: (range: RankRange) => void
+  /** The way back to the profile. */
+  back?: ReactNode
 }): JSX.Element {
   const client = useClient()
   const HeaderExtra = usePlatform().slots?.rankHeaderExtra
@@ -53,6 +57,7 @@ export function RankScreen({
       history={history.data}
       loading={history.isLoading}
       periods={periods.data}
+      back={back}
       headerExtra={
         HeaderExtra || share ? (
           <div className="flex flex-wrap items-center gap-3">

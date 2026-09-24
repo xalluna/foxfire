@@ -34,6 +34,7 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
         queryKeys.matchList(accountId),
         queryKeys.dashboard(accountId),
         queryKeys.rankHistory(accountId),
+        queryKeys.rankTrend(accountId),
         // Aggregated from the very matches a sync just imported, so stale the
         // moment it finishes rather than whenever the query ages out.
         queryKeys.championStats(accountId),
@@ -45,9 +46,10 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
 
     case 'rankEdited':
       // Somebody typed LP — in another window, or on another machine. The
-      // match row's chip and the rank graph both show it.
+      // match row's chip and both rank graphs show it.
       return [
         queryKeys.rankHistory(event.accountId),
+        queryKeys.rankTrend(event.accountId),
         queryKeys.matchList(event.accountId),
         queryKeys.dashboard(event.accountId)
       ]
@@ -56,7 +58,12 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
       // A League client recorded an LP change. Unscoped, as it always was: the
       // reading can settle a game on whichever account was playing, and a
       // refetch of a list nobody is looking at costs nothing.
-      return [queryKeys.rankHistory(), queryKeys.matchLists(), queryKeys.dashboard()]
+      return [
+        queryKeys.rankHistory(),
+        queryKeys.rankTrend(),
+        queryKeys.matchLists(),
+        queryKeys.dashboard()
+      ]
 
     case 'recordingChanged':
       // One account's row for one game, and the recording page if it is open.
@@ -70,6 +77,7 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
       return [
         queryKeys.rankPeriods(),
         queryKeys.rankHistory(),
+        queryKeys.rankTrend(),
         queryKeys.championStats(),
         queryKeys.matchLists()
       ]

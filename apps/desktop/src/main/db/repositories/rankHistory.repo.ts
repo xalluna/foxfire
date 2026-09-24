@@ -303,12 +303,16 @@ export function upsertMatchRank(db: DatabaseSync, input: MatchRankInput): void {
   )
 }
 
-/** The most recent reading strictly before a moment, or null if none precedes it. */
+/**
+ * The most recent reading strictly before a moment, or null if none precedes it.
+ * Of two in the same millisecond, the one stored later — the one that stood.
+ */
 export function getSnapshotBefore(
   db: DatabaseSync,
   accountId: number,
   queueType: QueueType,
-  beforeMs: number
+  beforeMs: number,
+  seasons: Season[] = []
 ): RankSnapshot | null {
   const row = db
     .prepare(
@@ -321,7 +325,26 @@ export function getSnapshotBefore(
     )
     .get(accountId, queueType, beforeMs) as unknown as SnapshotRow | undefined
 
-  return row ? toSnapshot(row) : null
+  return row ? toSnapshot(row, seasons) : null
+}
+
+/**
+ * What the profile's thirty-day graph is drawn from: the one reading before
+ * the window, which is where the line starts, and every reading since.
+ *
+ * No upper bound, matching the "30d" range, so a reading stamped a moment
+ * after now is still today's point. Ordered as stored, which rankTrend relies
+ * on to break a same-millisecond tie.
+ */
+export function getTrendReadings(
+  db: DatabaseSync,
+  accountId: number,
+  queueType: QueueType,
+  sinceMs: number
+): RankSnapshot[] {
+  const before = getSnapshotBefore(db, accountId, queueType, sinceMs)
+  const window = getRankSnapshots(db, accountId, queueType, sinceMs, null)
+  return before ? [before, ...window] : window
 }
 
 /**

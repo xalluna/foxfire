@@ -43,6 +43,7 @@ export function createIpcClient(api: Api): FoxfireClient {
 
     rank: {
       history: api.rank.history,
+      trend: api.rank.trend,
       periods: api.rank.periods,
       editable: api.rank.editable,
       saveManual: api.rank.saveManual,

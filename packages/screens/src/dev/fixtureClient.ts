@@ -27,6 +27,7 @@ import type {
   QueueType,
   RankHistory,
   RankRange,
+  RankTrend,
   Season,
   SeasonInput,
   ServerAdminSettings,
@@ -38,6 +39,7 @@ import {
   compareSearchResults,
   pageOf,
   rankMovement,
+  rankTrend,
   rangeBounds,
   resetsBetween,
   searchRank,
@@ -615,11 +617,14 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     rank: {
       history: (accountId: string, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
         const { sinceMs, untilMs } = rangeBounds(range, DEV_SEASONS)
-        const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
+        const series = RANK_SNAPSHOTS[accountId]?.[queueType] ?? []
+        const snapshots = series.filter(
           (s) =>
             (sinceMs === null || s.capturedAt >= sinceMs) &&
             (untilMs === null || s.capturedAt < untilMs)
         )
+        const before =
+          sinceMs === null ? null : (series.filter((s) => s.capturedAt < sinceMs).at(-1) ?? null)
 
         const milestones = snapshots
           .flatMap((snapshot, i) => {
@@ -644,8 +649,14 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           })
           .reverse()
 
-        return delay({ snapshots, milestones }, 280)
+        return delay({ snapshots, milestones, before }, 280)
       },
+
+      // The whole series is handed over: the rule only looks backwards from
+      // each day, so it reads the same carry-in a server's two queries would.
+      // Read at call time, so LP typed into the harness's editor shows here.
+      trend: (accountId: string, queueType: QueueType): Promise<RankTrend> =>
+        delay(rankTrend(RANK_SNAPSHOTS[accountId]?.[queueType] ?? [], DEV_SEASONS, Date.now()), 220),
 
       periods: (accountId: string): Promise<Season[]> => {
         const times = [

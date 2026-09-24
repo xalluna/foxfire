@@ -112,6 +112,8 @@ export const CH = {
   },
   rank: {
     history: 'rank:history',
+    /** The profile's graph: thirty days, a close a day. */
+    trend: 'rank:trend',
     /** The seasons this account has data in, for the period pickers. */
     periods: 'rank:periods',
     // Hand-entered LP, for the games attribution cannot resolve on its own.

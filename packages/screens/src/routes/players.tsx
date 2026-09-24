@@ -7,10 +7,11 @@ import {
   type ComponentType,
   type ReactNode
 } from 'react'
-import { Link, Navigate, Outlet, createRoute, useParams, type AnyRoute } from '@tanstack/react-router'
+import { Navigate, Outlet, createRoute, useParams, type AnyRoute } from '@tanstack/react-router'
 import type { Account, RiotIdInput } from '@foxfire/core'
 import { isPlayer, parsePlayerSlug, playerSlug } from '@foxfire/core/routes'
 import { EmptyState, Icon, type MatchFocus } from '@foxfire/ui'
+import { PlayerBackLink } from './PlayerBackLink'
 import { useAccount, useAccountByRiotId } from '../queries/accounts'
 import { ChampionsScreen } from '../screens/ChampionsScreen'
 import { DashboardScreen } from '../screens/DashboardScreen'
@@ -273,6 +274,7 @@ function ChampionsRoute(): JSX.Element {
       onQueueChange={(queueId) => setSearch({ queue: queueSearchFor(queueId) })}
       range={search.range ?? null}
       onRangeChange={(range) => setSearch({ range })}
+      back={<PlayerBackLink account={account} label="profile" />}
     />
   )
 }
@@ -288,6 +290,7 @@ function RankRoute(): JSX.Element {
       onQueueTypeChange={(queueType) => setSearch({ queue: rankQueueSearchFor(queueType) })}
       range={search.range ?? DEFAULT_RANK_RANGE}
       onRangeChange={(range) => setSearch({ range: rankRangeSearchFor(range) })}
+      back={<PlayerBackLink account={account} label="profile" />}
     />
   )
 }
@@ -300,17 +303,7 @@ function RecordingRoute(): JSX.Element {
     <RecordingScreen
       account={account}
       matchId={matchId}
-      back={
-        <Link
-          to="/players/$slug"
-          params={{ slug: playerSlug(account) }}
-          search={{ match: matchId } as never}
-          className="inline-flex items-center gap-1.5 text-sm text-text-dim transition hover:text-accent"
-        >
-          <Icon.ChevronDown width={14} height={14} className="rotate-90" />
-          {account.gameName}&rsquo;s history
-        </Link>
-      }
+      back={<PlayerBackLink account={account} label="history" match={matchId} />}
     />
   )
 }

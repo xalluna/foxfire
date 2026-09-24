@@ -17,7 +17,8 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "lint": "eslint . --ext .ts",
     "test": "vitest run",
-    "generate-corpus": "vite-node scripts/generate-ladder-corpus.ts"
+    "generate-corpus": "vite-node scripts/generate-ladder-corpus.ts",
+    "generate-trend-corpus": "vite-node scripts/generate-rank-trend-corpus.ts"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11"

@@ -395,6 +395,58 @@ export interface RankMilestone {
 export interface RankHistory {
   snapshots: RankSnapshot[]
   milestones: RankMilestone[]
+  /**
+   * The last reading before the range began, or null when the range has no
+   * start or nothing precedes it.
+   *
+   * What "over this period" counts from, so a month's change includes the
+   * month's first game — see rankNetChange. Optional because a server older
+   * than 0.4.0 does not send it, and the change then counts from the first
+   * reading inside the range, as it used to.
+   */
+  before?: RankSnapshot | null
+}
+
+/** A reading as the trend rule reads it: where somebody stood, and when. */
+export type RankTrendReading = Pick<
+  RankSnapshot,
+  'tier' | 'rank' | 'leaguePoints' | 'ladderPosition' | 'capturedAt'
+>
+
+/**
+ * One day's close on the profile's rank graph.
+ *
+ * Always a real reading, repeated onto the day it closed — never an average, so
+ * a tooltip can only ever show a rank somebody actually held.
+ */
+export interface RankTrendPoint {
+  /** Where it is drawn: the end of its day, `to − k·24h`. Never the reading's own time. */
+  at: number
+  tier: string | null
+  rank: string | null
+  leaguePoints: number | null
+  ladderPosition: number | null
+  /** The season of the reading, which is where the line breaks. */
+  seasonId: number | null
+  /** When the repeated reading was taken — earlier than `at` on a day with no games. */
+  capturedAt: number
+}
+
+/**
+ * The last thirty days of one queue, thinned to a close a day.
+ *
+ * Bounded by construction at 31 points, whatever the history holds — the
+ * profile's graph, where the Rank page's whole line would be hundreds of
+ * readings drawn 300px wide. See rules/rankTrend.ts.
+ */
+export interface RankTrend {
+  /** The window, epoch milliseconds: thirty days back from `to`, which is now. */
+  from: number
+  to: number
+  /** Oldest first. A day with nothing to show is left out rather than sent empty. */
+  points: RankTrendPoint[]
+  /** The ladder change over the window, from the raw readings. Null across a season change. */
+  netLp: number | null
 }
 
 /**

@@ -21,14 +21,29 @@ type PlayerPage =
   | '/players/$slug/rank'
 
 type NavItem =
-  | { label: string; icon: JSX.Element; page: PlayerPage }
+  | {
+      label: string
+      icon: JSX.Element
+      page: PlayerPage
+      /** Pages reached through this one, which it stays lit on. */
+      within?: PlayerPage[]
+    }
   | { label: string; icon: JSX.Element; to: '/settings/{-$category}' }
 
+/**
+ * Where the title bar goes. Rank and Champions are not here: each is a card on
+ * the profile that ends in "More", so they are part of the Dashboard — which
+ * stays lit on them — rather than places of their own, and the title bar keeps
+ * the room for the search box.
+ */
 const NAV: NavItem[] = [
-  { label: 'Dashboard', icon: <Icon.Dashboard />, page: '/players/$slug' },
+  {
+    label: 'Dashboard',
+    icon: <Icon.Dashboard />,
+    page: '/players/$slug',
+    within: ['/players/$slug/rank', '/players/$slug/champions']
+  },
   { label: 'Captures', icon: <Icon.Film />, page: '/players/$slug/captures' },
-  { label: 'Champions', icon: <Icon.Trophy />, page: '/players/$slug/champions' },
-  { label: 'Rank', icon: <Icon.TrendingUp />, page: '/players/$slug/rank' },
   { label: 'Settings', icon: <Icon.Settings />, to: '/settings/{-$category}' }
 ]
 
@@ -166,7 +181,11 @@ export function AppShell(): JSX.Element {
     // With no accounts every player page is the empty home page, which the
     // Dashboard tab stands for.
     if (item.page === '/players/$slug' && matchRoute({ to: '/', includeSearch: false })) return true
-    return !!matchRoute({ to: item.page, includeSearch: false })
+    // Each page matched exactly: a fuzzy match on the profile would light it
+    // on Captures too, which is a page of its own.
+    return [item.page, ...(item.within ?? [])].some(
+      (page) => !!matchRoute({ to: page, includeSearch: false })
+    )
   }
 
   const go = (item: NavItem): void => {
@@ -196,10 +215,18 @@ export function AppShell(): JSX.Element {
         className="drag box-content flex h-titlebar shrink-0 items-center gap-4 border-b border-hairline pl-4"
         style={{ paddingRight: 'var(--titlebar-controls-w)' }}
       >
-        <div className="flex items-center gap-2">
+        {/* Home: the account this PC opens on, from anywhere — Settings
+            included. A button inside the drag strip, so it has to opt out of
+            dragging or the click would move the window instead. */}
+        <button
+          type="button"
+          onClick={() => void navigate({ to: '/' })}
+          title="Home"
+          className="no-drag flex items-center gap-2 rounded transition hover:opacity-80"
+        >
           <Logo className="shrink-0 text-accent" />
           <span className="font-display text-base tracking-wide text-accent">Foxfire</span>
-        </div>
+        </button>
 
         <nav className="no-drag flex shrink-0 gap-0.5">
           {NAV.map((item) => {

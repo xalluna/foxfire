@@ -14,7 +14,7 @@ import {
 } from '../services/accountService'
 import { readSyncState, startSync } from '../services/syncService'
 import { getMasteryData } from '../services/masteryService'
-import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
+import { getRankHistory, getRankPeriods, getRankTrend } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
 import {
   clampPage,
@@ -157,6 +157,7 @@ export const localApi: ServerBackedApi = {
   rank: {
     history: async (accountId, queueType, range) =>
       getRankHistory(rowId(accountId), queueType, range),
+    trend: async (accountId, queueType) => getRankTrend(rowId(accountId), queueType),
     periods: async (accountId) => getRankPeriods(rowId(accountId)),
     editable: async (accountId, queueType) => {
       const db = getDb()

@@ -24,6 +24,7 @@ import type {
   QueueType,
   RankHistory,
   RankRange,
+  RankTrend,
   RiotIdInput,
   Season,
   SeasonInput,
@@ -247,6 +248,9 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         request<RankHistory>(
           `/riot-accounts/${accountId}/rank/history?queueType=${queueType}&range=${range}`
         ),
+
+      trend: (accountId: string, queueType: QueueType) =>
+        request<RankTrend>(`/riot-accounts/${accountId}/rank/trend?queueType=${queueType}`),
 
       periods: (accountId: string) => request<Season[]>(`/riot-accounts/${accountId}/rank/periods`),
 

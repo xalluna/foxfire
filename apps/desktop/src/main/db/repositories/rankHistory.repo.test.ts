@@ -7,6 +7,8 @@ import {
   getRankMilestones,
   getRankSnapshots,
   getRankedMatchesBetween,
+  getSnapshotBefore,
+  getTrendReadings,
   insertRankSnapshot,
   upsertMatchRank
 } from './rankHistory.repo'
@@ -204,6 +206,69 @@ describe('rank snapshots', () => {
 
     expect(getRankSnapshots(db, accountId, SOLO, T0 + 5000)).toHaveLength(1)
     expect(getRankSnapshots(db, accountId, SOLO, null)).toHaveLength(2)
+  })
+})
+
+describe('getTrendReadings', () => {
+  let db: DatabaseSyncType
+  let accountId: number
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    accountId = seedAccount(db)
+  })
+
+  const SINCE = T0 + 100_000
+
+  it('starts from the one reading before the window, the later of a tie', () => {
+    insertRankSnapshot(db, accountId, gold('IV', 10), 'lcu', T0)
+    insertRankSnapshot(db, accountId, gold('III', 20), 'lcu', SINCE - 1)
+    insertRankSnapshot(db, accountId, gold('III', 30), 'lcu', SINCE - 1)
+    insertRankSnapshot(db, accountId, gold('II', 40), 'lcu', SINCE + 5_000)
+
+    expect(getTrendReadings(db, accountId, SOLO, SINCE).map((r) => r.leaguePoints)).toEqual([30, 40])
+  })
+
+  it('counts a reading exactly at the start as inside the window', () => {
+    insertRankSnapshot(db, accountId, gold('IV', 10), 'lcu', T0)
+    insertRankSnapshot(db, accountId, gold('III', 20), 'lcu', SINCE)
+
+    const readings = getTrendReadings(db, accountId, SOLO, SINCE)
+    expect(readings.map((r) => r.capturedAt)).toEqual([T0, SINCE])
+  })
+
+  it('keeps readings from after now, and nothing from the other ladder', () => {
+    insertRankSnapshot(db, accountId, gold('II', 40), 'lcu', SINCE + 5_000)
+    insertRankSnapshot(db, accountId, gold('I', 50), 'lcu', Date.now() + 60_000)
+    insertRankSnapshot(
+      db,
+      accountId,
+      { ...gold('IV', 12), queueType: 'RANKED_FLEX_SR' },
+      'lcu',
+      SINCE + 6_000
+    )
+
+    expect(getTrendReadings(db, accountId, SOLO, SINCE).map((r) => r.leaguePoints)).toEqual([40, 50])
+  })
+
+  it('has nothing to start from before an account was tracked', () => {
+    insertRankSnapshot(db, accountId, gold('II', 40), 'lcu', SINCE + 5_000)
+    expect(getTrendReadings(db, accountId, SOLO, SINCE)).toHaveLength(1)
+  })
+})
+
+describe('getSnapshotBefore', () => {
+  it('stamps the season when given the table', () => {
+    const db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    const accountId = seedAccount(db)
+
+    const inSeason = new Date(2026, 5, 1).getTime()
+    insertRankSnapshot(db, accountId, gold('II', 40), 'lcu', inSeason)
+
+    expect(getSnapshotBefore(db, accountId, SOLO, inSeason + 1, SEASONS)?.seasonId).toBe(1)
+    expect(getSnapshotBefore(db, accountId, SOLO, inSeason)).toBeNull()
   })
 })
 

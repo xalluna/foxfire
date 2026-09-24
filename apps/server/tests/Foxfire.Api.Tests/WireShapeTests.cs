@@ -423,7 +423,9 @@ public class WireShapeTests(FoxfireServerFixture server)
             new Uri($"/api/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
                 UriKind.Relative));
 
-        AssertHasAll(history, "snapshots", "milestones");
+        // "before" is there even when it is null, so a client can tell a range
+        // with nothing ahead of it from a server too old to say.
+        AssertHasAll(history, "snapshots", "milestones", "before");
 
         var snapshot = history.GetProperty("snapshots").EnumerateArray().First();
 
@@ -441,6 +443,26 @@ public class WireShapeTests(FoxfireServerFixture server)
             "seasonId");
 
         AssertRiotSpelling(snapshot);
+    }
+
+    [Fact]
+    public async Task A_rank_trend_crosses_the_wire_as_the_card_draws_it()
+    {
+        // @foxfire/core RankTrend, RankTrendPoint. The rig's one reading is two
+        // hours old, so it closes today and nothing before it: one point.
+        var (client, accountId, _) = await RiggedAsync();
+        using var _client = client;
+
+        var trend = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{accountId}/rank/trend?queueType=RANKED_SOLO_5x5", UriKind.Relative));
+
+        AssertHasAll(trend, "from", "to", "points", "netLp");
+
+        var point = Assert.Single(trend.GetProperty("points").EnumerateArray().ToList());
+
+        AssertHasAll(point, "at", "tier", "rank", "leaguePoints", "ladderPosition", "seasonId", "capturedAt");
+
+        AssertRiotSpelling(point);
     }
 
     [Fact]
