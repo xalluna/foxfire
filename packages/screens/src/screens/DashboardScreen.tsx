@@ -28,7 +28,7 @@ import { useFavorites, useRefreshFavorites, useToggleFavorite } from '../queries
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 import { queueSearchFor, rankQueueSearchFor } from '../routes/params'
-import { isSyncing, useSyncProgress } from '../store/syncProgress'
+import { isSyncing, syncCooldownUntil, useSyncProgress } from '../store/syncProgress'
 
 const PAGE_SIZE = 20
 
@@ -129,8 +129,10 @@ export function DashboardScreen({
   })
 
   // Anybody's to press, so the server's two-minute cooldown is something people
-  // actually meet — and a button that did nothing would read as broken. Its
-  // refusal says how long to wait.
+  // would meet. The button counts it down so they need not; the notice is for
+  // a press that gets through anyway — a clock that disagrees with the
+  // server's, or a press a moment before somebody else's sync finished.
+  const cooldownUntil = syncCooldownUntil(dashboard.data?.syncState, progress)
   const sync = useMutation({
     mutationFn: () => client.sync.start(account.id),
     onSuccess: (outcome) => {
@@ -242,6 +244,7 @@ export function DashboardScreen({
         syncProgress={progress}
         syncing={syncing}
         onSync={() => sync.mutate()}
+        syncCooldownUntil={cooldownUntil}
         onCopyProfileLink={
           share
             ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))

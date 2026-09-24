@@ -18,23 +18,13 @@ namespace Foxfire.Api.Features.Sync;
 /// this server syncs on a timer, and the post-game ladder is armed by a desktop
 /// watching a League client that account has none of — so owner-only would mean
 /// its history froze on the day it was added. What stops that from being an
-/// open tap on the community's Riot key is <see cref="StartSyncRequestHandler.Cooldown"/>.
+/// open tap on the community's Riot key is <see cref="SyncCooldown"/>.
 /// </summary>
 public sealed record StartSyncRequest(Guid RiotAccountId) : IEmptyDomainRequest;
 
 internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService sync, TimeProvider time)
     : IDomainRequestHandler<StartSyncRequest>
 {
-    /// <summary>
-    /// How long a freshly synced account is left alone.
-    ///
-    /// Per account rather than per person: one member's refresh covers
-    /// everybody's, which is the point — twenty people opening the same profile
-    /// should cost one sync, not twenty. Read off the stored timestamps rather
-    /// than a dictionary in memory, so a restart does not reopen the budget.
-    /// </summary>
-    internal static readonly TimeSpan Cooldown = TimeSpan.FromMinutes(2);
-
     public async Task<Response> Handle(StartSyncRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -58,14 +48,14 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.RiotAccountId == request.RiotAccountId, cancellationToken);
 
+        // Clients hold the button until the same moment, so this is only met by
+        // one whose clock disagrees with ours, or that pressed a moment before
+        // somebody else's sync finished.
         var now = time.GetUtcNow();
-        DateTimeOffset? last = state is null
-            ? null
-            : new[] { state.LastFullSyncAt, state.LastDeltaSyncAt }.Max();
 
-        if (last is { } previous && now - previous < Cooldown)
+        if (SyncCooldown.Until(state) is { } until && now < until)
         {
-            var seconds = (int)Math.Ceiling((Cooldown - (now - previous)).TotalSeconds);
+            var seconds = (int)Math.Ceiling((until - now).TotalSeconds);
 
             return Response.Failure(
                 new Error(

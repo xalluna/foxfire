@@ -133,24 +133,31 @@ function syncState(accountId: string): SyncState {
     backfillComplete: scenario !== 'no-matches',
     backfillTarget: 200,
     lastFullSyncAt: '2026-08-14T18:00:00Z',
-    lastDeltaSyncAt: '2026-08-14T18:00:00Z'
+    lastDeltaSyncAt: '2026-08-14T18:00:00Z',
+    cooldownUntil: cooldownUntil(accountId)
   }
 }
 
 /**
- * The server's two minutes between syncs of one account, whoever asks, so a
- * second press shows the notice it would.
+ * The server's two minutes between syncs of one account, whoever asks, counted
+ * from when a sync finished, as the server counts them — so the button counts
+ * down after a press, and a press that beats it shows the notice it would.
  *
  * Applied in every scenario, local ones included, although this PC alone has
- * no cooldown: the harness is for looking at the notice, and a harness that
+ * no cooldown: the harness is for looking at the countdown, and a harness that
  * could only show it under one scenario would hide it from the other.
  */
 const SYNC_COOLDOWN_MS = 2 * 60_000
-const syncStartedAt = new Map<string, number>()
+const syncedAt = new Map<string, number>()
+
+function cooldownUntil(accountId: string): string | null {
+  const finished = syncedAt.get(accountId)
+  return finished === undefined ? null : new Date(finished + SYNC_COOLDOWN_MS).toISOString()
+}
 
 function syncTooSoon(accountId: string): AdminActionResult | null {
-  const started = syncStartedAt.get(accountId)
-  const waitMs = started === undefined ? 0 : started + SYNC_COOLDOWN_MS - Date.now()
+  const finished = syncedAt.get(accountId)
+  const waitMs = finished === undefined ? 0 : finished + SYNC_COOLDOWN_MS - Date.now()
   if (waitMs <= 0) return null
 
   const seconds = Math.ceil(waitMs / 1000)
@@ -183,6 +190,7 @@ function runFakeSync(accountId: string): void {
   const tick = setInterval(() => {
     current += 3
     const done = current >= total
+    if (done) syncedAt.set(accountId, Date.now())
     for (const cb of progressListeners) {
       cb({
         accountId,
@@ -192,7 +200,8 @@ function runFakeSync(accountId: string): void {
         message: done ? undefined : `Fetching match ${current} of ${total}`,
         // The harness exists to design the progress bar against motion, and an
         // auto-triggered sync deliberately renders nothing.
-        trigger: 'manual'
+        trigger: 'manual',
+        ...(done && { cooldownUntil: cooldownUntil(accountId) })
       })
     }
     if (done) clearInterval(tick)
@@ -595,7 +604,6 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         const refused = syncTooSoon(accountId)
         if (refused) return delay(refused, 100)
 
-        syncStartedAt.set(accountId, Date.now())
         runFakeSync(accountId)
         return delay({ ok: true, error: null }, 100)
       },

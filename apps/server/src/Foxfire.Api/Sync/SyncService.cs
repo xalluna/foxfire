@@ -211,13 +211,16 @@ public sealed class SyncService(
         log.LogInformation(
             "Sync finished for {RiotId}: {Stored} stored, {Failed} failed", account.RiotId, stored, failed);
 
+        // Read off the row after it was marked, so a run that left gaps — and
+        // did not mark it — reports the wait the server will actually enforce.
         await events.SyncProgressAsync(new SyncProgressEvent(
             riotAccountId,
             SyncPhase.Complete,
             stored,
             idsToFetch.Count,
             failed > 0 ? $"{failed} match{(failed == 1 ? "" : "es")} failed — syncing again will fill the gaps" : null,
-            trigger));
+            trigger,
+            SyncCooldown.Until(state)));
 
         return new SyncResult(stored, failed);
     }

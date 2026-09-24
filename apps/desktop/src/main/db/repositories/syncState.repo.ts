@@ -17,7 +17,9 @@ function toSyncState(row: SyncStateRow): SyncState {
     backfillComplete: row.backfill_complete === 1,
     backfillTarget: row.backfill_target,
     lastFullSyncAt: row.last_full_sync_at,
-    lastDeltaSyncAt: row.last_delta_sync_at
+    lastDeltaSyncAt: row.last_delta_sync_at,
+    // No cooldown on this PC: its own key, its own budget.
+    cooldownUntil: null
   }
 }
 

@@ -254,7 +254,8 @@ public class WireShapeTests(FoxfireServerFixture server)
             "backfillComplete",
             "backfillTarget",
             "lastFullSyncAt",
-            "lastDeltaSyncAt");
+            "lastDeltaSyncAt",
+            "cooldownUntil");
     }
 
     /// <summary>
@@ -287,7 +288,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         var frame = Encoding.UTF8.GetString(output.WrittenSpan).TrimEnd('\u001e');
         var progress = JsonDocument.Parse(frame).RootElement.GetProperty("arguments")[0];
 
-        AssertHasAll(progress, "accountId", "phase", "current", "total", "message", "trigger");
+        AssertHasAll(progress, "accountId", "phase", "current", "total", "message", "trigger", "cooldownUntil");
         Assert.Equal(expected, progress.GetProperty("phase").GetString());
         Assert.Equal("auto", progress.GetProperty("trigger").GetString());
     }

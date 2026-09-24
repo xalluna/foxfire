@@ -78,16 +78,7 @@ internal sealed class GetDashboardRequestHandler(
         return new DashboardResponse(
             RiotAccountResponse.Describe(account, me.UserId),
             [.. entries.Select(LeagueEntryResponse.Describe)],
-            state is null
-                ? null
-                : new SyncStateResponse(
-                    state.RiotAccountId,
-                    state.MostRecentMatchId,
-                    state.BackfillComplete,
-                    state.BackfillTarget,
-                    state.LastFullSyncAt,
-                    state.LastDeltaSyncAt,
-                    sync.IsSyncing(id)),
+            state is null ? null : SyncStateResponse.Describe(state, sync.IsSyncing(id)),
             await matches.StoredMatchCountAsync(account.Puuid, cancellationToken));
     }
 }

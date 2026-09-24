@@ -78,8 +78,8 @@ tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs Fo
 - **Sync anybody's account.** "Sync now" works on every profile on a server, not only on your own,
   so an account an admin tracks — which nobody else was ever going to refresh — or a friend who has
   not opened Foxfire in a while can be brought up to date. An account can be synced once every two
-  minutes, whoever asks; press it sooner and Foxfire says how long to wait, where it used to do
-  nothing at all.
+  minutes, whoever asks, so for those two minutes the button counts down — "Sync in 1:31" — and
+  comes back by itself when the server will take another. On this PC alone there is no wait.
 - **Settings › League accounts shows a page at a time.** For an admin, the list of claims arrives
   fifty at a time, with Show more for the next fifty and a box to find one.
 - **Recordings and Replays show a page at a time.** Captures lists the newest fifty of each, with

@@ -19,6 +19,7 @@ import { RecentSummary } from '../components/RecentSummary'
 import { EmptyState } from '../components/EmptyState'
 import { MatchListSkeleton } from '../components/Skeleton'
 import { ShowMoreButton } from '../components/ShowMore'
+import { SyncButton } from '../components/SyncButton'
 import * as Icon from '../components/icons'
 import { emptyEntry } from '../lib/rank'
 
@@ -34,6 +35,8 @@ export interface DashboardPageProps {
   syncProgress?: SyncProgressEvent
   syncing: boolean
   onSync: () => void
+  /** When the server takes a sync of this account again. Null when nothing holds it back. */
+  syncCooldownUntil: string | null
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyProfileLink?: () => Promise<void> | void
   /** The star on the profile. Absent where nobody can be starred. */
@@ -96,6 +99,7 @@ export function DashboardPage({
   syncProgress,
   syncing,
   onSync,
+  syncCooldownUntil,
   onCopyProfileLink,
   favorite,
   home,
@@ -157,6 +161,7 @@ export function DashboardPage({
           account={account}
           onRefresh={onSync}
           refreshing={syncing}
+          cooldownUntil={syncCooldownUntil}
           progress={syncProgress}
           onCopyLink={onCopyProfileLink}
           favorite={favorite}
@@ -179,6 +184,7 @@ export function DashboardPage({
             account={account}
             onRefresh={onSync}
             refreshing={syncing}
+            cooldownUntil={syncCooldownUntil}
             progress={syncProgress}
             onCopyLink={onCopyProfileLink}
             favorite={favorite}
@@ -229,13 +235,7 @@ export function DashboardPage({
               }
               action={
                 !syncing && (
-                  <button
-                    onClick={onSync}
-                    className="flex items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
-                  >
-                    <Icon.Sync />
-                    Sync now
-                  </button>
+                  <SyncButton onSync={onSync} syncing={false} cooldownUntil={syncCooldownUntil} />
                 )
               }
             />

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SyncProgressEvent } from '@foxfire/core'
+import type { SyncProgressEvent, SyncState } from '@foxfire/core'
 
 interface SyncProgressState {
   /** The latest event for each account, whichever phase it is in. */
@@ -29,4 +29,25 @@ export function useSyncProgress(accountId: string): SyncProgressEvent | undefine
 /** Whether a sync is running, as opposed to finished or failed. */
 export function isSyncing(progress: SyncProgressEvent | undefined): boolean {
   return progress !== undefined && progress.phase !== 'complete' && progress.phase !== 'error'
+}
+
+/**
+ * When "Sync now" is next accepted for an account, or null if nothing says.
+ *
+ * Two answers, and the later one wins. The sync state is what the profile
+ * opens with; a finished sync's event is what arrives the moment the spinner
+ * stops, before the refetch it sets off has brought the state up to date.
+ * Taking either alone would leave the button pressable for that round trip, or
+ * blind to a sync finished before the page was opened.
+ */
+export function syncCooldownUntil(
+  state: SyncState | null | undefined,
+  progress: SyncProgressEvent | undefined
+): string | null {
+  const fromState = state?.cooldownUntil ?? null
+  const fromEvent = progress?.phase === 'complete' ? (progress.cooldownUntil ?? null) : null
+
+  if (fromState === null) return fromEvent
+  if (fromEvent === null) return fromState
+  return Date.parse(fromEvent) > Date.parse(fromState) ? fromEvent : fromState
 }
