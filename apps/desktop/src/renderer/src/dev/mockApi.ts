@@ -8,6 +8,8 @@ import type {
   CaptureStatus,
   EmailChange,
   LcuStatus,
+  Page,
+  PageOptions,
   PasswordChange,
   QueueType,
   ObsValidation,
@@ -28,7 +30,6 @@ import type {
   ServerProbe,
   ServerRegistration,
   ServerState,
-  Scoreboard,
   InvitePreview,
   ImportProgress,
   UpdateState,
@@ -61,22 +62,27 @@ import {
   buildRecordingDescription,
   renderRecordingTitle
 } from '@foxfire/core/youtube'
+import { pageOf } from '@foxfire/core'
+import { canUploadRecording } from '@shared/uploadEligibility'
 import {
   RECORDINGS,
   RECORDING_EVENTS,
   MOCK_REPLAYS,
   MOCK_ROFL_SETTINGS,
-  MOCK_ARCHIVES,
-  SCOREBOARD
+  MOCK_ARCHIVES
 } from './desktopFixtures'
 
 /**
  * The shared half: League data, a server's admin surface, and the events that
  * refresh them. The same fixture client the web client's harness renders, so
  * the two review the same games; what is added below is only what a desktop
- * has and a browser does not.
+ * has and a browser does not — and, connected, whose each account is.
  */
-const fixture = createFixtureClient()
+const fixture = createFixtureClient({
+  describe: ownedAs,
+  // Everybody else is on the server; a local database has only its own.
+  community: () => serverState.session !== null
+})
 
 /**
  * The Google connection, as the three YouTube scenarios need it: a build with
@@ -200,6 +206,25 @@ function setServerState(next: ServerState): ServerState {
   serverState = next
   for (const listener of serverListeners) listener(next)
   return next
+}
+
+/** Accounts unlinked from Settings › Account this session: still tracked, nobody's. */
+const released = new Set<string>()
+
+/**
+ * Whose an account is, the way a server answers. Connected, Faker is you and
+ * any account the fixtures leave unowned is somebody else's — which is what the
+ * rail, the search box and Settings › Account tell apart. Locally nothing is anybody's,
+ * as on a real local database, so the account passes through.
+ *
+ * A declaration rather than a const, because the fixture client above is built
+ * with it before this line is reached.
+ */
+function ownedAs(account: Account): Account {
+  if (serverState.session === null) return account
+  if (released.has(account.id)) return { ...account, isMine: false, ownerUsername: null }
+  if (account.isMine === undefined) return { ...account, isMine: false, ownerUsername: 'Chovy' }
+  return account
 }
 
 /**
@@ -570,6 +595,12 @@ export const mockApi: Api = {
 
   accounts: {
     ...fixture.accounts,
+    // On a server, removing is giving up the claim: the account stays, nobody's.
+    remove: async (accountId: string): Promise<Account[]> => {
+      if (serverState.session === null) return fixture.accounts.remove(accountId)
+      released.add(accountId)
+      return fixture.accounts.mine()
+    },
     add: (input): Promise<Account> =>
       delay(
         {
@@ -609,13 +640,6 @@ export const mockApi: Api = {
 
   assets: fixture.assets,
 
-  liveClient: {
-    // Answered fast and without the shell hold, because the real one polls: a
-    // held promise under ?scenario=loading would stall every tick behind it.
-    scoreboard: (): Promise<Scoreboard | null> =>
-      scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false)
-  },
-
   champions: fixture.champions,
   seasons: fixture.seasons,
   mastery: fixture.mastery,
@@ -651,8 +675,8 @@ export const mockApi: Api = {
               accountId: '1',
               gameName: 'Faker',
               tagLine: 'NA1',
-              // A game in progress in the default scenario, so the Live tab's
-              // indicator has something to show without a client running.
+              // A game in progress in the default scenario, to match the
+              // capture status below, which is recording one.
               inGame: true
             },
         100
@@ -669,6 +693,7 @@ export const mockApi: Api = {
   },
 
   search: fixture.search,
+  favorites: fixture.favorites,
   /**
    * The panel opens at `#/telemetry` in its own window against the real main
    * process, so the browser harness cannot produce genuine measurements. It
@@ -736,7 +761,11 @@ export const mockApi: Api = {
     reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
   },
   recordings: {
-    list: (accountId: string): Promise<Recording[]> => delay(RECORDINGS[accountId] ?? [], 220),
+    list: (accountId: string, page?: PageOptions): Promise<Page<Recording>> =>
+      delay(pageOf(RECORDINGS[accountId] ?? [], page), 220),
+    // Everything that could go up, whole — what "select all" selects, pages or no pages.
+    eligible: (accountId: string): Promise<Recording[]> =>
+      delay((RECORDINGS[accountId] ?? []).filter(canUploadRecording), 180),
     detail: (recordingId: number): Promise<RecordingDetail | null> => {
       const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
       return delay(recording ? { recording, events: RECORDING_EVENTS } : null, 220)
@@ -745,9 +774,9 @@ export const mockApi: Api = {
       delay(
         {
           totalBytes: 3_180_000_000,
-          count: 3,
+          count: (RECORDINGS[1] ?? []).length,
           unmatchedCount: 1,
-          missingCount: 1,
+          missingCount: (RECORDINGS[1] ?? []).filter((recording) => !recording.fileExists).length,
           softCapBytes: 50 * 1024 * 1024 * 1024
         },
         180,
@@ -826,18 +855,19 @@ export const mockApi: Api = {
   // to draw: linked and playable, linked but on a patch nothing can play, and
   // ingested with no match yet.
   replays: {
-    list: (): Promise<Replay[]> => delay(MOCK_REPLAYS, 220),
+    list: (_accountId: string, page?: PageOptions): Promise<Page<Replay>> => delay(pageOf(MOCK_REPLAYS, page), 220),
     // The harness has no server behind it, so there is never one to fetch —
     // which is also what local-only mode answers.
     download: (): Promise<number | null> => delay(null, 400, false),
     usage: (): Promise<ReplayDiskUsage> =>
       delay(
         {
-          totalBytes: 96_000_000,
-          count: 3,
-          unlinkedCount: 1,
-          missingCount: 0,
-          unplayableCount: 1,
+          totalBytes: MOCK_REPLAYS.reduce((total, replay) => total + (replay.fileBytes ?? 0), 0),
+          count: MOCK_REPLAYS.length,
+          unlinkedCount: MOCK_REPLAYS.filter((replay) => replay.match === null).length,
+          missingCount: MOCK_REPLAYS.filter((replay) => !replay.fileExists).length,
+          unplayableCount: MOCK_REPLAYS.filter((replay) => replay.fileExists && replay.blockedReason !== null)
+            .length,
           softCapBytes: 5 * 1024 * 1024 * 1024
         },
         180,
@@ -966,7 +996,7 @@ function buildMockRequests(): TelemetryRequest[] {
     })
   }
 
-  // A live-game fan-out: ten rank lookups issued at once, queued serially.
+  // A fan-out: ten rank lookups issued at once, queued serially.
   for (let i = 0; i < 10; i += 1) {
     rows.push({
       id: 4_800 - i,

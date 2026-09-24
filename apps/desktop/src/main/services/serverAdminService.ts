@@ -7,6 +7,9 @@ import type {
   AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
+  Page,
+  PageOptions,
   RiotIdInput,
   ServerAdminSettings,
   ServerStorageUsage
@@ -28,8 +31,8 @@ export async function getStorageUsage(): Promise<ServerStorageUsage> {
   return serverApi().admin.storage()
 }
 
-export async function listStoredReplays(): Promise<AdminReplay[]> {
-  return serverApi().admin.storedReplays()
+export async function listStoredReplays(page?: PageOptions): Promise<Page<AdminReplay>> {
+  return serverApi().admin.storedReplays(page)
 }
 
 export async function removeStoredReplay(matchId: string): Promise<AdminActionResult> {
@@ -46,8 +49,8 @@ export async function addRiotAccount(input: RiotIdInput): Promise<Account> {
   return serverApi().admin.addRiotAccount(input)
 }
 
-export async function listUsers(): Promise<AdminUser[]> {
-  return serverApi().admin.users()
+export async function listUsers(query?: AdminUserQuery): Promise<Page<AdminUser>> {
+  return serverApi().admin.users(query)
 }
 
 export async function updateUser(id: string, patch: AdminUserPatch): Promise<AdminActionResult> {
@@ -67,8 +70,12 @@ export async function revokePasswordReset(userId: string): Promise<AdminActionRe
   return serverApi().admin.revokePasswordReset(userId)
 }
 
-export async function listInvites(): Promise<AdminInvite[]> {
-  return serverApi().admin.invites()
+export async function listOpenInvites(): Promise<AdminInvite[]> {
+  return serverApi().admin.openInvites()
+}
+
+export async function listUsedInvites(page?: PageOptions): Promise<Page<AdminInvite>> {
+  return serverApi().admin.usedInvites(page)
 }
 
 export async function createInvite(email: string): Promise<AdminInvite> {

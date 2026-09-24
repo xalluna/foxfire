@@ -7,8 +7,7 @@ import type { RecordingEvent } from '@foxfire/core'
  * you cannot see: two kills four seconds apart in a forty-minute game land on
  * the same pixel, and whether they merge, which glyph the merged mark takes and
  * what it says on hover are all decisions with no visual tell when they go
- * wrong. Pure, so they can be tested — the same reason the live-client mapping
- * lives apart from the view that draws it.
+ * wrong. Pure, so they can be tested.
  */
 
 /** Markers closer together than this on screen share one glyph. */

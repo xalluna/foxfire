@@ -1,5 +1,6 @@
 using Foxfire.Core;
 using Foxfire.Data;
+using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Reads;
@@ -36,9 +37,35 @@ public sealed record RankMilestoneResponse(
     string? Rank,
     long CapturedAt);
 
+/// <param name="Before">
+/// The last reading before the range began, which is what "over this period"
+/// counts from — see rankNetChange in packages/core. Null when the range has no
+/// start, or nothing precedes it.
+/// </param>
 public sealed record RankHistoryResponse(
     IReadOnlyList<RankSnapshotResponse> Snapshots,
-    IReadOnlyList<RankMilestoneResponse> Milestones);
+    IReadOnlyList<RankMilestoneResponse> Milestones,
+    RankSnapshotResponse? Before);
+
+/// <summary>One day's close on the profile's graph. See <see cref="RankTrends"/>.</summary>
+/// <param name="At">Where it is drawn: the end of its day.</param>
+/// <param name="Rank">The division, spelled the way <see cref="RankSnapshotResponse"/> spells it.</param>
+/// <param name="CapturedAt">When the repeated reading was taken, which on a quiet day is earlier than <paramref name="At"/>.</param>
+public sealed record RankTrendPointResponse(
+    long At,
+    string? Tier,
+    string? Rank,
+    int? LeaguePoints,
+    int? LadderPosition,
+    int? SeasonId,
+    long CapturedAt);
+
+/// <summary>Thirty days of one queue, a close a day. At most 31 points, however much history there is.</summary>
+public sealed record RankTrendResponse(
+    long From,
+    long To,
+    IReadOnlyList<RankTrendPointResponse> Points,
+    int? NetLp);
 
 /// <summary>A ranked season, as the pickers show it.</summary>
 public sealed record SeasonResponse(int Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
@@ -56,6 +83,19 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
     ///
     /// The upper bound is exclusive, so two adjacent ranked years tile without
     /// both claiming a reading that lands on the instant of the boundary.
+    ///
+    /// Whole and uncapped on purpose — the one list that grows which is not
+    /// paged (see "Lists that grow are paged" in CLAUDE.md). The milestones are
+    /// read off neighbouring pairs and the change over the period counts every
+    /// game, so a page would leave a gap in both and a cap would start them
+    /// silently late. It is bounded by the range asked for instead: a reading is
+    /// kept only when the rank moved, so about one per ranked game, which is a
+    /// few hundred for the thirty days the screen opens on. The client thins it
+    /// to closes for the graph itself. The profile, which draws the same month
+    /// 300px wide, reads the thinned <see cref="TrendAsync"/> instead. "All"
+    /// grows with every season, and
+    /// making that cheaper — summarising old seasons — is its own piece of work,
+    /// not a page size.
     /// </summary>
     public async Task<RankHistoryResponse> HistoryAsync(
         Guid riotAccountId,
@@ -75,19 +115,23 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             .ThenBy(r => r.Id)
             .ToListAsync(cancellationToken);
 
-        var snapshots = rows
-            .Select(r => new RankSnapshotResponse(
-                r.QueueType,
-                r.Tier?.RiotName(),
-                r.Division?.RiotName(),
-                r.LeaguePoints,
-                r.Wins,
-                r.Losses,
-                r.LadderPosition,
-                r.Source,
-                r.CapturedAt,
-                RankedSeasons.SeasonAt(seasons, r.CapturedAt)?.Id))
-            .ToList();
+        RankSnapshotResponse Describe(RankSnapshot r) => new(
+            r.QueueType,
+            r.Tier?.RiotName(),
+            r.Division?.RiotName(),
+            r.LeaguePoints,
+            r.Wins,
+            r.Losses,
+            r.LadderPosition,
+            r.Source,
+            r.CapturedAt,
+            RankedSeasons.SeasonAt(seasons, r.CapturedAt)?.Id);
+
+        var snapshots = rows.Select(Describe).ToList();
+
+        var before = bounds.StartMs is { } start
+            ? await LastBeforeAsync(riotAccountId, queueType, start, cancellationToken)
+            : null;
 
         List<RankMilestoneResponse> milestones = [];
 
@@ -112,8 +156,67 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
 
         milestones.Reverse();
 
-        return new RankHistoryResponse(snapshots, milestones);
+        return new RankHistoryResponse(snapshots, milestones, before is null ? null : Describe(before));
     }
+
+    /// <summary>
+    /// The last thirty days of one ladder, a close a day — the profile's graph.
+    ///
+    /// Two reads: the one reading before the window, which is where the line
+    /// starts, and everything since. Both walk the (account, queue, capturedAt,
+    /// id) index, the first backwards for a single row. There is no upper bound,
+    /// matching the "30d" range, so a reading a fast clock stamped a moment
+    /// ahead of now is still today's point rather than lost.
+    /// </summary>
+    public async Task<RankTrendResponse> TrendAsync(
+        Guid riotAccountId,
+        string queueType,
+        CancellationToken cancellationToken = default)
+    {
+        var seasons = await SeasonsAsync(cancellationToken);
+        var now = time.GetUtcNow().ToUnixTimeMilliseconds();
+        var since = RankTrends.Since(now);
+
+        var carryIn = await LastBeforeAsync(riotAccountId, queueType, since, cancellationToken);
+
+        var window = await db.RankSnapshots
+            .AsNoTracking()
+            .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueType && r.CapturedAt >= since)
+            .OrderBy(r => r.CapturedAt)
+            .ThenBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+        List<RankReading> readings = carryIn is null ? [] : [carryIn.ToReading()];
+        readings.AddRange(window.Select(r => r.ToReading()));
+
+        var trend = RankTrends.Of(readings, seasons, now);
+
+        return new RankTrendResponse(
+            trend.From,
+            trend.To,
+            [.. trend.Points.Select(p => new RankTrendPointResponse(
+                p.At,
+                p.Reading.Tier?.RiotName(),
+                p.Reading.Division?.RiotName(),
+                p.Reading.LeaguePoints,
+                p.Reading.LadderPosition,
+                p.SeasonId,
+                p.Reading.CapturedAt))],
+            trend.NetLp);
+    }
+
+    /// <summary>The newest reading strictly before a moment, the later row winning a tie.</summary>
+    private Task<RankSnapshot?> LastBeforeAsync(
+        Guid riotAccountId,
+        string queueType,
+        long beforeMs,
+        CancellationToken cancellationToken) =>
+        db.RankSnapshots
+            .AsNoTracking()
+            .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueType && r.CapturedAt < beforeMs)
+            .OrderByDescending(r => r.CapturedAt)
+            .ThenByDescending(r => r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// The seasons this account has history in, newest first.

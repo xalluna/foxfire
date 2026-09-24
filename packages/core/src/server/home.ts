@@ -13,26 +13,25 @@ export interface HomeAccountStore {
 }
 
 /**
- * Stamps a remembered home onto a server's account list.
+ * Which of your accounts is home, given the one this machine remembers.
  *
- * Falls back to the first account the caller owns, so a freshly joined server
- * opens somewhere rather than nowhere. Past that the two clients differ, and
- * `fallbackToAny` is the difference: the desktop opens on the first account at
- * all, because on a shared server there is always somebody's history to look
- * at, while the web client would rather open on its list of players than on a
- * stranger's profile.
+ * The remembered one when it is among them. Nothing remembered falls back to
+ * your first, so a freshly joined server opens somewhere rather than nowhere.
+ * And a remembered account that is not yours marks none of them: a browser can
+ * star a friend's profile to open on, and that friend is not in this list.
+ *
+ * There is no falling back past your own accounts. The desktop used to open on
+ * the first account on the server at all, which needed every account on the
+ * server to pick it from; somebody with nothing claimed is better told how to
+ * claim something than shown a stranger's history.
  */
-export function applyHomeAccount(
-  accounts: Account[],
-  storedId: string | null,
-  options: { fallbackToAny: boolean } = { fallbackToAny: true }
-): Account[] {
-  if (accounts.length === 0) return accounts
+export function homeAmong(mine: Account[], storedId: string | null): Account | null {
+  if (storedId === null) return mine[0] ?? null
+  return mine.find((a) => a.id === storedId) ?? null
+}
 
-  const home =
-    accounts.find((a) => a.id === storedId) ??
-    accounts.find((a) => a.isMine) ??
-    (options.fallbackToAny ? accounts[0] : undefined)
-
-  return accounts.map((account) => ({ ...account, isHomeAccount: account.id === home?.id }))
+/** The same list, with `isHomeAccount` set on the one `homeAmong` picks. */
+export function markHome(mine: Account[], storedId: string | null): Account[] {
+  const home = homeAmong(mine, storedId)
+  return mine.map((account) => ({ ...account, isHomeAccount: account.id === home?.id }))
 }

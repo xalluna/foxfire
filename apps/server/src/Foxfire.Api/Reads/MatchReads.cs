@@ -186,6 +186,23 @@ public sealed record ChampionStatsResponse(
 public sealed class MatchReads(FoxfireDbContext db)
 {
     /// <summary>
+    /// How many games one player's history holds under a queue filter — the
+    /// total beside a page of <see cref="MatchListAsync"/>.
+    ///
+    /// The filter is <see cref="MatchListAsync"/>'s, written out again rather
+    /// than shared: that one projects six subqueries per row, and EF composes a
+    /// count over the join far more plainly than over a projection. ReadTests
+    /// holds the two to the same set.
+    /// </summary>
+    public Task<int> MatchCountAsync(string puuid, int? queueId, CancellationToken cancellationToken = default) =>
+        db.MatchParticipants
+            .AsNoTracking()
+            .Where(p => p.Puuid == puuid)
+            .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => m)
+            .Where(m => queueId == null || m.QueueId == queueId)
+            .CountAsync(cancellationToken);
+
+    /// <summary>
     /// A page of match history for one player.
     ///
     /// Selects the full per-row stat set rather than the bare minimum: every
@@ -219,6 +236,7 @@ public sealed class MatchReads(FoxfireDbContext db)
             .Where(x => queueId == null || x.m.QueueId == queueId)
             .Where(x => matchId == null || x.m.MatchId == matchId)
             .OrderByDescending(x => x.m.GameCreation)
+            .ThenByDescending(x => x.m.MatchId)
             .Skip(offset)
             .Take(limit)
             .Select(x => new

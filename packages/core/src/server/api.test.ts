@@ -43,6 +43,17 @@ describe('createServerApi', () => {
     ])
   })
 
+  it("asks for a queue's thirty-day trend, never its whole history", async () => {
+    const { calls, request } = recorder(() => ({ from: 0, to: 0, points: [], netLp: null }))
+    const api = createServerApi(request)
+
+    await api.rank.trend('acc-1', 'RANKED_SOLO_5x5')
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /riot-accounts/acc-1/rank/trend?queueType=RANKED_SOLO_5x5'
+    ])
+  })
+
   it('answers a refused admin write with the server\'s own message', async () => {
     const { request } = recorder(
       () => new ServerError('There has to be at least one administrator.', 409, 'last_admin')
@@ -53,6 +64,22 @@ describe('createServerApi', () => {
       ok: false,
       error: 'There has to be at least one administrator.'
     })
+  })
+
+  it('answers a sync inside the cooldown with how long to wait, rather than throwing', async () => {
+    const tooSoon = 'This account was synced less than two minutes ago. Try again in 45 seconds.'
+    const { calls, request } = recorder(() => new ServerError(tooSoon, 429, 'sync_too_soon'))
+    const api = createServerApi(request)
+
+    await expect(api.sync.start('acc-1')).resolves.toEqual({ ok: false, error: tooSoon })
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /sync/acc-1'])
+  })
+
+  it('answers a sync the server started with ok', async () => {
+    const { request } = recorder()
+    const api = createServerApi(request)
+
+    await expect(api.sync.start('acc-1')).resolves.toEqual({ ok: true, error: null })
   })
 
   it('lets a failed read throw, because a read that fails has nothing to show', async () => {
@@ -71,13 +98,103 @@ describe('createServerApi', () => {
     expect(calls[0].path).toBe('/search?q=Hide%20on%20bush%23KR1')
   })
 
-  it('asks for every tracked player when the query is blank', async () => {
+  it('leaves the page to the server when a blank query names none', async () => {
     const { calls, request } = recorder(() => [])
     const api = createServerApi(request)
 
     await api.search.players('')
 
     expect(calls[0].path).toBe('/search?q=')
+  })
+
+  it('asks the finder for a page, and for only yours or only the claimed', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.search.players('', { limit: 50, offset: 100 })
+    await api.search.players('', { mine: true })
+    await api.search.players('fak', { claimed: true, limit: 50, offset: 0 })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/search?q=&limit=50&offset=100',
+      '/search?q=&mine=true',
+      '/search?q=fak&claimed=true&limit=50&offset=0'
+    ])
+  })
+
+  it('asks for the members a page at a time, by name or address', async () => {
+    const { calls, request } = recorder(() => ({ items: [], total: 0 }))
+    const api = createServerApi(request)
+
+    await api.admin.users()
+    await api.admin.users({ q: '  Faker@Example.com ', limit: 50, offset: 50 })
+    await api.admin.users({ q: '   ' })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/admin/users/',
+      '/admin/users/?q=Faker%40Example.com&limit=50&offset=50',
+      '/admin/users/'
+    ])
+  })
+
+  it('asks for the open invites whole and the used ones a page at a time', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.admin.openInvites()
+    await api.admin.usedInvites()
+    await api.admin.usedInvites({ limit: 50, offset: 100 })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/admin/invites/',
+      '/admin/invites/used',
+      '/admin/invites/used?limit=50&offset=100'
+    ])
+  })
+
+  it('asks for the replay library a page at a time', async () => {
+    const { calls, request } = recorder(() => ({ items: [], total: 0 }))
+    const api = createServerApi(request)
+
+    await api.admin.storedReplays()
+    await api.admin.storedReplays({ limit: 50, offset: 50 })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/admin/storage/replays',
+      '/admin/storage/replays?limit=50&offset=50'
+    ])
+  })
+
+  it('hands a page back as the server sent it, total and all', async () => {
+    const page = { items: [{ matchId: 'NA1_1' }], total: 37 }
+    const { request } = recorder(() => page)
+    const api = createServerApi(request)
+
+    await expect(api.dashboard.matches('acc-1', 20, 0, null)).resolves.toEqual(page)
+    await expect(api.search.players('')).resolves.toEqual(page)
+  })
+
+  it('reads accounts one question at a time, never the whole server', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.accounts.mine()
+    await api.accounts.get('acc-1')
+    await api.accounts.find({ gameName: 'Hide on bush', tagLine: 'KR1' })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/riot-accounts/mine',
+      '/riot-accounts/acc-1',
+      '/riot-accounts/lookup?gameName=Hide%20on%20bush&tagLine=KR1'
+    ])
+  })
+
+  it('answers an account the server does not have with null', async () => {
+    const { request } = recorder(() => new ServerError('The server answered 404.', 404))
+    const api = createServerApi(request)
+
+    await expect(api.accounts.get('gone')).resolves.toBeNull()
+    await expect(api.accounts.find({ gameName: 'Nobody', tagLine: 'NA1' })).resolves.toBeNull()
   })
 
   describe('importer', () => {

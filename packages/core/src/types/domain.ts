@@ -395,6 +395,76 @@ export interface RankMilestone {
 export interface RankHistory {
   snapshots: RankSnapshot[]
   milestones: RankMilestone[]
+  /**
+   * The last reading before the range began, or null when the range has no
+   * start or nothing precedes it.
+   *
+   * What "over this period" counts from, so a month's change includes the
+   * month's first game — see rankNetChange. Optional because a server older
+   * than 0.4.0 does not send it, and the change then counts from the first
+   * reading inside the range, as it used to.
+   */
+  before?: RankSnapshot | null
+}
+
+/** A reading as the trend rule reads it: where somebody stood, and when. */
+export type RankTrendReading = Pick<
+  RankSnapshot,
+  'tier' | 'rank' | 'leaguePoints' | 'ladderPosition' | 'capturedAt'
+>
+
+/**
+ * One close on a rank graph — a day's on the profile, a day's or six hours' on
+ * the Rank page.
+ *
+ * Always a real reading, repeated onto the day it closed — never an average, so
+ * a tooltip can only ever show a rank somebody actually held.
+ */
+export interface RankTrendPoint {
+  /** Where it is drawn: the end of its span, `to − k·step`. Never the reading's own time. */
+  at: number
+  tier: string | null
+  rank: string | null
+  leaguePoints: number | null
+  ladderPosition: number | null
+  /** The season of the reading, which is where the line breaks. */
+  seasonId: number | null
+  /** When the repeated reading was taken — earlier than `at` on a day with no games. */
+  capturedAt: number
+}
+
+/**
+ * The last thirty days of one queue, thinned to a close a day.
+ *
+ * Bounded by construction at 31 points, whatever the history holds — the
+ * profile's graph, where every reading in the month would be hundreds of
+ * points drawn 300px wide. See rules/rankTrend.ts.
+ */
+export interface RankTrend {
+  /** The window, epoch milliseconds: thirty days back from `to`, which is now. */
+  from: number
+  to: number
+  /** Oldest first. A day with nothing to show is left out rather than sent empty. */
+  points: RankTrendPoint[]
+  /** The ladder change over the window, from the raw readings. Null across a season change. */
+  netLp: number | null
+}
+
+/**
+ * The Rank page's graph: a range's readings as closes, by the profile's rule.
+ *
+ * A close every six hours over a week and every day over anything longer.
+ * Worked out on the client from the history it already reads — see
+ * rankRangeCloses in rules/rankTrend.ts — so it has no wire shape of its own.
+ */
+export interface RankCloses {
+  /** The window, epoch milliseconds. `to` is now, or a past season's last moment. */
+  from: number
+  to: number
+  /** How far apart the closes are drawn. */
+  step: number
+  /** Oldest first, `step` apart except where the line breaks. */
+  points: RankTrendPoint[]
 }
 
 /**
@@ -510,6 +580,13 @@ export interface SyncState {
   backfillTarget: number
   lastFullSyncAt: string | null
   lastDeltaSyncAt: string | null
+  /**
+   * When the account can next be synced — what "Sync now" waits for. The
+   * server's to say, because the rule is the server's: this PC alone has none,
+   * and answers null, as does an account that has never synced. Past once the
+   * wait is over, rather than null.
+   */
+  cooldownUntil: string | null
 }
 
 /**
@@ -528,6 +605,12 @@ export interface SyncProgressEvent {
   total: number
   message?: string
   trigger: SyncTrigger
+  /**
+   * On a server's 'complete', when the account can next be synced. The sync
+   * state says the same, but only after the refetch this event sets off — and
+   * until then "Sync now" would come back pressable. Never on this PC's own.
+   */
+  cooldownUntil?: string | null
 }
 
 /**
@@ -544,6 +627,65 @@ export interface PlayerSearchResult {
   account: Account
   /** Null for an account that has never been placed, or never synced. */
   soloEntry: LeagueEntry | null
+}
+
+/**
+ * A player somebody starred, as this machine or browser last saw them.
+ *
+ * A copy rather than an id, so the list draws the moment the search box opens
+ * — before anything has been asked of a server, and while it cannot be. It is
+ * brought up to date whenever a newer copy of the same account goes past.
+ */
+export interface FavoritePlayer extends PlayerSearchResult {
+  /** When it was starred. The list is newest first. */
+  addedAt: string
+}
+
+/** What starring somebody came to: the list either way, and why when it did not take. */
+export type FavoriteOutcome =
+  | { ok: true; favorites: FavoritePlayer[] }
+  | { ok: false; reason: 'full'; favorites: FavoritePlayer[] }
+
+/**
+ * One page of a list that grows, and how long the whole list is.
+ *
+ * Every list whose length depends on time or on the size of the community —
+ * match history, the finder, the members, used invites, the replay library,
+ * the desktop's recordings and replays — answers with this rather than an
+ * array. `total` counts the list under the same filters, so a screen can say
+ * "120 members" rather than "50+" and knows it has reached the end without
+ * asking for an empty page.
+ *
+ * Lists that cannot grow past a handful stay arrays. So does rank history,
+ * which the graph needs whole; see `FoxfireData.rank.history`.
+ */
+export interface Page<T> {
+  items: T[]
+  total: number
+}
+
+/**
+ * Which page. Both are optional: a list answers with its first page when asked
+ * for nothing, and never with more than its cap however much is asked for.
+ */
+export interface PageOptions {
+  /** How many to answer with. Capped at 100; 50 when left out (20 for match history). */
+  limit?: number
+  offset?: number
+}
+
+/**
+ * Which page of the finder, and of whom.
+ *
+ * A finder answers a page at a time — closest first for a typed query, in
+ * name order for a blank one — because a community is not obliged to stay a
+ * size somebody can scroll.
+ */
+export interface PlayerSearchOptions extends PageOptions {
+  /** Only the accounts the caller has claimed. Locally that is every account. */
+  mine?: boolean
+  /** Only accounts somebody has claimed — the admin's list of claims to undo. */
+  claimed?: boolean
 }
 
 export interface RiotIdInput {

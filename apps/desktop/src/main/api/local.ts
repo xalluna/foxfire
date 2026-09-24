@@ -2,7 +2,7 @@ import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { getDb } from '../db'
 import { getAccountById, getLeagueEntries } from '../db/repositories/accounts.repo'
-import { getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
+import { countMatchSummaries, getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
 import {
   addAccount,
@@ -14,9 +14,17 @@ import {
 } from '../services/accountService'
 import { readSyncState, startSync } from '../services/syncService'
 import { getMasteryData } from '../services/masteryService'
-import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
+import { getRankHistory, getRankPeriods, getRankTrend } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
-import { rangeBounds } from '@foxfire/core'
+import {
+  clampPage,
+  compareSearchResults,
+  MATCH_PAGE_LIMIT_DEFAULT,
+  pageOf,
+  rangeBounds,
+  searchRank
+} from '@foxfire/core'
+import { isPlayer } from '@foxfire/core/routes'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
 import type { Account } from '@shared/types'
 import type { ServerBackedApi } from './types'
@@ -62,10 +70,23 @@ function wire(account: StoredAccount): Account {
 
 export const localApi: ServerBackedApi = {
   accounts: {
-    list: async () => getAccounts().map(wire),
+    // Every account in this file is yours: there is nobody else here to tell apart.
+    mine: async () => getAccounts().map(wire),
+    get: async (accountId) => {
+      const account = getAccountById(getDb(), rowId(accountId))
+      return account ? wire(account) : null
+    },
+    // A handful of rows, so read and matched here rather than given a query of
+    // their own — with the same rule a link's slug is matched by.
+    find: async (riotId) => {
+      const account = getAccounts().find((a) => isPlayer(a, riotId))
+      return account ? wire(account) : null
+    },
+    // The one marked home, else the first: an empty home flag is a file whose
+    // home account was removed, and it should still open somewhere.
     getHome: async () => {
-      const home = getHome()
-      return home ? wire(home) : null
+      const home = getHome() ?? getAccounts()[0] ?? null
+      return home ? wire({ ...home, isHomeAccount: true }) : null
     },
     add: async (input) => {
       const account = await addAccount(input)
@@ -101,15 +122,23 @@ export const localApi: ServerBackedApi = {
     matchList: async (accountId, limit, offset, queueId) => {
       const db = getDb()
       const account = getAccountById(db, rowId(accountId))
-      if (!account) return []
-      return getMatchSummaries(db, account.puuid, limit, offset, queueId)
+      if (!account) return { items: [], total: 0 }
+
+      const page = clampPage({ limit, offset }, MATCH_PAGE_LIMIT_DEFAULT)
+      return {
+        items: getMatchSummaries(db, account.puuid, page.limit, page.offset, queueId),
+        total: countMatchSummaries(db, account.puuid, queueId)
+      }
     },
     matchDetail: async (matchId) => getMatchDetail(getDb(), matchId)
   },
 
   sync: {
+    // No cooldown on this PC: its own key, its own budget, and a sync already
+    // running for the account is joined rather than repeated.
     start: async (accountId) => {
       startSync(rowId(accountId))
+      return { ok: true, error: null }
     },
     getState: async (accountId) => readSyncState(rowId(accountId))
   },
@@ -131,6 +160,7 @@ export const localApi: ServerBackedApi = {
   rank: {
     history: async (accountId, queueType, range) =>
       getRankHistory(rowId(accountId), queueType, range),
+    trend: async (accountId, queueType) => getRankTrend(rowId(accountId), queueType),
     periods: async (accountId) => getRankPeriods(rowId(accountId)),
     editable: async (accountId, queueType) => {
       const db = getDb()
@@ -186,24 +216,40 @@ export const localApi: ServerBackedApi = {
    * world; it reads the database now, on both sides of the connection.
    */
   search: {
-    players: async (query) => {
-      const needle = query.trim().toLowerCase()
+    // Mine and claimed are every account here, so neither narrows anything.
+    players: async (query, options = {}) => {
       const db = getDb()
 
-      return getAccounts()
-        .filter(
-          (account) =>
-            needle.length === 0 ||
-            account.gameName.toLowerCase().includes(needle) ||
-            account.tagLine.toLowerCase().includes(needle) ||
-            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
-        )
-        .map((account) => ({
+      const page = pageOf(
+        getAccounts()
+          .filter((account) => searchRank(account, query) !== null)
+          .sort(compareSearchResults(query)),
+        options
+      )
+
+      return {
+        total: page.total,
+        items: page.items.map((account) => ({
           account: wire(account),
           soloEntry:
             getLeagueEntries(db, account.id).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
         }))
+      }
     }
+  },
+
+  /**
+   * Nobody to star. Every account in a local file is on the rail already, and
+   * the search box that holds favorites is only there with a server — whose
+   * list is kept per server, so one kept here would belong to none of them.
+   */
+  favorites: {
+    list: async () => [],
+    add: async () => {
+      throw new Error('Favorites are kept per server. Connect to one to star players on it.')
+    },
+    remove: async () => [],
+    refresh: async () => []
   },
 
   /**

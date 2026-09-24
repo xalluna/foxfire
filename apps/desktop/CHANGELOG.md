@@ -7,6 +7,134 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.15.0] — 2026-09-24
+
+On a server, the account rail is a way between your own accounts rather than a list of everybody's,
+and looking after them happens in Settings. Foxfire also stops downloading every account on the
+server to find the one it is showing, which is what lets a server's community grow without every
+desktop on it slowing down — and every list that grows, here or on the server, now arrives a page at
+a time. Finding anybody else is a box in the title bar now rather than a page of its own — Ctrl K
+from anywhere — with the players you star kept at the top of it. A profile leads with where somebody
+stands now — their Solo/Duo month drawn under their rank, and the champions they play most this
+season — and Rank and Champions open from there rather than from tabs of their own. The Live game
+tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
+
+### Added
+
+- **Search from anywhere.** The box in the middle of the title bar finds anybody on the server, and
+  Ctrl K jumps to it from any page. Click in it for your favorites and your own accounts; type three
+  letters and it suggests up to ten players, closest names first — an exact name or Riot ID, then
+  names that start with what you typed. Pick one, with the mouse or the arrow keys and Enter, to
+  open their profile. It is there while Foxfire is connected to a server; on this PC alone, the rail
+  already holds every account there is.
+- **Favorites.** Star anybody — beside their name in the search box, or on their profile — and they
+  are at the top of the box the next time you click in it, straight away, without waiting on the
+  server. Up to ten, newest first. This PC keeps them, one list per server, and a favorite's rank
+  catches up whenever Foxfire sees that player again.
+- **Set home from any profile.** A house beside Copy link makes Foxfire open on that player, and is
+  filled in on the one it opens on already. The rail's home button is the same house — the star
+  means favorite now.
+- **Unlink an account yourself.** Settings › Account lists the League accounts linked to you, each
+  with an Unlink button. Its games stay on the server; it just stops being yours, and whoever signs
+  in to it in the League client next can claim it. An account somebody else holds is still an
+  admin's to unlink.
+
+### Changed
+
+- **Rank and champions on the profile.** The Solo/Duo card shows how far through the tier you are,
+  what the last 30 days did to your LP, and the month drawn beneath it — one point a day, so a
+  quiet week is a flat line rather than a gap — with Rank history underneath for the whole graph.
+  Below Flex, the five champions you have played most this season, for all queues, Solo/Duo or
+  Flex, and All champions for the rest. The five are the Champions page's first five, so the list
+  it opens on carries straight on. The recent-games block keeps its own three, for its own twenty
+  games.
+- **The Rank page's graph is drawn the profile's way.** One point a day — the rank you closed the
+  day on — rather than one for every game, so a busy evening is where it ended instead of a
+  sawtooth of wins and losses, and a quiet week is a flat line across its own days rather than a
+  straight line to the next game. Over 7 days it is a point every six hours, so a big session still
+  shows. Every point is a rank you actually held, never an average, 30 days is the same line the
+  profile draws, and the milestones beneath still list every promotion at the minute it happened.
+- **A way back from Rank and Champions.** Both pages open with a link back to the profile they
+  came from, the way a game's own page already did.
+- **Rank and champions stay full size in a narrow window.** Below 1280 pixels wide the cards move
+  above the recent games instead of shrinking to a line of chips beside the name.
+- **The column beside the match list scrolls with it.** With a month and a season in it, it is
+  taller than most windows, and pinned in place it hid its own bottom until the list ran out.
+- **"Over this period" on the Rank page counts from before the period.** Thirty days now includes
+  the month's first game: it counted from the first reading inside the period, so the one game
+  somebody played after a quiet month showed no change at all. It is the same figure the profile
+  shows.
+- **Your account has its own page.** Your name, email, password and League accounts moved from
+  Settings › Server to a new Account page just under it, so Server is back to which server Foxfire
+  reads from and how to leave it. The page is only there while you are signed in to a server.
+- **On a server, the rail shows only your accounts.** It used to list every League account the
+  server tracks — everybody's. Now it lists the ones linked to you, and anybody else's is a search
+  away, as it is in the browser.
+- **No Add and no × on the rail on a server.** Adding an account there means claiming it through
+  the League client, which Settings › Account offers, so the rail's Add button only ever opened an
+  explanation. The × was the only way to give up a claim, one stray click from the avatar beside
+  it — and on anybody else's account the server refused it without a word. On this PC alone, the
+  rail works as it always has.
+- **Sync anybody's account.** "Sync now" works on every profile on a server, not only on your own,
+  so an account an admin tracks — which nobody else was ever going to refresh — or a friend who has
+  not opened Foxfire in a while can be brought up to date. An account can be synced once every two
+  minutes, whoever asks, so for those two minutes the button counts down — "Sync in 1:31" — and
+  comes back by itself when the server will take another. On this PC alone there is no wait.
+- **Settings › League accounts shows a page at a time.** For an admin, the list of claims arrives
+  fifty at a time, with Show more for the next fifty and a box to find one.
+- **Recordings and Replays show a page at a time.** Captures lists the newest fifty of each, with
+  Show more, rather than every game this PC has ever kept. "Select all not on YouTube" still means
+  all of them, not just the ones on screen, and the warnings above each list — missing files,
+  replays no installed client can play — still count every one.
+- **An admin's Members, Invites and replay library page too.** Members finds somebody by name or
+  email on the server and says how many there are; Invites lists the open ones in full and the
+  used ones fifty at a time; Data & storage lists shared replays biggest first with Show more.
+- **No stranger's profile at launch.** Signed in to a server with no League account linked yet,
+  Foxfire used to open on the first account the server had — somebody else's history. It now says
+  how to link yours, and that everybody else is in the search box.
+- **The capture pill shrinks to a dot in a narrow window.** Below about 1150 pixels wide the title
+  bar cannot hold the tabs, the search box and "Waiting for the game" side by side, so the pill
+  keeps its colour — teal ready, amber waiting, red recording — and its words move to its tooltip.
+
+### Removed
+
+- **Champions and Rank in the title bar.** Both open from the profile's cards now, and Dashboard
+  stays lit while you are on them, since they are part of it. The Foxfire logo takes you to the
+  account this PC opens on from anywhere — Settings included.
+- **The Search page and its tab.** Everything it did is in the title bar's search box, which works
+  from whichever page you are on rather than taking you away from it.
+- **The Live game tab.** It redrew the scoreboard League already shows on Tab, and had nothing to
+  show the rest of the time. Recording is unaffected: Foxfire still watches the game to know when
+  to start and stop, the title bar still says when a game is being recorded, and the dot on the
+  taskbar button still turns teal while a game is on and red while it is being recorded.
+
+### Under the hood
+
+- Connected to a server, Foxfire asks for the accounts it needs — yours for the rail, the launch
+  sync and the League client watcher, and the one a page names — instead of fetching every account
+  the server tracks at launch and on nearly every page. Needs Foxfire Server 0.4.0, which added
+  those reads.
+- The in-game reader keeps only what recording uses — the game clock, which player is you, and each
+  player's champion — and no longer reads items, runes, spells or scores.
+- Favorites live in this PC's own database beside the home account, keyed by server, each with a
+  copy of the player as last seen so the list draws without asking anybody. The rules — ten at most,
+  newest first, one per account, and a copy replaced only by a newer one — are shared with the web
+  client and tested. Suggestions come closest first because Foxfire Server 0.4.0 ranks them.
+- Every list that grows is read a page and a count at a time, from the server and from this PC's
+  own database alike: match history, search, recordings, replays and the admin lists. The replay
+  warnings count missing and unplayable files without building every row, checking playability once
+  per patch rather than once per replay.
+- One rule decides which recordings can go to YouTube, shared by the Recordings tab and the new
+  `recordings:eligible` channel behind "select all" — which exists only in builds with YouTube in
+  them.
+- Reads the lists of Foxfire Server 0.4.0's API version 3, and no older server's.
+- The profile's graph asks for thirty days as a close a day — the last reading of each day, at most
+  31 points, never an average — rather than every reading in the month. Connected to a server,
+  Foxfire Server 0.4.0 answers it; on this PC alone the same rule runs over the local database, and
+  a shared corpus of cases holds the two to the same answers. The Rank page still reads every
+  reading, for its milestones and its change over the period, and runs the same rule over them
+  itself to draw its graph, against the whole season table so no close is carried past a reset.
+
 ## [0.14.0] — 2026-09-23
 
 Foxfire updates itself, search looks through the people your server tracks rather than strangers on
@@ -1115,6 +1243,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0

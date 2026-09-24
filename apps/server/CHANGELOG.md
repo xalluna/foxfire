@@ -11,6 +11,153 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.4.0] — 2026-09-24
+
+A server that answers what a screen asks rather than handing over every account
+it has. Clients used to download the whole list of League accounts on the server
+— at launch and on nearly every page — and search it themselves, which is fine
+for a dozen people and not for a community that keeps growing. Now your own
+accounts are a list, anybody else's is one lookup, and the finder answers a page
+at a time. So does every other list that grows with the community or with time —
+the members, used invites, the replay library and match history — each saying how
+long it is. Serves Foxfire 0.15 and newer. In the browser, finding somebody moves
+out of the Players page and into a search box on every page, which opens on the
+players you starred, and a profile leads with a month of Solo/Duo and the
+season's most-played champions.
+
+### Added
+
+- **A search box on every page.** The middle of the header finds anybody on the
+  server, and Ctrl K (⌘K on a Mac) jumps to it. Click in it for your favorites
+  and your own accounts; type three letters and it suggests up to ten players.
+  Pick one, with the mouse or the arrow keys and Enter, to open their profile.
+- **Favorites.** Star anybody — beside their name in the search box, or on their
+  profile — and they are at the top of the box the next time you click in it,
+  without waiting on the server. Up to ten, newest first, kept by this browser,
+  and a favorite's rank catches up whenever the page sees that player again.
+- **Set home from a profile.** A house beside Copy link makes this browser open
+  on that player, and is filled in on the one it opens on already. It used to be
+  the star on the Players page, which means favorite now.
+
+### Changed
+
+- **Rank and champions on the profile.** The Solo/Duo card shows how far through
+  the tier somebody is, what the last 30 days did to their LP, and the month
+  drawn beneath it — one point a day — with Rank history for the whole graph.
+  Below Flex, the five champions they have played most this season, for all
+  queues, Solo/Duo or Flex, and All champions for the rest. On a narrow screen
+  or a phone the cards sit above the recent games at full size, rather than as
+  chips beside the name. The Profile, Champions and Rank tabs stay.
+- **A way back from Rank and Champions.** Both pages open with a link back to the
+  player's profile.
+- **"Over this period" counts from before the period.** On the Rank page, thirty
+  days now includes the month's first game, and matches the profile's figure.
+- **The Rank page's graph is drawn the profile's way.** One point a day — the
+  rank the day closed on — rather than one for every game, so a busy evening is
+  where it ended instead of a sawtooth of wins and losses, and a quiet week is
+  flat. Over 7 days it is a point every six hours, so a big session still shows.
+  Every point is a rank actually held, 30 days is the same line the profile
+  draws, and the milestones still list every promotion at the minute it
+  happened.
+- **Closest names first.** A typed search answers an exact name or whole Riot ID
+  first, then names that start with what was typed, then names that only contain
+  it — alphabetical within each. A box that shows ten should show the closest
+  ten, not the first ten A to Z. A blank search is still name order, and paging
+  still never repeats or skips anybody.
+- **Every search is capped.** A search that does not ask for a page gets fifty
+  players, and none gets more than a hundred.
+- **League accounts pages its claims.** An admin's list of claimed accounts
+  arrives fifty at a time, with a box to find one by name, rather than every
+  claim on the server at once.
+- **Members searches the server.** The Members page finds somebody by name or
+  email on the server rather than in a list it downloaded whole, fifty at a time
+  with Show more, and says how many members there are — or how many match.
+- **Invites shows what can still be used, and the rest a page at a time.** Open
+  invites are listed in full; used ones arrive fifty at a time with Show more.
+  The list used to stop at the newest two hundred invites ever made, so on a
+  long-running server the oldest simply were not there. Withdrawn and lapsed
+  invites are no longer sent at all, since nothing showed them.
+- **The replay library pages.** Data & storage lists shared replays biggest
+  first, fifty at a time with Show more, rather than stopping at the biggest
+  fifty — so the one you came to delete is always reachable.
+- **Foxfire 0.14 is no longer served.** Every list above now answers with a page
+  and a count, which 0.14 cannot read: its Search, match history and admin pages
+  would all come up empty. A 0.14 desktop connected here updates itself to 0.15,
+  the version this release names. A browser tab left open across the upgrade is
+  told to reload.
+- **Nothing to open yet?** Signed in with no League account claimed, the front
+  page says how to claim one and that everybody else is in the search box,
+  rather than opening a list of everybody.
+- **Sync anybody's account, from the browser too.** The server has let any
+  member start a sync since 0.3.0, once every two minutes per account, but the
+  page still greyed "Sync now" out on every profile but your own — so an
+  account an admin tracks could not be refreshed from a browser at all. It is
+  offered on every profile now. For the two minutes after a sync it counts down
+  on the button — "Sync in 1:31" — and comes back by itself when the server
+  will take another, rather than letting you press it and be told to wait.
+
+### Removed
+
+- **The Players page.** Everything it did is in the header's search box, which
+  works from whichever page you are on. An old `/players` link opens the front
+  page.
+
+### Under the hood
+
+- Three reads replace the one that answered with every account:
+  `GET /api/riot-accounts/mine` for the accounts you have claimed,
+  `GET /api/riot-accounts/{id}`, and
+  `GET /api/riot-accounts/lookup?gameName=…&tagLine=…`, which a player's link
+  and the League client's signed-in account are both matched by. The lookup is
+  answered by the unique index on the Riot ID, in any capitalisation.
+- `/api/search` takes `limit` and `offset`, and `mine` and `claimed` to narrow it.
+  A blank search pages through the Riot ID index in name order instead of sorting
+  the table. A typed one is ordered by how close each name is, with name, tag and
+  id still breaking ties so a page boundary falls in the same place every time;
+  a test covers the order.
+- The web client keeps its favorites in local storage beside the home account,
+  each a copy of the player as last seen, so the list draws without a request.
+  The rules — ten at most, newest first, one per account, and a copy replaced
+  only by a newer one — are shared with the desktop and tested.
+- `GET /api/riot-accounts`, every account at once, is gone. Foxfire 0.14 was the
+  last client that read it, and 0.14 is no longer served; nothing from 0.15 or
+  the web client asks for it.
+- Every list that grows answers `{ items, total }` rather than an array:
+  `/api/search`, `/api/riot-accounts/{id}/matches`, `/api/admin/users` (which
+  now takes `q`, `limit` and `offset`), `/api/admin/invites/used` (new) and
+  `/api/admin/storage/replays` (which now takes `offset`, and answers at most a
+  hundred rather than two hundred). `GET /api/admin/invites/` answers with the
+  open invites only. Each is counted over the same filters it pages, in an order
+  that ends in a unique column so no row falls between two pages.
+- API version 3, and the web client is built against it. The allow list is
+  Foxfire 0.15.0 alone.
+- Rank history is deliberately still answered whole: the milestones and "over
+  this period" need every reading in the range, and the range is what bounds it.
+  The web client thins them to closes for the graph itself, by the rule the
+  profile's trend is answered with, so nothing about the read changed for it. It
+  also sends `before`, the last reading ahead of the range, which "over this
+  period" counts from and the graph's first close carries in.
+- `GET /api/riot-accounts/{id}/rank/trend?queueType=` is the profile's graph:
+  thirty days as the last reading of each day, at most 31 points however much
+  history there is, and the month's LP change counted from the raw readings.
+  Two indexed reads — the reading before the window and everything since. New
+  rather than changed, so the API version stays 3. The rule is the desktop's,
+  ported, and `fixtures/rank-trend-corpus.json` — generated by running the
+  TypeScript — holds the two to the same answers, as the ladder corpus does for
+  LP.
+- A sync state — `GET /api/sync/{id}` and the dashboard's — says when the
+  account can next be synced, as `cooldownUntil`, and so does a finished sync's
+  progress event, so the button does not come back pressable in the moment
+  between the spinner stopping and the dashboard being reread. The two minutes
+  stay the server's alone: clients wait for the time rather than knowing the
+  rule, and the 429 is still there for one whose clock disagrees. New fields
+  rather than changed ones, so the API version stays 3.
+- Tests for each read — including that "yours" never picks up an account nobody
+  has claimed — and for paging, totals, the cap and both filters; for finding
+  members by name or address; for which invites are open and the order used ones
+  page in; for the replay library; and that every paged route answers with a
+  page on the wire.
+
 ## [0.3.1] — 2026-09-23
 
 A fix for the sync bar, which on a server never went away.
@@ -533,6 +680,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0
 [0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1
 [0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0

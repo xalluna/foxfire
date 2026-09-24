@@ -5,28 +5,13 @@
  * it reaches a production build. The desktop's own mock builds its
  * desktop-only half on top of what is here.
  */
-export { createFixtureClient, runFixtureImport } from './fixtureClient'
+export { createFixtureClient, runFixtureImport, type FixtureClientOptions } from './fixtureClient'
 export { KEY_EXPIRED, MOCK_SERVER_URL, delay, fail, scenario, type Scenario } from './scenario'
 export { DEV_SEASONS } from './seasons'
 export { createFakeYouTubeMount } from './fakeYouTube'
 export { FIXTURE_VIDEO_ID, fixtureDescription, fixtureEvents, fixtureRecording } from './recordings'
 export { DDRAGON_MANIFEST } from './ddragonManifest'
-export {
-  C,
-  DAY,
-  HOUR,
-  ITEMS_AD,
-  ITEMS_AP,
-  ITEMS_SUPPORT,
-  ITEMS_TANK,
-  K,
-  NOW,
-  ROLE_ITEM,
-  S,
-  detailFor,
-  perks,
-  type Keystone
-} from './catalog'
+export { C, DAY, HOUR, NOW, detailFor, perks, type Keystone } from './catalog'
 export {
   ACCOUNTS,
   LEAGUE_ENTRIES,

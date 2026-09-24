@@ -7,8 +7,8 @@ This is a monorepo. The repo root holds only the npm workspace (`package.json` +
 package, this file, the README, and `.github/`.
 
 - `apps/desktop` — the Electron app: main process, preload, the IPC client, and the desktop's
-  own screens (live game, captures, the recording player, telemetry, archives, the settings that
-  are about this PC).
+  own screens (captures, the recording player, telemetry, archives, the settings that are about
+  this PC).
 - `apps/server` — the Foxfire Server (.NET). Its API is under `/api`, and it hosts the web client
   at the root of the same address.
 - `apps/web` — the web client. Built into the server's image and archives and served by the server
@@ -64,15 +64,74 @@ and a browser opening `/search`. `/version` and `/health` answer at the root as 
 `/api`, permanently: they are how a client finds the API, and a health check should not have to
 change because the API moved.
 
-Desktop 0.12.0 predates `/api` and calls everything at the root. `Versioning/LegacyRootShim.cs`
-keeps it working: a request carrying `X-Foxfire-Client` (every desktop sends it, no browser opening
-a page does) that is not already under `/api` is moved there before routing. **Delete the shim in
-the same PR that takes 0.12.0 off `Allowed`** — from then on every desktop the server serves calls
-`/api` itself.
+No read answers with every League account on the server, because that number grows with the
+community rather than with the person asking. Your own accounts are a list
+(`/api/riot-accounts/mine`), anybody else's is one lookup (`/api/riot-accounts/{id}`,
+`/api/riot-accounts/lookup`), and the finder (`/api/search`) is paged like every other list that
+grows (see below). Clients hold
+what they asked for, under `queryKeys.accounts()`, and never the whole server. There used to be a
+`GET /api/riot-accounts` that answered with all of them; Server 0.4.0 removed it along with
+Desktop 0.14, the last client that read it.
 
 A server that has not been updated refuses a desktop newer than anything it knows, and names the
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
+
+## Lists that grow are paged
+
+A list whose length depends on time or on the size of the community is read a page at a time,
+never whole — the accounts rule above is one case of it. That is the finder (`/api/search`), match
+history (`/api/riot-accounts/{id}/matches`), the members (`/api/admin/users`, searched on the
+server by `q`), used invites (`/api/admin/invites/used`), the replay library
+(`/api/admin/storage/replays`), and on the desktop the Captures tabs' recordings and replays.
+
+- **The answer** is `{ items, total }` — `Page<T>` in `Foxfire.Api/Common` and in `@foxfire/core`.
+  `total` counts the list under the same filters, so a screen says "120 members" rather than "50+"
+  and knows where the end is.
+- **The question** is `limit` and `offset`. A page is 50 unless asked otherwise (match history
+  20), never more than 100 however much is asked for, and a caller that asks for nothing gets the
+  first page — capped, not refused. The server has `PageRequest.Of` and `ToPageAsync`; anything
+  answering out of memory or SQLite uses `clampPage` and `pageOf` from core; every "Show more" is a
+  `useInfiniteQuery` with `nextOffset`, `pageItems` and `pageTotal` from `@foxfire/screens`.
+- **The order** ends in a unique column, so a page boundary cannot fall between two rows the
+  database orders differently next time.
+
+A list that cannot grow past a handful by construction stays an array: your own accounts, open
+invites (they lapse after `InviteLifetime`), seasons, client archives.
+
+Two lists that grow are whole on purpose, and say so where they are read:
+
+- **Rank history** (`/api/riot-accounts/{id}/rank/history`, `rank.history`). The milestones are
+  read off neighbouring pairs and "over this period" counts every game, so a page would leave a gap
+  and a cap would start them late. The range bounds it instead: about one reading per ranked game,
+  around 300 for the thirty days the page opens on. "All" grows every season, and making it
+  cheaper — summarising old seasons — is its own piece of work, not a page size. The graph does not
+  draw every reading: the client thins them to closes by the profile's rule (`rankRangeCloses`) —
+  every six hours over a week, a day over anything longer.
+
+  The profile does not read it. Its graph is `/api/riot-accounts/{id}/rank/trend` (`rank.trend`):
+  thirty days thinned to the last reading of each day, at most 31 points by construction, so it is
+  neither paged nor on this list. The rule lives twice — `rules/rankTrend.ts` in core, which the
+  desktop runs over its own database, and `RankTrends` in `Foxfire.Core` — and
+  `fixtures/rank-trend-corpus.json`, generated from the TypeScript with
+  `npm run generate-trend-corpus -w @foxfire/core`, holds the two to the same answers, as the ladder
+  corpus does for LP. Change one and you regenerate the corpus and change the other. The Rank
+  page's closes run the same TypeScript on the client and are not ported, so its thirty days and
+  the profile's are one line.
+- **Every recording that can go to YouTube** (`recordings.eligible`, in YouTube builds only).
+  "Select all" on the Recordings tab has to mean all of them, and the batch dialog reads each one's
+  size and game. It is bounded by what is on one PC's disk.
+
+**Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`) grows
+with a player's history and is still read whole, with a query per game for the rank before it. It
+should be paged; what makes that more than a page size is that saving one game's rank can settle
+its neighbours anywhere in the list.
+
+A new list that can grow is paged the same way, and its route goes in
+`WireShapeTests.Every_list_that_grows_answers_with_a_page`. Turning an existing array into a page
+breaks every client that reads it: bump `ApiVersion` and `WEB_API_VERSION` in the same change, and
+take the desktops that cannot read it off `Allowed` — API 3 was that change, and 0.14.0 left the
+list in the release commit that put 0.15.0 on it.
 
 ## Server logging
 

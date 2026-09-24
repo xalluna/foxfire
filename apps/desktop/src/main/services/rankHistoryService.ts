@@ -6,18 +6,35 @@ import {
   getLatestSnapshot,
   getRankMilestones,
   getRankSnapshots,
+  getSnapshotBefore,
+  getTrendReadings,
   insertRankSnapshot,
   type SnapshotInput
 } from '../db/repositories/rankHistory.repo'
 import { attributeInterval, replayAttribution } from './rankAttribution'
 import { rebuildAttribution } from './manualRankService'
 import { listSeasons } from '../db/repositories/seasons.repo'
-import { queueIdForQueueType, rangeBounds, seasonsSpanning } from '@foxfire/core'
+import {
+  queueIdForQueueType,
+  rangeBounds,
+  rankTrend,
+  rankTrendSince,
+  seasonsSpanning
+} from '@foxfire/core'
 import { createLogger } from '../telemetry/logger'
-import type { QueueType, RankHistory, RankRange, Season } from '@shared/types'
+import type { QueueType, RankHistory, RankRange, RankTrend, Season } from '@shared/types'
 
 const log = createLogger('rank')
 
+/**
+ * The Rank page's readings and milestones over a range, whole.
+ *
+ * Not paged, on purpose — the one list that grows which is read in one go
+ * (see "Lists that grow are paged" in CLAUDE.md). Milestones come from
+ * neighbouring pairs and the change over the period counts every game, so it
+ * needs all of them; the range is what bounds it, at about one reading per
+ * ranked game. The graph thins them to closes in the renderer.
+ */
 export function getRankHistory(
   accountId: number,
   queueType: QueueType,
@@ -29,8 +46,22 @@ export function getRankHistory(
 
   return {
     snapshots: getRankSnapshots(db, accountId, queueType, sinceMs, untilMs, seasons),
-    milestones: getRankMilestones(db, accountId, queueType, sinceMs, untilMs, seasons)
+    milestones: getRankMilestones(db, accountId, queueType, sinceMs, untilMs, seasons),
+    // What "over this period" counts from. A range with no start has nothing before it.
+    before: sinceMs === null ? null : getSnapshotBefore(db, accountId, queueType, sinceMs, seasons)
   }
+}
+
+/**
+ * The profile's graph: the last thirty days as a close a day.
+ *
+ * The same rule a server answers with — see rules/rankTrend.ts in core, and the
+ * corpus that holds the two to it — over this machine's own readings.
+ */
+export function getRankTrend(accountId: number, queueType: QueueType, now = Date.now()): RankTrend {
+  const db = getDb()
+  const readings = getTrendReadings(db, accountId, queueType, rankTrendSince(now))
+  return rankTrend(readings, listSeasons(db), now)
 }
 
 /**

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Features.Reads;
 using Foxfire.Api.Reads;
@@ -248,6 +249,11 @@ public class ReadTests(FoxfireServerFixture server)
 
         // Newest first, the way history reads.
         Assert.True(ranked[0].GameCreation > ranked[1].GameCreation);
+
+        // The total beside a page counts the same filtered set the page is
+        // taken from — the two are written separately, so this holds them together.
+        Assert.Equal(3, await reads.MatchCountAsync(account.Puuid, 420));
+        Assert.Equal(6, await reads.MatchCountAsync(account.Puuid, null));
     }
 
     [Fact]
@@ -450,6 +456,156 @@ public class ReadTests(FoxfireServerFixture server)
         Assert.All(history.Snapshots, s => Assert.NotNull(s.SeasonId));
     }
 
+    /// <summary>
+    /// A clock that stays where it is put, for reads measured back from now.
+    ///
+    /// Handed to a RankReads built by hand rather than swapped in for the host:
+    /// sign-in, invites and resets read the same TimeProvider, and a server
+    /// stuck in June would refuse every token the suite issues.
+    /// </summary>
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private const long DayMs = 86_400_000L;
+
+    // Mid-season, clear of the seeded 8 January 2026 reset, so nothing here is
+    // about seasons.
+    private static readonly DateTimeOffset June = new(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// One reading at a ladder position, saved on its own so its id is later
+    /// than every reading saved before it — which is what breaks a tie.
+    /// </summary>
+    private static async Task AddReadingAsync(
+        FoxfireDbContext db,
+        Guid accountId,
+        int position,
+        long capturedAt,
+        RankedQueue queue = RankedQueue.SoloDuo)
+    {
+        var rank = Ladder.RankAtPosition(position);
+
+        db.RankSnapshots.Add(new RankSnapshot
+        {
+            RiotAccountId = accountId,
+            QueueType = queue.RiotName(),
+            Tier = rank.Tier,
+            Division = rank.Division,
+            LeaguePoints = rank.LeaguePoints,
+            LadderPosition = position,
+            Source = RankSources.Lcu,
+            CapturedAt = capturedAt
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task The_rank_trend_is_a_close_a_day_from_the_reading_before_it()
+    {
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var reads = new RankReads(db, new FixedClock(June));
+
+        var now = June.ToUnixTimeMilliseconds();
+        var since = now - (30 * DayMs);
+
+        var account = await AddAccountAsync(db);
+        var other = await AddAccountAsync(db);
+
+        // Before the window: an older reading, and then two in one millisecond,
+        // where the one stored second is the one that stood.
+        await AddReadingAsync(db, account.Id, 900, since - (15 * DayMs));
+        await AddReadingAsync(db, account.Id, 1000, since - 3_600_000);
+        await AddReadingAsync(db, account.Id, 1010, since - 3_600_000);
+
+        // Exactly on `since` is inside the window, so it is not the carry-in.
+        await AddReadingAsync(db, account.Id, 1040, since);
+
+        // Two games on one day: the later one closes it.
+        await AddReadingAsync(db, account.Id, 1100, now - (5 * DayMs) - (10 * 3_600_000));
+        await AddReadingAsync(db, account.Id, 1130, now - (5 * DayMs) - 3_600_000);
+
+        // A client clock running fast: still today's point, not lost.
+        await AddReadingAsync(db, account.Id, 1160, now + 60_000);
+
+        // Nothing from the other ladder or anybody else.
+        await AddReadingAsync(db, account.Id, 2500, now - DayMs, RankedQueue.Flex);
+        await AddReadingAsync(db, other.Id, 50, now - DayMs);
+
+        var trend = await reads.TrendAsync(account.Id, RankedQueue.SoloDuo.RiotName());
+
+        Assert.Equal(since, trend.From);
+        Assert.Equal(now, trend.To);
+        Assert.Equal(
+            Enumerable.Range(0, 31).Select(i => since + (i * DayMs)),
+            trend.Points.Select(p => p.At));
+
+        Assert.Equal(1010, trend.Points[0].LadderPosition);
+        Assert.Equal(1040, trend.Points[1].LadderPosition);
+        Assert.Equal(1130, trend.Points.Single(p => p.At == now - (4 * DayMs)).LadderPosition);
+        Assert.Equal(1160, trend.Points[^1].LadderPosition);
+        Assert.DoesNotContain(trend.Points, p => p.LadderPosition is 2500 or 50);
+
+        // Spelled the way the Rank page's readings are.
+        Assert.Equal(Ladder.RankAtPosition(1010).Tier?.RiotName(), trend.Points[0].Tier);
+        Assert.All(trend.Points, p => Assert.NotNull(p.SeasonId));
+
+        // From the carry-in to the latest, not from the first close.
+        Assert.Equal(1160 - 1010, trend.NetLp);
+    }
+
+    [Fact]
+    public async Task The_rank_page_counts_its_month_from_the_reading_before_it()
+    {
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var reads = new RankReads(db, new FixedClock(June));
+
+        var now = June.ToUnixTimeMilliseconds();
+        var account = await AddAccountAsync(db);
+        var queue = RankedQueue.SoloDuo.RiotName();
+
+        await AddReadingAsync(db, account.Id, 1000, now - (40 * DayMs));
+        await AddReadingAsync(db, account.Id, 1080, now - (10 * DayMs));
+
+        var month = await reads.HistoryAsync(account.Id, queue, "30d");
+
+        var reading = Assert.Single(month.Snapshots);
+        Assert.Equal(1080, reading.LadderPosition);
+        Assert.NotNull(month.Before);
+        Assert.Equal(1000, month.Before.LadderPosition);
+        Assert.NotNull(month.Before.SeasonId);
+
+        // A range with no start has nothing before it.
+        var all = await reads.HistoryAsync(account.Id, queue, "all");
+        Assert.Null(all.Before);
+    }
+
+    [Fact]
+    public async Task The_rank_trend_is_refused_for_an_unranked_queue_and_an_unknown_account()
+    {
+        var (client, admin) = await server.AdminAsync();
+
+        Guid accountId;
+        await using (var scope = Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            accountId = (await AddAccountAsync(db, admin.User.Id)).Id;
+        }
+
+        var unranked = await client.GetAsync(
+            new Uri($"/api/riot-accounts/{accountId}/rank/trend?queueType=ARAM", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.BadRequest, unranked.StatusCode);
+        Assert.Contains("unknown_queue", await unranked.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var unknown = await client.GetAsync(
+            new Uri($"/api/riot-accounts/{Guid.NewGuid()}/rank/trend", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+    }
+
     [Fact]
     public async Task Anybody_signed_in_can_read_anybody_elses_history()
     {
@@ -480,9 +636,10 @@ public class ReadTests(FoxfireServerFixture server)
 
         response.EnsureSuccessStatusCode();
 
-        var rows = await response.Content.ReadFromJsonAsync<List<MatchSummaryResponse>>();
+        var rows = await response.Content.ReadFromJsonAsync<Page<MatchSummaryResponse>>();
         Assert.NotNull(rows);
-        Assert.Single(rows);
+        Assert.Single(rows.Items);
+        Assert.Equal(1, rows.Total);
 
         // Reading is open; writing is not.
         var write = await stranger.PostAsJsonAsync(

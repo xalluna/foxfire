@@ -64,9 +64,9 @@ const MAX_RETRIES = 3
 
 /**
  * Single app-wide queue wrapping every Riot API call. Riot's rate limit is
- * per API key (global to the process), so backfill, delta sync, live-game
- * checks, and ad-hoc search all share this one fair FIFO queue rather than
- * each racing to send requests independently.
+ * per API key (global to the process), so backfill, delta sync and ad-hoc
+ * search all share this one fair FIFO queue rather than each racing to send
+ * requests independently.
  *
  * Requests are dispatched one at a time, paced by the burst window, rather
  * than truly concurrently — simpler to reason about and Riot's typical

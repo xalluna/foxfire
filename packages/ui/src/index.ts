@@ -18,6 +18,9 @@ export { AssetManifestProvider, useAssetManifest } from './context/assetManifest
 export { AccountRail } from './components/AccountRail'
 export { Asset } from './components/Asset'
 export { Bar, type BarTone } from './components/Bar'
+export { cardFooterLinkClass } from './components/CardFooter'
+export { ChampionRecordRow, type ChampionRecord } from './components/ChampionRecordRow'
+export { ChampionsCard, type ChampionsCardProps } from './components/ChampionsCard'
 export {
   ContextMenu,
   type ContextMenuItem,
@@ -27,21 +30,26 @@ export { CopyLinkButton } from './components/CopyLinkButton'
 export { ConfirmDialog, Dialog, DialogActions } from './components/Dialog'
 export { Disclaimer } from './components/Disclaimer'
 export { EmptyState } from './components/EmptyState'
+export { ShowMoreButton } from './components/ShowMore'
 export { ErrorBoundary } from './components/ErrorBoundary'
 export { ItemStrip } from './components/ItemStrip'
 export { Logo } from './components/Logo'
 export { LpChip } from './components/LpChip'
 export { MatchDetailTable } from './components/MatchDetailTable'
 export { MatchListRow } from './components/MatchListRow'
+export { PlayerSearch, type PlayerSearchProps, type PlayerSearchSection } from './components/PlayerSearch'
 export { ProfileHeader } from './components/ProfileHeader'
+export { ProfileMarks, type FavoriteMark, type HomeMark } from './components/ProfileMarks'
 export { ProfileStrip } from './components/ProfileStrip'
 export { QueueFilter } from './components/QueueFilter'
-export { RankCard } from './components/RankCard'
+export { RankCard, type RankCardDetail } from './components/RankCard'
 export { RankChart } from './components/RankChart'
+export { RankTrendChart } from './components/RankTrendChart'
 export { RecentSummary } from './components/RecentSummary'
 export { Segmented } from './components/Segmented'
 export { MatchListSkeleton, MatchRowSkeleton, Skeleton } from './components/Skeleton'
 export { SyncProgressBar } from './components/SyncProgressBar'
+export { TierProgressTrack } from './components/TierProgressTrack'
 export * as Icon from './components/icons'
 
 // Recordings
@@ -94,7 +102,6 @@ export { DashboardPage, type DashboardPageProps, type MatchFocus } from './pages
 export { LpEditorPage } from './pages/LpEditorPage'
 export { MatchPage } from './pages/MatchPage'
 export { RankPage } from './pages/RankPage'
-export { PlayersPage, type PlayerLink } from './pages/PlayersPage'
 export { RankInput, RankLabel, isApexTier } from './pages/RankInput'
 export { ServerDataPage, type ServerDataPageProps } from './admin/ServerData'
 export { InvitesPage, type InvitesPageProps } from './admin/Invites'
@@ -124,6 +131,7 @@ export {
   runeIconUrl,
   spellIconUrl
 } from './lib/assets'
+export { mostPlayed } from './lib/champions'
 export { roundedPath, type Point } from './lib/curve'
 export { EXAMPLE_RIOT_IDS, randomExampleRiotId } from './lib/exampleRiotId'
 export { TRINKET_SLOT, itemSlots } from './lib/items'
@@ -149,8 +157,10 @@ export {
   tierColor,
   tierCrest,
   tierLabel,
+  tierProgress,
   type RankRecord,
-  type Tier
+  type Tier,
+  type TierProgress
 } from './lib/rank'
 export { formatRiotId, parseRiotId } from './lib/riotId'
 export { runeIds } from './lib/runes'

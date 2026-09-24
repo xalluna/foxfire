@@ -23,7 +23,9 @@ export function createIpcClient(api: Api): FoxfireClient {
     },
 
     accounts: {
-      list: api.accounts.list,
+      mine: api.accounts.mine,
+      get: api.accounts.get,
+      find: api.accounts.find,
       getHome: api.accounts.getHome,
       remove: api.accounts.remove,
       setHome: api.accounts.setHome
@@ -41,6 +43,7 @@ export function createIpcClient(api: Api): FoxfireClient {
 
     rank: {
       history: api.rank.history,
+      trend: api.rank.trend,
       periods: api.rank.periods,
       editable: api.rank.editable,
       saveManual: api.rank.saveManual,
@@ -49,6 +52,7 @@ export function createIpcClient(api: Api): FoxfireClient {
 
     seasons: api.seasons,
     search: api.search,
+    favorites: api.favorites,
 
     // Answered by the server when connected to one; local-only has none, and
     // says so rather than pretending. Absent altogether from a build without
@@ -70,7 +74,8 @@ export function createIpcClient(api: Api): FoxfireClient {
       deleteUser: api.serverAdmin.deleteUser,
     createPasswordReset: api.serverAdmin.createPasswordReset,
     revokePasswordReset: api.serverAdmin.revokePasswordReset,
-      invites: api.serverAdmin.invites,
+      openInvites: api.serverAdmin.openInvites,
+      usedInvites: api.serverAdmin.usedInvites,
       createInvite: api.serverAdmin.createInvite,
       revokeInvite: api.serverAdmin.revokeInvite,
       getSettings: api.serverAdmin.getSettings,

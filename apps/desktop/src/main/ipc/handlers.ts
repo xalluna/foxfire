@@ -25,7 +25,8 @@ import {
   listStoredReplays,
   removeStoredReplay,
   getSettings as getServerAdminSettings,
-  listInvites,
+  listOpenInvites,
+  listUsedInvites,
   listUsers,
   revokeInvite,
   revokePasswordReset,
@@ -33,7 +34,6 @@ import {
   updateUser
 } from '../services/serverAdminService'
 import { chooseImportDatabase, importDatabase } from '../services/importService'
-import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
@@ -110,11 +110,15 @@ import { reconnectObs } from '../obs/client'
 import { getMainWindow } from '../window'
 import type {
   AdminUserPatch,
+  AdminUserQuery,
   BackgroundSettings,
   CaptureSettings,
   EmailChange,
   ManualRankEdit,
+  PageOptions,
   PasswordChange,
+  PlayerSearchOptions,
+  PlayerSearchResult,
   QueueType,
   RankRange,
   RiotIdInput,
@@ -168,7 +172,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
-  ipcMain.handle(CH.serverAdmin.users, () => listUsers())
+  ipcMain.handle(CH.serverAdmin.users, (_e, query?: AdminUserQuery) => listUsers(query))
   ipcMain.handle(CH.serverAdmin.updateUser, (_e, id: string, patch: AdminUserPatch) =>
     updateUser(id, patch)
   )
@@ -179,12 +183,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.revokePasswordReset, (_e, userId: string) =>
     revokePasswordReset(userId)
   )
-  ipcMain.handle(CH.serverAdmin.invites, () => listInvites())
+  ipcMain.handle(CH.serverAdmin.openInvites, () => listOpenInvites())
+  ipcMain.handle(CH.serverAdmin.usedInvites, (_e, page?: PageOptions) => listUsedInvites(page))
   ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
   ipcMain.handle(CH.serverAdmin.storage, () => getStorageUsage())
-  ipcMain.handle(CH.serverAdmin.storedReplays, () => listStoredReplays())
+  ipcMain.handle(CH.serverAdmin.storedReplays, (_e, page?: PageOptions) => listStoredReplays(page))
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
   ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
   ipcMain.handle(CH.serverAdmin.addRiotAccount, (_e, input: RiotIdInput) => addRiotAccount(input))
@@ -204,7 +209,9 @@ export function registerIpcHandlers(): void {
     return getSettings()
   })
 
-  ipcMain.handle(CH.accounts.list, () => serverBacked().accounts.list())
+  ipcMain.handle(CH.accounts.mine, () => serverBacked().accounts.mine())
+  ipcMain.handle(CH.accounts.get, (_e, accountId: string) => serverBacked().accounts.get(accountId))
+  ipcMain.handle(CH.accounts.find, (_e, riotId: RiotIdInput) => serverBacked().accounts.find(riotId))
   ipcMain.handle(CH.accounts.getHome, () => serverBacked().accounts.getHome())
   ipcMain.handle(CH.accounts.add, (_e, input: RiotIdInput) => serverBacked().accounts.add(input))
   ipcMain.handle(CH.accounts.link, (_e, input: RiotIdInput) => serverBacked().accounts.link(input))
@@ -237,8 +244,6 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
 
-  ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: string) => getScoreboard(accountId))
-
   ipcMain.handle(
     CH.champions.stats,
     (_e, accountId: string, queueId: number | null, range: RankRange) =>
@@ -255,6 +260,10 @@ export function registerIpcHandlers(): void {
     CH.rank.history,
     (_e, accountId: string, queueType: QueueType, range: RankRange) =>
       serverBacked().rank.history(accountId, queueType, range)
+  )
+
+  ipcMain.handle(CH.rank.trend, (_e, accountId: string, queueType: QueueType) =>
+    serverBacked().rank.trend(accountId, queueType)
   )
 
   ipcMain.handle(CH.rank.periods, (_e, accountId: string) =>
@@ -362,7 +371,7 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.recordings.list, (_e, accountId: string) => listRecordings(accountId))
+  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions) => listRecordings(accountId, page))
   ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
   ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
   ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
@@ -379,7 +388,7 @@ export function registerIpcHandlers(): void {
 
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */
-  ipcMain.handle(CH.replays.list, (_e, accountId: string) => listReplays(accountId))
+  ipcMain.handle(CH.replays.list, (_e, accountId: string, page?: PageOptions) => listReplays(accountId, page))
   ipcMain.handle(CH.replays.usage, (_e, accountId: string) => getReplayUsage(accountId))
   ipcMain.handle(CH.replays.open, (_e, replayId: number) => openReplay(replayId))
   ipcMain.handle(CH.replays.reveal, (_e, replayId: number) => revealReplay(replayId))
@@ -436,9 +445,14 @@ export function registerIpcHandlers(): void {
     main.webContents.send(CH.recordings.showMatch, accountId, matchId)
   })
 
-  ipcMain.handle(CH.search.players, (_e, query: string) =>
-    serverBacked().search.players(query)
+  ipcMain.handle(CH.search.players, (_e, query: string, options?: PlayerSearchOptions) =>
+    serverBacked().search.players(query, options)
   )
+
+  ipcMain.handle(CH.favorites.list, () => serverBacked().favorites.list())
+  ipcMain.handle(CH.favorites.add, (_e, player: PlayerSearchResult) => serverBacked().favorites.add(player))
+  ipcMain.handle(CH.favorites.remove, (_e, accountId: string) => serverBacked().favorites.remove(accountId))
+  ipcMain.handle(CH.favorites.refresh, (_e, seen: PlayerSearchResult[]) => serverBacked().favorites.refresh(seen))
 
   ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())
   ipcMain.handle(CH.telemetry.setEnabled, (_e, enabled: boolean) => {

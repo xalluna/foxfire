@@ -7,13 +7,12 @@ import {
   type ComponentType,
   type ReactNode
 } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Link, Navigate, Outlet, createRoute, useParams, type AnyRoute } from '@tanstack/react-router'
-import type { Account } from '@foxfire/core'
+import { Navigate, Outlet, createRoute, useParams, type AnyRoute } from '@tanstack/react-router'
+import type { Account, RiotIdInput } from '@foxfire/core'
 import { isPlayer, parsePlayerSlug, playerSlug } from '@foxfire/core/routes'
 import { EmptyState, Icon, type MatchFocus } from '@foxfire/ui'
-import { useClient } from '../client/context'
-import { queryKeys } from '../queries/keys'
+import { PlayerBackLink } from './PlayerBackLink'
+import { useAccount, useAccountByRiotId } from '../queries/accounts'
 import { ChampionsScreen } from '../screens/ChampionsScreen'
 import { DashboardScreen } from '../screens/DashboardScreen'
 import { LpEditorScreen } from '../screens/LpEditorScreen'
@@ -82,7 +81,7 @@ function Unwrapped({ children }: PlayerLayoutProps): JSX.Element {
  *
  * Returned unassembled, so an app can mount only the pages it has and hang its
  * own beside them: the desktop leaves out `lp`, which it opens as a window, and
- * adds its live game and captures pages.
+ * adds its captures page.
  */
 export function createPlayerRoutes<TParent extends AnyRoute>(
   parent: TParent,
@@ -158,16 +157,11 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
  * typed against.
  */
 function PlayerBoundary({ layout: Layout }: { layout: ComponentType<PlayerLayoutProps> }): JSX.Element {
-  const client = useClient()
   const { slug } = useParams({ strict: false }) as { slug?: string }
 
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
-  })
-
   const riotId = slug === undefined ? null : parsePlayerSlug(slug)
-  const account = (riotId && accounts.data?.find((a) => isPlayer(a, riotId))) || null
+  const found = useAccountByRiotId(riotId)
+  const account = found.data ?? null
 
   // Whom this page was showing. A sync that notices a rename changes the Riot
   // ID under an open page, and the slug with it; following the account there is
@@ -177,40 +171,40 @@ function PlayerBoundary({ layout: Layout }: { layout: ComponentType<PlayerLayout
     if (account) shown.current = account
   }, [account])
 
-  if (accounts.isPending) return <Layout account={null}>{null}</Layout>
+  // Asked after by id only once the slug has stopped finding them, since that
+  // is the one moment the page needs to know where they went.
+  const lost = riotId !== null && found.isSuccess && account === null ? shown.current : null
+  const followed = useAccount(lost?.id ?? null)
 
-  if (accounts.isError) {
+  if (riotId === null) return <NoSuchPlayer Layout={Layout} riotId={null} />
+
+  if (found.isPending || (lost !== null && followed.isPending)) {
+    return <Layout account={null}>{null}</Layout>
+  }
+
+  if (found.isError) {
     return (
       <Layout account={null}>
         <EmptyState
           icon={<Icon.Warning />}
           tone="error"
-          title="Could not load accounts"
-          description={accounts.error instanceof Error ? accounts.error.message : undefined}
+          title="Could not load this player"
+          description={found.error instanceof Error ? found.error.message : undefined}
         />
       </Layout>
     )
   }
 
   if (!account) {
-    const renamed = shown.current && accounts.data.find((a) => a.id === shown.current?.id)
-    if (renamed) {
+    // Followed only when their Riot ID really did change. Typing somebody
+    // else's name into the address bar is not them being renamed, and taking
+    // the page back to whoever it showed before would be ignoring the request.
+    const renamed = followed.data
+    if (renamed && lost && !isPlayer(renamed, lost)) {
       return <Navigate to="." params={{ slug: playerSlug(renamed) } as never} replace />
     }
 
-    return (
-      <Layout account={null}>
-        <EmptyState
-          icon={<Icon.Search />}
-          title="No player by that name"
-          description={
-            riotId
-              ? `Nobody here plays as ${riotId.gameName}#${riotId.tagLine}. If they changed their Riot ID, look for them under the new one.`
-              : 'This link does not name a Riot ID.'
-          }
-        />
-      </Layout>
-    )
+    return <NoSuchPlayer Layout={Layout} riotId={riotId} />
   }
 
   return (
@@ -218,6 +212,28 @@ function PlayerBoundary({ layout: Layout }: { layout: ComponentType<PlayerLayout
       <PlayerContext.Provider value={account}>
         <Outlet key={account.id} />
       </PlayerContext.Provider>
+    </Layout>
+  )
+}
+
+function NoSuchPlayer({
+  Layout,
+  riotId
+}: {
+  Layout: ComponentType<PlayerLayoutProps>
+  riotId: RiotIdInput | null
+}): JSX.Element {
+  return (
+    <Layout account={null}>
+      <EmptyState
+        icon={<Icon.Search />}
+        title="No player by that name"
+        description={
+          riotId
+            ? `Nobody here plays as ${riotId.gameName}#${riotId.tagLine}. If they changed their Riot ID, look for them under the new one.`
+            : 'This link does not name a Riot ID.'
+        }
+      />
     </Layout>
   )
 }
@@ -258,6 +274,7 @@ function ChampionsRoute(): JSX.Element {
       onQueueChange={(queueId) => setSearch({ queue: queueSearchFor(queueId) })}
       range={search.range ?? null}
       onRangeChange={(range) => setSearch({ range })}
+      back={<PlayerBackLink account={account} label="profile" />}
     />
   )
 }
@@ -273,6 +290,7 @@ function RankRoute(): JSX.Element {
       onQueueTypeChange={(queueType) => setSearch({ queue: rankQueueSearchFor(queueType) })}
       range={search.range ?? DEFAULT_RANK_RANGE}
       onRangeChange={(range) => setSearch({ range: rankRangeSearchFor(range) })}
+      back={<PlayerBackLink account={account} label="profile" />}
     />
   )
 }
@@ -285,17 +303,7 @@ function RecordingRoute(): JSX.Element {
     <RecordingScreen
       account={account}
       matchId={matchId}
-      back={
-        <Link
-          to="/players/$slug"
-          params={{ slug: playerSlug(account) }}
-          search={{ match: matchId } as never}
-          className="inline-flex items-center gap-1.5 text-sm text-text-dim transition hover:text-accent"
-        >
-          <Icon.ChevronDown width={14} height={14} className="rotate-90" />
-          {account.gameName}&rsquo;s history
-        </Link>
-      }
+      back={<PlayerBackLink account={account} label="history" match={matchId} />}
     />
   )
 }

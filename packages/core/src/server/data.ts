@@ -1,6 +1,8 @@
 import type { FoxfireData } from '../client'
+import type { Account } from '../types'
 import type { ServerApi } from './api'
-import { applyHomeAccount, type HomeAccountStore } from './home'
+import { favoritesOver, type FavoritesStore } from './favorites'
+import { homeAmong, markHome, type HomeAccountStore } from './home'
 
 /**
  * Everything a screen reads, answered by a Foxfire Server.
@@ -9,32 +11,50 @@ import { applyHomeAccount, type HomeAccountStore } from './home'
  * method, because both satisfy the same contract. That is the whole design, and
  * it is why this file has almost no decisions in it — the server made them.
  *
- * The one thing that happens here is the home account, which is a preference of
- * the machine or browser asking and so is stamped on by the caller's own store
- * on the way past. Match rows come back without anything from this machine's
+ * The things that happen here are the home account and the favorites, which
+ * are preferences of the machine or browser asking and so are kept in the
+ * caller's own stores on the way past. Match rows come back without anything from this machine's
  * disk; the desktop adds that on top, and a browser has nothing to add.
  */
 export function createServerData(
   api: ServerApi,
   home: HomeAccountStore,
-  options: { fallbackToAny: boolean } = { fallbackToAny: true }
+  favorites: FavoritesStore
 ): FoxfireData {
-  const listWithHome = async () => applyHomeAccount(await api.accounts.list(), home.get(), options)
+  const mine = async (): Promise<Account[]> => markHome(await api.accounts.mine(), home.get())
 
   return {
     accounts: {
-      list: listWithHome,
+      mine,
 
-      getHome: async () => (await listWithHome()).find((a) => a.isHomeAccount) ?? null,
+      // One account's `isHomeAccount` is left as the server sends it, false.
+      // Which account is home is `getHome`'s question, and the rail's list.
+      get: api.accounts.get,
+      find: api.accounts.find,
+
+      getHome: async () => {
+        const storedId = home.get()
+
+        // Remembered, and possibly somebody else's — a browser can star a
+        // friend's profile to open on. An account the server no longer has
+        // falls through to your own, as nothing remembered would.
+        if (storedId !== null) {
+          const stored = await api.accounts.get(storedId)
+          if (stored) return { ...stored, isHomeAccount: true }
+        }
+
+        const first = homeAmong(await api.accounts.mine(), null)
+        return first && { ...first, isHomeAccount: true }
+      },
 
       remove: async (accountId) => {
         await api.accounts.release(accountId)
-        return listWithHome()
+        return mine()
       },
 
       setHome: async (accountId) => {
         home.set(accountId)
-        return listWithHome()
+        return mine()
       }
     },
 
@@ -56,6 +76,7 @@ export function createServerData(
 
     rank: {
       history: api.rank.history,
+      trend: api.rank.trend,
       periods: api.rank.periods,
       editable: api.rank.editable,
       saveManual: api.rank.saveManual,
@@ -68,6 +89,8 @@ export function createServerData(
     },
 
     search: { players: api.search.players },
+
+    favorites: favoritesOver(favorites),
 
     matchRecordings: {
       get: api.matchRecordings.get,

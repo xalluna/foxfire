@@ -28,7 +28,7 @@ const CREST_SIZE = 128
 // or in any versioned snapshot. The emblems are the only complete set. They
 // ship as letterboxed hero art up to 2560x1440 (~1MB for all ten), so we trim
 // the transparent margin and downscale — otherwise a single decoded crest
-// costs ~14MB of memory, which matters in the ten-row live-game list.
+// costs ~14MB of memory, which adds up fast wherever several are on screen.
 const TIERS = [
   'iron',
   'bronze',

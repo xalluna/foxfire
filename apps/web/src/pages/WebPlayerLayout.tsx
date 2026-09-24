@@ -31,14 +31,13 @@ function Tab({
 /**
  * A player's pages, with the tabs between them.
  *
- * The desktop has an account rail here; a browser has the Players page for
- * choosing somebody, so this only has to move between one player's views.
+ * The desktop has an account rail here; a browser has the header's search box
+ * for choosing somebody, so this only has to move between one player's views.
  *
  * Capped at 1280px, not narrower, because the dashboard brings its 320px stats
  * rail in at `xl:` — a viewport query, 1280px — and has no cap of its own. A
  * narrower box here still gets the rail on a wide screen, and the match rows
- * lose their items to the list's overflow-hidden. The desktop's LiveGame makes
- * the same bargain at the same width.
+ * lose their items to the list's overflow-hidden.
  *
  * The tabs do not scroll sideways. Three fit the narrowest phone, and a scroll
  * container turns each tab's -mb-px — the pixel that overlaps the hairline —

@@ -9,20 +9,12 @@ import {
   useParams,
   type ErrorComponentProps
 } from '@tanstack/react-router'
-import {
-  PlayersScreen,
-  createPlayerRoutes,
-  parseSearch,
-  stringifySearch,
-  usePlayer,
-  validatePlayersSearch
-} from '@foxfire/screens'
+import { createPlayerRoutes, parseSearch, stringifySearch, usePlayer } from '@foxfire/screens'
 import { AppShell } from './App'
 import { Main, PlayerLayout } from './components/PlayerLayout'
 import { validateLpEditorWindowSearch } from './lpEditor/search'
 import { Captures } from './views/Captures'
 import { Home } from './views/Home'
-import { LiveGame } from './views/LiveGame'
 import { Settings } from './views/Settings'
 import { YOUTUBE_ENABLED } from '@shared/features'
 
@@ -49,39 +41,11 @@ const home = createRoute({ getParentRoute: () => app, path: '/', component: Home
 
 const players = createPlayerRoutes(app, { layout: PlayerLayout })
 
-const live = createRoute({
-  getParentRoute: () => players.player,
-  path: 'live',
-  component: function LiveRoute() {
-    return <LiveGame account={usePlayer()} />
-  }
-})
-
 const captures = createRoute({
   getParentRoute: () => players.player,
   path: 'captures',
   component: function CapturesRoute() {
     return <Captures account={usePlayer()} />
-  }
-})
-
-/**
- * The finder, which the web client reaches as its Players page.
- *
- * Kept under "Search" here because that is the word for it in an app whose nav
- * is otherwise one account's own pages — there is no list of everybody to fold
- * it into, the way a browser has.
- */
-const search = createRoute({
-  getParentRoute: () => app,
-  path: 'search',
-  validateSearch: validatePlayersSearch,
-  component: function SearchRoute() {
-    return (
-      <Main>
-        <PlayersScreen heading="Search" />
-      </Main>
-    )
   }
 })
 
@@ -140,8 +104,7 @@ const lpEditor = createRoute({
 const routeTree = root.addChildren([
   app.addChildren([
     home,
-    players.player.addChildren([players.dashboard, players.champions, players.rank, live, captures]),
-    search,
+    players.player.addChildren([players.dashboard, players.champions, players.rank, captures]),
     settings
   ]),
   windows.addChildren([

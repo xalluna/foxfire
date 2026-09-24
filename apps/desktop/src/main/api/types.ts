@@ -25,8 +25,8 @@ import type { Api } from '@shared/api'
  *     for local-only mode, not data from anywhere.
  *   - `assets` — Data Dragon. A public CDN that needs no key and is not rate
  *     limited, so there is nothing to be gained by routing it through a server.
- *   - `liveClient`, `lcu`, `capture`, `recordings`, `replays`, `archives`,
- *     `background`, `telemetry`, `pathForFile` — the machine's own business.
+ *   - `lcu`, `capture`, `recordings`, `replays`, `archives`, `background`,
+ *     `telemetry`, `pathForFile` — the machine's own business.
  *     A game running on this PC, an OBS on this PC, files on this disk.
  *   - The event subscriptions and window-opening calls stripped from `sync` and
  *     `rank` below. Those are renderer plumbing, identical in both modes: a
@@ -42,4 +42,5 @@ export interface ServerBackedApi {
   rank: Omit<Api['rank'], 'openEditor' | 'onEdited' | 'onEditorFocus'>
   seasons: Api['seasons']
   search: Api['search']
+  favorites: Api['favorites']
 }

@@ -1,12 +1,10 @@
 import clsx from 'clsx'
 import type { MatchSummary } from '@foxfire/core'
-import { useAssetManifest } from '../context/assetManifest'
-import { useRecentSummary, type ChampionForm } from '../hooks/useRecentSummary'
-import { championIconUrl, championName } from '../lib/assets'
+import { useRecentSummary } from '../hooks/useRecentSummary'
 import { positionIcon, positionLabel } from '../lib/positions'
 import { formatPercent } from '../lib/matchStats'
-import { Asset } from './Asset'
 import { Bar } from './Bar'
+import { ChampionRecordRow } from './ChampionRecordRow'
 
 /** Win-rate ring. An SVG arc rather than a chart library — one number, one shape. */
 function WinRateRing({ winRate }: { winRate: number | null }): JSX.Element {
@@ -45,51 +43,16 @@ function WinRateRing({ winRate }: { winRate: number | null }): JSX.Element {
   )
 }
 
-function ChampionRow({ champ }: { champ: ChampionForm }): JSX.Element {
-  const assets = useAssetManifest()
-  const winRate = champ.games > 0 ? champ.wins / champ.games : 0
-  const kda =
-    champ.deaths === 0 ? 'Perfect' : ((champ.kills + champ.assists) / champ.deaths).toFixed(2)
-
-  return (
-    <div className="flex items-center gap-2">
-      <Asset
-        src={assets ? championIconUrl(assets, champ.championId) : null}
-        className="h-7 w-7"
-        rounded="rounded-full"
-      />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-text-dim">
-          {assets ? championName(assets, champ.championId) : ''}
-        </p>
-        <p className="text-2xs tabular-nums text-text-mute">
-          {kda}
-          {champ.deaths > 0 && ':1'} KDA
-        </p>
-      </div>
-      <div className="text-right">
-        <p
-          className={clsx(
-            'text-sm tabular-nums',
-            winRate >= 0.6 ? 'text-teal' : winRate >= 0.5 ? 'text-text' : 'text-text-dim'
-          )}
-        >
-          {Math.round(winRate * 100)}%
-        </p>
-        <p className="text-2xs tabular-nums text-text-mute">
-          {champ.wins}W {champ.games - champ.wins}L
-        </p>
-      </div>
-    </div>
-  )
-}
-
 /**
  * Recent-form block above the match list.
  *
  * Every figure is an aggregate of measured stats over the same rows shown
  * below — no rating, no estimate. Answers "how have I been playing lately",
- * which the season-long rank cards in the rail can't.
+ * which the season-long cards in the rail can't.
+ *
+ * Its most-played champions can be the rail's too, with different numbers:
+ * these are the last few games, those are the season. The heading says which
+ * window this is, and the rail's card says which season it is.
  */
 export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined }): JSX.Element | null {
   const summary = useRecentSummary(matches)
@@ -129,7 +92,7 @@ export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined
         {/* Most played */}
         <div className="min-w-0 flex-1 space-y-1.5">
           {summary.topChampions.map((champ) => (
-            <ChampionRow key={champ.championId} champ={champ} />
+            <ChampionRecordRow key={champ.championId} champ={champ} />
           ))}
         </div>
 

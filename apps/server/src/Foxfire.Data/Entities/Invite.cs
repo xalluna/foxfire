@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -67,6 +68,14 @@ public sealed class Invite
 
     public bool IsOpen(DateTimeOffset now) =>
         RedeemedAt is null && RevokedAt is null && ExpiresAt > now;
+
+    /// <summary>
+    /// <see cref="IsOpen"/>, as something a query can hand to SQL Server — the
+    /// admin list asks the database for the open ones rather than reading every
+    /// invite ever issued to find them. The two must say the same thing.
+    /// </summary>
+    public static Expression<Func<Invite, bool>> OpenAt(DateTimeOffset now) =>
+        i => i.RedeemedAt == null && i.RevokedAt == null && i.ExpiresAt > now;
 }
 
 internal sealed class InviteConfiguration : IEntityTypeConfiguration<Invite>

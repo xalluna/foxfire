@@ -77,8 +77,8 @@ public class RiotLinkProfileTests(FoxfireServerFixture server)
     public async Task A_claimed_account_says_so_on_the_wire()
     {
         // isMine is what the desktop gates every write on — typing LP, asking
-        // for a sync. An account nobody has claimed reports false, and the list
-        // carries both kinds because everything on a server is readable by
+        // for a sync. An account the caller has not claimed reports false, and
+        // anybody can read it, because everything on a server is readable by
         // everybody.
         var puuid = $"puuid-{Guid.NewGuid():N}";
         var gameName = $"Shared{Guid.NewGuid().ToString("N")[..8]}";
@@ -89,7 +89,9 @@ public class RiotLinkProfileTests(FoxfireServerFixture server)
         await using var _host = host;
         using var _client = client;
 
-        await client.PostAsJsonAsync(new Uri("/api/riot-accounts/", UriKind.Relative), new { gameName, tagLine = "KR" });
+        var linked = await client.PostAsJsonAsync(new Uri("/api/riot-accounts/", UriKind.Relative), new { gameName, tagLine = "KR" });
+        linked.EnsureSuccessStatusCode();
+        var claimed = await linked.Content.ReadFromJsonAsync<RiotAccountResponse>();
 
         // Somebody else on the same server sees it, and sees that it is not theirs.
         using var onlooker = server.Client();
@@ -100,12 +102,11 @@ public class RiotLinkProfileTests(FoxfireServerFixture server)
 
         FoxfireServerFixture.Authenticated(onlooker, theirSession);
 
-        var listed = await onlooker.GetFromJsonAsync<JsonElement>(new Uri("/api/riot-accounts/", UriKind.Relative));
+        var theirs = await onlooker.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{claimed!.Id}", UriKind.Relative));
 
-        var mine = listed.EnumerateArray()
-            .First(a => a.GetProperty("gameName").GetString() == gameName);
-
-        Assert.False(mine.GetProperty("isMine").GetBoolean());
-        Assert.NotNull(mine.GetProperty("ownerUsername").GetString());
+        Assert.Equal(gameName, theirs.GetProperty("gameName").GetString());
+        Assert.False(theirs.GetProperty("isMine").GetBoolean());
+        Assert.NotNull(theirs.GetProperty("ownerUsername").GetString());
     }
 }

@@ -62,6 +62,19 @@ export function Star({ filled, ...props }: IconProps & { filled?: boolean }): JS
   )
 }
 
+/**
+ * The account a PC or browser opens on. A house rather than the star it used
+ * to share with favorites, now that starring somebody means keeping them in
+ * the search box.
+ */
+export function Home({ filled, ...props }: IconProps & { filled?: boolean }): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill={filled ? 'currentColor' : 'none'} />
+    </Icon>
+  )
+}
+
 export function TrendingUp(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>
@@ -102,34 +115,6 @@ export function Settings(props: IconProps): JSX.Element {
     <Icon {...props}>
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
-    </Icon>
-  )
-}
-
-/**
- * Broadcast mark: a broken ring around a filled dot.
- *
- * The dot takes its own optional colour so the two can disagree — a game in
- * progress rings it in teal, and recording turns the dot red inside that ring,
- * which reads as "live, and being kept" in one glyph.
- */
-export function Live({
-  dotClassName,
-  ...props
-}: IconProps & { dotClassName?: string }): JSX.Element {
-  return (
-    <Icon {...props}>
-      <circle
-        cx="12"
-        cy="12"
-        r="3.5"
-        // currentColor resolves per element, so a text-* class here overrides
-        // the colour the ring inherits without touching the ring.
-        fill="currentColor"
-        stroke="none"
-        className={dotClassName}
-      />
-      <path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 17.7a8 8 0 0 0 0-11.4" />
     </Icon>
   )
 }
@@ -373,6 +358,16 @@ export function ExternalLink(props: IconProps): JSX.Element {
     <Icon {...props}>
       <path d="M15 3h6v6M10 14 21 3" />
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </Icon>
+  )
+}
+
+/** Your own account on a server — the person, as opposed to Server's machine. */
+export function User(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M20 21a8 8 0 0 0-16 0" />
     </Icon>
   )
 }

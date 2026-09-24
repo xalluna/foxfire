@@ -1,21 +1,18 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { youtubeWatchUrl } from '@foxfire/core/youtube'
-import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, ShowMoreButton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
 import { BulkUploadDialog } from '../../youtube/BulkUploadDialog'
 import { openUploadDialog } from '../../youtube/uploadDialog'
 import { uploadPending, uploadStatusText } from '../../youtube/uploadStatus'
+import { nextOffset, pageItems } from '@foxfire/screens'
 import type { Account, BulkUploadResult, Recording } from '@shared/types'
 import { YOUTUBE_ENABLED } from '@shared/features'
+import { canUploadRecording as canUpload } from '@shared/uploadEligibility'
 
-/**
- * Whether a recording could go to YouTube now: a file to send, and nothing
- * already sent or on its way. Never, in a build made without YouTube.
- */
-function canUpload(recording: Recording): boolean {
-  return YOUTUBE_ENABLED && recording.fileExists && recording.youtube === null && !uploadPending(recording.upload)
-}
+/** Recordings per page of the list. */
+const PAGE_SIZE = 50
 
 /** A sentence on what a batch did, for the line above the list. */
 function describeBatch(result: BulkUploadResult): string {
@@ -56,9 +53,23 @@ function formatBytes(bytes: number | null): string {
 export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   const queryClient = useQueryClient()
 
-  const recordings = useQuery({
+  // A page at a time: nothing is ever deleted automatically, so a PC that
+  // records every game has a list that only grows.
+  const recordings = useInfiniteQuery({
     queryKey: ['recordings', account.id],
-    queryFn: () => window.api.recordings.list(account.id)
+    queryFn: ({ pageParam }) => window.api.recordings.list(account.id, { limit: PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset
+  })
+
+  // Every recording that could go to YouTube, whole rather than paged — "select
+  // all" has to mean all of them, not the ones scrolled to, and the batch dialog
+  // reads each one's size and game. Under the list's key, so whatever refreshes
+  // the list refreshes this. No handler answers it in a build without YouTube.
+  const uploadable = useQuery({
+    queryKey: ['recordings', account.id, 'uploadable'],
+    queryFn: () => window.api.recordings.eligible(account.id),
+    enabled: YOUTUBE_ENABLED
   })
 
   const usage = useQuery({
@@ -104,8 +115,8 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
     onSuccess: refresh
   })
 
-  const rows = useMemo(() => recordings.data ?? [], [recordings.data])
-  const eligible = useMemo(() => rows.filter(canUpload), [rows])
+  const rows = useMemo(() => pageItems(recordings.data, (recording) => recording.id), [recordings.data])
+  const eligible = useMemo(() => uploadable.data ?? [], [uploadable.data])
   const selected = useMemo(() => eligible.filter((recording) => picked.has(recording.id)), [eligible, picked])
   const allPicked = eligible.length > 0 && selected.length === eligible.length
 
@@ -219,20 +230,28 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
             description="Turn on game capture in Settings and play a game in one of the queues you enabled. Recording starts once the game finishes loading."
           />
         ) : (
-          <ul className="divide-y divide-hairline/60">
-            {rows.map((recording) => (
-              <RecordingRow
-                key={recording.id}
-                recording={recording}
-                selectable={eligible.length > 0}
-                selected={picked.has(recording.id) && canUpload(recording)}
-                onToggleSelected={canUpload(recording) ? () => toggle(recording.id) : undefined}
-                onDelete={() => setDeleting(recording)}
-                onForget={() => setForgetting(recording)}
-                onAttachLink={() => setAttaching(recording)}
+          <>
+            <ul className="divide-y divide-hairline/60">
+              {rows.map((recording) => (
+                <RecordingRow
+                  key={recording.id}
+                  recording={recording}
+                  selectable={eligible.length > 0}
+                  selected={picked.has(recording.id) && canUpload(recording)}
+                  onToggleSelected={canUpload(recording) ? () => toggle(recording.id) : undefined}
+                  onDelete={() => setDeleting(recording)}
+                  onForget={() => setForgetting(recording)}
+                  onAttachLink={() => setAttaching(recording)}
+                />
+              ))}
+            </ul>
+            {recordings.hasNextPage && (
+              <ShowMoreButton
+                onClick={() => void recordings.fetchNextPage()}
+                loading={recordings.isFetchingNextPage}
               />
-            ))}
-          </ul>
+            )}
+          </>
         )}
       </div>
 

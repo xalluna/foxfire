@@ -10,6 +10,7 @@ import type {
   AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AppSettingsPublic,
   ArchiveCopyProgress,
   ArchiveResult,
@@ -24,6 +25,8 @@ import type {
   LcuStatus,
   LiveClient,
   ObsValidation,
+  Page,
+  PageOptions,
   PasswordChange,
   QueueType,
   Recording,
@@ -37,7 +40,6 @@ import type {
   RiotKeyLimits,
   RiotKeyType,
   RoflSettings,
-  Scoreboard,
   ServerAuthResult,
   ServerCredentials,
   ServerProbe,
@@ -155,14 +157,18 @@ export interface Api {
    * on the session decides what to draw, never what is allowed.
    */
   serverAdmin: {
-    users: () => Promise<AdminUser[]>
+    /** A page of the members, by name, narrowed to a name or address when `q` says one. */
+    users: (query?: AdminUserQuery) => Promise<Page<AdminUser>>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
     /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
     createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
     /** Withdraws the reset link outstanding for somebody, if there is one. */
     revokePasswordReset: (userId: string) => Promise<AdminActionResult>
-    invites: () => Promise<AdminInvite[]>
+    /** Every invite that can still be used. Whole: they expire, so there are never many. */
+    openInvites: () => Promise<AdminInvite[]>
+    /** A page of the invites somebody registered with, most recently used first. */
+    usedInvites: (page?: PageOptions) => Promise<Page<AdminInvite>>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
@@ -171,8 +177,8 @@ export interface Api {
     /** Opens a file picker. Resolves with null when it was dismissed. */
     /** What the server is holding, for the Data & storage page. */
     storage: () => Promise<ServerStorageUsage>
-    /** The biggest shared replays, so space can be reclaimed where it actually is. */
-    storedReplays: () => Promise<AdminReplay[]>
+    /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
+    storedReplays: (page?: PageOptions) => Promise<Page<AdminReplay>>
     /** Removes a shared replay, blob and record. Anybody who played the game can upload it again. */
     removeReplay: (matchId: string) => Promise<AdminActionResult>
     /**
@@ -234,15 +240,6 @@ export interface Api {
   assets: {
     get: () => Promise<AssetManifest>
   }
-  /**
-   * The in-game scoreboard, read from the game running on this machine over the
-   * Live Client Data API on 127.0.0.1:2999. Costs no Riot call and needs no key,
-   * so it works identically in local-only and server mode.
-   */
-  liveClient: {
-    /** Null whenever no game is running on this machine, which is not an error. */
-    scoreboard: (accountId: string) => Promise<Scoreboard | null>
-  }
   champions: FoxfireData['champions']
   seasons: FoxfireData['seasons']
   mastery: FoxfireData['mastery']
@@ -282,8 +279,18 @@ export interface Api {
     reconnect: () => Promise<CaptureStatus>
   }
   recordings: {
-    /** Every recording for an account, newest first, bound or not. */
-    list: (accountId: string) => Promise<Recording[]>
+    /** A page of an account's recordings, newest first, bound or not, and how many there are. */
+    list: (accountId: string, page?: PageOptions) => Promise<Page<Recording>>
+    /**
+     * Every recording of an account's that can go to YouTube — whole, not a
+     * page, because "select all" has to mean all of them and the batch dialog
+     * reads each one's size and game. One of the two lists that grow which are
+     * deliberately not paged; see CLAUDE.md.
+     *
+     * Registered only in builds with YouTube in them. Anywhere else it has no
+     * handler, so a caller has to check YOUTUBE_ENABLED first.
+     */
+    eligible: (accountId: string) => Promise<Recording[]>
     detail: (recordingId: number) => Promise<RecordingDetail | null>
     usage: () => Promise<RecordingDiskUsage>
     remove: (recordingId: number) => Promise<void>
@@ -349,7 +356,8 @@ export interface Api {
    */
   pathForFile: (file: File) => string | null
   replays: {
-    list: (accountId: string) => Promise<Replay[]>
+    /** A page of an account's replays, newest first, each told whether it can be watched. */
+    list: (accountId: string, page?: PageOptions) => Promise<Page<Replay>>
     usage: (accountId: string) => Promise<ReplayDiskUsage>
     /** Resolves with why it could not be opened, or null when it opened. */
     open: (replayId: number) => Promise<ReplayLaunchResult>
@@ -387,6 +395,8 @@ export interface Api {
     openWindow: () => Promise<void>
   }
   search: FoxfireData['search']
+  /** Players starred on this PC, one list per server. See FoxfireData['favorites']. */
+  favorites: FoxfireData['favorites']
   /**
    * Developer telemetry. Off by default; reads still work with collection
    * disabled so history stays visible after switching it off.

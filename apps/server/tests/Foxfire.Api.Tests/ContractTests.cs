@@ -1,6 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
+using Foxfire.Api.Features.RiotAccounts;
 using Foxfire.Core;
+using Foxfire.Data;
+using Foxfire.Data.Entities;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Foxfire.Api.Tests;
 
@@ -527,6 +532,110 @@ public class InviteTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task The_invite_list_is_the_ones_that_can_still_be_used()
+    {
+        using var admin = await AdminAsync();
+        var open = await CreateInviteAsync(admin, $"{Unique("open")}@example.com");
+
+        var withdrawn = await CreateInviteAsync(admin, $"{Unique("gone")}@example.com");
+        await admin.DeleteAsync(new Uri($"/api/admin/invites/{withdrawn.Id}", UriKind.Relative));
+
+        var usedEmail = $"{Unique("used")}@example.com";
+        var used = await CreateInviteAsync(admin, usedEmail);
+        await RegisterWithAsync(admin, used, usedEmail);
+
+        var expired = await SeedInviteAsync(
+            $"{Unique("lapsed")}@example.com",
+            expiresAt: DateTimeOffset.UtcNow.AddDays(-1));
+
+        var listed = (await admin.GetFromJsonAsync<InviteInfo[]>(new Uri("/api/admin/invites/", UriKind.Relative)))!;
+
+        Assert.Contains(listed, i => i.Id == open.Id);
+        Assert.All(listed, i => Assert.True(i.IsOpen));
+
+        // The used one is on the other list; the withdrawn and the lapsed are
+        // on neither, since nothing draws them.
+        Assert.DoesNotContain(listed, i => i.Id == withdrawn.Id || i.Id == used.Id || i.Id == expired);
+    }
+
+    [Fact]
+    public async Task Used_invites_come_a_page_at_a_time_most_recently_used_first()
+    {
+        using var admin = await AdminAsync();
+
+        // Used far in the future, so they lead the list whatever else the
+        // shared server has redeemed.
+        var future = new DateTimeOffset(2100, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var oldest = await SeedInviteAsync($"{Unique("u0")}@example.com", redeemedAt: future);
+        var middle = await SeedInviteAsync($"{Unique("u1")}@example.com", redeemedAt: future.AddDays(1));
+        var newest = await SeedInviteAsync($"{Unique("u2")}@example.com", redeemedAt: future.AddDays(2));
+
+        var first = (await admin.GetFromJsonAsync<Page<InviteInfo>>(
+            new Uri("/api/admin/invites/used?limit=2", UriKind.Relative)))!;
+        var second = (await admin.GetFromJsonAsync<Page<InviteInfo>>(
+            new Uri("/api/admin/invites/used?limit=2&offset=2", UriKind.Relative)))!;
+
+        Assert.Equal(new[] { newest, middle }, first.Items.Select(i => i.Id));
+        Assert.Equal(oldest, second.Items[0].Id);
+        Assert.All(first.Items.Concat(second.Items), i => Assert.NotNull(i.RedeemedAt));
+        Assert.True(first.Total >= 3);
+        Assert.Equal(first.Total, second.Total);
+    }
+
+    /// <summary>Registers somebody with an invite, on a server with signup shut for the moment.</summary>
+    private async Task RegisterWithAsync(HttpClient admin, InviteInfo invite, string email)
+    {
+        await SetPublicSignupAsync(admin, false);
+
+        try
+        {
+            using var client = server.Client();
+            var registered = await client.PostAsJsonAsync(
+                new Uri("/api/auth/register", UriKind.Relative),
+                new
+                {
+                    username = $"Invitee{Guid.NewGuid():N}"[..20],
+                    email,
+                    password = FoxfireServerFixture.GoodPassword,
+                    inviteToken = invite.Token
+                });
+
+            registered.EnsureSuccessStatusCode();
+        }
+        finally
+        {
+            await SetPublicSignupAsync(admin, true);
+        }
+    }
+
+    /// <summary>
+    /// An invite written straight to the table — the only way to have one that
+    /// has already expired, or was used at a time of the test's choosing.
+    /// </summary>
+    private async Task<Guid> SeedInviteAsync(
+        string email,
+        DateTimeOffset? expiresAt = null,
+        DateTimeOffset? redeemedAt = null)
+    {
+        await using var scope = server.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var now = DateTimeOffset.UtcNow;
+        var invite = new Invite
+        {
+            Id = Guid.CreateVersion7(now),
+            Email = email,
+            CreatedAt = now.AddDays(-20),
+            ExpiresAt = expiresAt ?? now.AddDays(14),
+            RedeemedAt = redeemedAt
+        };
+
+        db.Invites.Add(invite);
+        await db.SaveChangesAsync();
+        return invite.Id;
+    }
+
+    [Fact]
     public async Task An_invite_link_opens_the_web_client()
     {
         // The link is a page of the web client now, which reads the preview and
@@ -563,9 +672,13 @@ public class AuthorizationTests(FoxfireServerFixture server)
         FoxfireServerFixture.Authenticated(client, session);
 
         var invites = await client.GetAsync(new Uri("/api/admin/invites/", UriKind.Relative));
+        var used = await client.GetAsync(new Uri("/api/admin/invites/used", UriKind.Relative));
+        var replays = await client.GetAsync(new Uri("/api/admin/storage/replays", UriKind.Relative));
         var settings = await client.GetAsync(new Uri("/api/admin/settings/", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Forbidden, invites.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, used.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, replays.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, settings.StatusCode);
     }
 
@@ -584,7 +697,7 @@ public class AuthorizationTests(FoxfireServerFixture server)
     {
         using var client = server.Client();
 
-        var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/riot-accounts/mine", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -597,20 +710,6 @@ public class AuthorizationTests(FoxfireServerFixture server)
 public class RiotLinkTests(FoxfireServerFixture server)
 {
     private static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
-
-    [Fact]
-    public async Task A_member_sees_the_accounts_on_this_server()
-    {
-        // Everything here is visible to everybody on it, so this is a list of
-        // the server's accounts rather than only the caller's.
-        using var client = server.Client();
-        var session = await server.RegisterAsync(client, "Looker", $"{Unique("look")}@example.com");
-        FoxfireServerFixture.Authenticated(client, session);
-
-        var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
-
-        response.EnsureSuccessStatusCode();
-    }
 
     [Fact]
     public async Task A_riot_id_that_is_not_one_is_refused_before_riot_is_asked()

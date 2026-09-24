@@ -23,8 +23,19 @@ public static class InviteEndpoints
             .WithTags("Invites")
             .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.Admin));
 
+        // The open ones, whole: they expire, so there are never many. The
+        // collection route answers with them because a POST to it makes one.
         admin.MapGet("/", (ISender sender, CancellationToken cancellationToken) =>
-            sender.SendAsync(new ListInvitesRequest(), cancellationToken));
+            sender.SendAsync(new ListOpenInvitesRequest(), cancellationToken));
+
+        // The used ones, which are everybody who ever joined this way, a page
+        // at a time.
+        admin.MapGet("/used", (
+                int? limit,
+                int? offset,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new ListUsedInvitesRequest(limit, offset), cancellationToken));
 
         admin.MapPost("/", (
                 [FromBody] CreateInviteRequest request,

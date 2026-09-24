@@ -11,7 +11,8 @@ namespace Foxfire.Api.Endpoints;
 public sealed record SaveManualRanksBody(string QueueType, IReadOnlyList<ManualRankEditDto> Edits);
 
 /// <summary>
-/// Rank: the graph, the milestones, the periods, and the figures somebody typed.
+/// Rank: the graph, the profile's thirty days of it, the milestones, the periods,
+/// and the figures somebody typed.
 ///
 /// Reading is open to every member, like everything else here. Writing splits
 /// two ways, and the split is the interesting part.
@@ -38,6 +39,15 @@ public static class RankEndpoints
                 string queueType = "RANKED_SOLO_5x5",
                 string? range = null) =>
             sender.SendAsync(new GetRankHistoryRequest(riotAccountId, queueType, range), cancellationToken));
+
+        // The profile's graph: the same ladder as /history over thirty days, a
+        // close a day. Bounded at 31 points by construction, so not a page.
+        rank.MapGet("/trend", (
+                Guid riotAccountId,
+                ISender sender,
+                CancellationToken cancellationToken,
+                string queueType = "RANKED_SOLO_5x5") =>
+            sender.SendAsync(new GetRankTrendRequest(riotAccountId, queueType), cancellationToken));
 
         rank.MapGet("/periods", (
                 Guid riotAccountId,

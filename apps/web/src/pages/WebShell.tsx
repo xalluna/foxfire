@@ -1,10 +1,10 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, Outlet, useRouter } from '@tanstack/react-router'
 import { Icon, Logo } from '@foxfire/ui'
-import { useConnection } from '@foxfire/screens'
+import { PlayerSearchBox, useConnection } from '@foxfire/screens'
 import { signOut, useAuth } from '../session/session'
 
-function NavLink({ to, children }: { to: '/players' | '/admin'; children: ReactNode }): JSX.Element {
+function NavLink({ to, children }: { to: '/admin'; children: ReactNode }): JSX.Element {
   return (
     <Link
       to={to}
@@ -18,7 +18,8 @@ function NavLink({ to, children }: { to: '/players' | '/admin'; children: ReactN
 }
 
 /**
- * Everything after signing in: the server's name, where to go, who you are.
+ * Everything after signing in: the server's name, where to go, finding
+ * somebody, who you are.
  *
  * Also where a session that ends underneath the page is noticed — revoked by an
  * admin, signed out in another tab, expired — and turned into the sign-in page,
@@ -44,20 +45,32 @@ export function WebShell(): JSX.Element {
     <div className="min-h-screen bg-canvas text-text">
       <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/95 backdrop-blur">
         {/* As wide as the widest page below it — see WebPlayerLayout. */}
+        {/*
+          Three columns, the outer two growing equally from nothing, so the
+          search box sits in the middle of the header for as long as neither
+          side needs more than half of what is left beside it. The sides do not
+          wrap, which is what makes their width a floor the box gives way to —
+          a server name that could wrap would let the box cover the nav.
+        */}
         <div className="mx-auto flex h-12 max-w-7xl items-center gap-4 px-4 max-md:gap-2 max-md:px-2">
-          <Link to="/" className="flex shrink-0 items-center gap-2">
-            <Logo className="shrink-0 text-accent" />
-            <span className="font-display text-base tracking-wide text-accent max-sm:hidden">
-              {connection?.serverName ?? 'Foxfire'}
-            </span>
-          </Link>
+          <div className="flex flex-1 basis-0 items-center gap-4 whitespace-nowrap max-md:gap-2">
+            <Link to="/" className="flex shrink-0 items-center gap-2">
+              <Logo className="shrink-0 text-accent" />
+              <span className="font-display text-base tracking-wide text-accent max-sm:hidden">
+                {connection?.serverName ?? 'Foxfire'}
+              </span>
+            </Link>
 
-          <nav className="flex min-w-0 gap-0.5 overflow-x-auto">
-            <NavLink to="/players">Players</NavLink>
-            {user?.isAdmin && <NavLink to="/admin">Admin</NavLink>}
-          </nav>
+            {user?.isAdmin && (
+              <nav className="flex gap-0.5">
+                <NavLink to="/admin">Admin</NavLink>
+              </nav>
+            )}
+          </div>
 
-          <div className="ml-auto flex shrink-0 items-center gap-3">
+          <PlayerSearchBox className="w-full min-w-0 max-w-[360px]" />
+
+          <div className="flex flex-1 basis-0 items-center justify-end gap-3 whitespace-nowrap">
             {/* The name is the way to the account page, which is where a name
                 stops being a label and starts being a thing you can change. */}
             <Link
@@ -69,7 +82,7 @@ export function WebShell(): JSX.Element {
             </Link>
             <button
               onClick={() => void signOut()}
-              className="rounded-md border border-hairline px-2.5 py-1 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
+              className="shrink-0 whitespace-nowrap rounded-md border border-hairline px-2.5 py-1 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
             >
               Sign out
             </button>

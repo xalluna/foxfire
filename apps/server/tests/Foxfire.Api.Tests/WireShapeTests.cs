@@ -177,13 +177,11 @@ public class WireShapeTests(FoxfireServerFixture server)
     public async Task An_account_carries_every_field_the_desktops_Account_reads()
     {
         // @foxfire/core Account, plus the two a shared server adds.
-        var (client, _, _) = await RiggedAsync();
+        var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
-        var accounts = await client.GetFromJsonAsync<JsonElement>(
-            new Uri("/api/riot-accounts", UriKind.Relative));
-
-        var account = accounts.EnumerateArray().First();
+        var account = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{accountId}", UriKind.Relative));
 
         AssertHasAll(
             account,
@@ -204,6 +202,39 @@ public class WireShapeTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task Every_list_that_grows_answers_with_a_page()
+    {
+        // @foxfire/core Page<T>. Nothing on the TypeScript side can tell an
+        // array from a page at compile time; a route that still answered with
+        // an array would read as { items: undefined } and draw an empty list.
+        var (client, accountId, _) = await RiggedAsync();
+        using var _client = client;
+
+        string[] paged =
+        [
+            "/api/search?q=",
+            $"/api/riot-accounts/{accountId}/matches",
+            "/api/admin/users/",
+            "/api/admin/invites/used",
+            "/api/admin/storage/replays"
+        ];
+
+        foreach (var route in paged)
+        {
+            var page = await client.GetFromJsonAsync<JsonElement>(new Uri(route, UriKind.Relative));
+
+            Assert.True(page.ValueKind == JsonValueKind.Object, $"{route} answered with {page.ValueKind}");
+            AssertHasAll(page, "items", "total");
+            Assert.Equal(JsonValueKind.Array, page.GetProperty("items").ValueKind);
+            Assert.Equal(JsonValueKind.Number, page.GetProperty("total").ValueKind);
+        }
+
+        // The open invites cannot grow — they expire — so they stay a list.
+        var open = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/admin/invites/", UriKind.Relative));
+        Assert.Equal(JsonValueKind.Array, open.ValueKind);
+    }
+
+    [Fact]
     public async Task A_sync_state_calls_the_account_what_the_desktop_calls_it()
     {
         // @foxfire/core SyncState. This one was wrong: riotAccountId, which the
@@ -221,7 +252,8 @@ public class WireShapeTests(FoxfireServerFixture server)
             "backfillComplete",
             "backfillTarget",
             "lastFullSyncAt",
-            "lastDeltaSyncAt");
+            "lastDeltaSyncAt",
+            "cooldownUntil");
     }
 
     /// <summary>
@@ -254,7 +286,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         var frame = Encoding.UTF8.GetString(output.WrittenSpan).TrimEnd('\u001e');
         var progress = JsonDocument.Parse(frame).RootElement.GetProperty("arguments")[0];
 
-        AssertHasAll(progress, "accountId", "phase", "current", "total", "message", "trigger");
+        AssertHasAll(progress, "accountId", "phase", "current", "total", "message", "trigger", "cooldownUntil");
         Assert.Equal(expected, progress.GetProperty("phase").GetString());
         Assert.Equal("auto", progress.GetProperty("trigger").GetString());
     }
@@ -267,10 +299,10 @@ public class WireShapeTests(FoxfireServerFixture server)
         var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
-        var rows = await client.GetFromJsonAsync<JsonElement>(
+        var page = await client.GetFromJsonAsync<JsonElement>(
             new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
-        var row = rows.EnumerateArray().First();
+        var row = page.GetProperty("items").EnumerateArray().First();
 
         AssertHasAll(
             row,
@@ -352,10 +384,10 @@ public class WireShapeTests(FoxfireServerFixture server)
             "role",
             "label");
 
-        var rows = await client.GetFromJsonAsync<JsonElement>(
+        var page = await client.GetFromJsonAsync<JsonElement>(
             new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
-        AssertHasAll(rows[0].GetProperty("recording"), "youtubeVideoId", "privacy", "hasEvents");
+        AssertHasAll(page.GetProperty("items")[0].GetProperty("recording"), "youtubeVideoId", "privacy", "hasEvents");
     }
 #endif
 
@@ -390,7 +422,9 @@ public class WireShapeTests(FoxfireServerFixture server)
             new Uri($"/api/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
                 UriKind.Relative));
 
-        AssertHasAll(history, "snapshots", "milestones");
+        // "before" is there even when it is null, so a client can tell a range
+        // with nothing ahead of it from a server too old to say.
+        AssertHasAll(history, "snapshots", "milestones", "before");
 
         var snapshot = history.GetProperty("snapshots").EnumerateArray().First();
 
@@ -408,6 +442,26 @@ public class WireShapeTests(FoxfireServerFixture server)
             "seasonId");
 
         AssertRiotSpelling(snapshot);
+    }
+
+    [Fact]
+    public async Task A_rank_trend_crosses_the_wire_as_the_card_draws_it()
+    {
+        // @foxfire/core RankTrend, RankTrendPoint. The rig's one reading is two
+        // hours old, so it closes today and nothing before it: one point.
+        var (client, accountId, _) = await RiggedAsync();
+        using var _client = client;
+
+        var trend = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{accountId}/rank/trend?queueType=RANKED_SOLO_5x5", UriKind.Relative));
+
+        AssertHasAll(trend, "from", "to", "points", "netLp");
+
+        var point = Assert.Single(trend.GetProperty("points").EnumerateArray().ToList());
+
+        AssertHasAll(point, "at", "tier", "rank", "leaguePoints", "ladderPosition", "seasonId", "capturedAt");
+
+        AssertRiotSpelling(point);
     }
 
     [Fact]

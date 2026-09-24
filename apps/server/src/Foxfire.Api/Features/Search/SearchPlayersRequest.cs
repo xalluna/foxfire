@@ -31,25 +31,60 @@ public sealed record PlayerSearchResponse(
 /// search here is the history this server already keeps, which is the one thing
 /// that lookup could never return.
 ///
-/// A blank query is the whole list, deliberately. The finder opens with
-/// everybody on it, and an empty box should show what you would see before you
-/// typed. Uncapped for the same reason ListRiotAccountsRequest is: a server
-/// tracks the people who play on it, and that is a number you can scroll.
+/// A blank query is everybody, a page at a time — never all of them at once:
+/// this used to be uncapped on the grounds that a server tracks the people who
+/// play on it and that is a number you can scroll, and a community is not
+/// obliged to stay a size that makes that true. Pages run in name order, which
+/// the unique index on (GameName, TagLine) already holds, so a blank query reads
+/// one page of an index rather than sorting the table.
+///
+/// A typed one is closest first, because a search box shows the first ten: an
+/// exact name or whole Riot ID, then names that start with what was typed, then
+/// names that only contain it, alphabetical within each. The clients' own copy
+/// of the rule is <c>compareSearchResults</c> in @foxfire/core.
+///
+/// Two filters narrow it for the screens that need less than everybody: Mine
+/// for the caller's own accounts, which a finder shows first, and Claimed for
+/// the ones somebody has linked, which is the admin's list of claims to undo.
 /// </summary>
-public sealed record SearchPlayersRequest(string? Q) : IDomainRequest<IReadOnlyList<PlayerSearchResponse>>;
+/// <param name="Limit">At most <see cref="MaxLimit"/>; <see cref="DefaultLimit"/> when left out.</param>
+public sealed record SearchPlayersRequest(
+    string? Q,
+    bool Mine = false,
+    bool Claimed = false,
+    int? Limit = null,
+    int? Offset = null) : IDomainRequest<Page<PlayerSearchResponse>>
+{
+    /// <summary>A page, when the caller does not say.</summary>
+    public const int DefaultLimit = PageRequest.DefaultLimit;
+
+    /// <summary>The most one request is answered with, whatever it asks for.</summary>
+    public const int MaxLimit = PageRequest.MaxLimit;
+}
 
 internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentityContext me)
-    : IDomainRequestHandler<SearchPlayersRequest, IReadOnlyList<PlayerSearchResponse>>
+    : IDomainRequestHandler<SearchPlayersRequest, Page<PlayerSearchResponse>>
 {
-    public async Task<Response<IReadOnlyList<PlayerSearchResponse>>> Handle(
+    public async Task<Response<Page<PlayerSearchResponse>>> Handle(
         SearchPlayersRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var needle = (request.Q ?? "").Trim().ToLowerInvariant();
+        var page = PageRequest.Of(request.Limit, request.Offset);
 
         var accounts = db.RiotAccounts.Include(a => a.Owner).AsQueryable();
+
+        if (request.Mine)
+        {
+            // Nobody signed in has nothing of their own; compared as a null,
+            // OwnerId would match every unclaimed account instead.
+            if (me.UserId is not { } userId) return Response<Page<PlayerSearchResponse>>.Success(Page<PlayerSearchResponse>.Empty);
+            accounts = accounts.Where(a => a.OwnerId == userId);
+        }
+
+        if (request.Claimed) accounts = accounts.Where(a => a.OwnerId != null);
 
         if (needle.Length > 0)
         {
@@ -63,24 +98,40 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
                 || (a.GameName + "#" + a.TagLine).ToLower().Contains(needle));
         }
 
-        var found = await accounts.OrderBy(a => a.GameName).ToListAsync(cancellationToken);
+        // "ali" should find Ali#NA1 before a page of Aalinas: somebody typing
+        // into a box that shows ten wants the closest ten, not the first ten A
+        // to Z. Blank has nothing to be close to, and keeps the plain name
+        // order the index already holds.
+        var ordered = needle.Length == 0
+            ? accounts.OrderBy(a => a.GameName)
+            : accounts
+                .OrderBy(a =>
+                    a.GameName.ToLower() == needle || (a.GameName + "#" + a.TagLine).ToLower() == needle ? 0
+                    : a.GameName.ToLower().StartsWith(needle) ? 1
+                    : 2)
+                .ThenBy(a => a.GameName);
+
+        // The tag and then the id break ties, so a page boundary cannot fall
+        // between two rows the database would order differently next time.
+        var found = await ordered
+            .ThenBy(a => a.TagLine)
+            .ThenBy(a => a.Id)
+            .ToPageAsync(page, cancellationToken);
 
         // Fetched separately rather than as a join, because the rows are keyed
         // by (account, queue) and only one queue is wanted: a second small
         // query is easier to read than a grouped left join, and the set it runs
         // against is whatever the search already narrowed to.
         var solo = RankedQueue.SoloDuo.RiotName();
-        var ids = found.ConvertAll(a => a.Id);
+        var ids = found.Items.Select(a => a.Id).ToList();
 
         var entries = await db.LeagueEntries
             .Where(e => ids.Contains(e.RiotAccountId) && e.QueueType == solo)
             .ToDictionaryAsync(e => e.RiotAccountId, cancellationToken);
 
-        return Response<IReadOnlyList<PlayerSearchResponse>>.Success(
-        [
-            .. found.Select(a => new PlayerSearchResponse(
+        return Response<Page<PlayerSearchResponse>>.Success(
+            found.Map(a => new PlayerSearchResponse(
                 RiotAccountResponse.Describe(a, me.UserId),
-                entries.TryGetValue(a.Id, out var entry) ? LeagueEntryResponse.Describe(entry) : null))
-        ]);
+                entries.TryGetValue(a.Id, out var entry) ? LeagueEntryResponse.Describe(entry) : null)));
     }
 }

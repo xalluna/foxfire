@@ -24,6 +24,7 @@ describe('invalidationsFor', () => {
       queryKeys.matchList('acc-1'),
       queryKeys.dashboard('acc-1'),
       queryKeys.rankHistory('acc-1'),
+      queryKeys.rankTrend('acc-1'),
       queryKeys.championStats('acc-1'),
       queryKeys.rankPeriods('acc-1')
     ])
@@ -31,9 +32,10 @@ describe('invalidationsFor', () => {
     expect(keys).not.toContainEqual(queryKeys.matchLists())
   })
 
-  it('refreshes the chip and the graph when LP is typed, on that account', () => {
+  it('refreshes the chip and both graphs when LP is typed, on that account', () => {
     expect(invalidationsFor({ kind: 'rankEdited', accountId: 'acc-2' })).toEqual([
       queryKeys.rankHistory('acc-2'),
+      queryKeys.rankTrend('acc-2'),
       queryKeys.matchList('acc-2'),
       queryKeys.dashboard('acc-2')
     ])
@@ -42,6 +44,7 @@ describe('invalidationsFor', () => {
   it('refreshes every account when the League client reports a rank', () => {
     expect(invalidationsFor({ kind: 'rankChanged', accountId: 'acc-3' })).toEqual([
       queryKeys.rankHistory(),
+      queryKeys.rankTrend(),
       queryKeys.matchLists(),
       queryKeys.dashboard()
     ])
@@ -51,9 +54,14 @@ describe('invalidationsFor', () => {
     expect(invalidationsFor({ kind: 'seasonsSaved' })).toEqual([
       queryKeys.rankPeriods(),
       queryKeys.rankHistory(),
+      queryKeys.rankTrend(),
       queryKeys.championStats(),
       queryKeys.matchLists()
     ])
+  })
+
+  it('reads the favorites again when the connection changes, since the desktop keeps a list per server', () => {
+    expect(invalidationsFor({ kind: 'connectionChanged' })).toEqual([queryKeys.favorites()])
   })
 })
 
@@ -78,6 +86,17 @@ describe('queryKeys', () => {
 
     expect(full.slice(0, account.length)).toEqual(account)
     expect(account.slice(0, all.length)).toEqual(all)
+  })
+
+  it('nests the profile graph under its account, apart from the Rank page', () => {
+    const solo = queryKeys.rankTrend('acc-1', 'RANKED_SOLO_5x5')
+    const account = queryKeys.rankTrend('acc-1')
+
+    expect(solo.slice(0, account.length)).toEqual(account)
+    expect(account.slice(0, queryKeys.rankTrend().length)).toEqual(queryKeys.rankTrend())
+    // Its own prefix: refreshing the Rank page's history must not be what
+    // keeps the profile's graph current, or one could be forgotten.
+    expect(solo[0]).not.toEqual(queryKeys.rankHistory()[0])
   })
 
   it('keeps the admin settings under one key, whichever page reads them', () => {

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
 using Foxfire.Api.Features.Search;
 using Foxfire.Core;
 using Foxfire.Data;
@@ -73,33 +74,169 @@ public class SearchTests(FoxfireServerFixture server)
         return account;
     }
 
-    private async Task<IReadOnlyList<PlayerSearchResponse>> SearchAsync(HttpClient client, string query)
+    /// <summary>Many accounts sharing a stem, in one save — enough to fill pages.</summary>
+    private async Task TrackManyAsync(string stem, int count)
+    {
+        await using var scope = server.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var now = DateTimeOffset.UtcNow;
+
+        for (var i = 0; i < count; i++)
+        {
+            db.RiotAccounts.Add(new RiotAccount
+            {
+                Id = Guid.CreateVersion7(now),
+                Puuid = UniquePuuid(),
+                GameName = $"{stem}{i:D3}",
+                TagLine = "NA1",
+                Platform = "na1",
+                RegionalRoute = "americas",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<Page<PlayerSearchResponse>> SearchPageAsync(
+        HttpClient client,
+        string query,
+        string extra = "")
     {
         var response = await client.GetAsync(
-            new Uri($"/api/search?q={Uri.EscapeDataString(query)}", UriKind.Relative));
+            new Uri($"/api/search?q={Uri.EscapeDataString(query)}{extra}", UriKind.Relative));
 
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<IReadOnlyList<PlayerSearchResponse>>()
+        return await response.Content.ReadFromJsonAsync<Page<PlayerSearchResponse>>()
                ?? throw new InvalidOperationException("Search answered with no body.");
     }
 
+    private static async Task<IReadOnlyList<PlayerSearchResponse>> SearchAsync(
+        HttpClient client,
+        string query,
+        string extra = "") =>
+        (await SearchPageAsync(client, query, extra)).Items;
+
     [Fact]
-    public async Task A_blank_query_is_everybody_tracked_including_the_unclaimed()
+    public async Task The_unclaimed_are_found_as_well_as_the_claimed()
     {
         var (client, session) = await server.AdminAsync();
         using var _client = client;
 
-        var mine = await TrackAsync($"Claimed{Guid.NewGuid().ToString("N")[..8]}", ownerId: session.User.Id);
-        var nobodys = await TrackAsync($"Unclaimed{Guid.NewGuid().ToString("N")[..8]}");
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        var mine = await TrackAsync($"Claimed{stem}", ownerId: session.User.Id);
+        var nobodys = await TrackAsync($"Unclaimed{stem}");
 
-        var found = await SearchAsync(client, "");
+        var found = await SearchAsync(client, stem);
 
         // The unclaimed one is the whole point. An account an admin added
         // belongs to nobody, and a finder that only listed claimed accounts
         // would never show it.
         Assert.Contains(found, p => p.Account.Id == mine.Id);
         Assert.Contains(found, p => p.Account.Id == nobodys.Id);
+    }
+
+    [Fact]
+    public async Task A_blank_query_is_a_page_rather_than_everybody()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        // More than a page of accounts on the server, whatever else is here.
+        await TrackManyAsync($"Crowd{Guid.NewGuid().ToString("N")[..8]}", SearchPlayersRequest.DefaultLimit + 1);
+
+        var found = await SearchPageAsync(client, "");
+
+        Assert.Equal(SearchPlayersRequest.DefaultLimit, found.Items.Count);
+        Assert.True(found.Total > SearchPlayersRequest.DefaultLimit);
+    }
+
+    [Fact]
+    public async Task Pages_follow_on_from_each_other_in_name_order()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = $"Pager{Guid.NewGuid().ToString("N")[..8]}";
+        await TrackManyAsync(stem, 5);
+
+        var first = await SearchPageAsync(client, stem, "&limit=2");
+        var second = await SearchPageAsync(client, stem, "&limit=2&offset=2");
+        var last = await SearchPageAsync(client, stem, "&limit=2&offset=4");
+        var past = await SearchPageAsync(client, stem, "&limit=2&offset=6");
+
+        Assert.Equal(new[] { $"{stem}000", $"{stem}001" }, first.Items.Select(p => p.Account.GameName));
+        Assert.Equal(new[] { $"{stem}002", $"{stem}003" }, second.Items.Select(p => p.Account.GameName));
+        Assert.Equal(new[] { $"{stem}004" }, last.Items.Select(p => p.Account.GameName));
+
+        // Every page says how many there are under the filter, which is how a
+        // client knows there is nothing after the last one; asking past the
+        // end is not an error, just nothing.
+        Assert.All(new[] { first, second, last, past }, page => Assert.Equal(5, page.Total));
+        Assert.Empty(past.Items);
+    }
+
+    [Fact]
+    public async Task No_page_is_bigger_than_the_cap_however_many_are_asked_for()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = $"Greedy{Guid.NewGuid().ToString("N")[..8]}";
+        await TrackManyAsync(stem, SearchPlayersRequest.MaxLimit + 1);
+
+        var found = await SearchPageAsync(client, stem, "&limit=100000");
+
+        Assert.Equal(SearchPlayersRequest.MaxLimit, found.Items.Count);
+        Assert.Equal(SearchPlayersRequest.MaxLimit + 1, found.Total);
+    }
+
+    [Fact]
+    public async Task Mine_is_only_the_accounts_the_caller_has_claimed()
+    {
+        using var client = server.Client();
+        var session = await server.RegisterAsync(
+            client,
+            $"Owner{Guid.NewGuid().ToString("N")[..8]}",
+            $"owner-{Guid.NewGuid():N}@example.com");
+
+        FoxfireServerFixture.Authenticated(client, session);
+
+        var (admin, adminSession) = await server.AdminAsync();
+        admin.Dispose();
+
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        var mine = await TrackAsync($"Mine{stem}", ownerId: session.User.Id);
+        var theirs = await TrackAsync($"Theirs{stem}", ownerId: adminSession.User.Id);
+        var nobodys = await TrackAsync($"Nobodys{stem}");
+
+        var found = await SearchAsync(client, "", "&mine=true");
+
+        Assert.Contains(found, p => p.Account.Id == mine.Id && p.Account.IsMine);
+        Assert.DoesNotContain(found, p => p.Account.Id == theirs.Id);
+
+        // The one a null owner would have matched, had the filter compared
+        // against nobody rather than against the caller.
+        Assert.DoesNotContain(found, p => p.Account.Id == nobodys.Id);
+    }
+
+    [Fact]
+    public async Task Claimed_is_every_account_somebody_has_linked()
+    {
+        var (client, session) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        var claimed = await TrackAsync($"Taken{stem}", ownerId: session.User.Id);
+        var unclaimed = await TrackAsync($"Free{stem}");
+
+        var found = await SearchAsync(client, stem, "&claimed=true");
+
+        Assert.Contains(found, p => p.Account.Id == claimed.Id);
+        Assert.DoesNotContain(found, p => p.Account.Id == unclaimed.Id);
     }
 
     [Fact]
@@ -130,6 +267,41 @@ public class SearchTests(FoxfireServerFixture server)
         // And a name nobody here has is simply absent, rather than an error or
         // a trip to Riot to ask whether it exists elsewhere.
         Assert.DoesNotContain(await SearchAsync(client, $"nobody{stem}"), p => p.Account.Id == account.Id);
+    }
+
+    [Fact]
+    public async Task The_closest_names_come_first_rather_than_the_first_a_to_z()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        // Starting with a q, so the one that only contains it sorts first by
+        // name — and coming last is the ranking, not the alphabet.
+        var stem = $"q{Guid.NewGuid().ToString("N")[..8]}";
+        var contains = await TrackAsync($"A{stem}");
+        var exact = await TrackAsync(stem);
+        var startsWith = await TrackAsync($"{stem}Z");
+
+        var found = await SearchAsync(client, stem.ToUpperInvariant());
+
+        Assert.Equal(
+            new[] { exact.Id, startsWith.Id, contains.Id },
+            found.Select(p => p.Account.Id).Where(id => id == exact.Id || id == startsWith.Id || id == contains.Id));
+    }
+
+    [Fact]
+    public async Task A_whole_riot_id_typed_exactly_comes_first()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = $"q{Guid.NewGuid().ToString("N")[..8]}";
+        var elsewhere = await TrackAsync($"A{stem}", "ZZ9");
+        var exact = await TrackAsync(stem, "ZZ9");
+
+        var found = await SearchAsync(client, $"{stem}#zz9");
+
+        Assert.Equal(new[] { exact.Id, elsewhere.Id }, found.Select(p => p.Account.Id));
     }
 
     [Fact]

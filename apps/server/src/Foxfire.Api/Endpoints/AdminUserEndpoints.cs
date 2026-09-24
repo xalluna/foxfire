@@ -23,8 +23,13 @@ public static class AdminUserEndpoints
             .WithTags("Admin")
             .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.Admin));
 
-        admin.MapGet("/", (ISender sender, CancellationToken cancellationToken) =>
-            sender.SendAsync(new ListUsersRequest(), cancellationToken));
+        admin.MapGet("/", (
+                string? q,
+                int? limit,
+                int? offset,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new ListUsersRequest(q, limit, offset), cancellationToken));
 
         admin.MapPatch("/{id:guid}", (
                 Guid id,

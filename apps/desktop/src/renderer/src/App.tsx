@@ -4,9 +4,8 @@ import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
 import { playerSlug } from '@foxfire/core/routes'
 import { Icon, Logo } from '@foxfire/ui'
-import { queryKeys, useClient } from '@foxfire/screens'
+import { PlayerSearchBox, queryKeys, useClient } from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
-import { LiveNavIcon } from './components/LiveNavIcon'
 import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
 import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
 import { YOUTUBE_ENABLED } from '@shared/features'
@@ -17,23 +16,34 @@ import { useNavSlug } from './hooks/usePlayerNavigation'
 /** Pages of one account, found under its slug. */
 type PlayerPage =
   | '/players/$slug'
-  | '/players/$slug/live'
   | '/players/$slug/captures'
   | '/players/$slug/champions'
   | '/players/$slug/rank'
 
 type NavItem =
-  | { label: string; icon: JSX.Element; page: PlayerPage }
-  | { label: string; icon: JSX.Element; to: '/search' | '/settings/{-$category}' }
+  | {
+      label: string
+      icon: JSX.Element
+      page: PlayerPage
+      /** Pages reached through this one, which it stays lit on. */
+      within?: PlayerPage[]
+    }
+  | { label: string; icon: JSX.Element; to: '/settings/{-$category}' }
 
+/**
+ * Where the title bar goes. Rank and Champions are not here: each is a card on
+ * the profile that ends in "More", so they are part of the Dashboard — which
+ * stays lit on them — rather than places of their own, and the title bar keeps
+ * the room for the search box.
+ */
 const NAV: NavItem[] = [
-  { label: 'Dashboard', icon: <Icon.Dashboard />, page: '/players/$slug' },
-  // Coloured by whether a game is on and whether it is being recorded.
-  { label: 'Live game', icon: <LiveNavIcon />, page: '/players/$slug/live' },
+  {
+    label: 'Dashboard',
+    icon: <Icon.Dashboard />,
+    page: '/players/$slug',
+    within: ['/players/$slug/rank', '/players/$slug/champions']
+  },
   { label: 'Captures', icon: <Icon.Film />, page: '/players/$slug/captures' },
-  { label: 'Champions', icon: <Icon.Trophy />, page: '/players/$slug/champions' },
-  { label: 'Rank', icon: <Icon.TrendingUp />, page: '/players/$slug/rank' },
-  { label: 'Search', icon: <Icon.Search />, to: '/search' },
   { label: 'Settings', icon: <Icon.Settings />, to: '/settings/{-$category}' }
 ]
 
@@ -111,9 +121,11 @@ function useShowMatchRequests(): void {
     () =>
       window.api.recordings.onShowMatch((accountId, matchId) => {
         void queryClient
-          .ensureQueryData({ queryKey: queryKeys.accounts(), queryFn: () => client.accounts.list() })
-          .then((accounts) => {
-            const account = accounts.find((a) => a.id === accountId)
+          .ensureQueryData({
+            queryKey: queryKeys.account(accountId),
+            queryFn: () => client.accounts.get(accountId)
+          })
+          .then((account) => {
             if (!account) return
             void navigate({
               to: '/players/$slug',
@@ -169,13 +181,16 @@ export function AppShell(): JSX.Element {
     // With no accounts every player page is the empty home page, which the
     // Dashboard tab stands for.
     if (item.page === '/players/$slug' && matchRoute({ to: '/', includeSearch: false })) return true
-    return !!matchRoute({ to: item.page, includeSearch: false })
+    // Each page matched exactly: a fuzzy match on the profile would light it
+    // on Captures too, which is a page of its own.
+    return [item.page, ...(item.within ?? [])].some(
+      (page) => !!matchRoute({ to: page, includeSearch: false })
+    )
   }
 
   const go = (item: NavItem): void => {
     if ('to' in item) {
-      if (item.to === '/search') void navigate({ to: '/search' })
-      else void navigate({ to: '/settings/{-$category}', params: { category: undefined } })
+      void navigate({ to: item.to, params: { category: undefined } })
     } else if (slug === null) {
       void navigate({ to: '/' })
     } else {
@@ -200,12 +215,20 @@ export function AppShell(): JSX.Element {
         className="drag box-content flex h-titlebar shrink-0 items-center gap-4 border-b border-hairline pl-4"
         style={{ paddingRight: 'var(--titlebar-controls-w)' }}
       >
-        <div className="flex items-center gap-2">
+        {/* Home: the account this PC opens on, from anywhere — Settings
+            included. A button inside the drag strip, so it has to opt out of
+            dragging or the click would move the window instead. */}
+        <button
+          type="button"
+          onClick={() => void navigate({ to: '/' })}
+          title="Home"
+          className="no-drag flex items-center gap-2 rounded transition hover:opacity-80"
+        >
           <Logo className="shrink-0 text-accent" />
           <span className="font-display text-base tracking-wide text-accent">Foxfire</span>
-        </div>
+        </button>
 
-        <nav className="no-drag flex gap-0.5">
+        <nav className="no-drag flex shrink-0 gap-0.5">
           {NAV.map((item) => {
             const active = isActive(item)
             return (
@@ -225,7 +248,17 @@ export function AppShell(): JSX.Element {
           })}
         </nav>
 
-        <div className="ml-auto pr-2">
+        {/*
+          The space either side of the box stays draggable — only the box
+          itself opts out — so the title bar still moves the window from
+          anywhere that is not a control. No box without a server: every
+          account a local database has is on the rail already.
+        */}
+        <div className="flex min-w-0 flex-1 justify-center">
+          {connected && <PlayerSearchBox className="no-drag w-full min-w-[160px] max-w-[360px]" />}
+        </div>
+
+        <div className="shrink-0 pr-2">
           <CaptureIndicator />
         </div>
       </header>

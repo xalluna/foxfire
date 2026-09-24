@@ -16,7 +16,7 @@ import type { CaptureStatus } from '@shared/types'
  * Hidden entirely when capture is off, so it is not chrome for people who never
  * turned the feature on.
  */
-export function useCaptureStatus(): CaptureStatus | undefined {
+function useCaptureStatus(): CaptureStatus | undefined {
   const [pushed, setPushed] = useState<CaptureStatus | null>(null)
 
   const polled = useQuery({
@@ -32,6 +32,14 @@ export function useCaptureStatus(): CaptureStatus | undefined {
   return pushed ?? polled.data
 }
 
+/**
+ * The pill, or in a narrow window only its colour.
+ *
+ * Below about 1150px the title bar cannot hold the nav, the search box and
+ * "Waiting for the game" side by side, and the pill is the one of the three
+ * that still says what it has to without words: teal ready, amber waiting,
+ * red recording. The words stay in its tooltip and for a screen reader.
+ */
 export function CaptureIndicator(): JSX.Element | null {
   const status = useCaptureStatus()
   if (!status || status.state === 'off') return null
@@ -42,12 +50,12 @@ export function CaptureIndicator(): JSX.Element | null {
     <span
       title={label}
       className={clsx(
-        'no-drag flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs',
+        'no-drag flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs max-[1150px]:px-1.5 max-[1150px]:py-1',
         tone
       )}
     >
-      {dot}
-      {label}
+      {dot ?? <span className="hidden h-2 w-2 rounded-full bg-current max-[1150px]:block" />}
+      <span className="max-[1150px]:sr-only">{label}</span>
     </span>
   )
 }
@@ -85,39 +93,3 @@ function describe(status: CaptureStatus): {
   }
 }
 
-/**
- * The same state, stated at length for the Live Game screen.
- *
- * Mid-game is the moment it matters most and the moment the title bar is behind
- * a fullscreen League, so it is worth repeating here where somebody alt-tabbing
- * to check the scoreboard will see it.
- */
-export function CaptureBanner(): JSX.Element | null {
-  const status = useCaptureStatus()
-  if (!status || status.state === 'off' || status.state === 'idle') return null
-
-  if (status.state === 'recording') {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-red/30 bg-red/10 px-3 py-2 text-sm text-red">
-        <Icon.Record width={11} height={11} className="animate-pulse" />
-        This game is being recorded.
-      </div>
-    )
-  }
-
-  if (status.state === 'armed') {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-amber">
-        <Icon.Film width={13} height={13} />
-        Waiting for the game to finish loading before recording starts.
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-amber">
-      <Icon.Warning width={13} height={13} />
-      {status.state === 'error' ? status.message : 'Connecting to OBS…'}
-    </div>
-  )
-}

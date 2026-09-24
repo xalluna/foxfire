@@ -7,9 +7,9 @@ export type { AccountContext } from '../db/accountScope'
 /**
  * The context for one account, as it stands right now.
  *
- * Goes through the account list rather than SQLite, so it answers in both
- * modes — in local-only that list is a query against this machine's own
- * accounts table, and connected it is the server's.
+ * Asks whichever store owns accounts rather than SQLite, so it answers in both
+ * modes — in local-only that is this machine's own accounts table, and
+ * connected it is one lookup on the server.
  *
  * A null `riotId` is a real answer rather than a failure: an id for an account
  * that has since been deleted, or one from a server this machine is no longer
@@ -19,8 +19,7 @@ export async function accountContext(accountId: string): Promise<AccountContext>
   const serverKey = getServerState().activeUrl
 
   try {
-    const accounts = await serverBacked().accounts.list()
-    const account = accounts.find((a) => a.id === accountId)
+    const account = await serverBacked().accounts.get(accountId)
 
     return {
       accountId,

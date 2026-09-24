@@ -6,21 +6,28 @@ import type {
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AssetManifest,
   AttachRecordingInput,
   AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
+  FavoriteOutcome,
+  FavoritePlayer,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  Page,
+  PageOptions,
+  PlayerSearchOptions,
   PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
+  RankTrend,
   RiotIdInput,
   Season,
   SeasonInput,
@@ -44,26 +51,51 @@ import type {
  * client; both belong to the desktop and are not here.
  */
 export interface FoxfireData {
+  /**
+   * Accounts, asked about one question at a time.
+   *
+   * There is no "every account". There used to be, and every screen held the
+   * whole list and searched it for whichever account it meant — which on a
+   * server is the whole community, fetched by every client on every launch.
+   * Yours are a list, because that is as many as one person plays on; anybody
+   * else's is one lookup, or a page of `search.players`.
+   */
   accounts: {
-    list: () => Promise<Account[]>
+    /**
+     * The accounts that are yours, with the home one marked. On a server, the
+     * ones you have claimed; locally, every account in this file.
+     */
+    mine: () => Promise<Account[]>
+    /** One account by id, or null when there is no such account. */
+    get: (accountId: string) => Promise<Account | null>
+    /** One account by Riot ID, in any capitalisation, or null when nobody here plays as it. */
+    find: (riotId: RiotIdInput) => Promise<Account | null>
+    /** The account this machine or browser opens on, or null when there is none to open. */
     getHome: () => Promise<Account | null>
     /**
-     * Stops following an account. On a server that gives up the claim and
-     * leaves the history, which is everybody's.
+     * Stops following an account, and answers with yours. On a server that
+     * gives up the claim and leaves the history, which is everybody's.
      */
     remove: (accountId: string) => Promise<Account[]>
-    /** Which account opens first. A preference of the machine or browser, never of the server. */
+    /**
+     * Which account opens first, answered with yours. A preference of the
+     * machine or browser, never of the server — and it may be somebody else's.
+     */
     setHome: (accountId: string) => Promise<Account[]>
   }
   dashboard: {
     get: (accountId: string) => Promise<DashboardData | null>
-    /** `queueId` null means every queue; filtering happens where the rows are, so paging stays even. */
+    /**
+     * A page of one player's games, newest first, and how many there are.
+     * `queueId` null means every queue; filtering happens where the rows are,
+     * so pages stay even and `total` counts the filtered set.
+     */
     matchList: (
       accountId: string,
       limit: number,
       offset: number,
       queueId: number | null
-    ) => Promise<MatchSummary[]>
+    ) => Promise<Page<MatchSummary>>
     matchDetail: (matchId: string) => Promise<MatchDetail | null>
     /**
      * One game as one player's row — the result, the queue, the LP it moved.
@@ -75,7 +107,13 @@ export interface FoxfireData {
     matchSummary?: (accountId: string, matchId: string) => Promise<MatchSummary | null>
   }
   sync: {
-    start: (accountId: string) => Promise<void>
+    /**
+     * Starts a sync, anybody's account. On a server, one already synced in the
+     * last two minutes is turned away, whoever asks — an answer rather than a
+     * throw, because the person pressing the button wants to know how long to
+     * wait. How it goes is the progress events, not this.
+     */
+    start: (accountId: string) => Promise<AdminActionResult>
     getState: (accountId: string) => Promise<SyncState | null>
   }
   champions: {
@@ -86,10 +124,31 @@ export interface FoxfireData {
     get: (accountId: string, refresh: boolean, queueId: number | null) => Promise<MasteryData>
   }
   rank: {
+    /**
+     * Every reading in the range, whole — the one list that grows which is not
+     * paged. Milestones are read off neighbouring pairs and the change over the
+     * period counts every game, so a page would leave a gap and a cap would
+     * start the line late. The range bounds it instead: about one reading per
+     * ranked game, a few hundred for the thirty days the screen opens on. The
+     * graph thins it to closes on the client (rankRangeCloses); the profile
+     * reads `trend` rather than this. Making "all" cheaper as seasons pile up is
+     * separate work — see CLAUDE.md.
+     */
     history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+    /**
+     * The last thirty days as a close a day, for the profile's graph. Bounded
+     * by construction at 31 points — see rules/rankTrend.ts, which every
+     * implementation of this answers with.
+     */
+    trend: (accountId: string, queueType: QueueType) => Promise<RankTrend>
     /** Seasons with data, newest first. The first is what the pickers open on. */
     periods: (accountId: string) => Promise<Season[]>
-    /** Ranked games with no LP figure — everything the editor can offer. */
+    /**
+     * Ranked games with no LP figure — everything the editor can offer.
+     *
+     * Not paged, and it should be: it grows with a player's history. It is
+     * known debt, recorded in CLAUDE.md, rather than an exception.
+     */
     editable: (accountId: string, queueType: QueueType) => Promise<EditableMatch[]>
     /**
      * Stores a batch of entries and returns what still needs one. Fewer rows can
@@ -113,10 +172,28 @@ export interface FoxfireData {
   }
   search: {
     /**
-     * The tracked players matching a query, or every one of them when it is
-     * blank. Reads stored data only — no Riot call, on a server or a desktop.
+     * A page of the tracked players matching a query, closest first (see
+     * `compareSearchResults`), or of everybody in name order when it is blank.
+     * Reads stored data only — no Riot call, on a server or a desktop.
      */
-    players: (query: string) => Promise<PlayerSearchResult[]>
+    players: (query: string, options?: PlayerSearchOptions) => Promise<Page<PlayerSearchResult>>
+  }
+  /**
+   * The players somebody starred, for the search box to open on.
+   *
+   * Kept by the machine or browser asking, like the home account, and never by
+   * a server: each keeps a copy of every player it starred, so the list draws
+   * before anything has been asked of anybody. Ten at most, newest first; see
+   * `addFavorite`. Local-only has no community to star anybody in, so there it
+   * is always empty.
+   */
+  favorites: {
+    list: () => Promise<FavoritePlayer[]>
+    /** Stars a player, or says why not — a full list is refused, not trimmed. */
+    add: (player: PlayerSearchResult) => Promise<FavoriteOutcome>
+    remove: (accountId: string) => Promise<FavoritePlayer[]>
+    /** Brings any starred player among these up to date, and answers with the list. */
+    refresh: (seen: PlayerSearchResult[]) => Promise<FavoritePlayer[]>
   }
   /**
    * The YouTube recordings a server holds, one per game per account.
@@ -194,22 +271,26 @@ export interface FoxfireClient extends FoxfireData {
    * a refused write has a reason worth showing.
    */
   admin: {
-    users: () => Promise<AdminUser[]>
+    /** A page of the members, by name, narrowed to a name or address when `q` says one. */
+    users: (query?: AdminUserQuery) => Promise<Page<AdminUser>>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
     /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
     createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
     /** Withdraws the reset link outstanding for somebody, if there is one. */
     revokePasswordReset: (userId: string) => Promise<AdminActionResult>
-    invites: () => Promise<AdminInvite[]>
+    /** Every invite that can still be used. Whole: they expire, so there are never many. */
+    openInvites: () => Promise<AdminInvite[]>
+    /** A page of the invites somebody registered with, most recently used first. */
+    usedInvites: (page?: PageOptions) => Promise<Page<AdminInvite>>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
     storage: () => Promise<ServerStorageUsage>
-    /** The biggest shared replays, so space can be reclaimed where it actually is. */
-    storedReplays: () => Promise<AdminReplay[]>
+    /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
+    storedReplays: (page?: PageOptions) => Promise<Page<AdminReplay>>
     removeReplay: (matchId: string) => Promise<AdminActionResult>
     /** Takes a League account away from whoever claimed it. The account and its games stay. */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>

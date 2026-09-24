@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Foxfire.Api.Features.RiotAccounts;
+using Foxfire.Api.Features.Sync;
+using Foxfire.Api.Sync;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -203,6 +206,59 @@ public class TrackedAccountTests(FoxfireServerFixture server)
 
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
         Assert.Equal("sync_too_soon", error?.Error);
+    }
+
+    [Fact]
+    public async Task An_account_inside_the_cooldown_says_when_it_ends()
+    {
+        await using var host = new FakeRiot().Host(server.Factory);
+
+        Guid accountId;
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            accountId = await TrackedAsync(
+                scope.ServiceProvider.GetRequiredService<FoxfireDbContext>(),
+                syncedAgo: TimeSpan.FromSeconds(10));
+        }
+
+        using var client = await MemberAsync(host);
+
+        // So "Sync now" can wait it out rather than be refused. Both reads say
+        // it: the profile opens on the dashboard, and the sync state is what a
+        // client asks for on its own.
+        var state = await client.GetFromJsonAsync<SyncStateResponse>(
+            new Uri($"/api/sync/{accountId}", UriKind.Relative));
+
+        Assert.NotNull(state);
+        Assert.Equal(state.LastDeltaSyncAt + SyncCooldown.Length, state.CooldownUntil);
+        Assert.True(state.CooldownUntil > DateTimeOffset.UtcNow);
+
+        var dashboard = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{accountId}/dashboard", UriKind.Relative));
+
+        Assert.Equal(
+            state.CooldownUntil,
+            dashboard.GetProperty("syncState").GetProperty("cooldownUntil").GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task An_account_never_synced_has_no_cooldown()
+    {
+        await using var host = new FakeRiot().Host(server.Factory);
+
+        Guid accountId;
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            accountId = await TrackedAsync(scope.ServiceProvider.GetRequiredService<FoxfireDbContext>());
+        }
+
+        using var client = await MemberAsync(host);
+
+        var state = await client.GetFromJsonAsync<SyncStateResponse>(
+            new Uri($"/api/sync/{accountId}", UriKind.Relative));
+
+        Assert.NotNull(state);
+        Assert.Null(state.CooldownUntil);
     }
 
     [Fact]

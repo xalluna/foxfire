@@ -16,7 +16,7 @@ import type { MatchSummary } from '@shared/types'
  * answered. The server half is @foxfire/core's, and it is the very same code
  * the web client reads through — what is here is what only this machine has.
  *
- * Two things, both about this machine.
+ * Three things, all about this machine.
  *
  * A match row can carry a recording and a replay, and no server can know
  * either: they are files on this disk. So the rows come back without them and
@@ -24,16 +24,26 @@ import type { MatchSummary } from '@shared/types'
  * rather than one per row, since a page of history is twenty matches and
  * twenty round trips to the same table would be twenty for nothing.
  *
+ * The home account and the favorites are this PC's preferences, and live in
+ * its own settings table beside each other, one of each per server.
+ *
  * And a server id is not a thing the account list can invent. `accounts.add`
  * exists on this contract because local-only mode has it, but linking on a
  * server is LCU-attested — the desktop reports the Riot ID the League client
  * says is logged in, and the server resolves it. Typing a name into a box is
  * not attestation, so that path says so rather than half-working.
  */
-const shared = createServerData(serverApi(), {
-  get: () => getSetting(getDb(), homeSettingKey()),
-  set: (accountId) => setSetting(getDb(), homeSettingKey(), accountId)
-})
+const shared = createServerData(
+  serverApi(),
+  {
+    get: () => getSetting(getDb(), homeSettingKey()),
+    set: (accountId) => setSetting(getDb(), homeSettingKey(), accountId)
+  },
+  {
+    get: () => getSetting(getDb(), favoritesSettingKey()),
+    set: (list) => setSetting(getDb(), favoritesSettingKey(), list)
+  }
+)
 
 export const httpApi: ServerBackedApi = {
   ...shared,
@@ -60,11 +70,11 @@ export const httpApi: ServerBackedApi = {
       // no way to become anybody's.
       const account = await serverApi().accounts.link(input)
 
-      // Not awaited, exactly as the local path does not await its backfill.
-      void serverApi().sync.start(account.id).catch(() => {
-        // A claim that worked is worth reporting even if the sync that follows
-        // did not start; the next launch sweep picks it up.
-      })
+      // Not awaited, exactly as the local path does not await its backfill,
+      // and a refusal is not looked at: a claim that worked is worth reporting
+      // even if the sync that follows did not start; the next launch sweep
+      // picks it up.
+      void serverApi().sync.start(account.id)
 
       return account
     }
@@ -73,8 +83,10 @@ export const httpApi: ServerBackedApi = {
   dashboard: {
     ...shared.dashboard,
 
-    matchList: async (accountId, limit, offset, queueId) =>
-      withLocalArtefacts(accountId, await shared.dashboard.matchList(accountId, limit, offset, queueId))
+    matchList: async (accountId, limit, offset, queueId) => {
+      const page = await shared.dashboard.matchList(accountId, limit, offset, queueId)
+      return { total: page.total, items: await withLocalArtefacts(accountId, page.items) }
+    }
   },
 
   // The same routes the web client calls. Attaching from here, with the
@@ -91,6 +103,11 @@ export const httpApi: ServerBackedApi = {
  */
 function homeSettingKey(): string {
   return `home_account:${getServerState().activeUrl ?? ''}`
+}
+
+/** Who this machine has starred, for the server it is signed in to — a server's players are its own. */
+function favoritesSettingKey(): string {
+  return `favorite_players:${getServerState().activeUrl ?? ''}`
 }
 
 /**

@@ -6,12 +6,14 @@ import type {
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AssetManifest,
   AttachRecordingInput,
   AttachRecordingOutcome,
   ChampionStats,
   ConnectionState,
   DashboardData,
+  FavoritePlayer,
   FoxfireClient,
   ImportProgress,
   ImportResult,
@@ -19,10 +21,13 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  Page,
+  PageOptions,
   PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
+  RankTrend,
   Season,
   SeasonInput,
   ServerAdminSettings,
@@ -30,11 +35,24 @@ import type {
   SyncProgressEvent,
   SyncState
 } from '@foxfire/core'
-import { rankMovement, rangeBounds, resetsBetween, seasonsSpanning } from '@foxfire/core'
+import {
+  compareSearchResults,
+  pageOf,
+  rankMovement,
+  rankTrend,
+  rangeBounds,
+  resetsBetween,
+  searchRank,
+  seasonsSpanning,
+  serializeFavorites
+} from '@foxfire/core'
+import { favoritesOver } from '@foxfire/core/server'
+import { isPlayer } from '@foxfire/core/routes'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
   ACCOUNTS,
+  COMMUNITY,
   LEAGUE_ENTRIES,
   MASTERY,
   MATCHES,
@@ -115,7 +133,37 @@ function syncState(accountId: string): SyncState {
     backfillComplete: scenario !== 'no-matches',
     backfillTarget: 200,
     lastFullSyncAt: '2026-08-14T18:00:00Z',
-    lastDeltaSyncAt: '2026-08-14T18:00:00Z'
+    lastDeltaSyncAt: '2026-08-14T18:00:00Z',
+    cooldownUntil: cooldownUntil(accountId)
+  }
+}
+
+/**
+ * The server's two minutes between syncs of one account, whoever asks, counted
+ * from when a sync finished, as the server counts them — so the button counts
+ * down after a press, and a press that beats it shows the notice it would.
+ *
+ * Applied in every scenario, local ones included, although this PC alone has
+ * no cooldown: the harness is for looking at the countdown, and a harness that
+ * could only show it under one scenario would hide it from the other.
+ */
+const SYNC_COOLDOWN_MS = 2 * 60_000
+const syncedAt = new Map<string, number>()
+
+function cooldownUntil(accountId: string): string | null {
+  const finished = syncedAt.get(accountId)
+  return finished === undefined ? null : new Date(finished + SYNC_COOLDOWN_MS).toISOString()
+}
+
+function syncTooSoon(accountId: string): AdminActionResult | null {
+  const finished = syncedAt.get(accountId)
+  const waitMs = finished === undefined ? 0 : finished + SYNC_COOLDOWN_MS - Date.now()
+  if (waitMs <= 0) return null
+
+  const seconds = Math.ceil(waitMs / 1000)
+  return {
+    ok: false,
+    error: `This account was synced less than two minutes ago. Try again in ${seconds} seconds.`
   }
 }
 
@@ -142,6 +190,7 @@ function runFakeSync(accountId: string): void {
   const tick = setInterval(() => {
     current += 3
     const done = current >= total
+    if (done) syncedAt.set(accountId, Date.now())
     for (const cb of progressListeners) {
       cb({
         accountId,
@@ -151,7 +200,8 @@ function runFakeSync(accountId: string): void {
         message: done ? undefined : `Fetching match ${current} of ${total}`,
         // The harness exists to design the progress bar against motion, and an
         // auto-triggered sync deliberately renders nothing.
-        trigger: 'manual'
+        trigger: 'manual',
+        ...(done && { cooldownUntil: cooldownUntil(accountId) })
       })
     }
     if (done) clearInterval(tick)
@@ -220,7 +270,16 @@ const MOCK_STORED_REPLAYS: AdminReplay[] = [
     fileBytes: 21_500_000,
     uploadedBy: null,
     uploadedAt: '2026-07-02T23:12:00.000Z'
-  }
+  },
+  // A long-running community's worth behind those, all smaller, so the library
+  // has pages to show more of. Generated from the index — the same every load.
+  ...Array.from({ length: 117 }, (_, i): AdminReplay => ({
+    matchId: `NA1_52${String(9_000_000 - i * 7919).padStart(8, '0')}`,
+    patch: ['15.16', '15.15', '15.14', '15.13'][i % 4],
+    fileBytes: 21_000_000 - i * 97_000,
+    uploadedBy: ['Faker', 'Sova', null, 'phantomduval'][i % 4],
+    uploadedAt: new Date(Date.UTC(2026, 6, 1) - i * 86_400_000).toISOString()
+  }))
 ]
 
 /**
@@ -271,7 +330,22 @@ let mockUsers: AdminUser[] = [
     linkedRiotAccounts: 0,
     activeSessions: 0,
     passwordReset: null
-  }
+  },
+  // Enough more that the page has pages: 120 people, in three of them.
+  ...Array.from({ length: 117 }, (_, i): AdminUser => {
+    const n = String(i + 1).padStart(3, '0')
+    return {
+      id: `u-gen-${n}`,
+      username: `Summoner${n}`,
+      email: `summoner${n}@example.net`,
+      isAdmin: false,
+      isDisabled: i % 23 === 0,
+      createdAt: new Date(Date.UTC(2026, 5, 1) + i * 3_600_000 * 11).toISOString(),
+      linkedRiotAccounts: i % 3,
+      activeSessions: i % 4 === 0 ? 0 : 1,
+      passwordReset: null
+    }
+  })
 ]
 
 let mockInvites: AdminInvite[] = [
@@ -294,8 +368,60 @@ let mockInvites: AdminInvite[] = [
     redeemedAt: '2026-07-14T18:30:00.000Z',
     redeemedBy: 'phantomduval',
     isOpen: false
-  }
+  },
+  {
+    id: 'i-3',
+    email: 'gon@example.com',
+    link: 'https://foxfire.example.com/invite/open-token-for-the-harness-only-bbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    createdAt: '2026-09-18T09:00:00.000Z',
+    expiresAt: '2026-10-02T09:00:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  {
+    id: 'i-4',
+    email: 'kurapika@example.com',
+    link: 'https://foxfire.example.com/invite/open-token-for-the-harness-only-ccccccccccccccccccccccccccc',
+    createdAt: '2026-09-20T15:30:00.000Z',
+    expiresAt: '2026-10-04T15:30:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  // Lapsed without being used. The server keeps it and sends it nowhere, so
+  // neither list should show it.
+  {
+    id: 'i-5',
+    email: 'lapsed@example.com',
+    link: 'https://foxfire.example.com/invite/lapsed-token-for-the-harness-only-dddddddddddddddddddddddd',
+    createdAt: '2026-08-01T12:00:00.000Z',
+    expiresAt: '2026-08-15T12:00:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: false
+  },
+  // Everybody else who joined by invitation, so the used list has pages.
+  ...Array.from({ length: 72 }, (_, i): AdminInvite => {
+    const n = String(i + 1).padStart(3, '0')
+    const created = Date.UTC(2026, 6, 1) - i * 2 * 86_400_000
+    return {
+      id: `i-gen-${n}`,
+      email: `summoner${n}@example.net`,
+      link: `https://foxfire.example.com/invite/used-token-${n}-for-the-harness-only-eeeeeeeeeeeeeeeeeeeeee`,
+      createdAt: new Date(created).toISOString(),
+      expiresAt: new Date(created + 14 * 86_400_000).toISOString(),
+      redeemedAt: new Date(created + 86_400_000).toISOString(),
+      redeemedBy: i % 17 === 0 ? null : `Summoner${n}`,
+      isOpen: false
+    }
+  })
 ]
+
+/** A member matches a search the way the server matches one: part of the name or the address, any case. */
+function isMemberMatch(user: AdminUser, needle: string): boolean {
+  return user.username.toLowerCase().includes(needle) || user.email.toLowerCase().includes(needle)
+}
 
 // Uncapped, which is the default a host has to choose away from.
 let mockServerSettings: ServerAdminSettings = {
@@ -304,7 +430,69 @@ let mockServerSettings: ServerAdminSettings = {
   replayByteCap: 0
 }
 
-export function createFixtureClient(): FoxfireClient {
+export interface FixtureClientOptions {
+  /**
+   * Every fixture account as the one asking sees it. The desktop's harness
+   * makes some of them somebody else's while it plays at being on a server.
+   */
+  describe?: (account: Account) => Account
+  /**
+   * Whether everybody else on the harness's server is there to be found. Not
+   * on a desktop playing at being local-only, whose database has nobody but
+   * its own accounts. Always, when left out.
+   */
+  community?: () => boolean
+}
+
+/**
+ * The players starred when a harness opens: one whose copy is current, and
+ * one seen weeks ago, since promoted — so opening their profile, or finding
+ * them in the box, shows the copy catching up.
+ */
+function seededFavorites(): string {
+  const [fakest, tidecaller] = [COMMUNITY[1], COMMUNITY[8]]
+  const favorites: FavoritePlayer[] = [
+    {
+      account: tidecaller,
+      soloEntry: LEAGUE_ENTRIES[tidecaller.id]?.[0] ?? null,
+      addedAt: '2026-09-20T10:00:00Z'
+    },
+    {
+      account: { ...fakest, summonerLevel: 118, updatedAt: '2026-08-01T10:00:00Z' },
+      soloEntry: {
+        queueType: 'RANKED_SOLO_5x5',
+        tier: 'PLATINUM',
+        rank: 'I',
+        leaguePoints: 77,
+        wins: 31,
+        losses: 30,
+        fetchedAt: '2026-08-01T10:00:00Z'
+      },
+      addedAt: '2026-09-10T10:00:00Z'
+    }
+  ]
+  return serializeFavorites(favorites)
+}
+
+export function createFixtureClient(options: FixtureClientOptions = {}): FoxfireClient {
+  const describe = options.describe ?? ((account: Account) => account)
+  const community = options.community ?? (() => true)
+  const everyone = (): Account[] => [...accounts(), ...(community() ? COMMUNITY : [])].map(describe)
+
+  // Kept the way a browser keeps them, for as long as the page is open.
+  let starred: string | null = seededFavorites()
+  const favorites = favoritesOver({ get: () => starred, set: (list) => (starred = list) })
+
+  // The home this harness remembers, as a browser or a PC would. Null opens on
+  // your first account.
+  let homeId: string | null = null
+
+  const mine = (): Account[] => {
+    const own = everyone().filter((a) => a.isMine !== false)
+    const home = homeId === null ? own[0] : own.find((a) => a.id === homeId)
+    return own.map((a) => ({ ...a, isHomeAccount: a.id === home?.id }))
+  }
+
   return {
     connection: {
       get: (): Promise<ConnectionState> => delay(connection, 120, false),
@@ -315,18 +503,26 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     accounts: {
-      list: (): Promise<Account[]> => delay(accounts(), 180, false),
-      getHome: (): Promise<Account | null> => delay(accounts()[0] ?? null, 180, false),
-      remove: (accountId: string): Promise<Account[]> =>
-        delay(accounts().filter((a) => a.id !== accountId)),
-      setHome: (accountId: string): Promise<Account[]> =>
-        delay(accounts().map((a) => ({ ...a, isHomeAccount: a.id === accountId })))
+      mine: (): Promise<Account[]> => delay(mine(), 180, false),
+      get: (accountId: string): Promise<Account | null> =>
+        delay(everyone().find((a) => a.id === accountId) ?? null, 120, false),
+      find: (riotId): Promise<Account | null> =>
+        delay(everyone().find((a) => isPlayer(a, riotId)) ?? null, 120, false),
+      getHome: (): Promise<Account | null> => {
+        const home = (homeId === null ? undefined : everyone().find((a) => a.id === homeId)) ?? mine()[0]
+        return delay(home ? { ...home, isHomeAccount: true } : null, 180, false)
+      },
+      remove: (accountId: string): Promise<Account[]> => delay(mine().filter((a) => a.id !== accountId)),
+      setHome: (accountId: string): Promise<Account[]> => {
+        homeId = accountId
+        return delay(mine())
+      }
     },
 
     dashboard: {
       get: (accountId: string): Promise<DashboardData | null> => {
         if (scenario === 'key-expired') return fail(KEY_EXPIRED)
-        const account = accounts().find((a) => a.id === accountId)
+        const account = everyone().find((a) => a.id === accountId)
         if (!account) return delay(null)
         return delay({
           account,
@@ -339,14 +535,12 @@ export function createFixtureClient(): FoxfireClient {
         limit: number,
         offset: number,
         queueId: number | null
-      ): Promise<MatchSummary[]> => {
+      ): Promise<Page<MatchSummary>> => {
         // Filter before slicing, mirroring the real handler's SQL — otherwise the
         // harness pages differently to the app and hides paging bugs.
         const all = matchesFor(accountId).filter((m) => queueId === null || m.queueId === queueId)
-        return delay(
-          all.slice(offset, offset + limit).map((m) => withRecording(accountId, m)),
-          260
-        )
+        const page = pageOf(all, { limit, offset })
+        return delay({ ...page, items: page.items.map((m) => withRecording(accountId, m)) }, 260)
       },
       matchDetail: (matchId: string): Promise<MatchDetail | null> =>
         delay(MATCH_DETAILS[matchId] ?? null, 420),
@@ -363,7 +557,7 @@ export function createFixtureClient(): FoxfireClient {
       // The server's rules, so the harness refuses what it would: only the
       // account's owner attaches, and a second one asks first.
       attach: (accountId: string, matchId: string, input: AttachRecordingInput): Promise<AttachRecordingOutcome> => {
-        const account = accounts().find((a) => a.id === accountId)
+        const account = everyone().find((a) => a.id === accountId)
         if (account?.isMine === false) {
           return delay({ ok: false, reason: 'failed', message: 'That League account is not linked to your Foxfire account.' }, 300)
         }
@@ -406,9 +600,12 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     sync: {
-      start: (accountId: string): Promise<void> => {
+      start: (accountId: string): Promise<AdminActionResult> => {
+        const refused = syncTooSoon(accountId)
+        if (refused) return delay(refused, 100)
+
         runFakeSync(accountId)
-        return delay(undefined, 100)
+        return delay({ ok: true, error: null }, 100)
       },
       getState: (accountId: string): Promise<SyncState | null> => delay(syncState(accountId))
     },
@@ -455,11 +652,14 @@ export function createFixtureClient(): FoxfireClient {
     rank: {
       history: (accountId: string, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
         const { sinceMs, untilMs } = rangeBounds(range, DEV_SEASONS)
-        const snapshots = (RANK_SNAPSHOTS[accountId]?.[queueType] ?? []).filter(
+        const series = RANK_SNAPSHOTS[accountId]?.[queueType] ?? []
+        const snapshots = series.filter(
           (s) =>
             (sinceMs === null || s.capturedAt >= sinceMs) &&
             (untilMs === null || s.capturedAt < untilMs)
         )
+        const before =
+          sinceMs === null ? null : (series.filter((s) => s.capturedAt < sinceMs).at(-1) ?? null)
 
         const milestones = snapshots
           .flatMap((snapshot, i) => {
@@ -484,8 +684,14 @@ export function createFixtureClient(): FoxfireClient {
           })
           .reverse()
 
-        return delay({ snapshots, milestones }, 280)
+        return delay({ snapshots, milestones, before }, 280)
       },
+
+      // The whole series is handed over: the rule only looks backwards from
+      // each day, so it reads the same carry-in a server's two queries would.
+      // Read at call time, so LP typed into the harness's editor shows here.
+      trend: (accountId: string, queueType: QueueType): Promise<RankTrend> =>
+        delay(rankTrend(RANK_SNAPSHOTS[accountId]?.[queueType] ?? [], DEV_SEASONS, Date.now()), 220),
 
       periods: (accountId: string): Promise<Season[]> => {
         const times = [
@@ -515,33 +721,43 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     search: {
-      // The same substring rule the server applies, so the harness answers a
-      // half-typed name the way a real one does. Blank is everybody, which is
-      // what the finder opens on.
-      players: (query: string): Promise<PlayerSearchResult[]> => {
-        const needle = query.trim().toLowerCase()
+      // The same matching, ranking, filters and paging the server applies, so
+      // the harness answers a half-typed name the way a real one does.
+      players: (query: string, options = {}): Promise<Page<PlayerSearchResult>> => {
 
-        const matches = ACCOUNTS.filter(
-          (account) =>
-            needle.length === 0 ||
-            account.gameName.toLowerCase().includes(needle) ||
-            account.tagLine.toLowerCase().includes(needle) ||
-            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
-        )
+        const matches = everyone()
+          .filter((account) => searchRank(account, query) !== null)
+          .filter((account) => !options.mine || account.isMine !== false)
+          .filter((account) => !options.claimed || account.ownerUsername != null)
+          .sort(compareSearchResults(query))
+
+        const page = pageOf(matches, options)
 
         return delay(
-          matches.map((account) => ({
-            account,
-            soloEntry:
-              (LEAGUE_ENTRIES[account.id] ?? []).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
-          })),
+          {
+            total: page.total,
+            items: page.items.map((account) => ({
+              account,
+              soloEntry:
+                (LEAGUE_ENTRIES[account.id] ?? []).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
+            }))
+          },
           200
         )
       }
     },
 
+    favorites,
+
     admin: {
-      users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
+      users: (query: AdminUserQuery = {}): Promise<Page<AdminUser>> => {
+        const needle = (query.q ?? '').trim().toLowerCase()
+        const matching = mockUsers
+          .filter((user) => needle.length === 0 || isMemberMatch(user, needle))
+          .sort((a, b) => a.username.localeCompare(b.username))
+
+        return delay(pageOf(matching, query), 200, false)
+      },
 
       // Numbers a host would actually be looking at: a match history that is
       // nowhere near troubling a 10 GB database, beside replays that are the
@@ -550,9 +766,9 @@ export function createFixtureClient(): FoxfireClient {
         delay(
           {
             replaysConfigured: true,
-            replayCount: 46,
-            replayBytes: 1_412_000_000,
-            replayRecords: 46,
+            replayCount: MOCK_STORED_REPLAYS.length,
+            replayBytes: MOCK_STORED_REPLAYS.reduce((total, replay) => total + (replay.fileBytes ?? 0), 0),
+            replayRecords: MOCK_STORED_REPLAYS.length,
             matches: 4_812,
             matchParticipants: 48_120,
             riotAccounts: 7,
@@ -562,7 +778,8 @@ export function createFixtureClient(): FoxfireClient {
           220
         ),
 
-      storedReplays: (): Promise<AdminReplay[]> => delay(MOCK_STORED_REPLAYS, 240),
+      storedReplays: (page?: PageOptions): Promise<Page<AdminReplay>> =>
+        delay(pageOf(MOCK_STORED_REPLAYS, page), 240),
 
       removeReplay: (matchId: string): Promise<AdminActionResult> => {
         const index = MOCK_STORED_REPLAYS.findIndex((r) => r.matchId === matchId)
@@ -574,7 +791,7 @@ export function createFixtureClient(): FoxfireClient {
       // rather than only that it asked. The account and its games stay; that is
       // the whole distinction the card exists to make.
       forceUnlink: (riotAccountId: string): Promise<AdminActionResult> => {
-        const account = ACCOUNTS.find((a) => a.id === riotAccountId)
+        const account = [...ACCOUNTS, ...COMMUNITY].find((a) => a.id === riotAccountId)
         if (account) {
           account.ownerUsername = null
           account.isMine = false
@@ -686,7 +903,26 @@ export function createFixtureClient(): FoxfireClient {
         return delay({ ok: true, error: null }, 200, false)
       },
 
-      invites: (): Promise<AdminInvite[]> => delay(mockInvites, 200, false),
+      // Open and used apart, as the server sends them; the lapsed one is in
+      // neither, as the server's is not.
+      openInvites: (): Promise<AdminInvite[]> =>
+        delay(
+          mockInvites.filter((i) => i.isOpen).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+          200,
+          false
+        ),
+
+      usedInvites: (page?: PageOptions): Promise<Page<AdminInvite>> =>
+        delay(
+          pageOf(
+            mockInvites
+              .filter((i) => i.redeemedAt !== null)
+              .sort((a, b) => (b.redeemedAt ?? '').localeCompare(a.redeemedAt ?? '')),
+            page
+          ),
+          200,
+          false
+        ),
 
       createInvite: (email: string): Promise<AdminInvite> => {
         const existing = mockInvites.find((i) => i.email === email && i.isOpen)

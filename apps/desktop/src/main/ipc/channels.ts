@@ -42,7 +42,8 @@ export const CH = {
     deleteUser: 'serverAdmin:deleteUser',
     createPasswordReset: 'serverAdmin:createPasswordReset',
     revokePasswordReset: 'serverAdmin:revokePasswordReset',
-    invites: 'serverAdmin:invites',
+    openInvites: 'serverAdmin:openInvites',
+    usedInvites: 'serverAdmin:usedInvites',
     createInvite: 'serverAdmin:createInvite',
     revokeInvite: 'serverAdmin:revokeInvite',
     getSettings: 'serverAdmin:getSettings',
@@ -64,7 +65,9 @@ export const CH = {
     keyInvalid: 'settings:keyInvalid'
   },
   accounts: {
-    list: 'accounts:list',
+    mine: 'accounts:mine',
+    get: 'accounts:get',
+    find: 'accounts:find',
     getHome: 'accounts:getHome',
     add: 'accounts:add',
     link: 'accounts:link',
@@ -93,14 +96,6 @@ export const CH = {
     getState: 'sync:getState',
     progress: 'sync:progress'
   },
-  // Read from the game running on this machine, so it costs no Riot call and
-  // needs no key. It used to have a playerRank sibling that resolved each row's
-  // ladder standing at two Riot calls a player — twenty per board. That is a lot
-  // of a shared server's budget for a number nobody could act on, and without
-  // op.gg-scale history behind it the ranks were not worth what they cost.
-  liveClient: {
-    scoreboard: 'liveClient:scoreboard'
-  },
   // Separate from mastery:get on purpose. Champion stats are pure SQLite, so
   // they must not sit behind a channel that can reach out to Riot and fail.
   champions: {
@@ -117,6 +112,8 @@ export const CH = {
   },
   rank: {
     history: 'rank:history',
+    /** The profile's graph: thirty days, a close a day. */
+    trend: 'rank:trend',
     /** The seasons this account has data in, for the period pickers. */
     periods: 'rank:periods',
     // Hand-entered LP, for the games attribution cannot resolve on its own.
@@ -173,7 +170,9 @@ export const CH = {
     /** Removes a recording's row once its file is gone. Never touches YouTube or a server. */
     forget: 'recordings:forget',
     /** Opens a window for a recording this machine has no file of, from YouTube. */
-    openRemote: 'recordings:openRemote'
+    openRemote: 'recordings:openRemote',
+    /** Every recording that can go to YouTube, whole, for "select all". YouTube builds only. */
+    eligible: 'recordings:eligible'
   },
   // Putting recordings on YouTube. The Google connection lives in the main
   // process — its refresh token never crosses IPC — and the renderer only ever
@@ -241,6 +240,12 @@ export const CH = {
   },
   search: {
     players: 'search:players'
+  },
+  favorites: {
+    list: 'favorites:list',
+    add: 'favorites:add',
+    remove: 'favorites:remove',
+    refresh: 'favorites:refresh'
   },
   assets: {
     get: 'assets:get'

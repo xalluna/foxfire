@@ -20,9 +20,9 @@ import * as Icon from './icons'
  * edge would otherwise collapse the rail and throw the half-typed ID away.
  * Pinned, it closes on Escape or a click outside — the exits ContextMenu offers.
  *
- * Everything it does is the caller's: which account is selected, what setting
- * a home or removing one means, and whether there is a form for adding one at
- * all. The rail only draws them.
+ * Everything it does is the caller's: which accounts it lists, which is
+ * selected, what setting a home means, and whether an account can be removed or
+ * added here at all. The rail only draws them.
  */
 export function AccountRail({
   accounts,
@@ -37,7 +37,8 @@ export function AccountRail({
   activeAccountId: string | null
   onSelect: (accountId: string) => void
   onSetHome: (accountId: string) => void
-  onRemove: (accountId: string) => void
+  /** Removing an account from the rail. No handler, no × on the rows. */
+  onRemove?: (accountId: string) => void
   /**
    * The account signed in to the League client on this machine, which gets the
    * presence dot. Null wherever there is no League client to ask.
@@ -152,20 +153,22 @@ export function AccountRail({
                       onClick={() => onSetHome(account.id)}
                       className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-accent"
                     >
-                      <Icon.Star width={13} height={13} />
+                      <Icon.Home width={13} height={13} />
                     </button>
                   )}
-                  <button
-                    title="Remove account"
-                    onClick={() => {
-                      if (confirm(`Remove ${account.gameName}#${account.tagLine}?`)) {
-                        onRemove(account.id)
-                      }
-                    }}
-                    className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-red"
-                  >
-                    <Icon.Close width={13} height={13} />
-                  </button>
+                  {onRemove && (
+                    <button
+                      title="Remove account"
+                      onClick={() => {
+                        if (confirm(`Remove ${account.gameName}#${account.tagLine}?`)) {
+                          onRemove(account.id)
+                        }
+                      }}
+                      className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-red"
+                    >
+                      <Icon.Close width={13} height={13} />
+                    </button>
+                  )}
                 </div>
               </li>
             )
