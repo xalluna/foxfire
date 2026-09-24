@@ -140,7 +140,9 @@ export function reconcileAttachments(): Promise<void> {
       const candidates = attachCandidates(getDb(), serverKey)
       if (candidates.length === 0) return
 
-      const accounts = await serverBacked().accounts.list()
+      // Yours only, which is all planAttachments would keep: nobody else's
+      // account takes a recording from this PC.
+      const accounts = await serverBacked().accounts.mine()
       for (const plan of planAttachments(candidates, accounts)) {
         await attachTo(plan, serverKey)
       }
@@ -168,7 +170,7 @@ export async function reattach(recordingId: number, replace = true): Promise<Att
   // kept, and the reconcile after the bind does the rest.
   if (!identity.matchId) return { ok: true }
 
-  const accounts = await serverBacked().accounts.list()
+  const accounts = await serverBacked().accounts.mine()
   const account = serverAccountFor(identity, accounts)
   if (!account || account.isMine !== true) {
     return {

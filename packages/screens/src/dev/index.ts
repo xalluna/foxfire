@@ -5,7 +5,7 @@
  * it reaches a production build. The desktop's own mock builds its
  * desktop-only half on top of what is here.
  */
-export { createFixtureClient, runFixtureImport } from './fixtureClient'
+export { createFixtureClient, runFixtureImport, type FixtureClientOptions } from './fixtureClient'
 export { KEY_EXPIRED, MOCK_SERVER_URL, delay, fail, scenario, type Scenario } from './scenario'
 export { DEV_SEASONS } from './seasons'
 export { createFakeYouTubeMount } from './fakeYouTube'

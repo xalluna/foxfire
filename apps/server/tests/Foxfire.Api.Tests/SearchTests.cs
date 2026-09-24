@@ -73,10 +73,39 @@ public class SearchTests(FoxfireServerFixture server)
         return account;
     }
 
-    private async Task<IReadOnlyList<PlayerSearchResponse>> SearchAsync(HttpClient client, string query)
+    /// <summary>Many accounts sharing a stem, in one save — enough to fill pages.</summary>
+    private async Task TrackManyAsync(string stem, int count)
+    {
+        await using var scope = server.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var now = DateTimeOffset.UtcNow;
+
+        for (var i = 0; i < count; i++)
+        {
+            db.RiotAccounts.Add(new RiotAccount
+            {
+                Id = Guid.CreateVersion7(now),
+                Puuid = UniquePuuid(),
+                GameName = $"{stem}{i:D3}",
+                TagLine = "NA1",
+                Platform = "na1",
+                RegionalRoute = "americas",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<IReadOnlyList<PlayerSearchResponse>> SearchAsync(
+        HttpClient client,
+        string query,
+        string extra = "")
     {
         var response = await client.GetAsync(
-            new Uri($"/api/search?q={Uri.EscapeDataString(query)}", UriKind.Relative));
+            new Uri($"/api/search?q={Uri.EscapeDataString(query)}{extra}", UriKind.Relative));
 
         response.EnsureSuccessStatusCode();
 
@@ -85,21 +114,115 @@ public class SearchTests(FoxfireServerFixture server)
     }
 
     [Fact]
-    public async Task A_blank_query_is_everybody_tracked_including_the_unclaimed()
+    public async Task The_unclaimed_are_found_as_well_as_the_claimed()
     {
         var (client, session) = await server.AdminAsync();
         using var _client = client;
 
-        var mine = await TrackAsync($"Claimed{Guid.NewGuid().ToString("N")[..8]}", ownerId: session.User.Id);
-        var nobodys = await TrackAsync($"Unclaimed{Guid.NewGuid().ToString("N")[..8]}");
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        var mine = await TrackAsync($"Claimed{stem}", ownerId: session.User.Id);
+        var nobodys = await TrackAsync($"Unclaimed{stem}");
 
-        var found = await SearchAsync(client, "");
+        var found = await SearchAsync(client, stem);
 
         // The unclaimed one is the whole point. An account an admin added
         // belongs to nobody, and a finder that only listed claimed accounts
         // would never show it.
         Assert.Contains(found, p => p.Account.Id == mine.Id);
         Assert.Contains(found, p => p.Account.Id == nobodys.Id);
+    }
+
+    [Fact]
+    public async Task A_blank_query_is_a_page_rather_than_everybody()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        // More than a page of accounts on the server, whatever else is here.
+        await TrackManyAsync($"Crowd{Guid.NewGuid().ToString("N")[..8]}", SearchPlayersRequest.DefaultLimit + 1);
+
+        var found = await SearchAsync(client, "");
+
+        Assert.Equal(SearchPlayersRequest.DefaultLimit, found.Count);
+    }
+
+    [Fact]
+    public async Task Pages_follow_on_from_each_other_in_name_order()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = $"Pager{Guid.NewGuid().ToString("N")[..8]}";
+        await TrackManyAsync(stem, 5);
+
+        var first = await SearchAsync(client, stem, "&limit=2");
+        var second = await SearchAsync(client, stem, "&limit=2&offset=2");
+        var last = await SearchAsync(client, stem, "&limit=2&offset=4");
+
+        Assert.Equal(new[] { $"{stem}000", $"{stem}001" }, first.Select(p => p.Account.GameName));
+        Assert.Equal(new[] { $"{stem}002", $"{stem}003" }, second.Select(p => p.Account.GameName));
+
+        // A short page is how a client knows there is nothing after it.
+        Assert.Equal(new[] { $"{stem}004" }, last.Select(p => p.Account.GameName));
+    }
+
+    [Fact]
+    public async Task No_page_is_bigger_than_the_cap_however_many_are_asked_for()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = $"Greedy{Guid.NewGuid().ToString("N")[..8]}";
+        await TrackManyAsync(stem, SearchPlayersRequest.MaxLimit + 1);
+
+        var found = await SearchAsync(client, stem, "&limit=100000");
+
+        Assert.Equal(SearchPlayersRequest.MaxLimit, found.Count);
+    }
+
+    [Fact]
+    public async Task Mine_is_only_the_accounts_the_caller_has_claimed()
+    {
+        using var client = server.Client();
+        var session = await server.RegisterAsync(
+            client,
+            $"Owner{Guid.NewGuid().ToString("N")[..8]}",
+            $"owner-{Guid.NewGuid():N}@example.com");
+
+        FoxfireServerFixture.Authenticated(client, session);
+
+        var (admin, adminSession) = await server.AdminAsync();
+        admin.Dispose();
+
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        var mine = await TrackAsync($"Mine{stem}", ownerId: session.User.Id);
+        var theirs = await TrackAsync($"Theirs{stem}", ownerId: adminSession.User.Id);
+        var nobodys = await TrackAsync($"Nobodys{stem}");
+
+        var found = await SearchAsync(client, "", "&mine=true");
+
+        Assert.Contains(found, p => p.Account.Id == mine.Id && p.Account.IsMine);
+        Assert.DoesNotContain(found, p => p.Account.Id == theirs.Id);
+
+        // The one a null owner would have matched, had the filter compared
+        // against nobody rather than against the caller.
+        Assert.DoesNotContain(found, p => p.Account.Id == nobodys.Id);
+    }
+
+    [Fact]
+    public async Task Claimed_is_every_account_somebody_has_linked()
+    {
+        var (client, session) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        var claimed = await TrackAsync($"Taken{stem}", ownerId: session.User.Id);
+        var unclaimed = await TrackAsync($"Free{stem}");
+
+        var found = await SearchAsync(client, stem, "&claimed=true");
+
+        Assert.Contains(found, p => p.Account.Id == claimed.Id);
+        Assert.DoesNotContain(found, p => p.Account.Id == unclaimed.Id);
     }
 
     [Fact]

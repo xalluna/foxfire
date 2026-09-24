@@ -16,6 +16,7 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  PlayerSearchOptions,
   PlayerSearchResult,
   QueueType,
   RankHistory,
@@ -126,9 +127,28 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     }
   }
 
+  /** A read the server answers with a 404 when there is nothing to answer with. */
+  const orNull = async <T>(path: string): Promise<T | null> => {
+    try {
+      return await request<T>(path)
+    } catch (err) {
+      if (err instanceof ServerError && err.status === 404) return null
+      throw err
+    }
+  }
+
   return {
     accounts: {
-      list: () => request<Account[]>('/riot-accounts'),
+      /** The accounts the signed-in member has claimed. */
+      mine: () => request<Account[]>('/riot-accounts/mine'),
+
+      get: (accountId: string) => orNull<Account>(`/riot-accounts/${encodeURIComponent(accountId)}`),
+
+      find: (riotId: RiotIdInput) =>
+        orNull<Account>(
+          `/riot-accounts/lookup?gameName=${encodeURIComponent(riotId.gameName)}`
+            + `&tagLine=${encodeURIComponent(riotId.tagLine)}`
+        ),
 
       /**
        * Claims a League account for the signed-in member. First claim wins.
@@ -249,8 +269,14 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     search: {
-      players: (query: string) =>
-        request<PlayerSearchResult[]>(`/search?q=${encodeURIComponent(query)}`)
+      players: (query: string, options: PlayerSearchOptions = {}) => {
+        let path = `/search?q=${encodeURIComponent(query)}`
+        if (options.mine) path += '&mine=true'
+        if (options.claimed) path += '&claimed=true'
+        if (options.limit !== undefined) path += `&limit=${options.limit}`
+        if (options.offset !== undefined) path += `&offset=${options.offset}`
+        return request<PlayerSearchResult[]>(path)
+      }
     },
 
     replays: {

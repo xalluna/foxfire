@@ -1,7 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
 import { EmptyState, Icon, MatchListSkeleton, recordingPrimaryActionClass } from '@foxfire/ui'
-import { RecordingScreen, queryKeys, useClient } from '@foxfire/screens'
+import { RecordingScreen, useAccount } from '@foxfire/screens'
 
 /**
  * A recording this machine has no file of, in a window of its own.
@@ -14,14 +13,12 @@ import { RecordingScreen, queryKeys, useClient } from '@foxfire/screens'
  */
 export function RemoteRecordingApp(): JSX.Element {
   const { accountId, matchId } = useParams({ from: '/_window/recording/match/$accountId/$matchId' })
-  const client = useClient()
-
-  const accounts = useQuery({ queryKey: queryKeys.accounts(), queryFn: () => client.accounts.list() })
-  const account = accounts.data?.find((candidate) => candidate.id === accountId) ?? null
+  const found = useAccount(accountId)
+  const account = found.data ?? null
 
   return (
     <div className="flex h-screen flex-col bg-canvas text-text">
-      {accounts.isPending ? (
+      {found.isPending ? (
         <div className="p-6">
           <MatchListSkeleton rows={3} />
         </div>

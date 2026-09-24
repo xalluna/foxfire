@@ -18,11 +18,10 @@ import type { Scoreboard } from '@shared/types'
  * the process.
  */
 export async function getScoreboard(accountId: string): Promise<Scoreboard | null> {
-  // Through the account list rather than straight to SQLite, because the board
-  // is matched by Riot ID and in server mode the account that owns it is on the
-  // server. The list is small and already the app's answer to "who is this".
-  const accounts = await serverBacked().accounts.list()
-  const account = accounts.find((a) => a.id === accountId)
+  // Through whichever store owns accounts rather than straight to SQLite,
+  // because the board is matched by Riot ID and in server mode the account
+  // that owns it is on the server.
+  const account = await serverBacked().accounts.get(accountId)
   if (!account) throw new Error(`Unknown account ${accountId}`)
 
   let raw: unknown

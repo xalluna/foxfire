@@ -115,6 +115,7 @@ import type {
   EmailChange,
   ManualRankEdit,
   PasswordChange,
+  PlayerSearchOptions,
   QueueType,
   RankRange,
   RiotIdInput,
@@ -204,7 +205,9 @@ export function registerIpcHandlers(): void {
     return getSettings()
   })
 
-  ipcMain.handle(CH.accounts.list, () => serverBacked().accounts.list())
+  ipcMain.handle(CH.accounts.mine, () => serverBacked().accounts.mine())
+  ipcMain.handle(CH.accounts.get, (_e, accountId: string) => serverBacked().accounts.get(accountId))
+  ipcMain.handle(CH.accounts.find, (_e, riotId: RiotIdInput) => serverBacked().accounts.find(riotId))
   ipcMain.handle(CH.accounts.getHome, () => serverBacked().accounts.getHome())
   ipcMain.handle(CH.accounts.add, (_e, input: RiotIdInput) => serverBacked().accounts.add(input))
   ipcMain.handle(CH.accounts.link, (_e, input: RiotIdInput) => serverBacked().accounts.link(input))
@@ -436,8 +439,8 @@ export function registerIpcHandlers(): void {
     main.webContents.send(CH.recordings.showMatch, accountId, matchId)
   })
 
-  ipcMain.handle(CH.search.players, (_e, query: string) =>
-    serverBacked().search.players(query)
+  ipcMain.handle(CH.search.players, (_e, query: string, options?: PlayerSearchOptions) =>
+    serverBacked().search.players(query, options)
   )
 
   ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())

@@ -31,12 +31,33 @@ public sealed record PlayerSearchResponse(
 /// search here is the history this server already keeps, which is the one thing
 /// that lookup could never return.
 ///
-/// A blank query is the whole list, deliberately. The finder opens with
-/// everybody on it, and an empty box should show what you would see before you
-/// typed. Uncapped for the same reason ListRiotAccountsRequest is: a server
-/// tracks the people who play on it, and that is a number you can scroll.
+/// A blank query is everybody, a page at a time. The finder opens with people
+/// on it, and an empty box should show what you would see before you typed —
+/// but never all of them at once: this used to be uncapped on the grounds that a
+/// server tracks the people who play on it and that is a number you can scroll,
+/// and a community is not obliged to stay a size that makes that true. Pages
+/// run in name order, which the unique index on (GameName, TagLine) already
+/// holds, so a blank query reads one page of an index rather than sorting the
+/// table.
+///
+/// Two filters narrow it for the screens that need less than everybody: Mine
+/// for the caller's own accounts, which a finder shows first, and Claimed for
+/// the ones somebody has linked, which is the admin's list of claims to undo.
 /// </summary>
-public sealed record SearchPlayersRequest(string? Q) : IDomainRequest<IReadOnlyList<PlayerSearchResponse>>;
+/// <param name="Limit">At most <see cref="MaxLimit"/>; <see cref="DefaultLimit"/> when left out.</param>
+public sealed record SearchPlayersRequest(
+    string? Q,
+    bool Mine = false,
+    bool Claimed = false,
+    int? Limit = null,
+    int? Offset = null) : IDomainRequest<IReadOnlyList<PlayerSearchResponse>>
+{
+    /// <summary>A page, when the caller does not say — which is what Desktop 0.14 does.</summary>
+    public const int DefaultLimit = 50;
+
+    /// <summary>The most one request is answered with, whatever it asks for.</summary>
+    public const int MaxLimit = 100;
+}
 
 internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentityContext me)
     : IDomainRequestHandler<SearchPlayersRequest, IReadOnlyList<PlayerSearchResponse>>
@@ -48,8 +69,20 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
         ArgumentNullException.ThrowIfNull(request);
 
         var needle = (request.Q ?? "").Trim().ToLowerInvariant();
+        var limit = Math.Clamp(request.Limit ?? SearchPlayersRequest.DefaultLimit, 1, SearchPlayersRequest.MaxLimit);
+        var offset = Math.Max(request.Offset ?? 0, 0);
 
         var accounts = db.RiotAccounts.Include(a => a.Owner).AsQueryable();
+
+        if (request.Mine)
+        {
+            // Nobody signed in has nothing of their own; compared as a null,
+            // OwnerId would match every unclaimed account instead.
+            if (me.UserId is not { } userId) return Response<IReadOnlyList<PlayerSearchResponse>>.Success([]);
+            accounts = accounts.Where(a => a.OwnerId == userId);
+        }
+
+        if (request.Claimed) accounts = accounts.Where(a => a.OwnerId != null);
 
         if (needle.Length > 0)
         {
@@ -63,7 +96,15 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
                 || (a.GameName + "#" + a.TagLine).ToLower().Contains(needle));
         }
 
-        var found = await accounts.OrderBy(a => a.GameName).ToListAsync(cancellationToken);
+        // The tag and then the id break ties, so a page boundary cannot fall
+        // between two rows the database would order differently next time.
+        var found = await accounts
+            .OrderBy(a => a.GameName)
+            .ThenBy(a => a.TagLine)
+            .ThenBy(a => a.Id)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
 
         // Fetched separately rather than as a join, because the rows are keyed
         // by (account, queue) and only one queue is wanted: a second small

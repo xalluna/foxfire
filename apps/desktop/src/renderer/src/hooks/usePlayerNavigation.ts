@@ -1,9 +1,8 @@
 import { useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useMatchRoute, useNavigate, useParams } from '@tanstack/react-router'
 import type { Account } from '@foxfire/core'
 import { playerSlug } from '@foxfire/core/routes'
-import { queryKeys, useClient } from '@foxfire/screens'
+import { useAccount, useHomeAccount } from '@foxfire/screens'
 import { useLastPlayer } from '../store/lastPlayer'
 
 /**
@@ -32,22 +31,20 @@ export function useSwitchPlayer(): (account: Account) => void {
 
 /**
  * Whose pages the nav links open: the player on screen, else whoever was on
- * screen last, else the home account. Null when there are no accounts at all.
+ * screen last, else the home account. Null when there is nobody to open.
  */
 export function useNavSlug(): string | null {
-  const client = useClient()
   const { slug } = useParams({ strict: false })
   const lastAccountId = useLastPlayer((s) => s.accountId)
 
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
-  })
+  // Asked only when the page names nobody, and each by itself: whoever was on
+  // screen last may be anybody on the server, and is one lookup rather than a
+  // reason to hold every account.
+  const last = useAccount(slug === undefined ? lastAccountId : null)
+  const home = useHomeAccount()
 
   if (slug !== undefined) return slug
 
-  const list = accounts.data ?? []
-  const target =
-    list.find((a) => a.id === lastAccountId) ?? list.find((a) => a.isHomeAccount) ?? list[0]
+  const target = last.data ?? home.data
   return target ? playerSlug(target) : null
 }

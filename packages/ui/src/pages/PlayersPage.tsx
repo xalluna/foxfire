@@ -110,6 +110,10 @@ function Section({ label, children }: { label: string; children: ReactNode }): J
  * filtered list is already an answer to a question, and splitting four results
  * across two headed sections says less than listing them does.
  *
+ * Everybody arrives a page at a time, with "Show more" for the next. Yours come
+ * separately and all at once — one person's accounts are a handful, and they
+ * belong at the top however far down the alphabet they would fall.
+ *
  * The home account comes from the caller rather than off these rows,
  * deliberately. Which account this machine opens on is a property of the whole
  * list, so reading it from a filtered one would move the star about as somebody
@@ -121,7 +125,11 @@ export function PlayersPage({
   query,
   onQueryChange,
   players,
+  yours,
   loading,
+  hasMore,
+  loadingMore,
+  onShowMore,
   homeAccountId,
   onSetHome,
   link
@@ -131,16 +139,32 @@ export function PlayersPage({
   intro: string
   query: string
   onQueryChange: (query: string) => void
+  /** The pages of matches fetched so far — of everybody, when nothing is typed. */
   players: PlayerSearchResult[]
+  /** Your own accounts, which head the list while nothing is typed. */
+  yours: PlayerSearchResult[]
   loading: boolean
-  /** The account this machine opens on, from the full list rather than these rows. */
+  /** Whether there is another page after `players`. */
+  hasMore: boolean
+  loadingMore: boolean
+  onShowMore: () => void
+  /** The account this machine opens on, which may be on no page fetched yet. */
   homeAccountId: string | null
   onSetHome: (account: Account) => void
   link: PlayerLink
 }): JSX.Element {
   const typed = query.trim()
-  const mine = players.filter((p) => p.account.isMine !== false)
   const others = players.filter((p) => p.account.isMine === false)
+
+  const showMore = hasMore && (
+    <button
+      onClick={onShowMore}
+      disabled={loadingMore}
+      className="w-full border-t border-hairline py-2.5 text-sm text-text-dim transition hover:bg-surface hover:text-accent disabled:opacity-50"
+    >
+      {loadingMore ? 'Loading…' : 'Show more'}
+    </button>
+  )
 
   const rows = (list: PlayerSearchResult[]): JSX.Element => (
     <ul className="divide-y divide-hairline/60">
@@ -185,25 +209,34 @@ export function PlayersPage({
             description={`This server keeps history for the accounts it tracks, and none of them match ${typed}. An administrator can start tracking somebody new.`}
           />
         ) : (
-          <Section label={`${players.length} ${players.length === 1 ? 'player' : 'players'}`}>
+          <Section
+            label={`${players.length}${hasMore ? '+' : ''} ${players.length === 1 && !hasMore ? 'player' : 'players'}`}
+          >
             {rows(players)}
+            {showMore}
           </Section>
         )
       ) : (
         <>
           <Section label="Yours">
-            {mine.length === 0 ? (
+            {yours.length === 0 ? (
               <EmptyState
                 icon={<Icon.Plus />}
                 title="No League account of yours yet"
                 description="Claim yours from Foxfire desktop, with the League client open and signed in — the client is what vouches that the account is yours. It shows up here as soon as it is claimed."
               />
             ) : (
-              rows(mine)
+              rows(yours)
             )}
           </Section>
 
-          {others.length > 0 && <Section label="Everybody else">{rows(others)}</Section>}
+          {/* Also while a page turned up nothing but yours, so the next can still be asked for. */}
+          {(others.length > 0 || hasMore) && (
+            <Section label="Everybody else">
+              {rows(others)}
+              {showMore}
+            </Section>
+          )}
         </>
       )}
     </div>

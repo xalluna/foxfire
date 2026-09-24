@@ -111,9 +111,11 @@ function useShowMatchRequests(): void {
     () =>
       window.api.recordings.onShowMatch((accountId, matchId) => {
         void queryClient
-          .ensureQueryData({ queryKey: queryKeys.accounts(), queryFn: () => client.accounts.list() })
-          .then((accounts) => {
-            const account = accounts.find((a) => a.id === accountId)
+          .ensureQueryData({
+            queryKey: queryKeys.account(accountId),
+            queryFn: () => client.accounts.get(accountId)
+          })
+          .then((account) => {
             if (!account) return
             void navigate({
               to: '/players/$slug',
