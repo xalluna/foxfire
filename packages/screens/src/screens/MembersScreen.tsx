@@ -11,9 +11,6 @@ import { nextOffset, pageItems, pageTotal } from '../queries/paging'
 /** Members per page. */
 const PAGE_SIZE = 50
 
-/** How long the search waits before asking, as the finder's box does. */
-const TYPING_PAUSE_MS = 250
-
 /**
  * The people on the server you administer, and what can be done about them.
  *
@@ -27,7 +24,7 @@ export function MembersScreen(): JSX.Element {
   const connection = useConnection()
 
   const [query, setQuery] = useState('')
-  const asked = useDebounced(query.trim(), TYPING_PAUSE_MS)
+  const asked = useDebounced(query.trim())
 
   const users = useInfiniteQuery({
     queryKey: queryKeys.admin.users(asked),

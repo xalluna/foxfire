@@ -4,6 +4,7 @@ import { profileIconUrl } from '../lib/assets'
 import { emptyEntry } from '../lib/rank'
 import { Asset } from './Asset'
 import { CopyLinkButton } from './CopyLinkButton'
+import { ProfileMarks, type FavoriteMark, type HomeMark } from './ProfileMarks'
 import { RankCard } from './RankCard'
 import { SyncProgressBar } from './SyncProgressBar'
 import * as Icon from './icons'
@@ -36,7 +37,9 @@ export function ProfileHeader({
   onRefresh,
   refreshing,
   progress,
-  onCopyLink
+  onCopyLink,
+  favorite,
+  home
 }: {
   account: Account
   leagueEntries: LeagueEntry[]
@@ -46,6 +49,10 @@ export function ProfileHeader({
   progress?: SyncProgressEvent
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyLink?: () => Promise<void> | void
+  /** The star. Absent where nobody can be starred. */
+  favorite?: FavoriteMark
+  /** The house, for opening on this account. */
+  home?: HomeMark
 }): JSX.Element {
   const notYours = account.isMine === false
   const assets = useAssetManifest()
@@ -97,7 +104,12 @@ export function ProfileHeader({
             {refreshing ? 'Syncing…' : 'Sync now'}
           </button>
 
-          {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="mt-2 w-full py-1.5" />}
+          {(onCopyLink || favorite || home) && (
+            <div className="mt-2 flex w-full justify-center gap-1.5">
+              {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="flex-1 py-1.5" />}
+              <ProfileMarks favorite={favorite} home={home} />
+            </div>
+          )}
         </div>
 
         <SyncProgressBar progress={progress} />

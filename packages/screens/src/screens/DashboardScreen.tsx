@@ -1,8 +1,9 @@
-import { useEffect, useState, type MouseEvent } from 'react'
-import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DEFAULT_QUEUE_FILTER,
   queueTypeForQueueId,
+  soloEntryOf,
   type Account,
   type MatchSummary,
   type QueueType
@@ -14,6 +15,8 @@ import { useShareLink } from '../client/useShareLink'
 import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
 import { useRecordingActions } from '../match/useRecordingActions'
+import { useHomeAccount } from '../queries/accounts'
+import { useFavorites, useRefreshFavorites, useToggleFavorite } from '../queries/favorites'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 import { isSyncing, useSyncProgress } from '../store/syncProgress'
@@ -44,6 +47,7 @@ export function DashboardScreen({
   focus?: MatchFocus | null
 }): JSX.Element {
   const client = useClient()
+  const queryClient = useQueryClient()
   const platform = usePlatform()
   const share = useShareLink()
 
@@ -81,6 +85,27 @@ export function DashboardScreen({
   const sync = useMutation({
     mutationFn: () => client.sync.start(account.id)
   })
+
+  // The star and the house. Both are this machine's or browser's, never the
+  // server's: who you keep in the search box, and which profile opens first.
+  const { available: canStar, isFavorite } = useFavorites()
+  const toggleFavorite = useToggleFavorite()
+  const home = useHomeAccount()
+  const setHome = useMutation({
+    mutationFn: () => client.accounts.setHome(account.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
+  })
+
+  // The freshest copy of this player there is, for a favorite that shows them.
+  const seen = useMemo(
+    () =>
+      dashboard.data
+        ? [{ account: dashboard.data.account, soloEntry: soloEntryOf(dashboard.data.leagueEntries) }]
+        : undefined,
+    [dashboard.data]
+  )
+  useRefreshFavorites(seen)
+  const starred = isFavorite(account.id)
 
   // Clearing returns the editor's fresh list, which this screen has no use for
   // — the match row and rank graph refresh off the rank-edited event, the same
@@ -168,6 +193,26 @@ export function DashboardScreen({
             ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))
             : undefined
         }
+        favorite={
+          canStar
+            ? {
+                starred,
+                onToggle: () =>
+                  void toggleFavorite(
+                    {
+                      account: dashboard.data?.account ?? account,
+                      soloEntry: soloEntryOf(dashboard.data?.leagueEntries ?? [])
+                    },
+                    starred
+                  ).then((refused) => refused && setNotice(refused))
+              }
+            : undefined
+        }
+        home={{
+          isHome: home.data?.id === account.id,
+          onSetHome: () => setHome.mutate(),
+          where: platform.kind === 'web' ? 'this browser' : 'this PC'
+        }}
         matches={rows}
         matchesLoading={matches.isLoading}
         hasMoreMatches={matches.hasNextPage}

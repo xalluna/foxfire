@@ -153,7 +153,7 @@ export function AccountRail({
                       onClick={() => onSetHome(account.id)}
                       className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-accent"
                     >
-                      <Icon.Star width={13} height={13} />
+                      <Icon.Home width={13} height={13} />
                     </button>
                   )}
                   {onRemove && (

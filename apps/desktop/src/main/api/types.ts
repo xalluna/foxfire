@@ -42,4 +42,5 @@ export interface ServerBackedApi {
   rank: Omit<Api['rank'], 'openEditor' | 'onEdited' | 'onEditorFocus'>
   seasons: Api['seasons']
   search: Api['search']
+  favorites: Api['favorites']
 }

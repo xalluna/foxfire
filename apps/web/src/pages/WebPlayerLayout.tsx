@@ -31,8 +31,8 @@ function Tab({
 /**
  * A player's pages, with the tabs between them.
  *
- * The desktop has an account rail here; a browser has the Players page for
- * choosing somebody, so this only has to move between one player's views.
+ * The desktop has an account rail here; a browser has the header's search box
+ * for choosing somebody, so this only has to move between one player's views.
  *
  * Capped at 1280px, not narrower, because the dashboard brings its 320px stats
  * rail in at `xl:` — a viewport query, 1280px — and has no cap of its own. A

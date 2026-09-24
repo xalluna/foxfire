@@ -3,6 +3,7 @@ import type { Account, LeagueEntry, MatchSummary, SyncProgressEvent } from '@fox
 import { queueFilterLabel } from '@foxfire/core'
 import { ContextMenu, type ContextMenuState } from '../components/ContextMenu'
 import { ProfileHeader } from '../components/ProfileHeader'
+import type { FavoriteMark, HomeMark } from '../components/ProfileMarks'
 import { ProfileStrip } from '../components/ProfileStrip'
 import { MatchListRow } from '../components/MatchListRow'
 import { QueueFilter } from '../components/QueueFilter'
@@ -26,6 +27,10 @@ export interface DashboardPageProps {
   onSync: () => void
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyProfileLink?: () => Promise<void> | void
+  /** The star on the profile. Absent where nobody can be starred. */
+  favorite?: FavoriteMark
+  /** The house on the profile: whether this is the account that opens first, and making it so. */
+  home?: HomeMark
 
   matches: MatchSummary[]
   matchesLoading: boolean
@@ -71,6 +76,8 @@ export function DashboardPage({
   syncing,
   onSync,
   onCopyProfileLink,
+  favorite,
+  home,
   matches: rows,
   matchesLoading,
   hasMoreMatches,
@@ -121,6 +128,8 @@ export function DashboardPage({
           refreshing={syncing}
           progress={syncProgress}
           onCopyLink={onCopyProfileLink}
+          favorite={favorite}
+          home={home}
         />
       </aside>
 
@@ -139,6 +148,8 @@ export function DashboardPage({
             refreshing={syncing}
             progress={syncProgress}
             onCopyLink={onCopyProfileLink}
+            favorite={favorite}
+            home={home}
           />
         </div>
 

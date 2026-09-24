@@ -395,6 +395,8 @@ export interface Api {
     openWindow: () => Promise<void>
   }
   search: FoxfireData['search']
+  /** Players starred on this PC, one list per server. See FoxfireData['favorites']. */
+  favorites: FoxfireData['favorites']
   /**
    * Developer telemetry. Off by default; reads still work with collection
    * disabled so history stays visible after switching it off.

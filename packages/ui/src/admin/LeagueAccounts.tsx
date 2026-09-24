@@ -251,7 +251,7 @@ function LinkedAccountsCard({
           <EmptyState
             icon={<Icon.Search />}
             title="No claimed account by that name"
-            description={`Nobody has claimed an account matching ${typed}. It may be tracked and unclaimed — the finder lists those too.`}
+            description={`Nobody has claimed an account matching ${typed}. It may be tracked and unclaimed — the search box at the top finds those too.`}
           />
         ) : (
           <EmptyState

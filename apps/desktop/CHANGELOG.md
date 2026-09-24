@@ -13,11 +13,25 @@ On a server, the account rail is a way between your own accounts rather than a l
 and looking after them happens in Settings. Foxfire also stops downloading every account on the
 server to find the one it is showing, which is what lets a server's community grow without every
 desktop on it slowing down — and every list that grows, here or on the server, now arrives a page at
-a time. The Live game tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs
-Foxfire Server 0.4.0.
+a time. Finding anybody else is a box in the title bar now rather than a page of its own — Ctrl K
+from anywhere — with the players you star kept at the top of it. The Live game tab is gone, too: it
+redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
 
 ### Added
 
+- **Search from anywhere.** The box in the middle of the title bar finds anybody on the server, and
+  Ctrl K jumps to it from any page. Click in it for your favorites and your own accounts; type three
+  letters and it suggests up to ten players, closest names first — an exact name or Riot ID, then
+  names that start with what you typed. Pick one, with the mouse or the arrow keys and Enter, to
+  open their profile. It is there while Foxfire is connected to a server; on this PC alone, the rail
+  already holds every account there is.
+- **Favorites.** Star anybody — beside their name in the search box, or on their profile — and they
+  are at the top of the box the next time you click in it, straight away, without waiting on the
+  server. Up to ten, newest first. This PC keeps them, one list per server, and a favorite's rank
+  catches up whenever Foxfire sees that player again.
+- **Set home from any profile.** A house beside Copy link makes Foxfire open on that player, and is
+  filled in on the one it opens on already. The rail's home button is the same house — the star
+  means favorite now.
 - **Unlink an account yourself.** Settings › Account lists the League accounts linked to you, each
   with an Unlink button. Its games stay on the server; it just stops being yours, and whoever signs
   in to it in the League client next can claim it. An account somebody else holds is still an
@@ -36,10 +50,8 @@ Foxfire Server 0.4.0.
   explanation. The × was the only way to give up a claim, one stray click from the avatar beside
   it — and on anybody else's account the server refused it without a word. On this PC alone, the
   rail works as it always has.
-- **Search shows a page at a time.** With nothing typed it lists your accounts, then the first
-  fifty of everybody else, with Show more for the next fifty. Typing says how many match rather
-  than "50+". Settings › League accounts, for an admin, does the same with its list of claims, and
-  has a box to find one.
+- **Settings › League accounts shows a page at a time.** For an admin, the list of claims arrives
+  fifty at a time, with Show more for the next fifty and a box to find one.
 - **Recordings and Replays show a page at a time.** Captures lists the newest fifty of each, with
   Show more, rather than every game this PC has ever kept. "Select all not on YouTube" still means
   all of them, not just the ones on screen, and the warnings above each list — missing files,
@@ -49,10 +61,15 @@ Foxfire Server 0.4.0.
   used ones fifty at a time; Data & storage lists shared replays biggest first with Show more.
 - **No stranger's profile at launch.** Signed in to a server with no League account linked yet,
   Foxfire used to open on the first account the server had — somebody else's history. It now says
-  how to link yours, and that everybody else is in Search.
+  how to link yours, and that everybody else is in the search box.
+- **The capture pill shrinks to a dot in a narrow window.** Below about 1150 pixels wide the title
+  bar cannot hold the tabs, the search box and "Waiting for the game" side by side, so the pill
+  keeps its colour — teal ready, amber waiting, red recording — and its words move to its tooltip.
 
 ### Removed
 
+- **The Search page and its tab.** Everything it did is in the title bar's search box, which works
+  from whichever page you are on rather than taking you away from it.
 - **The Live game tab.** It redrew the scoreboard League already shows on Tab, and had nothing to
   show the rest of the time. Recording is unaffected: Foxfire still watches the game to know when
   to start and stop, the title bar still says when a game is being recorded, and the dot on the
@@ -66,6 +83,10 @@ Foxfire Server 0.4.0.
   those reads.
 - The in-game reader keeps only what recording uses — the game clock, which player is you, and each
   player's champion — and no longer reads items, runes, spells or scores.
+- Favorites live in this PC's own database beside the home account, keyed by server, each with a
+  copy of the player as last seen so the list draws without asking anybody. The rules — ten at most,
+  newest first, one per account, and a copy replaced only by a newer one — are shared with the web
+  client and tested. Suggestions come closest first because Foxfire Server 0.4.0 ranks them.
 - Every list that grows is read a page and a count at a time, from the server and from this PC's
   own database alike: match history, search, recordings, replays and the admin lists. The replay
   warnings count missing and unplayable files without building every row, checking playability once

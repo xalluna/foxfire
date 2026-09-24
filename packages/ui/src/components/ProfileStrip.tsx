@@ -4,6 +4,7 @@ import { profileIconUrl } from '../lib/assets'
 import { queueLabel, rankRecord, tierColor, tierCrest, tierLabel } from '../lib/rank'
 import { Asset } from './Asset'
 import { CopyLinkButton } from './CopyLinkButton'
+import { ProfileMarks, type FavoriteMark, type HomeMark } from './ProfileMarks'
 import { SyncProgressBar } from './SyncProgressBar'
 import * as Icon from './icons'
 
@@ -57,7 +58,9 @@ export function ProfileStrip({
   onRefresh,
   refreshing,
   progress,
-  onCopyLink
+  onCopyLink,
+  favorite,
+  home
 }: {
   account: Account
   leagueEntries: LeagueEntry[]
@@ -67,6 +70,10 @@ export function ProfileStrip({
   progress?: SyncProgressEvent
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyLink?: () => Promise<void> | void
+  /** The star. Absent where nobody can be starred. */
+  favorite?: FavoriteMark
+  /** The house, for opening on this account. */
+  home?: HomeMark
 }): JSX.Element {
   const notYours = account.isMine === false
   const assets = useAssetManifest()
@@ -104,6 +111,7 @@ export function ProfileStrip({
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <ProfileMarks favorite={favorite} home={home} />
           {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="py-1.5" />}
           <button
             onClick={onRefresh}

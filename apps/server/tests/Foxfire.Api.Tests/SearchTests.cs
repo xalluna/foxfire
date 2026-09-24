@@ -270,6 +270,41 @@ public class SearchTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task The_closest_names_come_first_rather_than_the_first_a_to_z()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        // Starting with a q, so the one that only contains it sorts first by
+        // name — and coming last is the ranking, not the alphabet.
+        var stem = $"q{Guid.NewGuid().ToString("N")[..8]}";
+        var contains = await TrackAsync($"A{stem}");
+        var exact = await TrackAsync(stem);
+        var startsWith = await TrackAsync($"{stem}Z");
+
+        var found = await SearchAsync(client, stem.ToUpperInvariant());
+
+        Assert.Equal(
+            new[] { exact.Id, startsWith.Id, contains.Id },
+            found.Select(p => p.Account.Id).Where(id => id == exact.Id || id == startsWith.Id || id == contains.Id));
+    }
+
+    [Fact]
+    public async Task A_whole_riot_id_typed_exactly_comes_first()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var stem = $"q{Guid.NewGuid().ToString("N")[..8]}";
+        var elsewhere = await TrackAsync($"A{stem}", "ZZ9");
+        var exact = await TrackAsync(stem, "ZZ9");
+
+        var found = await SearchAsync(client, $"{stem}#zz9");
+
+        Assert.Equal(new[] { exact.Id, elsewhere.Id }, found.Select(p => p.Account.Id));
+    }
+
+    [Fact]
     public async Task A_row_carries_solo_queue_rank_and_nothing_for_the_unplaced()
     {
         var (client, _) = await server.AdminAsync();

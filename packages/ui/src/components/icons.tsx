@@ -62,6 +62,19 @@ export function Star({ filled, ...props }: IconProps & { filled?: boolean }): JS
   )
 }
 
+/**
+ * The account a PC or browser opens on. A house rather than the star it used
+ * to share with favorites, now that starring somebody means keeping them in
+ * the search box.
+ */
+export function Home({ filled, ...props }: IconProps & { filled?: boolean }): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill={filled ? 'currentColor' : 'none'} />
+    </Icon>
+  )
+}
+
 export function TrendingUp(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>

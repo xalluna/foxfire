@@ -55,6 +55,10 @@ describe('invalidationsFor', () => {
       queryKeys.matchLists()
     ])
   })
+
+  it('reads the favorites again when the connection changes, since the desktop keeps a list per server', () => {
+    expect(invalidationsFor({ kind: 'connectionChanged' })).toEqual([queryKeys.favorites()])
+  })
 })
 
 describe('a recording changing', () => {

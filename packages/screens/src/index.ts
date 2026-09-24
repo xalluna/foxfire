@@ -28,6 +28,14 @@ export { useDataEvents } from './client/useDataEvents'
 
 export { queryKeys } from './queries/keys'
 export { useAccount, useAccountByRiotId, useHomeAccount, useMyAccounts } from './queries/accounts'
+export {
+  FAVORITES_FULL,
+  useFavorites,
+  useFavoritesRefresher,
+  useRefreshFavorites,
+  useToggleFavorite,
+  type Favorites
+} from './queries/favorites'
 export { invalidationsFor, type DataEvent } from './queries/invalidations'
 export { createQueryClient } from './queries/queryClient'
 export { nextOffset, pageItems, pageTotal } from './queries/paging'
@@ -53,7 +61,6 @@ export { LpEditorScreen } from './screens/LpEditorScreen'
 export { MatchScreen } from './screens/MatchScreen'
 export { RankScreen } from './screens/RankScreen'
 export { RecordingScreen, headerFactsFor } from './screens/RecordingScreen'
-export { PlayersScreen } from './screens/PlayersScreen'
 export { SeasonsCard } from './screens/SeasonsCard'
 export { ServerDataScreen } from './screens/ServerDataScreen'
 export { InvitesScreen } from './screens/InvitesScreen'
@@ -78,16 +85,18 @@ export {
   validateDashboardSearch,
   validateLpEditorSearch,
   validateMatchSearch,
-  validatePlayersSearch,
   validateRankSearch,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
   type MatchSearch,
-  type PlayersSearch,
   type QueueSearch,
   type RankSearch
 } from './routes/params'
 export { rememberSearch, type SearchMemory } from './routes/rememberSearch'
 export { parseSearch, stringifySearch } from './routes/serialize'
 export { useRouteSearch, type SearchUpdateOptions } from './routes/useRouteSearch'
+
+export { PlayerSearchBox } from './search/PlayerSearchBox'
+export { MIN_QUERY_LENGTH, SUGGESTION_LIMIT, searchShortcutLabel } from './search/searchView'
+export { TYPING_PAUSE_MS, useDebounced } from './hooks/useDebounced'

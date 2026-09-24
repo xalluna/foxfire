@@ -78,7 +78,11 @@ import {
  * the two review the same games; what is added below is only what a desktop
  * has and a browser does not — and, connected, whose each account is.
  */
-const fixture = createFixtureClient({ describe: ownedAs })
+const fixture = createFixtureClient({
+  describe: ownedAs,
+  // Everybody else is on the server; a local database has only its own.
+  community: () => serverState.session !== null
+})
 
 /**
  * The Google connection, as the three YouTube scenarios need it: a build with
@@ -210,7 +214,7 @@ const released = new Set<string>()
 /**
  * Whose an account is, the way a server answers. Connected, Faker is you and
  * any account the fixtures leave unowned is somebody else's — which is what the
- * rail, Search and Settings › Account tell apart. Locally nothing is anybody's,
+ * rail, the search box and Settings › Account tell apart. Locally nothing is anybody's,
  * as on a real local database, so the account passes through.
  *
  * A declaration rather than a const, because the fixture client above is built
@@ -689,6 +693,7 @@ export const mockApi: Api = {
   },
 
   search: fixture.search,
+  favorites: fixture.favorites,
   /**
    * The panel opens at `#/telemetry` in its own window against the real main
    * process, so the browser harness cannot produce genuine measurements. It

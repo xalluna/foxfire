@@ -16,7 +16,14 @@ import { readSyncState, startSync } from '../services/syncService'
 import { getMasteryData } from '../services/masteryService'
 import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
-import { clampPage, MATCH_PAGE_LIMIT_DEFAULT, pageOf, rangeBounds } from '@foxfire/core'
+import {
+  clampPage,
+  compareSearchResults,
+  MATCH_PAGE_LIMIT_DEFAULT,
+  pageOf,
+  rangeBounds,
+  searchRank
+} from '@foxfire/core'
 import { isPlayer } from '@foxfire/core/routes'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
 import type { Account } from '@shared/types'
@@ -207,17 +214,12 @@ export const localApi: ServerBackedApi = {
   search: {
     // Mine and claimed are every account here, so neither narrows anything.
     players: async (query, options = {}) => {
-      const needle = query.trim().toLowerCase()
       const db = getDb()
 
       const page = pageOf(
-        getAccounts().filter(
-          (account) =>
-            needle.length === 0 ||
-            account.gameName.toLowerCase().includes(needle) ||
-            account.tagLine.toLowerCase().includes(needle) ||
-            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
-        ),
+        getAccounts()
+          .filter((account) => searchRank(account, query) !== null)
+          .sort(compareSearchResults(query)),
         options
       )
 
@@ -230,6 +232,20 @@ export const localApi: ServerBackedApi = {
         }))
       }
     }
+  },
+
+  /**
+   * Nobody to star. Every account in a local file is on the rail already, and
+   * the search box that holds favorites is only there with a server — whose
+   * list is kept per server, so one kept here would belong to none of them.
+   */
+  favorites: {
+    list: async () => [],
+    add: async () => {
+      throw new Error('Favorites are kept per server. Connect to one to star players on it.')
+    },
+    remove: async () => [],
+    refresh: async () => []
   },
 
   /**

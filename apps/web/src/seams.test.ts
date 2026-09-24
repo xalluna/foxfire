@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { browserHomeStore } from './client'
+import { browserFavoritesStore, browserHomeStore } from './client'
 import { safeRedirect } from './routes/redirect'
 import { inTabLock } from './session/locks'
 
@@ -51,6 +51,36 @@ describe('inTabLock', () => {
 
     await expect(lock.run(() => Promise.reject(new Error('refused')))).rejects.toThrow('refused')
     await expect(lock.run(async () => 'next')).resolves.toBe('next')
+  })
+})
+
+describe('browserFavoritesStore', () => {
+  it('keeps the favorites apart from the home account', () => {
+    const values = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value)
+    }
+
+    browserHomeStore(storage).set('acc-1')
+    browserFavoritesStore(storage).set('{"v":1,"players":[]}')
+
+    expect(browserHomeStore(storage).get()).toBe('acc-1')
+    expect(browserFavoritesStore(storage).get()).toBe('{"v":1,"players":[]}')
+  })
+
+  it('forgets quietly where the browser will not keep anything', () => {
+    const store = browserFavoritesStore({
+      getItem: () => {
+        throw new Error('blocked')
+      },
+      setItem: () => {
+        throw new Error('blocked')
+      }
+    })
+
+    expect(() => store.set('{}')).not.toThrow()
+    expect(store.get()).toBeNull()
   })
 })
 

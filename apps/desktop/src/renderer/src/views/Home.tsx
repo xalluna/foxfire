@@ -31,7 +31,7 @@ export function Home(): JSX.Element {
         <EmptyState
           icon={<Icon.Plus />}
           title="No League account of yours yet"
-          description="Sign in to it in the League client, then link it from Settings › Account. Anybody else on this server is in Search."
+          description="Sign in to it in the League client, then link it from Settings › Account. Anybody else on this server is in the search box at the top — press Ctrl K."
         />
       ) : (
         <EmptyState

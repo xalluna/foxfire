@@ -293,6 +293,12 @@ const api: Api = {
   search: {
     players: (query, options) => ipcRenderer.invoke(CH.search.players, query, options)
   },
+  favorites: {
+    list: () => ipcRenderer.invoke(CH.favorites.list),
+    add: (player) => ipcRenderer.invoke(CH.favorites.add, player),
+    remove: (accountId) => ipcRenderer.invoke(CH.favorites.remove, accountId),
+    refresh: (seen) => ipcRenderer.invoke(CH.favorites.refresh, seen)
+  },
   telemetry: {
     getState: () => ipcRenderer.invoke(CH.telemetry.getState),
     setEnabled: (enabled) => ipcRenderer.invoke(CH.telemetry.setEnabled, enabled),

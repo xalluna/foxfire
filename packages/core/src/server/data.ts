@@ -1,6 +1,7 @@
 import type { FoxfireData } from '../client'
 import type { Account } from '../types'
 import type { ServerApi } from './api'
+import { favoritesOver, type FavoritesStore } from './favorites'
 import { homeAmong, markHome, type HomeAccountStore } from './home'
 
 /**
@@ -10,12 +11,16 @@ import { homeAmong, markHome, type HomeAccountStore } from './home'
  * method, because both satisfy the same contract. That is the whole design, and
  * it is why this file has almost no decisions in it — the server made them.
  *
- * The one thing that happens here is the home account, which is a preference of
- * the machine or browser asking and so is stamped on by the caller's own store
- * on the way past. Match rows come back without anything from this machine's
+ * The things that happen here are the home account and the favorites, which
+ * are preferences of the machine or browser asking and so are kept in the
+ * caller's own stores on the way past. Match rows come back without anything from this machine's
  * disk; the desktop adds that on top, and a browser has nothing to add.
  */
-export function createServerData(api: ServerApi, home: HomeAccountStore): FoxfireData {
+export function createServerData(
+  api: ServerApi,
+  home: HomeAccountStore,
+  favorites: FavoritesStore
+): FoxfireData {
   const mine = async (): Promise<Account[]> => markHome(await api.accounts.mine(), home.get())
 
   return {
@@ -83,6 +88,8 @@ export function createServerData(api: ServerApi, home: HomeAccountStore): Foxfir
     },
 
     search: { players: api.search.players },
+
+    favorites: favoritesOver(favorites),
 
     matchRecordings: {
       get: api.matchRecordings.get,

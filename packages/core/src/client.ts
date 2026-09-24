@@ -13,6 +13,8 @@ import type {
   ChampionStats,
   DashboardData,
   EditableMatch,
+  FavoriteOutcome,
+  FavoritePlayer,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
@@ -155,11 +157,28 @@ export interface FoxfireData {
   }
   search: {
     /**
-     * A page of the tracked players matching a query, or of everybody when it
-     * is blank, in name order. Reads stored data only — no Riot call, on a
-     * server or a desktop.
+     * A page of the tracked players matching a query, closest first (see
+     * `compareSearchResults`), or of everybody in name order when it is blank.
+     * Reads stored data only — no Riot call, on a server or a desktop.
      */
     players: (query: string, options?: PlayerSearchOptions) => Promise<Page<PlayerSearchResult>>
+  }
+  /**
+   * The players somebody starred, for the search box to open on.
+   *
+   * Kept by the machine or browser asking, like the home account, and never by
+   * a server: each keeps a copy of every player it starred, so the list draws
+   * before anything has been asked of anybody. Ten at most, newest first; see
+   * `addFavorite`. Local-only has no community to star anybody in, so there it
+   * is always empty.
+   */
+  favorites: {
+    list: () => Promise<FavoritePlayer[]>
+    /** Stars a player, or says why not — a full list is refused, not trimmed. */
+    add: (player: PlayerSearchResult) => Promise<FavoriteOutcome>
+    remove: (accountId: string) => Promise<FavoritePlayer[]>
+    /** Brings any starred player among these up to date, and answers with the list. */
+    refresh: (seen: PlayerSearchResult[]) => Promise<FavoritePlayer[]>
   }
   /**
    * The YouTube recordings a server holds, one per game per account.

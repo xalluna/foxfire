@@ -547,6 +547,23 @@ export interface PlayerSearchResult {
 }
 
 /**
+ * A player somebody starred, as this machine or browser last saw them.
+ *
+ * A copy rather than an id, so the list draws the moment the search box opens
+ * — before anything has been asked of a server, and while it cannot be. It is
+ * brought up to date whenever a newer copy of the same account goes past.
+ */
+export interface FavoritePlayer extends PlayerSearchResult {
+  /** When it was starred. The list is newest first. */
+  addedAt: string
+}
+
+/** What starring somebody came to: the list either way, and why when it did not take. */
+export type FavoriteOutcome =
+  | { ok: true; favorites: FavoritePlayer[] }
+  | { ok: false; reason: 'full'; favorites: FavoritePlayer[] }
+
+/**
  * One page of a list that grows, and how long the whole list is.
  *
  * Every list whose length depends on time or on the size of the community —
@@ -577,8 +594,9 @@ export interface PageOptions {
 /**
  * Which page of the finder, and of whom.
  *
- * A finder answers a page at a time, in name order, because a community is not
- * obliged to stay a size somebody can scroll.
+ * A finder answers a page at a time — closest first for a typed query, in
+ * name order for a blank one — because a community is not obliged to stay a
+ * size somebody can scroll.
  */
 export interface PlayerSearchOptions extends PageOptions {
   /** Only the accounts the caller has claimed. Locally that is every account. */

@@ -32,9 +32,14 @@ export const queryKeys = {
 
   /** Every finder query, so one invalidation clears them all. */
   playerSearches: () => ['playerSearch'] as const,
-  /** One finder list, paged: `scope` is which of the page's lists it is. */
-  playerSearch: (query: string, scope: 'all' | 'mine' | 'claimed' = 'all') =>
-    ['playerSearch', scope, query] as const,
+  /**
+   * One finder list: the search box's suggestions for what was typed, your own
+   * accounts it opens on, or the admin's paged list of claims.
+   */
+  playerSearch: (query: string, scope: 'suggest' | 'mine' | 'claimed') => ['playerSearch', scope, query] as const,
+
+  /** The players this machine or browser starred. Kept on the device, so only it changes them. */
+  favorites: () => ['favorites'] as const,
 
   dashboard: (accountId?: string) =>
     accountId === undefined ? (['dashboard'] as const) : (['dashboard', accountId] as const),
