@@ -7,6 +7,29 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.15.0] — 2026-09-24
+
+On a server, the account rail is a way between your own accounts rather than a list of everybody's,
+and looking after them happens in Settings.
+
+### Added
+
+- **Unlink an account yourself.** Settings › Server lists the League accounts linked to you, each
+  with an Unlink button. Its games stay on the server; it just stops being yours, and whoever signs
+  in to it in the League client next can claim it. An account somebody else holds is still an
+  admin's to unlink.
+
+### Changed
+
+- **On a server, the rail shows only your accounts.** It used to list every League account the
+  server tracks — everybody's. Now it lists the ones linked to you, and anybody else's is a search
+  away, as it is in the browser.
+- **No Add and no × on the rail on a server.** Adding an account there means claiming it through
+  the League client, which Settings › Server offers, so the rail's Add button only ever opened an
+  explanation. The × was the only way to give up a claim, one stray click from the avatar beside
+  it — and on anybody else's account the server refused it without a word. On this PC alone, the
+  rail works as it always has.
+
 ## [0.14.0] — 2026-09-23
 
 Foxfire updates itself, search looks through the people your server tracks rather than strangers on
@@ -1115,6 +1138,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0

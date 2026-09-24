@@ -202,6 +202,26 @@ function setServerState(next: ServerState): ServerState {
   return next
 }
 
+/** Accounts unlinked from Settings › Server this session: still tracked, nobody's. */
+const released = new Set<string>()
+
+/**
+ * Whose each account is, the way a server answers. Connected, Faker is you and
+ * any account the fixtures leave unowned is somebody else's — which is what the
+ * rail and Settings › Server tell apart. Locally nothing is anybody's, as on a
+ * real local database, so the list passes through.
+ */
+function withOwners(accounts: Account[]): Account[] {
+  if (serverState.session === null) return accounts
+  return accounts.map((account) =>
+    released.has(account.id)
+      ? { ...account, isMine: false, ownerUsername: null }
+      : account.isMine === undefined
+        ? { ...account, isMine: false, ownerUsername: 'Chovy' }
+        : account
+  )
+}
+
 /**
  * The patch notes an update carries, in the shape CHANGELOG.md is written in.
  *
@@ -570,6 +590,13 @@ export const mockApi: Api = {
 
   accounts: {
     ...fixture.accounts,
+    list: async (): Promise<Account[]> => withOwners(await fixture.accounts.list()),
+    // On a server, removing is giving up the claim: the account stays, nobody's.
+    remove: async (accountId: string): Promise<Account[]> => {
+      if (serverState.session === null) return fixture.accounts.remove(accountId)
+      released.add(accountId)
+      return withOwners(await fixture.accounts.list())
+    },
     add: (input): Promise<Account> =>
       delay(
         {

@@ -16,10 +16,10 @@ import { SettingsRow, primaryButtonClass } from '@foxfire/ui'
  * League client running on this machine, signed in. That is what the button is
  * waiting for, and why it says which account it can see rather than asking.
  *
- * First claim wins and there is no undo from here — an admin unlinks. Hence a
- * button rather than doing it the moment the client appears: on a shared PC,
- * or a smurf somebody else is meant to have, silently taking it would be the
- * wrong default and the only remedy would be asking an admin.
+ * First claim wins. Hence a button rather than doing it the moment the client
+ * appears: on a shared PC, or a smurf somebody else is meant to have, silently
+ * taking it would be the wrong default. A claim of your own is given up from the
+ * linked rows above this one; anybody else's, only by an admin.
  */
 export function LinkAccountRow(): JSX.Element | null {
   const queryClient = useQueryClient()
@@ -49,17 +49,9 @@ export function LinkAccountRow(): JSX.Element | null {
   const riotId = `${status.gameName}#${status.tagLine}`
   const known = matching(accounts.data, status.gameName, status.tagLine)
 
-  // Already yours. Said rather than hidden, because "did that work?" is the
-  // question somebody has right after pressing the button.
-  if (known?.isMine === true) {
-    return (
-      <SettingsRow
-        label={riotId}
-        description="Linked to you. Its games and rank are yours to edit."
-        control={<span className="text-2xs text-good">Linked</span>}
-      />
-    )
-  }
+  // Already yours, so it is among the linked rows above — which is also where
+  // "did that work?" is answered, the moment after pressing the button.
+  if (known?.isMine === true) return null
 
   // Somebody else got there first. Nothing this screen can do about it — the
   // whole point of first-claim-wins is that an admin is the escape hatch.
