@@ -16,17 +16,11 @@ import * as Icon from './icons'
  * rank cards are Riot's current reading, the graph is the last thirty days and
  * the champions are the current season, each labelled as such; every other
  * window is one "More" away.
- */
-/**
- * Why syncing somebody else's account is not offered.
  *
- * A sync spends the community's shared Riot budget on history that is not
- * yours to fetch, and the server refuses it with not_your_account — so the
- * button could only ever produce a 403 with nothing to act on. Undefined is
- * local-only, where every account in the file is yours.
+ * "Sync now" is anybody's, not only the owner's: an account an admin tracks
+ * has nobody else to refresh it. The server turns away a second sync of the
+ * same account inside two minutes, whoever asks.
  */
-const NOT_YOURS = 'Only whoever claimed this account can sync it'
-
 export function ProfileHeader({
   account,
   onRefresh,
@@ -48,7 +42,6 @@ export function ProfileHeader({
   /** The house, for opening on this account. */
   home?: HomeMark
 }): JSX.Element {
-  const notYours = account.isMine === false
   const assets = useAssetManifest()
 
   return (
@@ -83,8 +76,7 @@ export function ProfileHeader({
 
         <button
           onClick={onRefresh}
-          disabled={refreshing || notYours}
-          title={notYours ? NOT_YOURS : undefined}
+          disabled={refreshing}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
         >
           <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />

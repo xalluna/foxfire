@@ -69,6 +69,11 @@ tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs Fo
   explanation. The × was the only way to give up a claim, one stray click from the avatar beside
   it — and on anybody else's account the server refused it without a word. On this PC alone, the
   rail works as it always has.
+- **Sync anybody's account.** "Sync now" works on every profile on a server, not only on your own,
+  so an account an admin tracks — which nobody else was ever going to refresh — or a friend who has
+  not opened Foxfire in a while can be brought up to date. An account can be synced once every two
+  minutes, whoever asks; press it sooner and Foxfire says how long to wait, where it used to do
+  nothing at all.
 - **Settings › League accounts shows a page at a time.** For an admin, the list of claims arrives
   fifty at a time, with Show more for the next fifty and a box to find one.
 - **Recordings and Replays show a page at a time.** Captures lists the newest fifty of each, with

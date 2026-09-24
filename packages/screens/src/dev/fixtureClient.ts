@@ -137,6 +137,29 @@ function syncState(accountId: string): SyncState {
   }
 }
 
+/**
+ * The server's two minutes between syncs of one account, whoever asks, so a
+ * second press shows the notice it would.
+ *
+ * Applied in every scenario, local ones included, although this PC alone has
+ * no cooldown: the harness is for looking at the notice, and a harness that
+ * could only show it under one scenario would hide it from the other.
+ */
+const SYNC_COOLDOWN_MS = 2 * 60_000
+const syncStartedAt = new Map<string, number>()
+
+function syncTooSoon(accountId: string): AdminActionResult | null {
+  const started = syncStartedAt.get(accountId)
+  const waitMs = started === undefined ? 0 : started + SYNC_COOLDOWN_MS - Date.now()
+  if (waitMs <= 0) return null
+
+  const seconds = Math.ceil(waitMs / 1000)
+  return {
+    ok: false,
+    error: `This account was synced less than two minutes ago. Try again in ${seconds} seconds.`
+  }
+}
+
 /** Drives a believable progress sequence so the progress bar can be designed against motion. */
 function runFakeSync(accountId: string): void {
   if (scenario === 'sync-error') {
@@ -568,9 +591,13 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     },
 
     sync: {
-      start: (accountId: string): Promise<void> => {
+      start: (accountId: string): Promise<AdminActionResult> => {
+        const refused = syncTooSoon(accountId)
+        if (refused) return delay(refused, 100)
+
+        syncStartedAt.set(accountId, Date.now())
         runFakeSync(accountId)
-        return delay(undefined, 100)
+        return delay({ ok: true, error: null }, 100)
       },
       getState: (accountId: string): Promise<SyncState | null> => delay(syncState(accountId))
     },

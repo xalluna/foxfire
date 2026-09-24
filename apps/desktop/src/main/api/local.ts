@@ -134,8 +134,11 @@ export const localApi: ServerBackedApi = {
   },
 
   sync: {
+    // No cooldown on this PC: its own key, its own budget, and a sync already
+    // running for the account is joined rather than repeated.
     start: async (accountId) => {
       startSync(rowId(accountId))
+      return { ok: true, error: null }
     },
     getState: async (accountId) => readSyncState(rowId(accountId))
   },

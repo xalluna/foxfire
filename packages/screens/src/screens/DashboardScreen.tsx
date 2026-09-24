@@ -128,8 +128,14 @@ export function DashboardScreen({
     getNextPageParam: nextOffset
   })
 
+  // Anybody's to press, so the server's two-minute cooldown is something people
+  // actually meet — and a button that did nothing would read as broken. Its
+  // refusal says how long to wait.
   const sync = useMutation({
-    mutationFn: () => client.sync.start(account.id)
+    mutationFn: () => client.sync.start(account.id),
+    onSuccess: (outcome) => {
+      if (!outcome.ok && outcome.error) setNotice(outcome.error)
+    }
   })
 
   // The star and the house. Both are this machine's or browser's, never the

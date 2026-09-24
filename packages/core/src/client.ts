@@ -107,7 +107,13 @@ export interface FoxfireData {
     matchSummary?: (accountId: string, matchId: string) => Promise<MatchSummary | null>
   }
   sync: {
-    start: (accountId: string) => Promise<void>
+    /**
+     * Starts a sync, anybody's account. On a server, one already synced in the
+     * last two minutes is turned away, whoever asks — an answer rather than a
+     * throw, because the person pressing the button wants to know how long to
+     * wait. How it goes is the progress events, not this.
+     */
+    start: (accountId: string) => Promise<AdminActionResult>
     getState: (accountId: string) => Promise<SyncState | null>
   }
   champions: {

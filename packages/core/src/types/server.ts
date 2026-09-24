@@ -309,12 +309,14 @@ export interface ServerAdminSettings {
 }
 
 /**
- * The outcome of an administrative action.
+ * The outcome of an administrative action, or of any other write that can be
+ * turned away.
  *
  * A result rather than a thrown error, because every one of these can be
  * refused for a reason worth showing — the last administrator cannot be
- * demoted, an invite that has been used cannot be withdrawn — and the caller
- * needs the message, not a stack.
+ * demoted, an invite that has been used cannot be withdrawn, an account synced
+ * a minute ago is not synced again yet — and the caller needs the message, not
+ * a stack.
  */
 export interface AdminActionResult {
   ok: boolean

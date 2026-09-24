@@ -228,7 +228,7 @@ export function DashboardPage({
                     : 'Pull your match history from Riot to see it here.'
               }
               action={
-                !syncing && account.isMine !== false && (
+                !syncing && (
                   <button
                     onClick={onSync}
                     className="flex items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
