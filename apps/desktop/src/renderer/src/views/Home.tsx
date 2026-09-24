@@ -10,7 +10,7 @@ import { useServerHealth } from '../hooks/useKeyStatus'
  *
  * With nothing to open there is no profile to show, so this is the page that
  * says so, and where the first one comes from — the rail locally, the League
- * client and Settings › Server on a server. On a server that is somebody who
+ * client and Settings › Account on a server. On a server that is somebody who
  * has claimed nothing yet, and it used to open on the first account the server
  * had at all: a stranger's history, picked out of a list of everybody that
  * nothing fetches any more.
@@ -31,7 +31,7 @@ export function Home(): JSX.Element {
         <EmptyState
           icon={<Icon.Plus />}
           title="No League account of yours yet"
-          description="Sign in to it in the League client, then link it from Settings › Server. Anybody else on this server is in Search."
+          description="Sign in to it in the League client, then link it from Settings › Account. Anybody else on this server is in Search."
         />
       ) : (
         <EmptyState

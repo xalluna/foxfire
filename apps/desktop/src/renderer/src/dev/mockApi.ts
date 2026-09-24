@@ -200,13 +200,13 @@ function setServerState(next: ServerState): ServerState {
   return next
 }
 
-/** Accounts unlinked from Settings › Server this session: still tracked, nobody's. */
+/** Accounts unlinked from Settings › Account this session: still tracked, nobody's. */
 const released = new Set<string>()
 
 /**
  * Whose an account is, the way a server answers. Connected, Faker is you and
  * any account the fixtures leave unowned is somebody else's — which is what the
- * rail, Search and Settings › Server tell apart. Locally nothing is anybody's,
+ * rail, Search and Settings › Account tell apart. Locally nothing is anybody's,
  * as on a real local database, so the account passes through.
  *
  * A declaration rather than a const, because the fixture client above is built

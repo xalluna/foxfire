@@ -25,6 +25,7 @@ import {
   ServerDataScreen,
   useIsServerAdmin
 } from '@foxfire/screens'
+import { AccountSettings } from '../components/AccountSettings'
 import { CaptureSettings } from '../components/CaptureSettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { useServerHealth } from '../hooks/useKeyStatus'
@@ -46,6 +47,7 @@ import type { IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
  */
 export type SettingsCategory =
   | 'server'
+  | 'account'
   | 'server-members'
   | 'server-invites'
   | 'server-accounts'
@@ -81,6 +83,13 @@ interface NavItem extends SettingsNavItem<SettingsCategory> {
    * nothing would read.
    */
   localOnly?: boolean
+  /**
+   * Shown only while a server is answering — `localOnly` the other way round.
+   *
+   * For the account page: local-only there is nobody signed in, so there is no
+   * name, email or password to change and nowhere to link an account to.
+   */
+  serverOnly?: boolean
 }
 
 /**
@@ -93,6 +102,7 @@ interface NavItem extends SettingsNavItem<SettingsCategory> {
 const GROUPS: NavItem[][] = [
   [
     { id: 'server', label: 'Server', icon: <Icon.Server /> },
+    { id: 'account', label: 'Account', icon: <Icon.User />, serverOnly: true },
     { id: 'server-members', label: 'Members', icon: <Icon.Settings />, adminOnly: true },
     { id: 'server-invites', label: 'Invites', icon: <Icon.Link />, adminOnly: true },
     { id: 'server-accounts', label: 'League accounts', icon: <Icon.Server />, adminOnly: true },
@@ -146,7 +156,12 @@ export function Settings({ category }: { category?: string }): JSX.Element {
   const { connected: isConnected } = useServerHealth()
 
   const groups = GROUPS.map((group) =>
-    group.filter((item) => (!item.adminOnly || isServerAdmin) && (!item.localOnly || !isConnected))
+    group.filter(
+      (item) =>
+        (!item.adminOnly || isServerAdmin) &&
+        (!item.localOnly || !isConnected) &&
+        (!item.serverOnly || isConnected)
+    )
   )
 
   const opening: SettingsCategory = isConnected ? 'server' : FIRST_CATEGORY
@@ -170,6 +185,7 @@ export function Settings({ category }: { category?: string }): JSX.Element {
 
       <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
         {active === 'server' && <ServerSettings />}
+        {active === 'account' && <AccountSettings />}
         {active === 'server-members' && <MembersScreen />}
         {active === 'server-invites' && <InvitesScreen />}
         {active === 'server-accounts' && <LeagueAccountsScreen />}

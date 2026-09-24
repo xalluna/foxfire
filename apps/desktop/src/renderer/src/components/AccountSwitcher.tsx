@@ -19,7 +19,7 @@ import { AddAccountForm } from './AddAccountForm'
  * account management — a typed Riot ID adds one and × removes it. On a server it
  * is only a way between your own accounts: everybody else's are a search away,
  * one becomes yours by claiming it through the League client, and giving one up
- * is Settings › Server. An × brushed on the way to an avatar is too easy a way to
+ * is Settings › Account. An × brushed on the way to an avatar is too easy a way to
  * give up a claim, and on anybody else's account the server would refuse it.
  */
 export function AccountSwitcher({

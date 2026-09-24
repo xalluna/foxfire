@@ -9,7 +9,7 @@ import { useSwitchPlayer } from '../hooks/usePlayerNavigation'
  *
  * Local-only. On a server an account is attested rather than typed: the desktop
  * reports the Riot ID the running League client says is signed in, and Settings ›
- * Server offers to claim it. A typed name attests to nothing, and a server that
+ * Account offers to claim it. A typed name attests to nothing, and a server that
  * accepted one would make every claim on it worth less — so the rail offers no
  * form there at all.
  */

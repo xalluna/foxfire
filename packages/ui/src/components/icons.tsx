@@ -349,6 +349,16 @@ export function ExternalLink(props: IconProps): JSX.Element {
   )
 }
 
+/** Your own account on a server — the person, as opposed to Server's machine. */
+export function User(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M20 21a8 8 0 0 0-16 0" />
+    </Icon>
+  )
+}
+
 /**
  * Two stacked racks with a status light each — the conventional shorthand for
  * a server, and distinct at 16px from Folder and from Activity, which are its

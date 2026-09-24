@@ -17,18 +17,21 @@ shows on Tab. Needs Foxfire Server 0.4.0.
 
 ### Added
 
-- **Unlink an account yourself.** Settings › Server lists the League accounts linked to you, each
+- **Unlink an account yourself.** Settings › Account lists the League accounts linked to you, each
   with an Unlink button. Its games stay on the server; it just stops being yours, and whoever signs
   in to it in the League client next can claim it. An account somebody else holds is still an
   admin's to unlink.
 
 ### Changed
 
+- **Your account has its own page.** Your name, email, password and League accounts moved from
+  Settings › Server to a new Account page just under it, so Server is back to which server Foxfire
+  reads from and how to leave it. The page is only there while you are signed in to a server.
 - **On a server, the rail shows only your accounts.** It used to list every League account the
   server tracks — everybody's. Now it lists the ones linked to you, and anybody else's is a search
   away, as it is in the browser.
 - **No Add and no × on the rail on a server.** Adding an account there means claiming it through
-  the League client, which Settings › Server offers, so the rail's Add button only ever opened an
+  the League client, which Settings › Account offers, so the rail's Add button only ever opened an
   explanation. The × was the only way to give up a claim, one stray click from the avatar beside
   it — and on anybody else's account the server refused it without a word. On this PC alone, the
   rail works as it always has.

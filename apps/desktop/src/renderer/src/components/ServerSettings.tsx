@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
-import { LinkAccountRow } from './LinkAccountRow'
-import { LinkedAccountRows } from './LinkedAccountRows'
 import { useUpdates } from '../hooks/useUpdates'
 import {
   SettingsCard,
   SettingsPage,
-  ChangeEmailCard,
-  ChangePasswordCard,
-  ChangeUsernameCard,
   DangerRow,
   SettingsBlock,
   SettingsRow,
@@ -28,7 +23,8 @@ type Mode = 'login' | 'register'
  * Joining a Foxfire server, and choosing which one answers.
  *
  * The page has two shapes rather than one with everything disabled. Connected,
- * it is a short status page: who you are, where, and how to leave. Disconnected,
+ * it is a short status page: who you are, where, and how to leave — changing
+ * who you are is the Account page's. Disconnected,
  * it is a connect form — an address, then what that server said about itself,
  * then credentials. Nothing about registering is shown until a server has been
  * asked whether registration is even open, because the answer decides whether
@@ -108,23 +104,6 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           }
         />
         <SettingsRow label="Address" control={<Address url={state.activeUrl!} />} />
-      </SettingsCard>
-
-      <ChangeUsernameCard
-        username={session.username}
-        onSave={(username) => window.api.server.changeUsername(username)}
-      />
-
-      <ChangeEmailCard email={session.email} onSave={(change) => window.api.server.changeEmail(change)} />
-
-      <ChangePasswordCard onSave={(change) => window.api.server.changePassword(change)} />
-
-      <SettingsCard
-        title="Your League accounts"
-        description="A server links the account it can see you are signed in to, rather than one you type — which is what stops anybody claiming a Riot ID that is not theirs."
-      >
-        <LinkedAccountRows />
-        <LinkAccountRow />
       </SettingsCard>
 
       <SettingsCard
