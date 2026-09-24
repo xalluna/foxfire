@@ -23,8 +23,9 @@ public readonly record struct LadderMark(int? LadderPosition, int? SeasonId);
 /// A port of packages/core/src/rules/rankTrend.ts.
 ///
 /// The Rank page reads every reading, which over a month is about one a ranked
-/// game. The profile draws the same month 300px wide, so it reads this instead:
-/// at most 31 points, whatever the history holds.
+/// game, and thins them to closes itself by the same rule. The profile draws the
+/// same month 300px wide and needs nothing else, so it reads this instead: at
+/// most 31 points, whatever the history holds.
 ///
 /// Point k, for k = 30 down to 0, is drawn at now − k·24h and repeats the last
 /// reading taken strictly before that moment — point 0 takes the latest of all,

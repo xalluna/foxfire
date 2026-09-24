@@ -85,14 +85,15 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
     /// both claiming a reading that lands on the instant of the boundary.
     ///
     /// Whole and uncapped on purpose — the one list that grows which is not
-    /// paged (see "Lists that grow are paged" in CLAUDE.md). The graph draws a
-    /// line through every reading and the milestones are read off neighbouring
-    /// pairs, so a page would be a line with a gap in it and a cap would be one
-    /// that silently starts late. It is bounded by the range asked for instead:
-    /// a reading is kept only when the rank moved, so about one per ranked game,
-    /// which is a few hundred for the thirty days the screen opens on. The
-    /// profile, which draws the same month 300px wide, reads the thinned
-    /// <see cref="TrendAsync"/> instead. "All" grows with every season, and
+    /// paged (see "Lists that grow are paged" in CLAUDE.md). The milestones are
+    /// read off neighbouring pairs and the change over the period counts every
+    /// game, so a page would leave a gap in both and a cap would start them
+    /// silently late. It is bounded by the range asked for instead: a reading is
+    /// kept only when the rank moved, so about one per ranked game, which is a
+    /// few hundred for the thirty days the screen opens on. The client thins it
+    /// to closes for the graph itself. The profile, which draws the same month
+    /// 300px wide, reads the thinned <see cref="TrendAsync"/> instead. "All"
+    /// grows with every season, and
     /// making that cheaper — summarising old seasons — is its own piece of work,
     /// not a page size.
     /// </summary>

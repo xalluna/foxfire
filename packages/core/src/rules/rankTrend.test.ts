@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { RankTrendReading, Season } from '../types'
+import type { RankHistory, RankSnapshot, RankTrendReading, Season } from '../types'
 import { rankAtPosition } from './ladder'
-import { RANK_TREND_DAYS, rankNetChange, rankTrend, rankTrendSince } from './rankTrend'
+import {
+  RANK_TREND_DAYS,
+  rankCloses,
+  rankNetChange,
+  rankRangeCloses,
+  rankTrend,
+  rankTrendSince
+} from './rankTrend'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -229,6 +236,149 @@ describe('rankTrend', () => {
     it('has no answer from or to an unranked reading', () => {
       expect(rankTrend([reading(null, dayAt(20)), reading(400, dayAt(5))], SEASONS, NOW).netLp).toBeNull()
       expect(rankTrend([reading(400, dayAt(20)), reading(null, dayAt(5))], SEASONS, NOW).netLp).toBeNull()
+    })
+  })
+})
+
+describe('rankCloses', () => {
+  const SIX_HOURS = 6 * HOUR
+  const WEEK_AGO = NOW - 7 * DAY
+
+  it('draws a point every step, ending at `to`', () => {
+    const points = rankCloses([reading(1200, WEEK_AGO - DAY)], SEASONS, WEEK_AGO, NOW, SIX_HOURS)
+
+    expect(points).toHaveLength(29)
+    expect(points.map((p) => p.at)).toEqual(
+      Array.from({ length: 29 }, (_, i) => NOW - (28 - i) * SIX_HOURS)
+    )
+  })
+
+  it("takes each span's last reading, and repeats it across quiet spans", () => {
+    const points = rankCloses(
+      [reading(1200, NOW - 30 * HOUR), reading(1230, NOW - 26 * HOUR), reading(1210, NOW - 25 * HOUR)],
+      SEASONS,
+      WEEK_AGO,
+      NOW,
+      SIX_HOURS
+    )
+
+    // The span ending 24 hours ago closed on the third game, and nothing
+    // since has moved it.
+    const after = points.filter((p) => p.at >= NOW - 24 * HOUR)
+    expect(after).toHaveLength(5)
+    for (const p of after) expect(p.ladderPosition).toBe(1210)
+  })
+
+  it('draws the lone reading a fast clock stamped after the window', () => {
+    const points = rankCloses([reading(1000, NOW + 5_000)], SEASONS, NOW + 5_000, NOW)
+
+    expect(points).toEqual([expect.objectContaining({ at: NOW, ladderPosition: 1000 })])
+  })
+})
+
+describe('rankRangeCloses', () => {
+  function snapshot(position: number, capturedAt: number): RankSnapshot {
+    return {
+      ...reading(position, capturedAt),
+      queueType: 'RANKED_SOLO_5x5',
+      wins: null,
+      losses: null,
+      seasonId: null,
+      source: 'lcu'
+    }
+  }
+
+  function history(snapshots: RankSnapshot[], before: RankSnapshot | null = null): RankHistory {
+    return { snapshots, milestones: [], before }
+  }
+
+  it("draws thirty days exactly as the profile's graph does", () => {
+    const readings = [
+      snapshot(1000, SINCE - 2 * DAY),
+      snapshot(1050, dayAt(25)),
+      snapshot(1030, dayAt(25) + 2 * HOUR),
+      snapshot(1100, dayAt(10) - HOUR),
+      snapshot(1080, dayAt(1))
+    ]
+    const closes = rankRangeCloses(history(readings.slice(1), readings[0]), '30d', SEASONS, NOW)
+    const trend = rankTrend(readings, SEASONS, NOW)
+
+    expect(closes).toEqual({ from: trend.from, to: trend.to, step: DAY, points: trend.points })
+  })
+
+  it('closes every six hours over a week', () => {
+    const closes = rankRangeCloses(
+      history([snapshot(1100, dayAt(2))], snapshot(1000, NOW - 8 * DAY)),
+      '7d',
+      SEASONS,
+      NOW
+    )
+
+    expect(closes).toMatchObject({ from: NOW - 7 * DAY, to: NOW, step: 6 * HOUR })
+    expect(closes.points).toHaveLength(29)
+    expect(closes.points[0].ladderPosition).toBe(1000)
+  })
+
+  it("ends a past season on where the player finished, though the next one reset", () => {
+    const split = dayAt(40)
+    const closes = rankRangeCloses(
+      history([snapshot(1400, dayAt(60)), snapshot(1500, dayAt(45) - HOUR)]),
+      'season:1',
+      resetAt(split),
+      NOW
+    )
+
+    expect(closes.to).toBe(split - 1)
+    expect(closes.points.at(-1)).toMatchObject({ at: split - 1, ladderPosition: 1500, seasonId: 1 })
+  })
+
+  it('starts a range with no start of its own at the first reading', () => {
+    // Season 2026 is the oldest here, so it reaches back forever, like All.
+    const first = dayAt(60) + 3 * HOUR
+    const readings = [snapshot(1400, first), snapshot(1500, dayAt(45))]
+
+    for (const range of ['season:1', 'all'] as const) {
+      const closes = rankRangeCloses(history(readings), range, resetAt(dayAt(40)), NOW)
+      expect(closes.from).toBe(first)
+      expect(closes.points[0]).toMatchObject({ ladderPosition: 1400 })
+      expect(closes.points[0].at).toBeGreaterThan(first)
+      expect(closes.points[0].at - first).toBeLessThanOrEqual(DAY)
+    }
+  })
+
+  it('runs the current season from its start to now', () => {
+    const split = dayAt(40) + 5 * HOUR
+    const closes = rankRangeCloses(
+      history([snapshot(300, dayAt(20))], snapshot(1500, dayAt(45))),
+      'season:2',
+      resetAt(split),
+      NOW
+    )
+
+    expect(closes).toMatchObject({ from: split, to: NOW, step: DAY })
+    // Nothing from before the reset is carried in: the line starts on the
+    // season's own first game.
+    expect(closes.points[0]).toMatchObject({ at: dayAt(19), ladderPosition: 300, seasonId: 2 })
+    expect(closes.points.at(-1)?.at).toBe(NOW)
+  })
+
+  it('carries nothing past a reset that came after the last game', () => {
+    const closes = rankRangeCloses(
+      history([snapshot(1500, dayAt(20)), snapshot(1520, dayAt(9))]),
+      'all',
+      resetAt(dayAt(3)),
+      NOW
+    )
+
+    expect(closes.points.at(-1)).toMatchObject({ at: dayAt(4), ladderPosition: 1520 })
+  })
+
+  it('has no points for a range with no readings', () => {
+    expect(rankRangeCloses(history([]), 'all', SEASONS, NOW)).toEqual({
+      from: NOW,
+      to: NOW,
+      step: DAY,
+      points: []
     })
   })
 })

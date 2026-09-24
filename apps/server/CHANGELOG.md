@@ -52,6 +52,13 @@ season's most-played champions.
   player's profile.
 - **"Over this period" counts from before the period.** On the Rank page, thirty
   days now includes the month's first game, and matches the profile's figure.
+- **The Rank page's graph is drawn the profile's way.** One point a day — the
+  rank the day closed on — rather than one for every game, so a busy evening is
+  where it ended instead of a sawtooth of wins and losses, and a quiet week is
+  flat. Over 7 days it is a point every six hours, so a big session still shows.
+  Every point is a rank actually held, 30 days is the same line the profile
+  draws, and the milestones still list every promotion at the minute it
+  happened.
 - **Closest names first.** A typed search answers an exact name or whole Riot ID
   first, then names that start with what was typed, then names that only contain
   it — alphabetical within each. A box that shows ten should show the closest
@@ -125,10 +132,12 @@ season's most-played champions.
 - API version 3, and the web client is built against it. Admitting 0.15 and
   taking 0.14 off the allow list — with the deprecated `GET /api/riot-accounts`
   going at the same time — happen in the commit that releases both.
-- Rank history is deliberately still answered whole: the graph needs every
-  reading in the range to draw its line, and the range is what bounds it. It
+- Rank history is deliberately still answered whole: the milestones and "over
+  this period" need every reading in the range, and the range is what bounds it.
+  The web client thins them to closes for the graph itself, by the rule the
+  profile's trend is answered with, so nothing about the read changed for it. It
   also sends `before`, the last reading ahead of the range, which "over this
-  period" counts from.
+  period" counts from and the graph's first close carries in.
 - `GET /api/riot-accounts/{id}/rank/trend?queueType=` is the profile's graph:
   thirty days as the last reading of each day, at most 31 points however much
   history there is, and the month's LP change counted from the raw readings.

@@ -36,8 +36,10 @@ export function RankScreen({
   const share = useShareLink()
 
   // Whole, not paged — the one list that grows which is fetched in one go. The
-  // graph needs every reading to draw its line, and the range bounds it: a few
-  // hundred for the thirty days the page opens on. See FoxfireData.rank.history.
+  // milestones are read off neighbouring readings and the change over the
+  // period counts every game, so a page would leave gaps in both; the range
+  // bounds it instead, a few hundred for the thirty days the page opens on. The
+  // graph thins it to closes itself. See FoxfireData.rank.history.
   const history = useQuery({
     queryKey: queryKeys.rankHistory(account.id, queueType, range),
     queryFn: () => client.rank.history(account.id, queueType, range)
@@ -48,6 +50,12 @@ export function RankScreen({
     queryFn: () => client.rank.periods(account.id)
   })
 
+  // The whole table, for where the graph's closes stop at a reset.
+  const seasons = useQuery({
+    queryKey: queryKeys.seasons(),
+    queryFn: () => client.seasons.list()
+  })
+
   return (
     <RankPage
       queueType={queueType}
@@ -55,8 +63,13 @@ export function RankScreen({
       range={range}
       onRangeChange={onRangeChange}
       history={history.data}
-      loading={history.isLoading}
+      loading={history.isLoading || seasons.isLoading}
       periods={periods.data}
+      seasons={seasons.data}
+      // The moment the readings were read, rather than each render's: the
+      // closes are drawn back from it, and would otherwise creep under the
+      // pointer.
+      now={history.dataUpdatedAt}
       back={back}
       headerExtra={
         HeaderExtra || share ? (
