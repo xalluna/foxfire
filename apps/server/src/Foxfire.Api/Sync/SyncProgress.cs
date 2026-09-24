@@ -1,9 +1,22 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Foxfire.Api.Sync;
 
+/// <summary>
+/// An enum written as its name in camelCase — <c>complete</c>, not <c>Complete</c>.
+///
+/// A plain <see cref="JsonStringEnumConverter"/> writes the member name as C#
+/// spells it, and a converter named in an attribute takes no naming policy from
+/// anywhere else. The clients compare these values against lowercase literals,
+/// so a sync that finished arrived as "Complete", never matched "complete", and
+/// every progress bar on every client stayed up for good.
+/// </summary>
+public sealed class CamelCaseEnumConverter<TEnum>() : JsonStringEnumConverter<TEnum>(JsonNamingPolicy.CamelCase)
+    where TEnum : struct, Enum;
+
 /// <summary>Why a sync is running, so the desktop can keep a background one quiet.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(CamelCaseEnumConverter<SyncTrigger>))]
 public enum SyncTrigger
 {
     /// <summary>Somebody pressed the button and is watching.</summary>
@@ -14,7 +27,7 @@ public enum SyncTrigger
 }
 
 /// <summary>Which part of a sync the numbers describe.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(CamelCaseEnumConverter<SyncPhase>))]
 public enum SyncPhase
 {
     /// <summary>The first pass over an account, reaching back to the backfill target.</summary>

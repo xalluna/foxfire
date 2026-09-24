@@ -1,9 +1,12 @@
+using System.Buffers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Foxfire.Api.Sync;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
+using Microsoft.AspNetCore.SignalR.Protocol;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Foxfire.Api.Tests;
@@ -219,6 +222,41 @@ public class WireShapeTests(FoxfireServerFixture server)
             "backfillTarget",
             "lastFullSyncAt",
             "lastDeltaSyncAt");
+    }
+
+    /// <summary>
+    /// A progress event, written by the hub protocol this server actually runs.
+    ///
+    /// The second assertion about values rather than names, for the reason the
+    /// first one gives. @foxfire/core SyncProgressEvent types phase and trigger
+    /// as lowercase literals, and the screens decide a sync is over by comparing
+    /// against 'complete'. The server wrote "Complete" from the day it had a hub,
+    /// so no sync on a server ever finished as far as a progress bar could tell.
+    /// </summary>
+    [Theory]
+    [InlineData(SyncPhase.Backfill, "backfill")]
+    [InlineData(SyncPhase.Delta, "delta")]
+    [InlineData(SyncPhase.Complete, "complete")]
+    [InlineData(SyncPhase.Error, "error")]
+    public void A_sync_progress_event_spells_its_phase_the_way_the_screens_compare_it(
+        SyncPhase phase, string expected)
+    {
+        var protocol = server.Services.GetServices<IHubProtocol>().Single(p => p.Name == "json");
+        var output = new ArrayBufferWriter<byte>();
+
+        protocol.WriteMessage(
+            new InvocationMessage(
+                HubEvents.SyncProgress,
+                [new SyncProgressEvent(Guid.NewGuid(), phase, 1, 2, null, SyncTrigger.Auto)]),
+            output);
+
+        // The protocol ends every frame with a record separator.
+        var frame = Encoding.UTF8.GetString(output.WrittenSpan).TrimEnd('\u001e');
+        var progress = JsonDocument.Parse(frame).RootElement.GetProperty("arguments")[0];
+
+        AssertHasAll(progress, "accountId", "phase", "current", "total", "message", "trigger");
+        Assert.Equal(expected, progress.GetProperty("phase").GetString());
+        Assert.Equal("auto", progress.GetProperty("trigger").GetString());
     }
 
     [Fact]
