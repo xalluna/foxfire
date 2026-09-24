@@ -64,10 +64,12 @@ function webClient(routes: Record<string, () => Response>) {
   })
 
   let home: string | null = null
+  let favorites: string | null = null
   const client = createServerClient({
     session,
     identity: WEB,
     home: { get: () => home, set: (id) => (home = id) },
+    favorites: { get: () => favorites, set: (list) => (favorites = list) },
     assets: async () => ({}) as AssetManifest
   })
 
@@ -105,6 +107,17 @@ describe('createServerClient', () => {
 
     expect(seen).toHaveBeenCalledTimes(1)
     expect(seen.mock.calls[0][0].upgradeRequired).toBe('reload')
+  })
+
+  it('keeps favorites in its own store, without asking the server anything', async () => {
+    const { client, server } = webClient({})
+
+    const outcome = await client.favorites.add({ account: account('9', false), soloEntry: null })
+    const list = await client.favorites.list()
+
+    expect(outcome.ok).toBe(true)
+    expect(list.map((f) => f.account.id)).toEqual(['9'])
+    expect(server.calls).toEqual([])
   })
 
   it("opens on nobody rather than a stranger's profile when nothing is yours", async () => {

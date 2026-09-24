@@ -81,15 +81,6 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 export const paths = {
   home: () => '/',
 
-  /**
-   * Everybody this server tracks, optionally narrowed to a query.
-   *
-   * The finder lives here in the web client, so this is the address a shared
-   * link to one carries. The desktop draws the same screen under its own
-   * Search page; a link is always into the web client, which has one.
-   */
-  players: (query?: string) => withQuery('/players', { q: query || undefined }),
-
   /** A profile, and optionally one of its games opened in the history. */
   player: (player: PlayerRef, search: { queue?: number | null; match?: string } = {}) =>
     withQuery(`/players/${segment(playerSlug(player))}`, {

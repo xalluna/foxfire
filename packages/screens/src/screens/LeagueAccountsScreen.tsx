@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
 import { LeagueAccountsPage } from '@foxfire/ui'
 import { useClient } from '../client/context'
+import { useDebounced } from '../hooks/useDebounced'
 import { queryKeys } from '../queries/keys'
 
-/** Claims per page. The same page the finder uses, since it is the finder answering. */
+/** Claims per page. Half of what a server answers one search with. */
 const PAGE_SIZE = 50
-
-/** How long the filter waits before asking, as the finder's box does. */
-const TYPING_PAUSE_MS = 250
 
 /**
  * The League accounts this server keeps history for, and who owns them.
@@ -24,12 +22,7 @@ export function LeagueAccountsScreen(): JSX.Element {
   const queryClient = useQueryClient()
 
   const [query, setQuery] = useState('')
-  const [asked, setAsked] = useState('')
-
-  useEffect(() => {
-    const timer = setTimeout(() => setAsked(query), TYPING_PAUSE_MS)
-    return () => clearTimeout(timer)
-  }, [query])
+  const asked = useDebounced(query)
 
   const storage = useQuery({ queryKey: queryKeys.admin.storage(), queryFn: () => client.admin.storage() })
 

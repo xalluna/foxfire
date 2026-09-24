@@ -51,6 +51,7 @@ export function createIpcClient(api: Api): FoxfireClient {
 
     seasons: api.seasons,
     search: api.search,
+    favorites: api.favorites,
 
     // Answered by the server when connected to one; local-only has none, and
     // says so rather than pretending. Absent altogether from a build without

@@ -236,6 +236,12 @@ export const CH = {
   search: {
     players: 'search:players'
   },
+  favorites: {
+    list: 'favorites:list',
+    add: 'favorites:add',
+    remove: 'favorites:remove',
+    refresh: 'favorites:refresh'
+  },
   assets: {
     get: 'assets:get'
   },

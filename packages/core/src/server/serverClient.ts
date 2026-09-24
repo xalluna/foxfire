@@ -3,6 +3,7 @@ import type { AssetManifest, SyncProgressEvent, VersionInfo } from '../types'
 import { silentLogger, type Logger } from '../log'
 import { createServerApi, type ServerApi } from './api'
 import { createServerData } from './data'
+import type { FavoritesStore } from './favorites'
 import type { HomeAccountStore } from './home'
 import { createHub, type ServerHub } from './hub'
 import type { ClientIdentity } from './identity'
@@ -14,6 +15,8 @@ export interface ServerClientOptions {
   identity: ClientIdentity
   /** Which account opens first, remembered wherever this client keeps preferences. */
   home: HomeAccountStore
+  /** Who has been starred, kept in the same place as `home`. */
+  favorites: FavoritesStore
   /** Champion, item and rune art — Data Dragon, fetched by whoever runs this. */
   assets: () => Promise<AssetManifest>
   log?: Logger
@@ -53,7 +56,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
   const log = options.log ?? silentLogger
 
   const api = createServerApi(session.request, { log })
-  const data = createServerData(api, options.home)
+  const data = createServerData(api, options.home, options.favorites)
 
   const syncListeners = new Set<(event: SyncProgressEvent) => void>()
   const editedListeners = new Set<(accountId: string) => void>()

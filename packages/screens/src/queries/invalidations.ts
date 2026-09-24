@@ -9,6 +9,7 @@ export type DataEvent =
   | { kind: 'rankChanged'; accountId: string }
   | { kind: 'recordingChanged'; accountId: string; matchId: string }
   | { kind: 'seasonsSaved' }
+  | { kind: 'connectionChanged' }
 
 /**
  * Which cached answers an event makes stale.
@@ -72,5 +73,11 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
         queryKeys.championStats(),
         queryKeys.matchLists()
       ]
+
+    case 'connectionChanged':
+      // The desktop keeps a list of favorites per server, and nothing else
+      // tells the cached one that the server it belonged to is not the one
+      // answering any more.
+      return [queryKeys.favorites()]
   }
 }

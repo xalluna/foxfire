@@ -92,7 +92,73 @@ export const ACCOUNTS: Account[] = [
   }
 ]
 
+/**
+ * Everybody else on the harness's server: the people the search box finds.
+ *
+ * Only there while connected — a local database has nobody but its own
+ * accounts. Named so "fak" shows every rung of the ranking at once (Faker#KR1
+ * exact, Fakest and Fakir starting with it, Snowfaker and Afakeaccount only
+ * containing it), and with enough NA1 tags that "na1" runs past the ten a
+ * search box shows.
+ */
+function communityAccount(
+  id: string,
+  riotId: string,
+  profileIconId: number,
+  summonerLevel: number,
+  ownerUsername: string | null
+): Account {
+  const [gameName, tagLine] = riotId.split('#')
+  return {
+    id,
+    puuid: `puuid-${id}`,
+    gameName,
+    tagLine,
+    platform: tagLine === 'EUW' ? 'euw1' : tagLine === 'KR1' ? 'kr' : 'na1',
+    regionalRoute: tagLine === 'EUW' ? 'europe' : tagLine === 'KR1' ? 'asia' : 'americas',
+    summonerId: `sum-${id}`,
+    profileIconId,
+    summonerLevel,
+    isHomeAccount: false,
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-08-20T10:00:00Z',
+    isMine: false,
+    ownerUsername
+  }
+}
+
+export const COMMUNITY: Account[] = [
+  communityAccount('c1', 'Faker#KR1', 4834, 590, 'hideonbush'),
+  communityAccount('c2', 'Fakest#NA1', 588, 121, 'fakest'),
+  communityAccount('c3', 'Fakir#EUW', 3379, 64, null),
+  communityAccount('c4', 'Snowfaker#NA1', 5212, 233, 'snow'),
+  communityAccount('c5', 'Afakeaccount#NA1', 29, 30, null),
+  communityAccount('c6', 'Nightfall#NA1', 4568, 188, 'nightfall'),
+  communityAccount('c7', 'Mossbloom#NA1', 685, 76, 'moss'),
+  communityAccount('c8', 'Quillon#NA1', 1394, 142, 'quill'),
+  communityAccount('c9', 'Tidecaller#NA1', 5367, 305, 'tide'),
+  communityAccount('c10', 'Emberlyn#NA1', 7, 98, 'ember'),
+  communityAccount('c11', 'Vexwind#NA1', 6299, 211, null),
+  communityAccount('c12', 'Lumen#NA1', 5788, 55, 'lumen'),
+  communityAccount('c13', 'Hollowpine#NA1', 3505, 167, 'pine')
+]
+
+const soloEntry = (tier: string, rank: string, leaguePoints: number): LeagueEntry[] => [
+  { queueType: 'RANKED_SOLO_5x5', tier, rank, leaguePoints, wins: 40, losses: 36, fetchedAt: '2026-08-20T10:00:00Z' }
+]
+
 export const LEAGUE_ENTRIES: Record<string, LeagueEntry[]> = {
+  c1: soloEntry('CHALLENGER', 'I', 1402),
+  c2: soloEntry('EMERALD', 'III', 28),
+  c3: soloEntry('SILVER', 'I', 2),
+  c4: soloEntry('PLATINUM', 'IV', 61),
+  c6: soloEntry('DIAMOND', 'II', 45),
+  c7: soloEntry('GOLD', 'IV', 12),
+  c8: soloEntry('BRONZE', 'I', 88),
+  c9: soloEntry('MASTER', 'I', 203),
+  c10: soloEntry('SILVER', 'II', 70),
+  c12: soloEntry('IRON', 'II', 34),
+  c13: soloEntry('GOLD', 'I', 99),
   1: [
     {
       queueType: 'RANKED_SOLO_5x5',

@@ -32,6 +32,14 @@ function useCaptureStatus(): CaptureStatus | undefined {
   return pushed ?? polled.data
 }
 
+/**
+ * The pill, or in a narrow window only its colour.
+ *
+ * Below about 1150px the title bar cannot hold the nav, the search box and
+ * "Waiting for the game" side by side, and the pill is the one of the three
+ * that still says what it has to without words: teal ready, amber waiting,
+ * red recording. The words stay in its tooltip and for a screen reader.
+ */
 export function CaptureIndicator(): JSX.Element | null {
   const status = useCaptureStatus()
   if (!status || status.state === 'off') return null
@@ -42,12 +50,12 @@ export function CaptureIndicator(): JSX.Element | null {
     <span
       title={label}
       className={clsx(
-        'no-drag flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs',
+        'no-drag flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs max-[1150px]:px-1.5 max-[1150px]:py-1',
         tone
       )}
     >
-      {dot}
-      {label}
+      {dot ?? <span className="hidden h-2 w-2 rounded-full bg-current max-[1150px]:block" />}
+      <span className="max-[1150px]:sr-only">{label}</span>
     </span>
   )
 }

@@ -18,14 +18,31 @@ it has. Clients used to download the whole list of League accounts on the server
 — at launch and on nearly every page — and search it themselves, which is fine
 for a dozen people and not for a community that keeps growing. Now your own
 accounts are a list, anybody else's is one lookup, and the finder answers a page
-at a time.
+at a time. In the browser, finding somebody moves out of the Players page and
+into a search box on every page, which opens on the players you starred.
+
+### Added
+
+- **A search box on every page.** The middle of the header finds anybody on the
+  server, and Ctrl K (⌘K on a Mac) jumps to it. Click in it for your favorites
+  and your own accounts; type three letters and it suggests up to ten players.
+  Pick one, with the mouse or the arrow keys and Enter, to open their profile.
+- **Favorites.** Star anybody — beside their name in the search box, or on their
+  profile — and they are at the top of the box the next time you click in it,
+  without waiting on the server. Up to ten, newest first, kept by this browser,
+  and a favorite's rank catches up whenever the page sees that player again.
+- **Set home from a profile.** A house beside Copy link makes this browser open
+  on that player, and is filled in on the one it opens on already. It used to be
+  the star on the Players page, which means favorite now.
 
 ### Changed
 
-- **Players shows a page at a time.** The Players page opens on the accounts you
-  have claimed, then the first fifty of everybody else in name order, with Show
-  more for the next fifty. Typing still finds anybody on the server, a page at a
-  time as well.
+- **Closest names first.** A typed search answers an exact name or whole Riot ID
+  first, then names that start with what was typed, then names that only contain
+  it — alphabetical within each. A box that shows ten should show the closest
+  ten, not the first ten A to Z. A blank search is still name order, and paging
+  still never repeats or skips anybody. Foxfire 0.14's Search page gets the same
+  order.
 - **Every search is capped.** A search that does not ask for a page gets fifty
   players, and none gets more than a hundred. That includes Foxfire 0.14, whose
   Search page has no Show more: a blank search there lists the first fifty by
@@ -33,6 +50,15 @@ at a time.
 - **League accounts pages its claims.** An admin's list of claimed accounts
   arrives fifty at a time, with a box to find one by name, rather than every
   claim on the server at once.
+- **Nothing to open yet?** Signed in with no League account claimed, the front
+  page says how to claim one and that everybody else is in the search box,
+  rather than opening a list of everybody.
+
+### Removed
+
+- **The Players page.** Everything it did is in the header's search box, which
+  works from whichever page you are on. An old `/players` link opens the front
+  page.
 
 ### Under the hood
 
@@ -44,7 +70,13 @@ at a time.
   answered by the unique index on the Riot ID, in any capitalisation.
 - `/api/search` takes `limit` and `offset`, and `mine` and `claimed` to narrow it.
   A blank search pages through the Riot ID index in name order instead of sorting
-  the table.
+  the table. A typed one is ordered by how close each name is, with name, tag and
+  id still breaking ties so a page boundary falls in the same place every time;
+  a test covers the order.
+- The web client keeps its favorites in local storage beside the home account,
+  each a copy of the player as last seen, so the list draws without a request.
+  The rules — ten at most, newest first, one per account, and a copy replaced
+  only by a newer one — are shared with the desktop and tested.
 - `GET /api/riot-accounts`, every account at once, is deprecated. It still
   answers for Foxfire 0.14, which reads nothing else, but says so with a
   `Deprecation` header (RFC 9745), and is marked obsolete in the code so nothing

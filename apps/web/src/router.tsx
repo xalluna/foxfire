@@ -11,13 +11,11 @@ import {
   InvitesScreen,
   LeagueAccountsScreen,
   MembersScreen,
-  PlayersScreen,
   ServerDataScreen,
   createMatchRoute,
   createPlayerRoutes,
   parseSearch,
-  stringifySearch,
-  validatePlayersSearch
+  stringifySearch
 } from '@foxfire/screens'
 import { AccountPage } from './pages/AccountPage'
 import { AdminLayout } from './pages/AdminLayout'
@@ -105,11 +103,17 @@ const authed = createRoute({
 
 const home = createRoute({ getParentRoute: () => authed, path: '/', component: HomePage })
 
+/**
+ * Where the Players page was. Finding somebody is the header's search box now,
+ * on every page, so an old link to the list lands on the front page instead —
+ * query and all, since there is no list left to narrow.
+ */
 const players = createRoute({
   getParentRoute: () => authed,
   path: 'players',
-  validateSearch: validatePlayersSearch,
-  component: PlayersScreen
+  beforeLoad: () => {
+    throw redirect({ to: '/', replace: true })
+  }
 })
 
 const player = createPlayerRoutes(authed, { layout: WebPlayerLayout })

@@ -31,14 +31,17 @@ public sealed record PlayerSearchResponse(
 /// search here is the history this server already keeps, which is the one thing
 /// that lookup could never return.
 ///
-/// A blank query is everybody, a page at a time. The finder opens with people
-/// on it, and an empty box should show what you would see before you typed —
-/// but never all of them at once: this used to be uncapped on the grounds that a
-/// server tracks the people who play on it and that is a number you can scroll,
-/// and a community is not obliged to stay a size that makes that true. Pages
-/// run in name order, which the unique index on (GameName, TagLine) already
-/// holds, so a blank query reads one page of an index rather than sorting the
-/// table.
+/// A blank query is everybody, a page at a time — never all of them at once:
+/// this used to be uncapped on the grounds that a server tracks the people who
+/// play on it and that is a number you can scroll, and a community is not
+/// obliged to stay a size that makes that true. Pages run in name order, which
+/// the unique index on (GameName, TagLine) already holds, so a blank query reads
+/// one page of an index rather than sorting the table.
+///
+/// A typed one is closest first, because a search box shows the first ten: an
+/// exact name or whole Riot ID, then names that start with what was typed, then
+/// names that only contain it, alphabetical within each. The clients' own copy
+/// of the rule is <c>compareSearchResults</c> in @foxfire/core.
 ///
 /// Two filters narrow it for the screens that need less than everybody: Mine
 /// for the caller's own accounts, which a finder shows first, and Claimed for
@@ -96,10 +99,22 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
                 || (a.GameName + "#" + a.TagLine).ToLower().Contains(needle));
         }
 
+        // "ali" should find Ali#NA1 before a page of Aalinas: somebody typing
+        // into a box that shows ten wants the closest ten, not the first ten A
+        // to Z. Blank has nothing to be close to, and keeps the plain name
+        // order the index already holds.
+        var ordered = needle.Length == 0
+            ? accounts.OrderBy(a => a.GameName)
+            : accounts
+                .OrderBy(a =>
+                    a.GameName.ToLower() == needle || (a.GameName + "#" + a.TagLine).ToLower() == needle ? 0
+                    : a.GameName.ToLower().StartsWith(needle) ? 1
+                    : 2)
+                .ThenBy(a => a.GameName);
+
         // The tag and then the id break ties, so a page boundary cannot fall
         // between two rows the database would order differently next time.
-        var found = await accounts
-            .OrderBy(a => a.GameName)
+        var found = await ordered
             .ThenBy(a => a.TagLine)
             .ThenBy(a => a.Id)
             .Skip(offset)

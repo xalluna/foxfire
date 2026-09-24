@@ -106,8 +106,6 @@ describe('paths', () => {
   it('leaves the query off when there is nothing to say', () => {
     expect(paths.player(FAKER)).toBe('/players/Faker-KR1')
     expect(paths.champions(FAKER)).toBe('/players/Faker-KR1/champions')
-    expect(paths.players()).toBe('/players')
-    expect(paths.players('')).toBe('/players')
   })
 
   it('names a match, and optionally whose view of it', () => {
@@ -120,10 +118,6 @@ describe('paths', () => {
     expect(paths.recording({ gameName: 'Hide on bush', tagLine: 'KR1' }, 'KR_7123')).toBe(
       '/players/Hide%20on%20bush-KR1/recordings/KR_7123'
     )
-  })
-
-  it('carries a finder query', () => {
-    expect(paths.players('Faker#KR1')).toBe('/players?q=Faker%23KR1')
   })
 })
 

@@ -115,6 +115,7 @@ import type {
   ManualRankEdit,
   PasswordChange,
   PlayerSearchOptions,
+  PlayerSearchResult,
   QueueType,
   RankRange,
   RiotIdInput,
@@ -439,6 +440,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.search.players, (_e, query: string, options?: PlayerSearchOptions) =>
     serverBacked().search.players(query, options)
   )
+
+  ipcMain.handle(CH.favorites.list, () => serverBacked().favorites.list())
+  ipcMain.handle(CH.favorites.add, (_e, player: PlayerSearchResult) => serverBacked().favorites.add(player))
+  ipcMain.handle(CH.favorites.remove, (_e, accountId: string) => serverBacked().favorites.remove(accountId))
+  ipcMain.handle(CH.favorites.refresh, (_e, seen: PlayerSearchResult[]) => serverBacked().favorites.refresh(seen))
 
   ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())
   ipcMain.handle(CH.telemetry.setEnabled, (_e, enabled: boolean) => {

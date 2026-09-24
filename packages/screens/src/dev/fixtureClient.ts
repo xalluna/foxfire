@@ -12,6 +12,7 @@ import type {
   ChampionStats,
   ConnectionState,
   DashboardData,
+  FavoritePlayer,
   FoxfireClient,
   ImportProgress,
   ImportResult,
@@ -30,12 +31,22 @@ import type {
   SyncProgressEvent,
   SyncState
 } from '@foxfire/core'
-import { rankMovement, rangeBounds, resetsBetween, seasonsSpanning } from '@foxfire/core'
+import {
+  compareSearchResults,
+  rankMovement,
+  rangeBounds,
+  resetsBetween,
+  searchRank,
+  seasonsSpanning,
+  serializeFavorites
+} from '@foxfire/core'
+import { favoritesOver } from '@foxfire/core/server'
 import { isPlayer } from '@foxfire/core/routes'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
   ACCOUNTS,
+  COMMUNITY,
   LEAGUE_ENTRIES,
   MASTERY,
   MATCHES,
@@ -311,11 +322,52 @@ export interface FixtureClientOptions {
    * makes some of them somebody else's while it plays at being on a server.
    */
   describe?: (account: Account) => Account
+  /**
+   * Whether everybody else on the harness's server is there to be found. Not
+   * on a desktop playing at being local-only, whose database has nobody but
+   * its own accounts. Always, when left out.
+   */
+  community?: () => boolean
+}
+
+/**
+ * The players starred when a harness opens: one whose copy is current, and
+ * one seen weeks ago, since promoted — so opening their profile, or finding
+ * them in the box, shows the copy catching up.
+ */
+function seededFavorites(): string {
+  const [fakest, tidecaller] = [COMMUNITY[1], COMMUNITY[8]]
+  const favorites: FavoritePlayer[] = [
+    {
+      account: tidecaller,
+      soloEntry: LEAGUE_ENTRIES[tidecaller.id]?.[0] ?? null,
+      addedAt: '2026-09-20T10:00:00Z'
+    },
+    {
+      account: { ...fakest, summonerLevel: 118, updatedAt: '2026-08-01T10:00:00Z' },
+      soloEntry: {
+        queueType: 'RANKED_SOLO_5x5',
+        tier: 'PLATINUM',
+        rank: 'I',
+        leaguePoints: 77,
+        wins: 31,
+        losses: 30,
+        fetchedAt: '2026-08-01T10:00:00Z'
+      },
+      addedAt: '2026-09-10T10:00:00Z'
+    }
+  ]
+  return serializeFavorites(favorites)
 }
 
 export function createFixtureClient(options: FixtureClientOptions = {}): FoxfireClient {
   const describe = options.describe ?? ((account: Account) => account)
-  const everyone = (): Account[] => accounts().map(describe)
+  const community = options.community ?? (() => true)
+  const everyone = (): Account[] => [...accounts(), ...(community() ? COMMUNITY : [])].map(describe)
+
+  // Kept the way a browser keeps them, for as long as the page is open.
+  let starred: string | null = seededFavorites()
+  const favorites = favoritesOver({ get: () => starred, set: (list) => (starred = list) })
 
   // The home this harness remembers, as a browser or a PC would. Null opens on
   // your first account.
@@ -545,25 +597,17 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     },
 
     search: {
-      // The same substring rule, filters and paging the server applies, so the
-      // harness answers a half-typed name the way a real one does. Blank is
-      // everybody, a page at a time, which is what the finder opens on.
+      // The same matching, ranking, filters and paging the server applies, so
+      // the harness answers a half-typed name the way a real one does.
       players: (query: string, options = {}): Promise<PlayerSearchResult[]> => {
-        const needle = query.trim().toLowerCase()
         const offset = options.offset ?? 0
         const limit = options.limit ?? 50
 
-        const matches = ACCOUNTS.map(describe)
-          .filter(
-            (account) =>
-              needle.length === 0 ||
-              account.gameName.toLowerCase().includes(needle) ||
-              account.tagLine.toLowerCase().includes(needle) ||
-              `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
-          )
+        const matches = everyone()
+          .filter((account) => searchRank(account, query) !== null)
           .filter((account) => !options.mine || account.isMine !== false)
           .filter((account) => !options.claimed || account.ownerUsername != null)
-          .sort((a, b) => a.gameName.localeCompare(b.gameName))
+          .sort(compareSearchResults(query))
           .slice(offset, offset + limit)
 
         return delay(
@@ -576,6 +620,8 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         )
       }
     },
+
+    favorites,
 
     admin: {
       users: (): Promise<AdminUser[]> => delay(mockUsers, 200, false),
@@ -611,7 +657,7 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       // rather than only that it asked. The account and its games stay; that is
       // the whole distinction the card exists to make.
       forceUnlink: (riotAccountId: string): Promise<AdminActionResult> => {
-        const account = ACCOUNTS.find((a) => a.id === riotAccountId)
+        const account = [...ACCOUNTS, ...COMMUNITY].find((a) => a.id === riotAccountId)
         if (account) {
           account.ownerUsername = null
           account.isMine = false

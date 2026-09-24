@@ -52,11 +52,6 @@ export interface MatchSearch {
   player?: string
 }
 
-export interface PlayersSearch {
-  /** What the finder is narrowed to. Absent for the whole list. */
-  q?: string
-}
-
 type RawSearch = Record<string, unknown>
 
 /** The period the rank page opens on. */
@@ -102,10 +97,6 @@ export function validateLpEditorSearch(raw: RawSearch): LpEditorSearch {
 
 export function validateMatchSearch(raw: RawSearch): MatchSearch {
   return present({ player: readText(raw.player) })
-}
-
-export function validatePlayersSearch(raw: RawSearch): PlayersSearch {
-  return present({ q: readText(raw.q) })
 }
 
 /** The queue filter a page shows for what its URL says. */

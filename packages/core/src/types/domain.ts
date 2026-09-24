@@ -547,6 +547,23 @@ export interface PlayerSearchResult {
 }
 
 /**
+ * A player somebody starred, as this machine or browser last saw them.
+ *
+ * A copy rather than an id, so the list draws the moment the search box opens
+ * — before anything has been asked of a server, and while it cannot be. It is
+ * brought up to date whenever a newer copy of the same account goes past.
+ */
+export interface FavoritePlayer extends PlayerSearchResult {
+  /** When it was starred. The list is newest first. */
+  addedAt: string
+}
+
+/** What starring somebody came to: the list either way, and why when it did not take. */
+export type FavoriteOutcome =
+  | { ok: true; favorites: FavoritePlayer[] }
+  | { ok: false; reason: 'full'; favorites: FavoritePlayer[] }
+
+/**
  * Which page of the finder, and of whom.
  *
  * A finder answers a page at a time, in name order, because a community is not

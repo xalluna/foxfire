@@ -33,6 +33,7 @@ export {
 export { createServerData } from './data'
 export { createServerClient, type ServerClient, type ServerClientOptions } from './serverClient'
 export { homeAmong, markHome, type HomeAccountStore } from './home'
+export { favoritesOver, type FavoritesStore } from './favorites'
 export { createHub, type HubHandlers, type HubOptions, type ServerHub } from './hub'
 export { displayName, normaliseServerUrl, tokenFromLink, type NormalisedUrl, type UrlProblem } from './url'
 export { MINIMUM_PASSWORD, passwordProblem } from './password'

@@ -4,7 +4,7 @@ import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
 import { playerSlug } from '@foxfire/core/routes'
 import { Icon, Logo } from '@foxfire/ui'
-import { queryKeys, useClient } from '@foxfire/screens'
+import { PlayerSearchBox, queryKeys, useClient } from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
 import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
@@ -22,14 +22,13 @@ type PlayerPage =
 
 type NavItem =
   | { label: string; icon: JSX.Element; page: PlayerPage }
-  | { label: string; icon: JSX.Element; to: '/search' | '/settings/{-$category}' }
+  | { label: string; icon: JSX.Element; to: '/settings/{-$category}' }
 
 const NAV: NavItem[] = [
   { label: 'Dashboard', icon: <Icon.Dashboard />, page: '/players/$slug' },
   { label: 'Captures', icon: <Icon.Film />, page: '/players/$slug/captures' },
   { label: 'Champions', icon: <Icon.Trophy />, page: '/players/$slug/champions' },
   { label: 'Rank', icon: <Icon.TrendingUp />, page: '/players/$slug/rank' },
-  { label: 'Search', icon: <Icon.Search />, to: '/search' },
   { label: 'Settings', icon: <Icon.Settings />, to: '/settings/{-$category}' }
 ]
 
@@ -172,8 +171,7 @@ export function AppShell(): JSX.Element {
 
   const go = (item: NavItem): void => {
     if ('to' in item) {
-      if (item.to === '/search') void navigate({ to: '/search' })
-      else void navigate({ to: '/settings/{-$category}', params: { category: undefined } })
+      void navigate({ to: item.to, params: { category: undefined } })
     } else if (slug === null) {
       void navigate({ to: '/' })
     } else {
@@ -203,7 +201,7 @@ export function AppShell(): JSX.Element {
           <span className="font-display text-base tracking-wide text-accent">Foxfire</span>
         </div>
 
-        <nav className="no-drag flex gap-0.5">
+        <nav className="no-drag flex shrink-0 gap-0.5">
           {NAV.map((item) => {
             const active = isActive(item)
             return (
@@ -223,7 +221,17 @@ export function AppShell(): JSX.Element {
           })}
         </nav>
 
-        <div className="ml-auto pr-2">
+        {/*
+          The space either side of the box stays draggable — only the box
+          itself opts out — so the title bar still moves the window from
+          anywhere that is not a control. No box without a server: every
+          account a local database has is on the rail already.
+        */}
+        <div className="flex min-w-0 flex-1 justify-center">
+          {connected && <PlayerSearchBox className="no-drag w-full min-w-[160px] max-w-[360px]" />}
+        </div>
+
+        <div className="shrink-0 pr-2">
           <CaptureIndicator />
         </div>
       </header>
