@@ -66,21 +66,23 @@ export function RankCard({
               <p className="text-sm tabular-nums text-text-dim">{entry.leaguePoints} LP</p>
             )}
           </div>
-        </div>
 
-        {ranked && games > 0 && (
-          <div className="mt-2.5 border-t border-hairline pt-2">
-            <div className="flex items-baseline justify-between text-2xs tabular-nums">
-              <span className="text-text-dim">
-                {entry.wins}W {entry.losses}L
-              </span>
-              <span className={winRate !== null && winRate >= 50 ? 'text-teal' : 'text-text-dim'}>
-                {winRate}%
-              </span>
+          {/* The record beside the rank rather than beneath it, so the card
+              spends its height on the track and the month instead. */}
+          {ranked && games > 0 && (
+            <div className="min-w-24 shrink-0">
+              <div className="flex items-baseline justify-between gap-2 text-2xs tabular-nums">
+                <span className="whitespace-nowrap text-text-dim">
+                  {entry.wins}W {entry.losses}L
+                </span>
+                <span className={winRate !== null && winRate >= 50 ? 'text-teal' : 'text-text-dim'}>
+                  {winRate}%
+                </span>
+              </div>
+              <Bar fraction={(winRate ?? 0) / 100} tone="winrate" className="mt-1" />
             </div>
-            <Bar fraction={(winRate ?? 0) / 100} tone="winrate" className="mt-1" />
-          </div>
-        )}
+          )}
+        </div>
 
         {detail && <TierProgressTrack entry={entry} />}
       </div>
