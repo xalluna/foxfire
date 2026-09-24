@@ -4,8 +4,8 @@ import { profileIconUrl } from '../lib/assets'
 import { Asset } from './Asset'
 import { CopyLinkButton } from './CopyLinkButton'
 import { ProfileMarks, type FavoriteMark, type HomeMark } from './ProfileMarks'
+import { SyncButton } from './SyncButton'
 import { SyncProgressBar } from './SyncProgressBar'
-import * as Icon from './icons'
 
 /**
  * The horizontal form of the identity card, used below 1280px.
@@ -15,12 +15,14 @@ import * as Icon from './icons'
  * than degrade the row, the rail folds away and gives the full width back to
  * the match list: this strip says who, and the rail's rank and champion cards
  * sit beneath it at full size — which is why it carries no rank of its own.
- * "Sync now" is anybody's here too; see ProfileHeader.
+ * "Sync now" is anybody's here too, and waits out the cooldown the same way;
+ * see ProfileHeader.
  */
 export function ProfileStrip({
   account,
   onRefresh,
   refreshing,
+  cooldownUntil,
   progress,
   onCopyLink,
   favorite,
@@ -29,6 +31,8 @@ export function ProfileStrip({
   account: Account
   onRefresh: () => void
   refreshing: boolean
+  /** When the server takes a sync of this account again. Null when nothing holds it back. */
+  cooldownUntil: string | null
   /** The latest sync event for this account, if one is running or has just failed. */
   progress?: SyncProgressEvent
   /** Copies a link to this profile. Absent where there is no web client to link into. */
@@ -70,14 +74,12 @@ export function ProfileStrip({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <ProfileMarks favorite={favorite} home={home} />
           {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="py-1.5" />}
-          <button
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
-          >
-            <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
-            {refreshing ? 'Syncing…' : 'Sync now'}
-          </button>
+          <SyncButton
+            onSync={onRefresh}
+            syncing={refreshing}
+            cooldownUntil={cooldownUntil}
+            className="shrink-0"
+          />
         </div>
       </div>
 

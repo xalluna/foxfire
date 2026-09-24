@@ -580,6 +580,13 @@ export interface SyncState {
   backfillTarget: number
   lastFullSyncAt: string | null
   lastDeltaSyncAt: string | null
+  /**
+   * When the account can next be synced — what "Sync now" waits for. The
+   * server's to say, because the rule is the server's: this PC alone has none,
+   * and answers null, as does an account that has never synced. Past once the
+   * wait is over, rather than null.
+   */
+  cooldownUntil: string | null
 }
 
 /**
@@ -598,6 +605,12 @@ export interface SyncProgressEvent {
   total: number
   message?: string
   trigger: SyncTrigger
+  /**
+   * On a server's 'complete', when the account can next be synced. The sync
+   * state says the same, but only after the refetch this event sets off — and
+   * until then "Sync now" would come back pressable. Never on this PC's own.
+   */
+  cooldownUntil?: string | null
 }
 
 /**

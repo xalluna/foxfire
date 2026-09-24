@@ -52,13 +52,21 @@ public enum SyncPhase
 /// integer; in server mode the renderer is looking at server ids anyway, so this
 /// is the id it already holds.
 /// </param>
+/// <param name="CooldownUntil">
+/// On <see cref="SyncPhase.Complete"/>, when the account can next be synced.
+/// The sync state says the same, but a client only rereads that on the refetch
+/// this event sets off — so without it "Sync now" would come back pressable
+/// for that round trip between the spinner stopping and the new time arriving.
+/// The desktop's own event never carries it: this PC alone has no cooldown.
+/// </param>
 public sealed record SyncProgressEvent(
     Guid AccountId,
     SyncPhase Phase,
     int Current,
     int Total,
     string? Message,
-    SyncTrigger Trigger);
+    SyncTrigger Trigger,
+    DateTimeOffset? CooldownUntil = null);
 
 /// <summary>
 /// Everything this server tells the desktops connected to it.

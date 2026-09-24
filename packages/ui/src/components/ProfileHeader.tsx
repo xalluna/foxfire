@@ -4,8 +4,8 @@ import { profileIconUrl } from '../lib/assets'
 import { Asset } from './Asset'
 import { CopyLinkButton } from './CopyLinkButton'
 import { ProfileMarks, type FavoriteMark, type HomeMark } from './ProfileMarks'
+import { SyncButton } from './SyncButton'
 import { SyncProgressBar } from './SyncProgressBar'
-import * as Icon from './icons'
 
 /**
  * The top of the profile's rail: who this account is, and the buttons that act
@@ -19,12 +19,13 @@ import * as Icon from './icons'
  *
  * "Sync now" is anybody's, not only the owner's: an account an admin tracks
  * has nobody else to refresh it. The server turns away a second sync of the
- * same account inside two minutes, whoever asks.
+ * same account inside two minutes, whoever asks, so the button waits them out.
  */
 export function ProfileHeader({
   account,
   onRefresh,
   refreshing,
+  cooldownUntil,
   progress,
   onCopyLink,
   favorite,
@@ -33,6 +34,8 @@ export function ProfileHeader({
   account: Account
   onRefresh: () => void
   refreshing: boolean
+  /** When the server takes a sync of this account again. Null when nothing holds it back. */
+  cooldownUntil: string | null
   /** The latest sync event for this account, if one is running or has just failed. */
   progress?: SyncProgressEvent
   /** Copies a link to this profile. Absent where there is no web client to link into. */
@@ -74,14 +77,12 @@ export function ProfileHeader({
             ` · ${account.platform.toUpperCase()}`}
         </p>
 
-        <button
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:border-hairline disabled:bg-transparent disabled:text-text-mute"
-        >
-          <Icon.Sync className={refreshing ? 'animate-spin' : undefined} />
-          {refreshing ? 'Syncing…' : 'Sync now'}
-        </button>
+        <SyncButton
+          onSync={onRefresh}
+          syncing={refreshing}
+          cooldownUntil={cooldownUntil}
+          className="mt-3 w-full justify-center"
+        />
 
         {(onCopyLink || favorite || home) && (
           <div className="mt-2 flex w-full justify-center gap-1.5">

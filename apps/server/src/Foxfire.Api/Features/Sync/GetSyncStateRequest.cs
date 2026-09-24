@@ -1,6 +1,7 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Sync;
 using Foxfire.Data;
+using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Features.Sync;
@@ -10,6 +11,10 @@ namespace Foxfire.Api.Features.Sync;
 /// Named as the desktop names it. Spelled riotAccountId once, which the desktop
 /// read as undefined and then keyed a progress bar on.
 /// </param>
+/// <param name="CooldownUntil">
+/// When this account can next be synced — see <see cref="SyncCooldown"/>. What
+/// "Sync now" waits for, rather than the client knowing the rule itself.
+/// </param>
 public sealed record SyncStateResponse(
     Guid AccountId,
     string? MostRecentMatchId,
@@ -17,7 +22,24 @@ public sealed record SyncStateResponse(
     int BackfillTarget,
     DateTimeOffset? LastFullSyncAt,
     DateTimeOffset? LastDeltaSyncAt,
-    bool IsSyncing);
+    bool IsSyncing,
+    DateTimeOffset? CooldownUntil)
+{
+    public static SyncStateResponse Describe(SyncState state, bool isSyncing)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        return new SyncStateResponse(
+            state.RiotAccountId,
+            state.MostRecentMatchId,
+            state.BackfillComplete,
+            state.BackfillTarget,
+            state.LastFullSyncAt,
+            state.LastDeltaSyncAt,
+            isSyncing,
+            SyncCooldown.Until(state));
+    }
+}
 
 /// <summary>
 /// Readable by any member, like everything else here: the progress bar on
@@ -48,16 +70,9 @@ internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncServic
 
             // Linked but never synced. A null row and a zeroed one say the same
             // thing to the desktop, and the zeroed one saves it a special case.
-            return new SyncStateResponse(id, null, false, 0, null, null, sync.IsSyncing(id));
+            return new SyncStateResponse(id, null, false, 0, null, null, sync.IsSyncing(id), null);
         }
 
-        return new SyncStateResponse(
-            state.RiotAccountId,
-            state.MostRecentMatchId,
-            state.BackfillComplete,
-            state.BackfillTarget,
-            state.LastFullSyncAt,
-            state.LastDeltaSyncAt,
-            sync.IsSyncing(id));
+        return SyncStateResponse.Describe(state, sync.IsSyncing(id));
     }
 }
