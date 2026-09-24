@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { isPlayer, parsePlayerSlug, paths, playerSlug } from '@foxfire/core/routes'
+import { parsePlayerSlug, paths, playerSlug } from '@foxfire/core/routes'
 import { CopyLinkButton, Icon, MatchPage, recordingActionClass } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
 import { recordingBlockedReason, withoutServerRecording } from '../match/matchMenu'
+import { useAccountByRiotId } from '../queries/accounts'
 import { queryKeys } from '../queries/keys'
 
 /** Whether a failed read was the server saying it has no such thing. */
@@ -26,13 +27,8 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
   const platform = usePlatform()
   const share = useShareLink()
 
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
-  })
-
   const riotId = player === undefined ? null : parsePlayerSlug(player)
-  const account = (riotId && accounts.data?.find((a) => isPlayer(a, riotId))) || null
+  const account = useAccountByRiotId(riotId).data ?? null
   const readSummary = client.dashboard.matchSummary
 
   const summary = useQuery({

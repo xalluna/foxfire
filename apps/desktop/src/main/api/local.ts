@@ -17,6 +17,7 @@ import { getMasteryData } from '../services/masteryService'
 import { getRankHistory, getRankPeriods } from '../services/rankHistoryService'
 import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
 import { rangeBounds } from '@foxfire/core'
+import { isPlayer } from '@foxfire/core/routes'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
 import type { Account } from '@shared/types'
 import type { ServerBackedApi } from './types'
@@ -62,10 +63,23 @@ function wire(account: StoredAccount): Account {
 
 export const localApi: ServerBackedApi = {
   accounts: {
-    list: async () => getAccounts().map(wire),
+    // Every account in this file is yours: there is nobody else here to tell apart.
+    mine: async () => getAccounts().map(wire),
+    get: async (accountId) => {
+      const account = getAccountById(getDb(), rowId(accountId))
+      return account ? wire(account) : null
+    },
+    // A handful of rows, so read and matched here rather than given a query of
+    // their own — with the same rule a link's slug is matched by.
+    find: async (riotId) => {
+      const account = getAccounts().find((a) => isPlayer(a, riotId))
+      return account ? wire(account) : null
+    },
+    // The one marked home, else the first: an empty home flag is a file whose
+    // home account was removed, and it should still open somewhere.
     getHome: async () => {
-      const home = getHome()
-      return home ? wire(home) : null
+      const home = getHome() ?? getAccounts()[0] ?? null
+      return home ? wire({ ...home, isHomeAccount: true }) : null
     },
     add: async (input) => {
       const account = await addAccount(input)
@@ -186,9 +200,11 @@ export const localApi: ServerBackedApi = {
    * world; it reads the database now, on both sides of the connection.
    */
   search: {
-    players: async (query) => {
+    // Mine and claimed are every account here, so neither narrows anything.
+    players: async (query, options = {}) => {
       const needle = query.trim().toLowerCase()
       const db = getDb()
+      const offset = options.offset ?? 0
 
       return getAccounts()
         .filter(
@@ -198,6 +214,7 @@ export const localApi: ServerBackedApi = {
             account.tagLine.toLowerCase().includes(needle) ||
             `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
         )
+        .slice(offset, options.limit === undefined ? undefined : offset + options.limit)
         .map((account) => ({
           account: wire(account),
           soloEntry:

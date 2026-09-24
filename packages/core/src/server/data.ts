@@ -1,6 +1,7 @@
 import type { FoxfireData } from '../client'
+import type { Account } from '../types'
 import type { ServerApi } from './api'
-import { applyHomeAccount, type HomeAccountStore } from './home'
+import { homeAmong, markHome, type HomeAccountStore } from './home'
 
 /**
  * Everything a screen reads, answered by a Foxfire Server.
@@ -14,27 +15,41 @@ import { applyHomeAccount, type HomeAccountStore } from './home'
  * on the way past. Match rows come back without anything from this machine's
  * disk; the desktop adds that on top, and a browser has nothing to add.
  */
-export function createServerData(
-  api: ServerApi,
-  home: HomeAccountStore,
-  options: { fallbackToAny: boolean } = { fallbackToAny: true }
-): FoxfireData {
-  const listWithHome = async () => applyHomeAccount(await api.accounts.list(), home.get(), options)
+export function createServerData(api: ServerApi, home: HomeAccountStore): FoxfireData {
+  const mine = async (): Promise<Account[]> => markHome(await api.accounts.mine(), home.get())
 
   return {
     accounts: {
-      list: listWithHome,
+      mine,
 
-      getHome: async () => (await listWithHome()).find((a) => a.isHomeAccount) ?? null,
+      // One account's `isHomeAccount` is left as the server sends it, false.
+      // Which account is home is `getHome`'s question, and the rail's list.
+      get: api.accounts.get,
+      find: api.accounts.find,
+
+      getHome: async () => {
+        const storedId = home.get()
+
+        // Remembered, and possibly somebody else's — a browser can star a
+        // friend's profile to open on. An account the server no longer has
+        // falls through to your own, as nothing remembered would.
+        if (storedId !== null) {
+          const stored = await api.accounts.get(storedId)
+          if (stored) return { ...stored, isHomeAccount: true }
+        }
+
+        const first = homeAmong(await api.accounts.mine(), null)
+        return first && { ...first, isHomeAccount: true }
+      },
 
       remove: async (accountId) => {
         await api.accounts.release(accountId)
-        return listWithHome()
+        return mine()
       },
 
       setHome: async (accountId) => {
         home.set(accountId)
-        return listWithHome()
+        return mine()
       }
     },
 

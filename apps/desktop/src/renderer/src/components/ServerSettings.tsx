@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
 import { LinkAccountRow } from './LinkAccountRow'
+import { LinkedAccountRows } from './LinkedAccountRows'
 import { useUpdates } from '../hooks/useUpdates'
 import {
   SettingsCard,
@@ -122,6 +123,7 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
         title="Your League accounts"
         description="A server links the account it can see you are signed in to, rather than one you type — which is what stops anybody claiming a Riot ID that is not theirs."
       >
+        <LinkedAccountRows />
         <LinkAccountRow />
       </SettingsCard>
 

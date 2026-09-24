@@ -27,6 +27,7 @@ export { useShareLink, type ShareLink } from './client/useShareLink'
 export { useDataEvents } from './client/useDataEvents'
 
 export { queryKeys } from './queries/keys'
+export { useAccount, useAccountByRiotId, useHomeAccount, useMyAccounts } from './queries/accounts'
 export { invalidationsFor, type DataEvent } from './queries/invalidations'
 export { createQueryClient } from './queries/queryClient'
 export { isSyncing, useSyncProgress, useSyncProgressStore } from './store/syncProgress'

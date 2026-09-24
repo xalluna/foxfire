@@ -31,6 +31,7 @@ import type {
   SyncState
 } from '@foxfire/core'
 import { rankMovement, rangeBounds, resetsBetween, seasonsSpanning } from '@foxfire/core'
+import { isPlayer } from '@foxfire/core/routes'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import {
@@ -304,7 +305,28 @@ let mockServerSettings: ServerAdminSettings = {
   replayByteCap: 0
 }
 
-export function createFixtureClient(): FoxfireClient {
+export interface FixtureClientOptions {
+  /**
+   * Every fixture account as the one asking sees it. The desktop's harness
+   * makes some of them somebody else's while it plays at being on a server.
+   */
+  describe?: (account: Account) => Account
+}
+
+export function createFixtureClient(options: FixtureClientOptions = {}): FoxfireClient {
+  const describe = options.describe ?? ((account: Account) => account)
+  const everyone = (): Account[] => accounts().map(describe)
+
+  // The home this harness remembers, as a browser or a PC would. Null opens on
+  // your first account.
+  let homeId: string | null = null
+
+  const mine = (): Account[] => {
+    const own = everyone().filter((a) => a.isMine !== false)
+    const home = homeId === null ? own[0] : own.find((a) => a.id === homeId)
+    return own.map((a) => ({ ...a, isHomeAccount: a.id === home?.id }))
+  }
+
   return {
     connection: {
       get: (): Promise<ConnectionState> => delay(connection, 120, false),
@@ -315,18 +337,26 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     accounts: {
-      list: (): Promise<Account[]> => delay(accounts(), 180, false),
-      getHome: (): Promise<Account | null> => delay(accounts()[0] ?? null, 180, false),
-      remove: (accountId: string): Promise<Account[]> =>
-        delay(accounts().filter((a) => a.id !== accountId)),
-      setHome: (accountId: string): Promise<Account[]> =>
-        delay(accounts().map((a) => ({ ...a, isHomeAccount: a.id === accountId })))
+      mine: (): Promise<Account[]> => delay(mine(), 180, false),
+      get: (accountId: string): Promise<Account | null> =>
+        delay(everyone().find((a) => a.id === accountId) ?? null, 120, false),
+      find: (riotId): Promise<Account | null> =>
+        delay(everyone().find((a) => isPlayer(a, riotId)) ?? null, 120, false),
+      getHome: (): Promise<Account | null> => {
+        const home = (homeId === null ? undefined : everyone().find((a) => a.id === homeId)) ?? mine()[0]
+        return delay(home ? { ...home, isHomeAccount: true } : null, 180, false)
+      },
+      remove: (accountId: string): Promise<Account[]> => delay(mine().filter((a) => a.id !== accountId)),
+      setHome: (accountId: string): Promise<Account[]> => {
+        homeId = accountId
+        return delay(mine())
+      }
     },
 
     dashboard: {
       get: (accountId: string): Promise<DashboardData | null> => {
         if (scenario === 'key-expired') return fail(KEY_EXPIRED)
-        const account = accounts().find((a) => a.id === accountId)
+        const account = everyone().find((a) => a.id === accountId)
         if (!account) return delay(null)
         return delay({
           account,
@@ -363,7 +393,7 @@ export function createFixtureClient(): FoxfireClient {
       // The server's rules, so the harness refuses what it would: only the
       // account's owner attaches, and a second one asks first.
       attach: (accountId: string, matchId: string, input: AttachRecordingInput): Promise<AttachRecordingOutcome> => {
-        const account = accounts().find((a) => a.id === accountId)
+        const account = everyone().find((a) => a.id === accountId)
         if (account?.isMine === false) {
           return delay({ ok: false, reason: 'failed', message: 'That League account is not linked to your Foxfire account.' }, 300)
         }
@@ -515,19 +545,26 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     search: {
-      // The same substring rule the server applies, so the harness answers a
-      // half-typed name the way a real one does. Blank is everybody, which is
-      // what the finder opens on.
-      players: (query: string): Promise<PlayerSearchResult[]> => {
+      // The same substring rule, filters and paging the server applies, so the
+      // harness answers a half-typed name the way a real one does. Blank is
+      // everybody, a page at a time, which is what the finder opens on.
+      players: (query: string, options = {}): Promise<PlayerSearchResult[]> => {
         const needle = query.trim().toLowerCase()
+        const offset = options.offset ?? 0
+        const limit = options.limit ?? 50
 
-        const matches = ACCOUNTS.filter(
-          (account) =>
-            needle.length === 0 ||
-            account.gameName.toLowerCase().includes(needle) ||
-            account.tagLine.toLowerCase().includes(needle) ||
-            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
-        )
+        const matches = ACCOUNTS.map(describe)
+          .filter(
+            (account) =>
+              needle.length === 0 ||
+              account.gameName.toLowerCase().includes(needle) ||
+              account.tagLine.toLowerCase().includes(needle) ||
+              `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
+          )
+          .filter((account) => !options.mine || account.isMine !== false)
+          .filter((account) => !options.claimed || account.ownerUsername != null)
+          .sort((a, b) => a.gameName.localeCompare(b.gameName))
+          .slice(offset, offset + limit)
 
         return delay(
           matches.map((account) => ({
