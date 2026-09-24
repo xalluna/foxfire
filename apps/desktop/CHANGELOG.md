@@ -7,6 +7,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.15.0] — Unreleased
+
+In progress on the version branch; the date and this summary are written when it is released.
+
+### Changed
+
+- **Your account has its own page.** Your name, email, password and League accounts moved from
+  Settings › Server to a new Account page just under it, so Server is back to which server Foxfire
+  reads from and how to leave it. The page is only there while you are signed in to a server.
+
 ## [0.14.0] — 2026-09-23
 
 Foxfire updates itself, search looks through the people your server tracks rather than strangers on
@@ -1115,6 +1125,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0
