@@ -11,10 +11,10 @@ import { Asset } from './Asset'
  * into an inventory position. See itemSlots for why the six are packed and why
  * nothing collapses when a slot is empty.
  *
- * A component rather than a copy in each view: the match row, the match detail
- * panel and the live scoreboard all draw the same eight squares, differing only
- * in how big they are. The size arrives as a literal utility class rather than
- * a number, because Tailwind only emits the classes it can see in the source.
+ * A component rather than a copy in each view: the match row and the match
+ * detail panel draw the same eight squares, differing only in how big they are.
+ * The size arrives as a literal utility class rather than a number, because
+ * Tailwind only emits the classes it can see in the source.
  */
 export function ItemStrip({
   m,

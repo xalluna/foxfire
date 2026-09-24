@@ -7,6 +7,22 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.15.0] — 2026-09-24
+
+The Live game tab is gone. It redrew the scoreboard League already shows on Tab, and had nothing to
+show the rest of the time.
+
+### Removed
+
+- **The Live game tab.** Recording is unaffected: Foxfire still watches the game to know when to
+  start and stop, the title bar still says when a game is being recorded, and the dot on the
+  taskbar button still turns teal while a game is on and red while it is being recorded.
+
+### Under the hood
+
+- The in-game reader keeps only what recording uses — the game clock, which player is you, and each
+  player's champion — and no longer reads items, runes, spells or scores.
+
 ## [0.14.0] — 2026-09-23
 
 Foxfire updates itself, search looks through the people your server tracks rather than strangers on
@@ -1115,6 +1131,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0

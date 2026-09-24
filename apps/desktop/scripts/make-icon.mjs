@@ -59,8 +59,8 @@ const ACCENT_DIM = '#3E5F8A'
 /**
  * The --teal / --red / --amber tokens, keyed by the state each badge means.
  *
- * The same three colours the in-app indicators already use for these same
- * facts, so the taskbar button and the Live tab cannot end up disagreeing.
+ * The same tokens the window draws recording and its problems in, so the
+ * taskbar button never speaks in a colour the app itself does not.
  */
 const BADGE_COLOURS = {
   game: '#0AC8B9',

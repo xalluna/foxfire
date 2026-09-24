@@ -22,7 +22,6 @@ import { Main, PlayerLayout } from './components/PlayerLayout'
 import { validateLpEditorWindowSearch } from './lpEditor/search'
 import { Captures } from './views/Captures'
 import { Home } from './views/Home'
-import { LiveGame } from './views/LiveGame'
 import { Settings } from './views/Settings'
 import { YOUTUBE_ENABLED } from '@shared/features'
 
@@ -48,14 +47,6 @@ const app = createRoute({ getParentRoute: () => root, id: '_app', component: App
 const home = createRoute({ getParentRoute: () => app, path: '/', component: Home })
 
 const players = createPlayerRoutes(app, { layout: PlayerLayout })
-
-const live = createRoute({
-  getParentRoute: () => players.player,
-  path: 'live',
-  component: function LiveRoute() {
-    return <LiveGame account={usePlayer()} />
-  }
-})
 
 const captures = createRoute({
   getParentRoute: () => players.player,
@@ -140,7 +131,7 @@ const lpEditor = createRoute({
 const routeTree = root.addChildren([
   app.addChildren([
     home,
-    players.player.addChildren([players.dashboard, players.champions, players.rank, live, captures]),
+    players.player.addChildren([players.dashboard, players.champions, players.rank, captures]),
     search,
     settings
   ]),

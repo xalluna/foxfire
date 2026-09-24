@@ -33,7 +33,6 @@ import {
   updateUser
 } from '../services/serverAdminService'
 import { chooseImportDatabase, importDatabase } from '../services/importService'
-import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
@@ -236,8 +235,6 @@ export function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
-
-  ipcMain.handle(CH.liveClient.scoreboard, (_e, accountId: string) => getScoreboard(accountId))
 
   ipcMain.handle(
     CH.champions.stats,

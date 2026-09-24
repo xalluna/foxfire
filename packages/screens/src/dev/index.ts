@@ -11,22 +11,7 @@ export { DEV_SEASONS } from './seasons'
 export { createFakeYouTubeMount } from './fakeYouTube'
 export { FIXTURE_VIDEO_ID, fixtureDescription, fixtureEvents, fixtureRecording } from './recordings'
 export { DDRAGON_MANIFEST } from './ddragonManifest'
-export {
-  C,
-  DAY,
-  HOUR,
-  ITEMS_AD,
-  ITEMS_AP,
-  ITEMS_SUPPORT,
-  ITEMS_TANK,
-  K,
-  NOW,
-  ROLE_ITEM,
-  S,
-  detailFor,
-  perks,
-  type Keystone
-} from './catalog'
+export { C, DAY, HOUR, NOW, detailFor, perks, type Keystone } from './catalog'
 export {
   ACCOUNTS,
   LEAGUE_ENTRIES,

@@ -61,7 +61,8 @@ let lastPhase: string | null = null
 let currentQueueId: number | null = null
 
 /**
- * Whether the client is in a game right now, for the Live game tab's indicator.
+ * Whether the client is in a game right now, for the taskbar button, the tray
+ * and the updater, which will not restart the app in the middle of one.
  *
  * Separate from currentQueueId, which is only meaningful for a ranked snapshot
  * and is cleared the moment a game ends. This follows the phase itself.

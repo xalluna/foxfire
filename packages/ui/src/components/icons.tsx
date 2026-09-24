@@ -106,34 +106,6 @@ export function Settings(props: IconProps): JSX.Element {
   )
 }
 
-/**
- * Broadcast mark: a broken ring around a filled dot.
- *
- * The dot takes its own optional colour so the two can disagree — a game in
- * progress rings it in teal, and recording turns the dot red inside that ring,
- * which reads as "live, and being kept" in one glyph.
- */
-export function Live({
-  dotClassName,
-  ...props
-}: IconProps & { dotClassName?: string }): JSX.Element {
-  return (
-    <Icon {...props}>
-      <circle
-        cx="12"
-        cy="12"
-        r="3.5"
-        // currentColor resolves per element, so a text-* class here overrides
-        // the colour the ring inherits without touching the ring.
-        fill="currentColor"
-        stroke="none"
-        className={dotClassName}
-      />
-      <path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 17.7a8 8 0 0 0 0-11.4" />
-    </Icon>
-  )
-}
-
 export function Plus(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>

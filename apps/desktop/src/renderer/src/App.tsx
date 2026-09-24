@@ -6,7 +6,6 @@ import { playerSlug } from '@foxfire/core/routes'
 import { Icon, Logo } from '@foxfire/ui'
 import { queryKeys, useClient } from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
-import { LiveNavIcon } from './components/LiveNavIcon'
 import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
 import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
 import { YOUTUBE_ENABLED } from '@shared/features'
@@ -17,7 +16,6 @@ import { useNavSlug } from './hooks/usePlayerNavigation'
 /** Pages of one account, found under its slug. */
 type PlayerPage =
   | '/players/$slug'
-  | '/players/$slug/live'
   | '/players/$slug/captures'
   | '/players/$slug/champions'
   | '/players/$slug/rank'
@@ -28,8 +26,6 @@ type NavItem =
 
 const NAV: NavItem[] = [
   { label: 'Dashboard', icon: <Icon.Dashboard />, page: '/players/$slug' },
-  // Coloured by whether a game is on and whether it is being recorded.
-  { label: 'Live game', icon: <LiveNavIcon />, page: '/players/$slug/live' },
   { label: 'Captures', icon: <Icon.Film />, page: '/players/$slug/captures' },
   { label: 'Champions', icon: <Icon.Trophy />, page: '/players/$slug/champions' },
   { label: 'Rank', icon: <Icon.TrendingUp />, page: '/players/$slug/rank' },

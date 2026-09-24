@@ -1,4 +1,4 @@
-import type { Position, RecordingEvent, YouTubePrivacy } from '@foxfire/core'
+import type { RecordingEvent, YouTubePrivacy } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -85,8 +85,8 @@ export type LcuStatus =
        * Whether a game is actually being played right now.
        *
        * The client's own playing phase, so it goes true at the loading screen —
-       * before the game answers on loopback and well before there is a
-       * scoreboard to show. That is the honest answer to "is a game on".
+       * before the game itself answers on loopback. That is the honest answer
+       * to "is a game on".
        */
       inGame: boolean
     }
@@ -99,54 +99,6 @@ export interface BackgroundSettings {
   launchAtStartup: boolean
   /** Overrides League client auto-detection when the install is somewhere unusual. */
   lcuInstallPath: string | null
-}
-
-/**
- * One row of the in-game scoreboard, built from the Live Client Data API the
- * running game serves on loopback.
- *
- * Richer than anything the spectator endpoint could offer — it is the game's
- * own view of itself — but it carries no puuid, so a player is identified by
- * their Riot ID and nothing else.
- */
-export interface ScoreboardPlayer {
-  /** Index in the game's own player array. The React key, since two players can share a name. */
-  slot: number
-  gameName: string | null
-  tagLine: string | null
-  /** The account this window is showing, so the row can be picked out of the ten. */
-  isSelf: boolean
-  isBot: boolean
-  isDead: boolean
-  /** Seconds until respawn; 0 whenever alive. */
-  respawnTimer: number
-  level: number | null
-  position: Position | null
-  teamId: number
-  championId: number | null
-  /** The name the game sent, so a champion the manifest has not caught up with still reads. */
-  championName: string | null
-  spell1Id: number | null
-  spell2Id: number | null
-  keystoneId: number | null
-  secondaryTreeId: number | null
-  /** Seven slots, index 6 the trinket — the shape itemSlots() takes. */
-  items: number[]
-  /** Granted by the lane rather than bought, exactly as on a stored match. */
-  roleBoundItem: number
-  kills: number
-  deaths: number
-  assists: number
-  creepScore: number
-  wardScore: number
-}
-
-export interface Scoreboard {
-  gameMode: string
-  mapName: string
-  /** Seconds elapsed. */
-  gameTime: number
-  players: ScoreboardPlayer[]
 }
 
 /**

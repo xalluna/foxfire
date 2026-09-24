@@ -28,7 +28,6 @@ import type {
   ServerProbe,
   ServerRegistration,
   ServerState,
-  Scoreboard,
   InvitePreview,
   ImportProgress,
   UpdateState,
@@ -66,8 +65,7 @@ import {
   RECORDING_EVENTS,
   MOCK_REPLAYS,
   MOCK_ROFL_SETTINGS,
-  MOCK_ARCHIVES,
-  SCOREBOARD
+  MOCK_ARCHIVES
 } from './desktopFixtures'
 
 /**
@@ -609,13 +607,6 @@ export const mockApi: Api = {
 
   assets: fixture.assets,
 
-  liveClient: {
-    // Answered fast and without the shell hold, because the real one polls: a
-    // held promise under ?scenario=loading would stall every tick behind it.
-    scoreboard: (): Promise<Scoreboard | null> =>
-      scenario === 'not-live' ? delay(null, 200, false) : delay(SCOREBOARD, 200, false)
-  },
-
   champions: fixture.champions,
   seasons: fixture.seasons,
   mastery: fixture.mastery,
@@ -651,8 +642,8 @@ export const mockApi: Api = {
               accountId: '1',
               gameName: 'Faker',
               tagLine: 'NA1',
-              // A game in progress in the default scenario, so the Live tab's
-              // indicator has something to show without a client running.
+              // A game in progress in the default scenario, to match the
+              // capture status below, which is recording one.
               inGame: true
             },
         100
@@ -966,7 +957,7 @@ function buildMockRequests(): TelemetryRequest[] {
     })
   }
 
-  // A live-game fan-out: ten rank lookups issued at once, queued serially.
+  // A fan-out: ten rank lookups issued at once, queued serially.
   for (let i = 0; i < 10; i += 1) {
     rows.push({
       id: 4_800 - i,
