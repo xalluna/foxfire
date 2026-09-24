@@ -24,9 +24,15 @@ public static class RiotLinkEndpoints
     {
         var group = app.MapGroup("/riot-accounts").WithTags("Riot accounts").RequireAuthorization();
 
-        // Desktop 0.14.0 reads nothing else. Delete with 0.14.x's place on Allowed.
-        group.MapGet("/", (ISender sender, CancellationToken cancellationToken) =>
-            sender.SendAsync(new ListRiotAccountsRequest(), cancellationToken));
+        // DEPRECATED — every account on the server, for Desktop 0.14 and nobody
+        // else. The one place allowed to reach for it; see ListRiotAccountsRequest.
+#pragma warning disable CS0618
+        group.MapGet("/", (HttpContext http, ISender sender, CancellationToken cancellationToken) =>
+        {
+            WholeServerAccountList.MarkDeprecated(http.Response);
+            return sender.SendAsync(new ListRiotAccountsRequest(), cancellationToken);
+        });
+#pragma warning restore CS0618
 
         group.MapGet("/mine", (ISender sender, CancellationToken cancellationToken) =>
             sender.SendAsync(new ListMyRiotAccountsRequest(), cancellationToken));

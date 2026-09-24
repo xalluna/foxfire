@@ -45,9 +45,10 @@ at a time.
 - `/api/search` takes `limit` and `offset`, and `mine` and `claimed` to narrow it.
   A blank search pages through the Riot ID index in name order instead of sorting
   the table.
-- `GET /api/riot-accounts`, every account at once, still answers for Foxfire
-  0.14, which reads nothing else. It goes in the release that takes 0.14 off
-  the allow list.
+- `GET /api/riot-accounts`, every account at once, is deprecated. It still
+  answers for Foxfire 0.14, which reads nothing else, but says so with a
+  `Deprecation` header (RFC 9745), and is marked obsolete in the code so nothing
+  new calls it. It goes in the release that takes 0.14 off the allow list.
 - Tests for each read — including that "yours" never picks up an account nobody
   has claimed — and for paging, the cap and both filters.
 
