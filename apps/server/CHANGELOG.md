@@ -11,6 +11,26 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.3.1] — 2026-09-23
+
+A fix for the sync bar, which on a server never went away.
+
+### Fixed
+
+- **Syncing finishes.** After a sync, the "Syncing new matches" bar on an
+  account's page stayed up for good — in the web client and in every desktop
+  connected to a server — however long ago the sync had actually finished. The
+  server was announcing the end of a sync in a spelling the clients did not
+  recognise, so they went on waiting for it. Updating the server is the whole
+  fix: nobody needs a new desktop for it.
+
+### Under the hood
+
+- A test now reads the sync progress event exactly as the server's live
+  connection writes it, and names every phase it can be in, so a change on
+  either side that the other does not expect fails here rather than on
+  somebody's screen.
+
 ## [0.3.0] — 2026-09-23
 
 Accounts you can look after, and a search that looks through the people on this
@@ -513,6 +533,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1
 [0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0
