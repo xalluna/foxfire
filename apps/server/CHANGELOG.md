@@ -81,6 +81,12 @@ season's most-played champions.
 - **Nothing to open yet?** Signed in with no League account claimed, the front
   page says how to claim one and that everybody else is in the search box,
   rather than opening a list of everybody.
+- **Sync anybody's account, from the browser too.** The server has let any
+  member start a sync since 0.3.0, once every two minutes per account, but the
+  page still greyed "Sync now" out on every profile but your own — so an
+  account an admin tracks could not be refreshed from a browser at all. It is
+  offered on every profile now, and pressing it inside the two minutes says how
+  long to wait rather than doing nothing.
 
 ### Removed
 

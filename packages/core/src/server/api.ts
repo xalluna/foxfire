@@ -111,7 +111,7 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       await run()
       return { ok: true, error: null }
     } catch (err) {
-      if (!(err instanceof ServerError)) log.error('An admin action failed', err)
+      if (!(err instanceof ServerError)) log.error('A write to the server failed', err)
 
       return {
         ok: false,
@@ -221,7 +221,7 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     sync: {
-      start: (accountId: string) => request<void>(`/sync/${accountId}`, { method: 'POST' }),
+      start: (accountId: string) => attempt(() => request<void>(`/sync/${accountId}`, { method: 'POST' })),
       getState: (accountId: string) => request<SyncState | null>(`/sync/${accountId}`)
     },
 

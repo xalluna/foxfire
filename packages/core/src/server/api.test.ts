@@ -66,6 +66,22 @@ describe('createServerApi', () => {
     })
   })
 
+  it('answers a sync inside the cooldown with how long to wait, rather than throwing', async () => {
+    const tooSoon = 'This account was synced less than two minutes ago. Try again in 45 seconds.'
+    const { calls, request } = recorder(() => new ServerError(tooSoon, 429, 'sync_too_soon'))
+    const api = createServerApi(request)
+
+    await expect(api.sync.start('acc-1')).resolves.toEqual({ ok: false, error: tooSoon })
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /sync/acc-1'])
+  })
+
+  it('answers a sync the server started with ok', async () => {
+    const { request } = recorder()
+    const api = createServerApi(request)
+
+    await expect(api.sync.start('acc-1')).resolves.toEqual({ ok: true, error: null })
+  })
+
   it('lets a failed read throw, because a read that fails has nothing to show', async () => {
     const { request } = recorder(() => new ServerError('Forbidden', 403))
     const api = createServerApi(request)

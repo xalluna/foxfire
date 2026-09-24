@@ -70,11 +70,11 @@ export const httpApi: ServerBackedApi = {
       // no way to become anybody's.
       const account = await serverApi().accounts.link(input)
 
-      // Not awaited, exactly as the local path does not await its backfill.
-      void serverApi().sync.start(account.id).catch(() => {
-        // A claim that worked is worth reporting even if the sync that follows
-        // did not start; the next launch sweep picks it up.
-      })
+      // Not awaited, exactly as the local path does not await its backfill,
+      // and a refusal is not looked at: a claim that worked is worth reporting
+      // even if the sync that follows did not start; the next launch sweep
+      // picks it up.
+      void serverApi().sync.start(account.id)
 
       return account
     }

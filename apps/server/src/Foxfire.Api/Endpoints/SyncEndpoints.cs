@@ -14,11 +14,12 @@ namespace Foxfire.Api.Endpoints;
 /// the server because it has to outlive the laptop closing and must not run
 /// twice when two people were in the same game.
 ///
-/// Every write is gated on owning the Riot account. Reads are not, because
-/// everything on this server is readable by every member — but a sync spends
-/// the community's Riot budget, and a rank reading claims to have seen
-/// somebody's client, so neither is a thing to accept from just anybody who is
-/// logged in.
+/// Reads are anybody's, because everything on this server is readable by every
+/// member. So is starting a sync — it asks only for what Riot has already
+/// published, and an account nobody owns has nobody else to ask — with a
+/// per-account cooldown standing between it and the community's Riot budget.
+/// The end-of-game signal and a rank reading are the owner's alone: each claims
+/// to have watched somebody's League client, which only their own machine can.
 /// </summary>
 public static class SyncEndpoints
 {
