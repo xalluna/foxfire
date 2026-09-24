@@ -7,7 +7,9 @@ import { Icon, Logo } from '@foxfire/ui'
 import { queryKeys, useClient } from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { LiveNavIcon } from './components/LiveNavIcon'
-import { useRecordingUpdates, useReplayUpdates } from './hooks/useDesktopUpdates'
+import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
+import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import { useKeyRejected, useServerHealth } from './hooks/useKeyStatus'
 import { useUpdates } from './hooks/useUpdates'
 import { useNavSlug } from './hooks/usePlayerNavigation'
@@ -132,6 +134,7 @@ function useShowMatchRequests(): void {
 export function AppShell(): JSX.Element {
   useRecordingUpdates()
   useReplayUpdates()
+  useYouTubeUpdates()
   useShowMatchRequests()
   const [keyRejected, clearRejected] = useKeyRejected()
   const updates = useUpdates()
@@ -299,6 +302,8 @@ export function AppShell(): JSX.Element {
       <div className="flex min-h-0 flex-1">
         <Outlet />
       </div>
+
+      {YOUTUBE_ENABLED && <YouTubeUploadDialogHost />}
     </div>
   )
 }

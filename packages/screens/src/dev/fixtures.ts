@@ -5,12 +5,14 @@ import type {
   MasteryEntry,
   MatchDetail,
   MatchRankInfo,
+  MatchRecording,
   MatchSummary,
   QueueType,
   RankRange,
   RankSnapshot,
 } from '@foxfire/core'
 import { ladderPosition, rankAtPosition, rankMovement, rangeBounds } from '@foxfire/core'
+import { FIXTURE_VIDEO_ID, fixtureRecording } from './recordings'
 import { devSeasonIdAt } from './seasons'
 import {
   C,
@@ -485,6 +487,10 @@ const FAKER_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
     // The first three games were recorded; the rest were not, so the context
     // menu is exercised both enabled and disabled without switching scenario.
     recordingId: i < 3 ? i + 1 : null,
+    // Of those, the newest is already on YouTube and the third is on its way —
+    // so the menu shows upload offered, upload pending, and neither.
+    recordingVideoId: i === 0 ? FIXTURE_VIDEO_ID : null,
+    recordingUploadPending: i === 2,
     // Overlaps the recordings deliberately: the mock has to exercise a row with
     // both artefacts, one with each, and one with neither.
     replayId: i < 5 && i !== 1 ? i + 1 : null
@@ -505,6 +511,18 @@ export const MATCHES: Record<string, MatchSummary[]> = {
   // Newest first across both seasons: each block is already reversed, and the
   // prior one is wholly older, so concatenating keeps the list ordered.
   2: [...CLIMB_MATCHES, ...PRIOR_MATCHES]
+}
+
+/**
+ * What the harness's server holds on YouTube, keyed `account:match`.
+ *
+ * Faker's newest game, which is also on this disk, and his fourth, which only
+ * the server has — a link somebody pasted, so it plays without markers. The
+ * second account has none, so its rows show the other side of every question.
+ */
+export const MATCH_RECORDINGS: Record<string, MatchRecording> = {
+  [`1:${FAKER_MATCHES[0]!.matchId}`]: fixtureRecording(FAKER_MATCHES[0]!, 'upload'),
+  [`1:${FAKER_MATCHES[3]!.matchId}`]: fixtureRecording(FAKER_MATCHES[3]!, 'link')
 }
 
 /** Keyed by match id across both accounts, which is how the detail view looks them up. */

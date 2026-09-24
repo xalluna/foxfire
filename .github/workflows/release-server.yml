@@ -34,6 +34,12 @@ jobs:
     # container image has to be built on Linux anyway.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Build-time feature switches, from repository variables, for every step:
+    # the tests, the web client, both standalone builds and the image are all
+    # made with the same answer, and so is the desktop — release.yml reads the
+    # same variables. Unset is off. See apps/server/src/Foxfire.Core/BuildFeatures.cs.
+    env:
+      FOXFIRE_FEATURE_YOUTUBE: ${{ vars.FOXFIRE_FEATURE_YOUTUBE }}
     defaults:
       run:
         shell: bash
@@ -206,6 +212,7 @@ jobs:
         run: |
           docker build \
             --file apps/server/docker/Dockerfile \
+            --build-arg "FOXFIRE_FEATURE_YOUTUBE=$FOXFIRE_FEATURE_YOUTUBE" \
             --tag "foxfire-server:$VERSION" \
             .
 

@@ -74,7 +74,19 @@ export const CH = {
   dashboard: {
     get: 'dashboard:get',
     matchList: 'dashboard:matchList',
-    matchDetail: 'dashboard:matchDetail'
+    matchDetail: 'dashboard:matchDetail',
+    /** One game as one player's row — the header over a recording that has no file here. */
+    matchSummary: 'dashboard:matchSummary'
+  },
+  // The recordings a server holds on YouTube, one per game per account. Named
+  // apart from `recordings`, which are this disk's files: a server's copy can
+  // be somebody else's, and can outlive the file it came from.
+  matchRecordings: {
+    get: 'matchRecordings:get',
+    attach: 'matchRecordings:attach',
+    detach: 'matchRecordings:detach',
+    /** Pushed from the server's hub when one is attached, replaced or removed. */
+    changed: 'matchRecordings:changed'
   },
   sync: {
     start: 'sync:start',
@@ -157,7 +169,35 @@ export const CH = {
     /** Broadcast when a recording is added, bound or deleted, so lists refetch. */
     changed: 'recordings:changed',
     /** A recording window asking the main window to show its match. */
-    showMatch: 'recordings:showMatch'
+    showMatch: 'recordings:showMatch',
+    /** Removes a recording's row once its file is gone. Never touches YouTube or a server. */
+    forget: 'recordings:forget',
+    /** Opens a window for a recording this machine has no file of, from YouTube. */
+    openRemote: 'recordings:openRemote'
+  },
+  // Putting recordings on YouTube. The Google connection lives in the main
+  // process — its refresh token never crosses IPC — and the renderer only ever
+  // sees whether there is one and whose it is.
+  youtube: {
+    getState: 'youtube:getState',
+    connect: 'youtube:connect',
+    cancelConnect: 'youtube:cancelConnect',
+    disconnect: 'youtube:disconnect',
+    getSettings: 'youtube:getSettings',
+    setSettings: 'youtube:setSettings',
+    /** The upload form's starting point for one recording, from the templates. */
+    draft: 'youtube:draft',
+    enqueue: 'youtube:enqueue',
+    /** Many recordings at once, titled from the template, with one privacy for all. */
+    enqueueMany: 'youtube:enqueueMany',
+    cancel: 'youtube:cancel',
+    retry: 'youtube:retry',
+    /** Attaches a hand-uploaded video to a recording on this disk, markers and all. */
+    attachLink: 'youtube:attachLink',
+    /** Tells the active server about a recording's video again, replacing what is there. */
+    reattach: 'youtube:reattach',
+    /** Pushed when the connection or the queue changes. */
+    changed: 'youtube:changed'
   },
   // Riot's own replays. Separate from `recordings` throughout: the two are
   // different artefacts with different lifecycles, and one shared domain would

@@ -115,6 +115,13 @@ describe('paths', () => {
     expect(paths.match('KR_7123', { player: FAKER })).toBe('/matches/KR_7123?player=Faker-KR1')
   })
 
+  it('puts a recording under the player whose screen it is', () => {
+    expect(paths.recording(FAKER, 'KR_7123')).toBe('/players/Faker-KR1/recordings/KR_7123')
+    expect(paths.recording({ gameName: 'Hide on bush', tagLine: 'KR1' }, 'KR_7123')).toBe(
+      '/players/Hide%20on%20bush-KR1/recordings/KR_7123'
+    )
+  })
+
   it('carries a finder query', () => {
     expect(paths.players('Faker#KR1')).toBe('/players?q=Faker%23KR1')
   })

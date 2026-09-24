@@ -16,6 +16,14 @@ export const windowRoutes = {
 
   recording: (recordingId: number): string => `/recording/${recordingId}`,
 
+  /**
+   * A recording this machine has no file of — somebody else's, or its own
+   * after the file was deleted — played from YouTube through the server.
+   * Named by the account and the game, which is what a server keys it on.
+   */
+  remoteRecording: (accountId: string, matchId: string): string =>
+    `/recording/match/${encodeURIComponent(accountId)}/${encodeURIComponent(matchId)}`,
+
   lpEditor: (accountId: string, queueType: QueueType, matchId: string): string => {
     const query = new URLSearchParams({
       account: accountId,

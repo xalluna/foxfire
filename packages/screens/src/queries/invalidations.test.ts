@@ -57,6 +57,19 @@ describe('invalidationsFor', () => {
   })
 })
 
+describe('a recording changing', () => {
+  it('refreshes that account’s history and the recording under it, and nobody else’s', () => {
+    const keys = invalidationsFor({ kind: 'recordingChanged', accountId: 'acc-1', matchId: 'NA1_1' })
+    expect(keys).toEqual([queryKeys.matchList('acc-1')])
+
+    const recording = queryKeys.matchRecording('acc-1', 'NA1_1')
+    expect(recording.slice(0, keys[0]!.length)).toEqual(keys[0])
+
+    const somebodyElse = queryKeys.matchRecording('acc-2', 'NA1_1')
+    expect(somebodyElse.slice(0, keys[0]!.length)).not.toEqual(keys[0])
+  })
+})
+
 describe('queryKeys', () => {
   it('nests, so a shorter key refreshes everything beneath it', () => {
     const full = queryKeys.matchList('acc-1', 420)

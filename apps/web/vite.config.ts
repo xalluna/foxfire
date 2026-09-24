@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { featureDefines } from '../../tooling/vite/features'
 import { fsAllow } from '../../tooling/vite/fsAllow'
 
 /**
@@ -22,6 +23,9 @@ export default defineConfig(({ mode }) => {
   const server = process.env.FOXFIRE_SERVER ?? 'http://localhost:8080'
 
   return {
+    // Build-time feature switches, the same ones the server is compiled with
+    // when a release builds both — see tooling/vite/features.ts.
+    define: featureDefines(),
     plugins: [react()],
     server: {
       port: 5173,

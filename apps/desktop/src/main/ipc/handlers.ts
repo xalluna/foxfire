@@ -85,6 +85,8 @@ import {
 import { openTelemetryWindow } from '../telemetryWindow'
 import { openLpEditorWindow } from '../lpEditorWindow'
 import { openRecordingWindow } from '../recordingWindow'
+import { YOUTUBE_ENABLED } from '@shared/features'
+import { registerYouTubeHandlers } from './youtubeHandlers'
 import {
   clearObsPassword,
   getCaptureSettings,
@@ -93,6 +95,7 @@ import {
 } from '../services/captureSettings'
 import { getCaptureStatus, refreshCapture } from '../capture/captureService'
 import {
+  forgetRecording,
   getDiskUsage,
   getRecordingDetail,
   listRecordings,
@@ -222,6 +225,9 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.dashboard.matchDetail, (_e, matchId: string) =>
     serverBacked().dashboard.matchDetail(matchId)
+  )
+  ipcMain.handle(CH.dashboard.matchSummary, (_e, accountId: string, matchId: string) =>
+    serverBacked().dashboard.matchSummary?.(accountId, matchId) ?? null
   )
 
   ipcMain.handle(CH.sync.start, (_e, accountId: string) => serverBacked().sync.start(accountId))
@@ -365,6 +371,12 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.recordings.open, (_e, recordingId: number) => openRecordingWindow(recordingId))
   ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
+  ipcMain.handle(CH.recordings.forget, (_e, recordingId: number) => forgetRecording(recordingId))
+
+  // YouTube, and a server's recordings, only in a build made with them. Without,
+  // nothing answers those channels — and nothing in the renderer asks.
+  if (YOUTUBE_ENABLED) registerYouTubeHandlers()
+
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */
   ipcMain.handle(CH.replays.list, (_e, accountId: string) => listReplays(accountId))

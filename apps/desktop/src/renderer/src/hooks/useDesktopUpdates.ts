@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@foxfire/screens'
+import { YOUTUBE_ENABLED } from '@shared/features'
 
 /*
  * The refreshes only the desktop needs. Sync progress, LP edits and League
@@ -46,6 +47,27 @@ export function useReplayUpdates(): void {
       queryClient.invalidateQueries({ queryKey: ['replayUsage'] })
       // The match rows carry a marker for either artefact, so they go stale too.
       queryClient.invalidateQueries({ queryKey: queryKeys.matchLists() })
+    })
+  }, [queryClient])
+}
+
+/**
+ * Keeps Settings › YouTube and the Recordings tab's upload column current.
+ *
+ * The connection and the queue are pushed as one state; the rows carry each
+ * upload's progress, so they are refetched too — but not the match lists,
+ * which have nothing to show for a byte count and would otherwise refetch
+ * every second of an upload.
+ */
+export function useYouTubeUpdates(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    // A build without YouTube has nothing that would ever send one.
+    if (!YOUTUBE_ENABLED) return
+    return window.api.youtube.onChanged((state) => {
+      queryClient.setQueryData(['youtubeState'], state)
+      queryClient.invalidateQueries({ queryKey: ['recordings'] })
     })
   }, [queryClient])
 }

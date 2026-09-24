@@ -115,6 +115,17 @@ export const paths = {
       match: search.match
     }),
 
+  /**
+   * One player's recording of one game.
+   *
+   * Under the player rather than the match, because a recording is one
+   * player's screen: the same game has a different recording, or none, in
+   * each of its histories, and a link that did not say whose would have to
+   * pick.
+   */
+  recording: (player: PlayerRef, matchId: string) =>
+    `/players/${segment(playerSlug(player))}/recordings/${segment(matchId)}`,
+
   /** One game, optionally as one of its players saw it — their LP, their row picked out. */
   match: (matchId: string, search: { player?: PlayerRef } = {}) =>
     withQuery(`/matches/${segment(matchId)}`, {

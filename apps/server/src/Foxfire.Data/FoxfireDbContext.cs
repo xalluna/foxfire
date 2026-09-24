@@ -51,6 +51,7 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     public DbSet<RetiredPuuid> RetiredPuuids => Set<RetiredPuuid>();
     public DbSet<RankedSeason> Seasons => Set<RankedSeason>();
     public DbSet<SharedReplay> SharedReplays => Set<SharedReplay>();
+    public DbSet<MatchRecording> MatchRecordings => Set<MatchRecording>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

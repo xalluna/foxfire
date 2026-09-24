@@ -20,6 +20,15 @@ import { loadRoute } from './rendererUrl'
 const windows = new Set<BrowserWindow>()
 
 export function openRecordingWindow(recordingId: number): void {
+  openWindowAt(windowRoutes.recording(recordingId))
+}
+
+/** Somebody's recording that lives only on YouTube, by whose view of which game it is. */
+export function openRemoteRecordingWindow(accountId: string, matchId: string): void {
+  openWindowAt(windowRoutes.remoteRecording(accountId, matchId))
+}
+
+function openWindowAt(route: string): void {
   const window = new BrowserWindow({
     // 16:9 plus room for the header strip and the timeline beneath the video.
     width: 1180,
@@ -40,12 +49,15 @@ export function openRecordingWindow(recordingId: number): void {
 
   window.on('ready-to-show', () => window.show())
   window.on('closed', () => windows.delete(window))
+  // Only web addresses reach the browser. YouTube's frame opens links of its
+  // own — the title, "Watch on YouTube" — and a page that could hand
+  // openExternal any scheme it liked could hand it a file or a program.
   window.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (/^https?:\/\//i.test(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
-  loadRoute(window, windowRoutes.recording(recordingId))
+  loadRoute(window, route)
 
   windows.add(window)
 }

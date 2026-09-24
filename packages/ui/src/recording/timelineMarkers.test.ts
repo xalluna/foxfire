@@ -7,7 +7,7 @@ import {
   leadEvent,
   seekTargetFor
 } from './timelineMarkers'
-import type { RecordingEvent } from '@shared/types'
+import type { RecordingEvent } from '@foxfire/core'
 
 /** A 30-minute game on a 900px bar: one pixel is two seconds. */
 const DURATION = 1_800

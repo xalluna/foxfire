@@ -31,7 +31,12 @@ import type {
   Scoreboard,
   InvitePreview,
   ImportProgress,
-  UpdateState
+  UpdateState,
+  AttachRecordingOutcome,
+  BulkUploadResult,
+  UploadDraft,
+  YouTubeSettings,
+  YouTubeState
 } from '@shared/types'
 import type {
   LcuTelemetry,
@@ -44,11 +49,18 @@ import type {
 import {
   ACCOUNTS,
   MOCK_SERVER_URL,
+  NOW,
   createFixtureClient,
   delay,
   runFixtureImport,
   scenario
 } from '@foxfire/screens/dev'
+import {
+  DEFAULT_TITLE_TEMPLATE,
+  UNMATCHED_TITLE_TEMPLATE,
+  buildRecordingDescription,
+  renderRecordingTitle
+} from '@foxfire/core/youtube'
 import {
   RECORDINGS,
   RECORDING_EVENTS,
@@ -65,6 +77,31 @@ import {
  * has and a browser does not.
  */
 const fixture = createFixtureClient()
+
+/**
+ * The Google connection, as the three YouTube scenarios need it: a build with
+ * no client in it, one with a client and nobody connected, and — everywhere
+ * else — connected, so the upload form and the queue are what gets reviewed.
+ */
+let youtubeState: YouTubeState = {
+  configured: scenario !== 'youtube-unconfigured',
+  email: scenario === 'youtube-unconfigured' || scenario === 'youtube-disconnected' ? null : 'faker@example.com',
+  connecting: false,
+  error: null,
+  pausedForGame: false,
+  quotaResumesAt: scenario === 'youtube-queue' ? NOW + 5 * 60 * 60_000 : null
+}
+let youtubeSettings: YouTubeSettings = {
+  autoUpload: false,
+  defaultPrivacy: 'unlisted',
+  titleTemplate: DEFAULT_TITLE_TEMPLATE
+}
+const youtubeListeners = new Set<(state: YouTubeState) => void>()
+
+function setYouTubeState(patch: Partial<YouTubeState>): void {
+  youtubeState = { ...youtubeState, ...patch }
+  for (const listener of youtubeListeners) listener(youtubeState)
+}
 
 /**
  * A fake window.api for running the renderer in a plain browser.
@@ -722,7 +759,68 @@ export const mockApi: Api = {
     reveal: (): Promise<void> => delay(undefined, 0, false),
     onChanged: () => () => undefined,
     showMatch: (): Promise<void> => delay(undefined, 0, false),
-    onShowMatch: () => () => undefined
+    onShowMatch: () => () => undefined,
+    forget: (): Promise<void> => delay(undefined, 120, false),
+    // The harness has one window, so a recording "window" is a navigation in
+    // it, the way the LP editor's is.
+    openRemote: (accountId: string, matchId: string): Promise<void> => {
+      window.location.hash = `#${windowRoutes.remoteRecording(accountId, matchId)}`
+      return delay(undefined, 0, false)
+    }
+  },
+  matchRecordings: {
+    ...fixture.matchRecordings!,
+    onChanged: fixture.events.onRecordingChanged
+  },
+  youtube: {
+    getState: (): Promise<YouTubeState> => delay(youtubeState, 120, false),
+    connect: async (): Promise<void> => {
+      setYouTubeState({ connecting: true, error: null })
+      await delay(undefined, 1_200, false)
+      setYouTubeState({ connecting: false, email: 'faker@example.com' })
+    },
+    cancelConnect: async (): Promise<void> => setYouTubeState({ connecting: false }),
+    disconnect: async (): Promise<void> => setYouTubeState({ email: null }),
+    getSettings: (): Promise<YouTubeSettings> => delay(youtubeSettings, 120, false),
+    setSettings: (patch: Partial<YouTubeSettings>): Promise<YouTubeSettings> => {
+      youtubeSettings = { ...youtubeSettings, ...patch }
+      return delay(youtubeSettings, 120, false)
+    },
+    draft: (recordingId: number): Promise<UploadDraft> => {
+      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
+      const match = recording?.match
+      return delay(
+        {
+          recordingId,
+          title: renderRecordingTitle(match ? youtubeSettings.titleTemplate : UNMATCHED_TITLE_TEMPLATE, {
+            champion: match?.championName ?? 'Ahri',
+            queueId: match?.queueId ?? recording?.queueId ?? null,
+            gameMode: match?.gameMode ?? null,
+            win: match ? match.win : null,
+            kills: match?.kills ?? null,
+            deaths: match?.deaths ?? null,
+            assists: match?.assists ?? null,
+            playedAt: recording?.startedAt ?? NOW
+          }),
+          description: buildRecordingDescription(RECORDING_EVENTS),
+          privacy: youtubeSettings.defaultPrivacy,
+          durationSeconds: recording?.durationSeconds ?? null
+        },
+        250,
+        false
+      )
+    },
+    enqueue: (): Promise<void> => delay(undefined, 200, false),
+    enqueueMany: (recordingIds: number[]): Promise<BulkUploadResult> =>
+      delay({ queued: recordingIds.length, skipped: [] }, 400, false),
+    cancel: (): Promise<void> => delay(undefined, 100, false),
+    retry: (): Promise<void> => delay(undefined, 100, false),
+    attachLink: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),
+    reattach: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),
+    onChanged: (cb) => {
+      youtubeListeners.add(cb)
+      return () => youtubeListeners.delete(cb)
+    }
   },
   // Riot replays. The fixtures deliberately cover the three states the tab has
   // to draw: linked and playable, linked but on a patch nothing can play, and

@@ -12,6 +12,7 @@ import { queueTypeForQueueId, TRACKED_QUEUES } from '@foxfire/core'
 import type { LcuStatus, QueueType } from '@shared/types'
 import { discoverLcu, type LcuCredentials } from './discovery'
 import { isGameEndTransition, isPlayingPhase } from './gameflow'
+import { setGameflowPhase } from './phase'
 import { isSettled, pendingReadingFor, type PendingRankReading } from './rankSettling'
 import { lcuGet } from './client'
 
@@ -161,6 +162,7 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
   // itself is started by the game answering on loopback.
   inGame = isPlayingPhase(phase)
   onGamePhase(accountId, currentQueueId, inGame)
+  setGameflowPhase(phase)
 
   const ended = isGameEndTransition(lastPhase, phase)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
@@ -172,12 +174,22 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
   return ended
 }
 
+/** Reads the phase for its own sake, for a client this app follows no account on. */
+async function publishPhaseOnly(creds: LcuCredentials): Promise<void> {
+  try {
+    setGameflowPhase(await lcuGet<string>(creds, '/lol-gameflow/v1/gameflow-phase'))
+  } catch {
+    setGameflowPhase(null)
+  }
+}
+
 async function tick(): Promise<void> {
   const db = getDb()
 
   const creds = await discoverLcu(getSetting(db, LCU_PATH_SETTING))
   if (!creds) {
     setStatus({ state: 'disconnected' })
+    setGameflowPhase(null)
     return
   }
 
@@ -195,6 +207,10 @@ async function tick(): Promise<void> {
     const account = await reporting.findAccount(summoner.gameName, summoner.tagLine)
 
     if (!account) {
+      // The phase still matters to somebody playing on an account nobody
+      // tracks: an upload in the background competes with their game too.
+      await publishPhaseOnly(creds)
+
       // Surfaced as a prompt rather than acted on: adding an account hits Riot
       // and changes what the app tracks, which is the user's call to make.
       setStatus({
@@ -339,4 +355,5 @@ export function stopLcuWatcher(): void {
   currentQueueId = null
   inGame = false
   pendingReading = null
+  setGameflowPhase(null)
 }

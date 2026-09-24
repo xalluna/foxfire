@@ -35,6 +35,16 @@ export type Scenario =
   | 'update-downloading'
   | 'update-held'
   | 'just-installed'
+  // Recordings on YouTube. The queue in every state it can be in; a build with
+  // no Google client in it; one with a client and nobody connected; and a
+  // recording that plays for nobody but its owner.
+  | 'youtube-queue'
+  // A season of games recorded and none of them on YouTube yet, for the
+  // batch upload: select all, one privacy, queue the lot.
+  | 'youtube-backlog'
+  | 'youtube-unconfigured'
+  | 'youtube-disconnected'
+  | 'recording-private'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

@@ -45,7 +45,14 @@ import type {
   ServerRegistration,
   ServerState,
   SyncProgressEvent,
-  UpdateState
+  UpdateState,
+  AttachRecordingOutcome,
+  BulkUploadResult,
+  UploadDraft,
+  UploadRequest,
+  YouTubePrivacy,
+  YouTubeSettings,
+  YouTubeState
 } from './types'
 import type {
   LcuTelemetry,
@@ -213,6 +220,14 @@ export interface Api {
     link: (input: RiotIdInput) => Promise<Account>
   }
   dashboard: FoxfireData['dashboard']
+  /**
+   * The recordings the active server holds on YouTube. Local-only has none to
+   * hold: reads answer null and writes say to connect to a server.
+   */
+  matchRecordings: NonNullable<FoxfireData['matchRecordings']> & {
+    /** A recording was attached to one account's game, replaced, or removed — pushed by the server. */
+    onChanged: (cb: (event: { accountId: string; matchId: string }) => void) => () => void
+  }
   sync: FoxfireData['sync'] & {
     onProgress: (cb: (event: SyncProgressEvent) => void) => () => void
   }
@@ -282,6 +297,43 @@ export interface Api {
     /** Sent by a recording window; the main window focuses and expands that match. */
     showMatch: (accountId: string, matchId: string) => Promise<void>
     onShowMatch: (cb: (accountId: string, matchId: string) => void) => () => void
+    /** Removes a recording's row once its file is gone. The YouTube video and the server's copy stay. */
+    forget: (recordingId: number) => Promise<void>
+    /** Opens a window for one account's recording of a game that this machine has no file of. */
+    openRemote: (accountId: string, matchId: string) => Promise<void>
+  }
+  /**
+   * Putting recordings on YouTube, through this machine's own Google sign-in.
+   *
+   * The refresh token stays in the main process; the renderer sees only
+   * whether there is a connection and whose. Every upload goes through a queue
+   * that survives restarts and waits out games.
+   */
+  youtube: {
+    getState: () => Promise<YouTubeState>
+    /** Opens Google's consent page in the browser. Resolves once connected; rejects with why not. */
+    connect: () => Promise<void>
+    cancelConnect: () => Promise<void>
+    /** Disconnects and revokes the grant. Videos already on YouTube stay there. */
+    disconnect: () => Promise<void>
+    getSettings: () => Promise<YouTubeSettings>
+    setSettings: (patch: Partial<YouTubeSettings>) => Promise<YouTubeSettings>
+    /** What the upload form opens with for a recording, from the templates. */
+    draft: (recordingId: number) => Promise<UploadDraft>
+    enqueue: (request: UploadRequest) => Promise<void>
+    /**
+     * Queues many recordings at once, oldest game first, each titled and
+     * described from the templates, all with one privacy. Recordings that
+     * cannot go — already on YouTube, file gone — are reported, not queued.
+     */
+    enqueueMany: (recordingIds: number[], privacy: YouTubePrivacy) => Promise<BulkUploadResult>
+    cancel: (recordingId: number) => Promise<void>
+    retry: (recordingId: number) => Promise<void>
+    /** Attaches a video somebody uploaded themselves to a recording on this disk, with its markers. */
+    attachLink: (recordingId: number, videoId: string, replace: boolean) => Promise<AttachRecordingOutcome>
+    /** Tells the active server about this recording's video again, replacing whatever the game has. */
+    reattach: (recordingId: number) => Promise<AttachRecordingOutcome>
+    onChanged: (cb: (state: YouTubeState) => void) => () => void
   }
   /**
    * Riot's own replays. No detail call and no player: a .rofl is handed to the

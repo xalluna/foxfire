@@ -152,6 +152,29 @@ wrong there is still a record of it after the container has been restarted.
 - Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
   accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
   adding a tracked account, refusing a duplicate, and the sync cooldown.
+- **Recordings on YouTube are in this build, switched off.** A desktop attaching the video it
+  uploaded to its owner's game, every member watching it from that player's history — and only that
+  player's — in the desktop or on a page of its own in the browser, and attaching a link by hand, are
+  all written, and none of it is served until Foxfire's Google project has been through YouTube's
+  review. Whether a build has it is decided when it is compiled, by the `FOXFIRE_FEATURE_YOUTUBE`
+  repository variable, for the server and the web client inside it together; this release was made
+  without it, so there are no recording routes, a match row's `recording` is always null, and the
+  content security policy lets nothing of YouTube's in. What turning it on brings:
+  - `GET`, `PUT` and `DELETE /api/riot-accounts/{id}/matches/{matchId}/recording`. Only the
+    account's owner can attach — admins included in the refusal — and the owner or an admin can
+    remove. A second attach answers 409 `recording_exists` unless it says `replace`.
+  - A new hub event, `recording:changed`, carrying the account and the game, so the rows showing that
+    player's view of that game refresh everywhere.
+  - The web client's content security policy allows YouTube's privacy-enhanced player at
+    `youtube-nocookie.com` in a frame, and YouTube's IFrame API script, which is what lets the
+    markers seek the video. Nothing else from YouTube, and nothing drawn over its player.
+  - Tests against a real SQL Server for owner-only attaching, the one-perspective rule on match rows,
+    replacing, removing, validation and the event. CI builds and tests the server both ways.
+- One new table, `MatchRecordings`, created whether or not a build serves recordings, so turning them
+  on later needs no migration of its own. It is keyed on the game and the Riot account — the
+  account's id rather than its puuid, which is re-resolved whenever the server's Riot key changes —
+  and stores the YouTube video id and the markers as sent, never the video. Deleting a game takes its
+  recordings with it.
 
 - Logging goes through Serilog, behind the `ILogger` everything already wrote to. The blob lines are
   compact JSON with the message rendered and as its template, and the trace id on each. The sinks a

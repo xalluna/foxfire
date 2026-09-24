@@ -1,7 +1,13 @@
 import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createRecording, finishRecording, getRecording, markRecordingUnmatched } from '../db/repositories/recordings.repo'
+import {
+  createRecording,
+  finishRecording,
+  getRecording,
+  markRecordingUnmatched,
+  setYouTubeCopy
+} from '../db/repositories/recordings.repo'
 import { insertMatch } from '../db/repositories/matches.repo'
 import { applyAllMigrations } from '../db/testMigrations'
 import type { MatchDto } from '../riot/types'
@@ -44,10 +50,29 @@ vi.mock('./captureSettings', () => ({ getCaptureSettings: () => ({ softCapBytes:
 // which, and the real one holds an encrypted credential store.
 vi.mock('./serverService', () => ({
   isServerMode: () => false,
+  getServerState: () => ({ activeUrl: null }),
   authedRequest: () => Promise.reject(new Error('not connected'))
 }))
 
-const { bindPendingRecordings } = await import('./recordingService')
+// What a settled recording sets off — an automatic upload, a server told about
+// its video — is YouTube's business and has its own tests; here it only has to
+// be called, and must not reach the network or the secret store.
+const settled = vi.hoisted(() => ({ ids: [] as number[], reconciled: 0 }))
+vi.mock('../youtube/autoUpload', () => ({
+  onRecordingSettled: (id: number) => {
+    settled.ids.push(id)
+    return Promise.resolve()
+  }
+}))
+vi.mock('../youtube/attach', () => ({
+  reconcileAttachments: () => {
+    settled.reconciled += 1
+    return Promise.resolve()
+  }
+}))
+vi.mock('../youtube/queue', () => ({ cancelUpload: () => {} }))
+
+const { bindPendingRecordings, forgetRecording, removeRecording } = await import('./recordingService')
 
 const ME = 'puuid-me'
 const ACCOUNT = '1'
@@ -140,6 +165,8 @@ beforeEach(() => {
     'NA1'
   )
   live.db = db
+  settled.ids = []
+  settled.reconciled = 0
   vi.useFakeTimers()
   vi.setSystemTime(LATER)
 })
@@ -219,5 +246,76 @@ describe('bindPendingRecordings', () => {
     expect(await bindPendingRecordings(ACCOUNT)).toBe(1)
     const states = [first, second].map((id) => getRecording(db, id)?.bindState)
     expect(states.filter((state) => state === 'bound')).toHaveLength(1)
+  })
+})
+
+describe('what settling a recording sets off', () => {
+  it('offers a newly bound recording to YouTube, and tells the server', async () => {
+    const id = finishedRecording()
+    insertMatch(db, match('NA1_1'))
+
+    await bindPendingRecordings(ACCOUNT)
+
+    expect(settled.ids).toEqual([id])
+    expect(settled.reconciled).toBe(1)
+  })
+
+  it('offers one that was given up on too, which goes up with a plainer title', async () => {
+    const id = finishedRecording()
+
+    await bindPendingRecordings(ACCOUNT, { allowGiveUp: true })
+
+    expect(settled.ids).toEqual([id])
+    // Nothing bound, so there is nothing new for a server to hear about.
+    expect(settled.reconciled).toBe(0)
+  })
+
+  it('sets off nothing on a pass that changed nothing', async () => {
+    finishedRecording()
+    await bindPendingRecordings(ACCOUNT)
+    expect(settled.ids).toEqual([])
+  })
+})
+
+describe('deleting a recording', () => {
+  const ON_YOUTUBE = {
+    videoId: 'dQw4w9WgXcQ',
+    privacy: 'unlisted' as const,
+    forcedPrivate: false,
+    source: 'upload' as const,
+    title: 'Viktor',
+    at: T0
+  }
+
+  it('takes the row with the file when the recording is only on this disk', () => {
+    const id = finishedRecording()
+    removeRecording(id)
+    expect(getRecording(db, id)).toBeNull()
+  })
+
+  it('keeps a recording that is on YouTube, markers and all, and only frees the disk', () => {
+    const id = finishedRecording()
+    db.prepare(
+      "INSERT INTO recording_events (recording_id, event_id, name, game_time, video_time, role, label) VALUES (?, 1, 'ChampionKill', 300, 257.5, 'kill', 'Ahri')"
+    ).run(id)
+    setYouTubeCopy(db, id, ON_YOUTUBE)
+
+    removeRecording(id)
+
+    const kept = getRecording(db, id)
+    expect(kept?.fileDeleted).toBe(true)
+    expect(kept?.fileExists).toBe(false)
+    expect(kept?.youtube?.videoId).toBe('dQw4w9WgXcQ')
+    expect(db.prepare('SELECT COUNT(*) AS n FROM recording_events WHERE recording_id = ?').get(id)).toEqual({ n: 1 })
+  })
+
+  it('forgets the row once asked to, file or no file', () => {
+    const id = finishedRecording()
+    setYouTubeCopy(db, id, ON_YOUTUBE)
+    removeRecording(id)
+
+    forgetRecording(id)
+
+    expect(getRecording(db, id)).toBeNull()
   })
 })

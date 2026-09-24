@@ -6,12 +6,15 @@ import type {
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AttachRecordingInput,
+  AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
+  MatchRecording,
   MatchSummary,
   PlayerSearchResult,
   QueueType,
@@ -47,6 +50,10 @@ export interface ReplayDownloadGrant {
 
 /** A match row as the server sends it: everything except what is on somebody's disk. */
 export type ServerMatchSummary = Omit<MatchSummary, 'local'>
+
+function recordingPath(accountId: string, matchId: string): string {
+  return `/riot-accounts/${encodeURIComponent(accountId)}/matches/${encodeURIComponent(matchId)}/recording`
+}
 
 /**
  * Every route both clients call on a Foxfire server, typed.
@@ -250,6 +257,56 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       /** A signed URL for the replay this server holds of a game. Throws when it holds none. */
       downloadGrant: (matchId: string) =>
         request<ReplayDownloadGrant>(`/replays/${encodeURIComponent(matchId)}/download`)
+    },
+
+    /**
+     * One account's YouTube recording of one game.
+     *
+     * The path names both, because the recording is that player's screen and
+     * nobody else's — the same game on somebody else's history is a different
+     * address with a different answer.
+     */
+    matchRecordings: {
+      /** Null when that player's view of that game is not on YouTube. */
+      get: async (accountId: string, matchId: string): Promise<MatchRecording | null> => {
+        try {
+          return await request<MatchRecording>(recordingPath(accountId, matchId))
+        } catch (err) {
+          if (err instanceof ServerError && err.status === 404) return null
+          throw err
+        }
+      },
+
+      /**
+       * Attaches a video to the game, as its account's owner.
+       *
+       * A game that already has one answers `exists` rather than failing, so the
+       * screen can ask whether to replace it and send again with `replace` set.
+       */
+      attach: async (
+        accountId: string,
+        matchId: string,
+        input: AttachRecordingInput
+      ): Promise<AttachRecordingOutcome> => {
+        try {
+          await request<MatchRecording>(recordingPath(accountId, matchId), {
+            method: 'PUT',
+            body: input
+          })
+          return { ok: true }
+        } catch (err) {
+          if (!(err instanceof ServerError)) log.error('Attaching a recording failed', err)
+          const message = err instanceof Error ? err.message : String(err)
+          if (err instanceof ServerError && err.code === 'recording_exists') {
+            return { ok: false, reason: 'exists', message }
+          }
+          return { ok: false, reason: 'failed', message }
+        }
+      },
+
+      /** Takes the recording off the game. The video itself stays on YouTube. */
+      detach: (accountId: string, matchId: string) =>
+        attempt(() => request<void>(recordingPath(accountId, matchId), { method: 'DELETE' }))
     },
 
     admin: {

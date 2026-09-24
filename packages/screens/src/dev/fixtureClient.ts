@@ -7,6 +7,8 @@ import type {
   AdminUser,
   AdminUserPatch,
   AssetManifest,
+  AttachRecordingInput,
+  AttachRecordingOutcome,
   ChampionStats,
   ConnectionState,
   DashboardData,
@@ -15,6 +17,7 @@ import type {
   ImportResult,
   MasteryData,
   MatchDetail,
+  MatchRecording,
   MatchSummary,
   PlayerSearchResult,
   QueueType,
@@ -36,6 +39,7 @@ import {
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
+  MATCH_RECORDINGS,
   RANK_SNAPSHOTS,
   championStatsFor
 } from './fixtures'
@@ -64,6 +68,32 @@ const progressListeners = new Set<(event: SyncProgressEvent) => void>()
 const editedListeners = new Set<(accountId: string) => void>()
 const rankChangedListeners = new Set<(accountId: string) => void>()
 const connectionListeners = new Set<(state: ConnectionState) => void>()
+const recordingListeners = new Set<(event: { accountId: string; matchId: string }) => void>()
+
+/**
+ * What the harness's server holds on YouTube, as it changes this session.
+ *
+ * Keyed `account:match` because a recording is one player's view of a game —
+ * the same match under the other account is a different key with, here,
+ * nothing in it.
+ */
+const recordings = new Map<string, MatchRecording>(Object.entries(MATCH_RECORDINGS))
+const recordingKey = (accountId: string, matchId: string): string => `${accountId}:${matchId}`
+
+function notifyRecording(accountId: string, matchId: string): void {
+  for (const listener of recordingListeners) listener({ accountId, matchId })
+}
+
+/** A row as the server sends it: with this account's recording of the game, or none. */
+function withRecording(accountId: string, match: MatchSummary): MatchSummary {
+  const recording = recordings.get(recordingKey(accountId, match.matchId))
+  return {
+    ...match,
+    recording: recording
+      ? { youtubeVideoId: recording.youtubeVideoId, privacy: recording.privacy, hasEvents: recording.hasEvents }
+      : null
+  }
+}
 
 function notifyEdited(accountId: string): void {
   for (const listener of editedListeners) listener(accountId)
@@ -313,12 +343,66 @@ export function createFixtureClient(): FoxfireClient {
         // Filter before slicing, mirroring the real handler's SQL — otherwise the
         // harness pages differently to the app and hides paging bugs.
         const all = matchesFor(accountId).filter((m) => queueId === null || m.queueId === queueId)
-        return delay(all.slice(offset, offset + limit), 260)
+        return delay(
+          all.slice(offset, offset + limit).map((m) => withRecording(accountId, m)),
+          260
+        )
       },
       matchDetail: (matchId: string): Promise<MatchDetail | null> =>
         delay(MATCH_DETAILS[matchId] ?? null, 420),
-      matchSummary: (accountId: string, matchId: string): Promise<MatchSummary | null> =>
-        delay(matchesFor(accountId).find((m) => m.matchId === matchId) ?? null, 200)
+      matchSummary: (accountId: string, matchId: string): Promise<MatchSummary | null> => {
+        const match = matchesFor(accountId).find((m) => m.matchId === matchId)
+        return delay(match ? withRecording(accountId, match) : null, 200)
+      }
+    },
+
+    matchRecordings: {
+      get: (accountId: string, matchId: string): Promise<MatchRecording | null> =>
+        delay(recordings.get(recordingKey(accountId, matchId)) ?? null, 220),
+
+      // The server's rules, so the harness refuses what it would: only the
+      // account's owner attaches, and a second one asks first.
+      attach: (accountId: string, matchId: string, input: AttachRecordingInput): Promise<AttachRecordingOutcome> => {
+        const account = accounts().find((a) => a.id === accountId)
+        if (account?.isMine === false) {
+          return delay({ ok: false, reason: 'failed', message: 'That League account is not linked to your Foxfire account.' }, 300)
+        }
+
+        const key = recordingKey(accountId, matchId)
+        const existing = recordings.get(key)
+        if (existing && !input.replace) {
+          return delay(
+            {
+              ok: false,
+              reason: 'exists',
+              message: existing.title
+                ? `This game already has a recording attached: “${existing.title}”.`
+                : 'This game already has a recording attached.'
+            },
+            300
+          )
+        }
+
+        recordings.set(key, {
+          youtubeVideoId: input.youtubeVideoId,
+          privacy: input.privacy ?? null,
+          hasEvents: input.events !== undefined,
+          title: input.title ?? null,
+          durationSeconds: input.durationSeconds ?? null,
+          source: input.source,
+          attachedBy: 'Faker',
+          attachedAt: new Date().toISOString(),
+          events: input.events ?? []
+        })
+        notifyRecording(accountId, matchId)
+        return delay({ ok: true }, 300)
+      },
+
+      detach: (accountId: string, matchId: string): Promise<AdminActionResult> => {
+        const removed = recordings.delete(recordingKey(accountId, matchId))
+        if (removed) notifyRecording(accountId, matchId)
+        return delay({ ok: removed, error: removed ? null : 'There is no recording on that game.' }, 250)
+      }
     },
 
     sync: {
@@ -649,6 +733,10 @@ export function createFixtureClient(): FoxfireClient {
       onRankChanged: (cb) => {
         rankChangedListeners.add(cb)
         return () => rankChangedListeners.delete(cb)
+      },
+      onRecordingChanged: (cb) => {
+        recordingListeners.add(cb)
+        return () => recordingListeners.delete(cb)
       }
     }
   }

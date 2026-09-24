@@ -75,6 +75,90 @@ export interface SharedReplaySummary {
   fileBytes: number | null
 }
 
+/** Which side of an event the recording player was on. */
+export type RecordingEventRole = 'kill' | 'death' | 'assist' | 'multikill'
+
+/**
+ * One thing that happened to the player whose screen a recording is.
+ *
+ * Moved here from the desktop when recordings started reaching YouTube: the
+ * events travel to a server with the video, so the web draws the same markers
+ * the desktop always did, from the same shape.
+ */
+export interface RecordingEvent {
+  /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
+  eventId: number
+  name: string
+  /** Seconds on the game clock, as the game reported it. */
+  gameTime: number
+  /** Seconds into the video file — gameTime minus the offset captured at record start. */
+  videoTime: number
+  role: RecordingEventRole
+  /** The other player for a kill or death, the streak size for a multikill. */
+  label: string | null
+}
+
+/**
+ * Who can watch a YouTube video. The uploader picks, which YouTube requires.
+ *
+ * A private video attaches to a server like any other; it plays for nobody
+ * but its owner signed in to YouTube, and the player says so rather than the
+ * row pretending there is nothing there.
+ */
+export type YouTubePrivacy = 'public' | 'unlisted' | 'private'
+
+/**
+ * The YouTube recording a server holds for one account's view of one game.
+ *
+ * A recording is one player's screen, so it belongs to a (match, account) pair
+ * and never to the match: in Ahri's history this is Ahri's video, in Riven's it
+ * is Riven's, and a history that is neither has none. The row carries only
+ * enough to offer "Watch recording"; the events come with the recording itself.
+ */
+export interface MatchRecordingSummary {
+  youtubeVideoId: string
+  /** As the uploader chose it, or null for a link pasted with nothing to say. */
+  privacy: YouTubePrivacy | null
+  /** Whether markers come with it — false for a link pasted in a browser. */
+  hasEvents: boolean
+}
+
+/** The recording in full, as its page and the player read it. */
+export interface MatchRecording extends MatchRecordingSummary {
+  title: string | null
+  durationSeconds: number | null
+  /** Uploaded by Foxfire, or a link to a video somebody uploaded themselves. */
+  source: 'upload' | 'link'
+  /** The username that attached it; null once that user is gone. */
+  attachedBy: string | null
+  attachedAt: string
+  events: RecordingEvent[]
+}
+
+/** What attaching a recording to a game sends. */
+export interface AttachRecordingInput {
+  youtubeVideoId: string
+  source: 'upload' | 'link'
+  privacy?: YouTubePrivacy | null
+  title?: string | null
+  durationSeconds?: number | null
+  events?: RecordingEvent[]
+  /** Set once somebody has been asked and said yes: one recording per game per account. */
+  replace?: boolean
+}
+
+/**
+ * How an attach went.
+ *
+ * `exists` is its own answer rather than an error string because the screen
+ * turns it into a question — replace the video already on this game? — and
+ * resends with `replace` when the answer is yes.
+ */
+export type AttachRecordingOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'exists'; message: string }
+  | { ok: false; reason: 'failed'; message: string }
+
 /**
  * What this machine holds for one game, as a match row carries it.
  *
@@ -84,6 +168,15 @@ export interface SharedReplaySummary {
 export interface LocalArtefacts {
   /** The recording of this game, when one exists. Scoped to the account it was recorded on. */
   recordingId: number | null
+  /**
+   * The YouTube copy of that recording, once it has one.
+   *
+   * Optional because only the desktop's own recordings table can answer it,
+   * and a row built before it knew to ask simply has nothing on YouTube.
+   */
+  recordingVideoId?: string | null
+  /** An upload of that recording is queued or running, so the menu does not offer another. */
+  recordingUploadPending?: boolean
   /**
    * Riot's own replay for this game, when Foxfire has a copy.
    *
@@ -163,6 +256,17 @@ export interface MatchSummary {
    * decide between offering a download and offering to watch.
    */
   sharedReplay?: SharedReplaySummary | null
+
+  /**
+   * The YouTube recording of this game from this row's player, when a server holds one.
+   *
+   * Scoped the way the row is: a server answers it for the account whose
+   * history this is, so the same game in two people's histories carries two
+   * different recordings, or one, or none. Null in local-only mode, where a
+   * video on YouTube lives on the recording itself and reaches the row
+   * through `local`.
+   */
+  recording?: MatchRecordingSummary | null
 
   /**
    * Files this machine holds for the game: a recording, a Riot replay.

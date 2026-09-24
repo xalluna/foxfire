@@ -15,6 +15,15 @@ namespace Foxfire.Api.Reads;
 /// </summary>
 public sealed record MatchSharedReplay(string? Patch, long? FileBytes);
 
+/// <summary>
+/// The YouTube recording of a game from one row's player, as the row advertises it.
+///
+/// Enough to offer "Watch recording" and no more; the markers come with the
+/// recording itself, when somebody opens it. Spelled YoutubeVideoId so the
+/// wire says youtubeVideoId, which is what the TypeScript side reads.
+/// </summary>
+public sealed record MatchRecordingSummary(string YoutubeVideoId, string? Privacy, bool HasEvents);
+
 /// <summary>What one game was worth, when it could be worked out.</summary>
 public sealed record MatchRankSummary(
     int LpDelta,
@@ -61,6 +70,10 @@ internal sealed record MatchRankRow(
 /// so: recordingId and replayId are about files on one machine, and no server
 /// can answer them. The desktop fills those from its own SQLite after this
 /// arrives.
+///
+/// A recording on YouTube is different, and so it is here: the video is on the
+/// internet rather than on a disk, so the server can say whether this row's
+/// player attached one.
 /// </summary>
 public sealed record MatchSummaryResponse(
     string MatchId,
@@ -90,7 +103,8 @@ public sealed record MatchSummaryResponse(
     bool IsRemake,
     MatchRankSummary? Rank,
     bool HasManualRank,
-    MatchSharedReplay? SharedReplay);
+    MatchSharedReplay? SharedReplay,
+    MatchRecordingSummary? Recording);
 
 /// <summary>One player's line, as the match detail screen draws it.</summary>
 public sealed record MatchParticipantResponse(
@@ -236,7 +250,24 @@ public sealed class MatchReads(FoxfireDbContext db)
                 SharedReplay = db.SharedReplays
                     .Where(r => r.MatchId == x.p.MatchId && r.UploadedAt != null)
                     .Select(r => new MatchSharedReplay(r.Patch, r.FileBytes))
+                    .FirstOrDefault(),
+
+                // Keyed on the account whose history this is, never on the
+                // match alone. This is the rule that a recording belongs to
+                // one player's view: the same game in somebody else's history
+                // answers with their recording or with nothing, and a search
+                // row with no account (a null id) answers with nothing.
+                //
+                // A build without YouTube asks nothing: the field is always
+                // null, and the query carries no subquery for it.
+#if FEATURE_YOUTUBE
+                Recording = db.MatchRecordings
+                    .Where(r => r.MatchId == x.p.MatchId && r.RiotAccountId == riotAccountId)
+                    .Select(r => new MatchRecordingSummary(r.YouTubeVideoId, r.Privacy, r.EventsJson != null))
                     .FirstOrDefault()
+#else
+                Recording = (MatchRecordingSummary?)null
+#endif
             })
             .ToListAsync(cancellationToken);
 
@@ -270,7 +301,8 @@ public sealed class MatchReads(FoxfireDbContext db)
                 x.p.GameEndedInEarlySurrender,
                 x.Rank?.ToWire(),
                 x.HasManualRank,
-                x.SharedReplay))
+                x.SharedReplay,
+                x.Recording))
         ];
     }
 

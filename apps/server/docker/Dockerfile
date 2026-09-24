@@ -36,6 +36,12 @@ COPY tsconfig.base.json ./
 COPY tooling/ ./tooling/
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
+
+# Build-time feature switches — see tooling/vite/features.ts. Declared in both
+# stages, because the web client and the server it is served by must be built
+# with the same answer; a build argument reaches only the stage that names it.
+# Unset is off. The release passes the repository's variables.
+ARG FOXFIRE_FEATURE_YOUTUBE=
 RUN npm run build -w @foxfire/web
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -63,6 +69,9 @@ COPY apps/server/ ./apps/server/
 # where Web/SpaHosting.cs looks for it.
 COPY --from=web /src/apps/web/dist ./apps/server/src/Foxfire.Api/wwwroot
 
+# The same switches as the web stage, read by Directory.Build.props. After the
+# restore, so turning one on does not throw away the package layer.
+ARG FOXFIRE_FEATURE_YOUTUBE=
 RUN dotnet publish apps/server/src/Foxfire.Api/Foxfire.Api.csproj \
       --no-restore \
       --configuration Release \

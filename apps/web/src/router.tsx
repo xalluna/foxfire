@@ -29,6 +29,7 @@ import { InvitePage } from './pages/auth/InvitePage'
 import { RegisterPage } from './pages/auth/RegisterPage'
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { SignInPage } from './pages/auth/SignInPage'
+import { YOUTUBE_ENABLED } from './features'
 import { safeRedirect } from './routes/redirect'
 import { useAuth } from './session/session'
 
@@ -135,7 +136,14 @@ const routeTree = root.addChildren([
   authed.addChildren([
     home,
     players,
-    player.player.addChildren([player.dashboard, player.champions, player.rank, player.lpEditor]),
+    player.player.addChildren([
+      player.dashboard,
+      player.champions,
+      player.rank,
+      player.lpEditor,
+      // A recording's page, from YouTube — only in a build that has it.
+      ...(YOUTUBE_ENABLED ? [player.recording] : [])
+    ]),
     match,
     account,
     admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData])
