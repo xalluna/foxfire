@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   DEFAULT_QUEUE_FILTER,
   queueTypeForQueueId,
@@ -8,20 +9,51 @@ import {
   type MatchSummary,
   type QueueType
 } from '@foxfire/core'
-import { paths } from '@foxfire/core/routes'
-import { DashboardPage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
+import { paths, playerSlug } from '@foxfire/core/routes'
+import {
+  DashboardPage,
+  Icon,
+  cardFooterLinkClass,
+  type ContextMenuState,
+  type MatchFocus
+} from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
 import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
 import { useRecordingActions } from '../match/useRecordingActions'
 import { useHomeAccount } from '../queries/accounts'
+import { useChampionStats } from '../queries/championStats'
 import { useFavorites, useRefreshFavorites, useToggleFavorite } from '../queries/favorites'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
+import { queueSearchFor, rankQueueSearchFor } from '../routes/params'
 import { isSyncing, useSyncProgress } from '../store/syncProgress'
 
 const PAGE_SIZE = 20
+
+const SOLO: QueueType = 'RANKED_SOLO_5x5'
+
+/** The "More" that ends a card in the rail, leading to the page it summarises. */
+function MoreLink({
+  to,
+  slug,
+  search,
+  label
+}: {
+  to: '/players/$slug/rank' | '/players/$slug/champions'
+  slug: string
+  search: Record<string, unknown>
+  label: string
+}): JSX.Element {
+  return (
+    // The router's types are registered by each app, not here.
+    <Link to={to} params={{ slug }} search={search as never} className={cardFooterLinkClass}>
+      {label}
+      <Icon.ChevronDown width={14} height={14} className="-rotate-90" />
+    </Link>
+  )
+}
 
 /**
  * One account's profile: rank, recent form, and its match history.
@@ -29,6 +61,12 @@ const PAGE_SIZE = 20
  * The queue filter is the host's to hold, because where it lives — a store, a
  * URL — decides whether it survives navigating away and back, and that is a
  * decision about the app rather than about this screen.
+ *
+ * The rail's two summaries are this screen's own. Solo/Duo's month comes from
+ * the thinned trend rather than the Rank page's whole history, and the
+ * champions from the same query the Champions page opens on, so each "More"
+ * lands on the numbers its card was showing. Which queue the champions card is
+ * on is held here and forgotten on leaving: it is a glance, not a setting.
  */
 export function DashboardScreen({
   account,
@@ -71,6 +109,14 @@ export function DashboardScreen({
     queryKey: queryKeys.dashboard(account.id),
     queryFn: () => client.dashboard.get(account.id)
   })
+
+  const soloTrend = useQuery({
+    queryKey: queryKeys.rankTrend(account.id, SOLO),
+    queryFn: () => client.rank.trend(account.id, SOLO)
+  })
+
+  const [championsQueue, setChampionsQueue] = useState<number | null>(DEFAULT_QUEUE_FILTER)
+  const champions = useChampionStats(account, championsQueue, null)
 
   // Genuinely paged: each "Show more" fetches only the next window and appends
   // it. The previous version grew a limit and refetched the whole list from
@@ -175,6 +221,8 @@ export function DashboardScreen({
     })
   }
 
+  const slug = playerSlug(account)
+
   // A client that cannot play YouTube is not offered the server's recordings.
   const flat = pageItems(matches.data, (match) => match.matchId)
   const rows = platform.youtube ? flat : flat.map(withoutServerRecording)
@@ -212,6 +260,35 @@ export function DashboardScreen({
           isHome: home.data?.id === account.id,
           onSetHome: () => setHome.mutate(),
           where: platform.kind === 'web' ? 'this browser' : 'this PC'
+        }}
+        soloTrend={soloTrend.data}
+        rankMore={
+          // Solo/Duo, and no range: thirty days is where the Rank page opens.
+          <MoreLink
+            to="/players/$slug/rank"
+            slug={slug}
+            search={{ queue: rankQueueSearchFor(SOLO) }}
+            label="Rank history"
+          />
+        }
+        champions={{
+          stats: champions.stats,
+          loading: champions.loading,
+          seasonLabel: champions.season?.label ?? null,
+          queueId: championsQueue,
+          onQueueChange: setChampionsQueue,
+          more: (
+            // The queue always named, even when it is the default: the page
+            // otherwise opens on whichever queue it last showed, and "More"
+            // has to continue the list this card is showing. No range, so it
+            // opens on the same season — and the same cached numbers.
+            <MoreLink
+              to="/players/$slug/champions"
+              slug={slug}
+              search={{ queue: queueSearchFor(championsQueue) }}
+              label="All champions"
+            />
+          )
         }}
         matches={rows}
         matchesLoading={matches.isLoading}

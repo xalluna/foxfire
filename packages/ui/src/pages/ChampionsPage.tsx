@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import type { ChampionStats, RankRange } from '@foxfire/core'
 import { queueFilterLabel } from '@foxfire/core'
@@ -138,9 +138,29 @@ export interface ChampionsPageProps {
   onRangeChange: (range: RankRange) => void
   /** The season the range names, or null for all time. */
   seasonLabel: string | null
+  /** Above everything, whether loading, empty or full: the way back to the profile. */
+  back?: ReactNode
 }
 
-export function ChampionsPage({
+/**
+ * One account's champions as a sortable table.
+ *
+ * The way back sits outside the body so that each of the body's three states —
+ * loading, nothing at all, the table — keeps it, rather than a slow first load
+ * being the one moment there is no way off the page.
+ */
+export function ChampionsPage({ back, ...body }: ChampionsPageProps): JSX.Element {
+  if (back === undefined) return <ChampionsBody {...body} />
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <div className="px-4 pt-4 max-md:px-2 max-md:pt-2">{back}</div>
+      <ChampionsBody {...body} />
+    </div>
+  )
+}
+
+function ChampionsBody({
   stats: data,
   loading: isLoading,
   queueId,
@@ -149,7 +169,7 @@ export function ChampionsPage({
   rangeOptions,
   onRangeChange: setPicked,
   seasonLabel
-}: ChampionsPageProps): JSX.Element {
+}: Omit<ChampionsPageProps, 'back'>): JSX.Element {
   const assets = useAssetManifest()
   // Opens on games played: the point of this screen is which champions you
   // actually play and how they perform.

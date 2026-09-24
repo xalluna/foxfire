@@ -37,6 +37,35 @@ internal sealed class GetRankHistoryRequestHandler(FoxfireDbContext db, RankRead
     }
 }
 
+/// <summary>The last thirty days of one ladder, a close a day, for the profile's graph.</summary>
+public sealed record GetRankTrendRequest(Guid RiotAccountId, string QueueType)
+    : IValidatedRequest<RankTrendResponse>;
+
+internal sealed class GetRankTrendRequestValidator : AbstractValidator<GetRankTrendRequest>
+{
+    public GetRankTrendRequestValidator() =>
+        RuleFor(x => x.QueueType)
+            .Must(queue => RankedQueues.FromRiotName(queue) is not null)
+            .WithErrorCode("unknown_queue")
+            .WithMessage(x => $"{x.QueueType} is not a ranked queue.");
+}
+
+internal sealed class GetRankTrendRequestHandler(FoxfireDbContext db, RankReads ranks)
+    : IValidatedRequestHandler<GetRankTrendRequest, RankTrendResponse>
+{
+    public async Task<Response<RankTrendResponse>> Handle(
+        GetRankTrendRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var known = await db.RiotAccounts.AnyAsync(a => a.Id == request.RiotAccountId, cancellationToken);
+        if (!known) return Response<RankTrendResponse>.NotFound();
+
+        return await ranks.TrendAsync(request.RiotAccountId, request.QueueType, cancellationToken);
+    }
+}
+
 /// <summary>The seasons this account has any history in, for the pickers.</summary>
 public sealed record GetRankPeriodsRequest(Guid RiotAccountId)
     : IDomainRequest<IReadOnlyList<SeasonResponse>>;

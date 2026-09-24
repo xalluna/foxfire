@@ -27,6 +27,8 @@ export type {
   ManualRankEdit,
   RankMilestone,
   RankHistory,
+  RankTrend,
+  RankTrendPoint,
   Season,
   SeasonInput,
   RankRange,

@@ -107,7 +107,15 @@ Two lists that grow are whole on purpose, and say so where they are read:
   through every reading and reads milestones off neighbouring pairs, so a page would leave a gap
   and a cap would start the line late. The range bounds it instead: about one reading per ranked
   game, around 300 for the thirty days the page opens on. "All" grows every season, and making it
-  cheaper — thinning the line, summarising old seasons — is its own piece of work, not a page size.
+  cheaper — summarising old seasons — is its own piece of work, not a page size.
+
+  The profile does not read it. Its graph is `/api/riot-accounts/{id}/rank/trend` (`rank.trend`):
+  thirty days thinned to the last reading of each day, at most 31 points by construction, so it is
+  neither paged nor on this list. The rule lives twice — `rules/rankTrend.ts` in core, which the
+  desktop runs over its own database, and `RankTrends` in `Foxfire.Core` — and
+  `fixtures/rank-trend-corpus.json`, generated from the TypeScript with
+  `npm run generate-trend-corpus -w @foxfire/core`, holds the two to the same answers, as the ladder
+  corpus does for LP. Change one and you regenerate the corpus and change the other.
 - **Every recording that can go to YouTube** (`recordings.eligible`, in YouTube builds only).
   "Select all" on the Recordings tab has to mean all of them, and the batch dialog reads each one's
   size and game. It is bounded by what is on one PC's disk.

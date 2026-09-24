@@ -139,6 +139,7 @@ const api: Api = {
   rank: {
     history: (accountId, queueType, range) =>
       ipcRenderer.invoke(CH.rank.history, accountId, queueType, range),
+    trend: (accountId, queueType) => ipcRenderer.invoke(CH.rank.trend, accountId, queueType),
     periods: (accountId) => ipcRenderer.invoke(CH.rank.periods, accountId),
     editable: (accountId, queueType) =>
       ipcRenderer.invoke(CH.rank.editable, accountId, queueType),

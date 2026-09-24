@@ -14,8 +14,10 @@ and looking after them happens in Settings. Foxfire also stops downloading every
 server to find the one it is showing, which is what lets a server's community grow without every
 desktop on it slowing down — and every list that grows, here or on the server, now arrives a page at
 a time. Finding anybody else is a box in the title bar now rather than a page of its own — Ctrl K
-from anywhere — with the players you star kept at the top of it. The Live game tab is gone, too: it
-redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
+from anywhere — with the players you star kept at the top of it. A profile leads with where somebody
+stands now — their Solo/Duo month drawn under their rank, and the champions they play most this
+season — and Rank and Champions open from there rather than from tabs of their own. The Live game
+tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
 
 ### Added
 
@@ -39,6 +41,23 @@ redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
 
 ### Changed
 
+- **Rank and champions on the profile.** The Solo/Duo card shows how far through the tier you are,
+  what the last 30 days did to your LP, and the month drawn beneath it — one point a day, so a
+  quiet week is a flat line rather than a gap — with Rank history underneath for the whole graph.
+  Below Flex, the five champions you have played most this season, for all queues, Solo/Duo or
+  Flex, and All champions for the rest. The five are the Champions page's first five, so the list
+  it opens on carries straight on. The recent-games block keeps its own three, for its own twenty
+  games.
+- **A way back from Rank and Champions.** Both pages open with a link back to the profile they
+  came from, the way a game's own page already did.
+- **Rank and champions stay full size in a narrow window.** Below 1280 pixels wide the cards move
+  above the recent games instead of shrinking to a line of chips beside the name.
+- **The column beside the match list scrolls with it.** With a month and a season in it, it is
+  taller than most windows, and pinned in place it hid its own bottom until the list ran out.
+- **"Over this period" on the Rank page counts from before the period.** Thirty days now includes
+  the month's first game: it counted from the first reading inside the period, so the one game
+  somebody played after a quiet month showed no change at all. It is the same figure the profile
+  shows.
 - **Your account has its own page.** Your name, email, password and League accounts moved from
   Settings › Server to a new Account page just under it, so Server is back to which server Foxfire
   reads from and how to leave it. The page is only there while you are signed in to a server.
@@ -68,6 +87,9 @@ redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
 
 ### Removed
 
+- **Champions and Rank in the title bar.** Both open from the profile's cards now, and Dashboard
+  stays lit while you are on them, since they are part of it. The Foxfire logo takes you to the
+  account this PC opens on from anywhere — Settings included.
 - **The Search page and its tab.** Everything it did is in the title bar's search box, which works
   from whichever page you are on rather than taking you away from it.
 - **The Live game tab.** It redrew the scoreboard League already shows on Tab, and had nothing to
@@ -95,6 +117,11 @@ redrew the scoreboard League already shows on Tab. Needs Foxfire Server 0.4.0.
   `recordings:eligible` channel behind "select all" — which exists only in builds with YouTube in
   them.
 - Reads the lists of Foxfire Server 0.4.0's API version 3, and no older server's.
+- The profile's graph asks for thirty days as a close a day — the last reading of each day, at most
+  31 points, never an average — rather than every reading in the month, which is what the Rank
+  page still reads. Connected to a server, Foxfire Server 0.4.0 answers it; on this PC alone the
+  same rule runs over the local database, and a shared corpus of cases holds the two to the same
+  answers.
 
 ## [0.14.0] — 2026-09-23
 

@@ -27,6 +27,7 @@ import type {
   QueueType,
   RankHistory,
   RankRange,
+  RankTrend,
   RiotIdInput,
   Season,
   SeasonInput,
@@ -122,10 +123,17 @@ export interface FoxfireData {
      * paged. The graph draws a line through all of them and reads milestones
      * off neighbouring pairs, so a page would leave a gap and a cap would start
      * the line late. The range bounds it instead: about one reading per ranked
-     * game, a few hundred for the thirty days the screen opens on. Making "all"
-     * cheaper as seasons pile up is separate work; see CLAUDE.md.
+     * game, a few hundred for the thirty days the screen opens on. The profile
+     * reads `trend` rather than this; making "all" cheaper as seasons pile up is
+     * separate work — see CLAUDE.md.
      */
     history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+    /**
+     * The last thirty days as a close a day, for the profile's graph. Bounded
+     * by construction at 31 points — see rules/rankTrend.ts, which every
+     * implementation of this answers with.
+     */
+    trend: (accountId: string, queueType: QueueType) => Promise<RankTrend>
     /** Seasons with data, newest first. The first is what the pickers open on. */
     periods: (accountId: string) => Promise<Season[]>
     /**

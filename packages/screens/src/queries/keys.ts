@@ -74,6 +74,14 @@ export const queryKeys = {
       ...(range === undefined ? [] : [range])
     ] as const,
 
+  /** The profile's thirty days, a close a day. Refreshed wherever rankHistory is. */
+  rankTrend: (accountId?: string, queueType?: QueueType) =>
+    [
+      'rankTrend',
+      ...(accountId === undefined ? [] : [accountId]),
+      ...(queueType === undefined ? [] : [queueType])
+    ] as const,
+
   rankPeriods: (accountId?: string) =>
     accountId === undefined ? (['rankPeriods'] as const) : (['rankPeriods', accountId] as const),
 

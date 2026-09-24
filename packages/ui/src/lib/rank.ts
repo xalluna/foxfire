@@ -1,4 +1,5 @@
 import type { LeagueEntry, QueueType } from '@foxfire/core'
+import { ALL_TIERS, DIVISIONS, DIVISIONED_TIERS } from '@foxfire/core'
 
 import iron from '../assets/ranks/iron.png'
 import bronze from '../assets/ranks/bronze.png'
@@ -75,6 +76,44 @@ export function formatTierShort(tier: string | null, division: string | null): s
   if (apex) return apex
   const arabic = ROMAN_TO_ARABIC[division ?? '']
   return arabic ? `${TIERS[tier].label[0]}${arabic}` : TIERS[tier].label[0]
+}
+
+/** Where somebody stands inside their tier, for the track under a rank card. */
+export interface TierProgress {
+  /** The four divisions lowest first, then the tier they lead to: G4 G3 G2 G1 P. */
+  stops: Array<{ label: string; tier: Tier }>
+  /** Which of the first four is the current division. */
+  current: number
+  /** How far through the tier, 0 at its fourth division's 0 LP and 1 at the next tier. */
+  fraction: number
+}
+
+/**
+ * The tier as a track of its divisions — how far to the next crest.
+ *
+ * Null for the apex tiers, which have no divisions to walk through and no
+ * fixed LP to the next one, and for anybody unranked. LP is clamped to the
+ * division it belongs to, since a reading can sit at 100 in promotion series.
+ */
+export function tierProgress(
+  entry: Pick<LeagueEntry, 'tier' | 'rank' | 'leaguePoints'>
+): TierProgress | null {
+  const tierIndex = (DIVISIONED_TIERS as readonly string[]).indexOf(entry.tier ?? '')
+  const division = (DIVISIONS as readonly string[]).indexOf(entry.rank ?? '')
+  if (tierIndex < 0 || division < 0) return null
+
+  const tier = entry.tier as Tier
+  const next = ALL_TIERS[tierIndex + 1] as Tier
+  const lp = Math.min(Math.max(entry.leaguePoints ?? 0, 0), 100)
+
+  return {
+    stops: [
+      ...DIVISIONS.map((d) => ({ label: formatTierShort(tier, d) ?? '', tier })),
+      { label: formatTierShort(next, null) ?? '', tier: next }
+    ],
+    current: division,
+    fraction: (division + lp / 100) / DIVISIONS.length
+  }
 }
 
 export function queueLabel(queueType: QueueType): string {

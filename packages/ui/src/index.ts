@@ -18,6 +18,9 @@ export { AssetManifestProvider, useAssetManifest } from './context/assetManifest
 export { AccountRail } from './components/AccountRail'
 export { Asset } from './components/Asset'
 export { Bar, type BarTone } from './components/Bar'
+export { cardFooterLinkClass } from './components/CardFooter'
+export { ChampionRecordRow, type ChampionRecord } from './components/ChampionRecordRow'
+export { ChampionsCard, type ChampionsCardProps } from './components/ChampionsCard'
 export {
   ContextMenu,
   type ContextMenuItem,
@@ -39,12 +42,14 @@ export { ProfileHeader } from './components/ProfileHeader'
 export { ProfileMarks, type FavoriteMark, type HomeMark } from './components/ProfileMarks'
 export { ProfileStrip } from './components/ProfileStrip'
 export { QueueFilter } from './components/QueueFilter'
-export { RankCard } from './components/RankCard'
+export { RankCard, type RankCardDetail } from './components/RankCard'
 export { RankChart } from './components/RankChart'
+export { RankTrendChart } from './components/RankTrendChart'
 export { RecentSummary } from './components/RecentSummary'
 export { Segmented } from './components/Segmented'
 export { MatchListSkeleton, MatchRowSkeleton, Skeleton } from './components/Skeleton'
 export { SyncProgressBar } from './components/SyncProgressBar'
+export { TierProgressTrack } from './components/TierProgressTrack'
 export * as Icon from './components/icons'
 
 // Recordings
@@ -126,6 +131,7 @@ export {
   runeIconUrl,
   spellIconUrl
 } from './lib/assets'
+export { mostPlayed } from './lib/champions'
 export { roundedPath, type Point } from './lib/curve'
 export { EXAMPLE_RIOT_IDS, randomExampleRiotId } from './lib/exampleRiotId'
 export { TRINKET_SLOT, itemSlots } from './lib/items'
@@ -151,8 +157,10 @@ export {
   tierColor,
   tierCrest,
   tierLabel,
+  tierProgress,
   type RankRecord,
-  type Tier
+  type Tier,
+  type TierProgress
 } from './lib/rank'
 export { formatRiotId, parseRiotId } from './lib/riotId'
 export { runeIds } from './lib/runes'
