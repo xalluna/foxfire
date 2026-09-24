@@ -18,21 +18,37 @@ it has. Clients used to download the whole list of League accounts on the server
 — at launch and on nearly every page — and search it themselves, which is fine
 for a dozen people and not for a community that keeps growing. Now your own
 accounts are a list, anybody else's is one lookup, and the finder answers a page
-at a time.
+at a time. So does every other list that grows with the community or with time —
+the members, used invites, the replay library and match history — each saying how
+long it is. Serves Foxfire 0.15 and newer.
 
 ### Changed
 
 - **Players shows a page at a time.** The Players page opens on the accounts you
   have claimed, then the first fifty of everybody else in name order, with Show
   more for the next fifty. Typing still finds anybody on the server, a page at a
-  time as well.
+  time as well, and says how many match rather than "50+".
 - **Every search is capped.** A search that does not ask for a page gets fifty
-  players, and none gets more than a hundred. That includes Foxfire 0.14, whose
-  Search page has no Show more: a blank search there lists the first fifty by
-  name, and typing still finds anybody.
+  players, and none gets more than a hundred.
 - **League accounts pages its claims.** An admin's list of claimed accounts
   arrives fifty at a time, with a box to find one by name, rather than every
   claim on the server at once.
+- **Members searches the server.** The Members page finds somebody by name or
+  email on the server rather than in a list it downloaded whole, fifty at a time
+  with Show more, and says how many members there are — or how many match.
+- **Invites shows what can still be used, and the rest a page at a time.** Open
+  invites are listed in full; used ones arrive fifty at a time with Show more.
+  The list used to stop at the newest two hundred invites ever made, so on a
+  long-running server the oldest simply were not there. Withdrawn and lapsed
+  invites are no longer sent at all, since nothing showed them.
+- **The replay library pages.** Data & storage lists shared replays biggest
+  first, fifty at a time with Show more, rather than stopping at the biggest
+  fifty — so the one you came to delete is always reachable.
+- **Foxfire 0.14 is no longer served.** Every list above now answers with a page
+  and a count, which 0.14 cannot read: its Search, match history and admin pages
+  would all come up empty. A 0.14 desktop connected here updates itself to 0.15,
+  the version this release names. A browser tab left open across the upgrade is
+  told to reload.
 
 ### Under the hood
 
@@ -49,8 +65,23 @@ at a time.
   answers for Foxfire 0.14, which reads nothing else, but says so with a
   `Deprecation` header (RFC 9745), and is marked obsolete in the code so nothing
   new calls it. It goes in the release that takes 0.14 off the allow list.
+- Every list that grows answers `{ items, total }` rather than an array:
+  `/api/search`, `/api/riot-accounts/{id}/matches`, `/api/admin/users` (which
+  now takes `q`, `limit` and `offset`), `/api/admin/invites/used` (new) and
+  `/api/admin/storage/replays` (which now takes `offset`, and answers at most a
+  hundred rather than two hundred). `GET /api/admin/invites/` answers with the
+  open invites only. Each is counted over the same filters it pages, in an order
+  that ends in a unique column so no row falls between two pages.
+- API version 3, and the web client is built against it. Admitting 0.15 and
+  taking 0.14 off the allow list — with the deprecated `GET /api/riot-accounts`
+  going at the same time — happen in the commit that releases both.
+- Rank history is deliberately still answered whole: the graph needs every
+  reading in the range to draw its line, and the range is what bounds it.
 - Tests for each read — including that "yours" never picks up an account nobody
-  has claimed — and for paging, the cap and both filters.
+  has claimed — and for paging, totals, the cap and both filters; for finding
+  members by name or address; for which invites are open and the order used ones
+  page in; for the replay library; and that every paged route answers with a
+  page on the wire.
 
 ## [0.3.1] — 2026-09-23
 

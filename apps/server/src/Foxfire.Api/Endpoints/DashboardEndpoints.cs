@@ -32,8 +32,8 @@ public static class DashboardEndpoints
                 Guid riotAccountId,
                 ISender sender,
                 CancellationToken cancellationToken,
-                int limit = 20,
-                int offset = 0,
+                int? limit = null,
+                int? offset = null,
                 int? queueId = null) =>
             sender.SendAsync(new GetMatchesRequest(riotAccountId, limit, offset, queueId), cancellationToken));
 

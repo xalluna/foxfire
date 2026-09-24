@@ -56,6 +56,16 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
     ///
     /// The upper bound is exclusive, so two adjacent ranked years tile without
     /// both claiming a reading that lands on the instant of the boundary.
+    ///
+    /// Whole and uncapped on purpose — the one list that grows which is not
+    /// paged (see "Lists that grow are paged" in CLAUDE.md). The graph draws a
+    /// line through every reading and the milestones are read off neighbouring
+    /// pairs, so a page would be a line with a gap in it and a cap would be one
+    /// that silently starts late. It is bounded by the range asked for instead:
+    /// a reading is kept only when the rank moved, so about one per ranked game,
+    /// which is a few hundred for the thirty days the screen opens on. "All"
+    /// grows with every season, and making that cheaper — thinning the line or
+    /// summarising old seasons — is its own piece of work, not a page size.
     /// </summary>
     public async Task<RankHistoryResponse> HistoryAsync(
         Guid riotAccountId,

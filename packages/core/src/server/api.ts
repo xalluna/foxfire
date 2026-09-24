@@ -6,6 +6,7 @@ import type {
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AttachRecordingInput,
   AttachRecordingOutcome,
   ChampionStats,
@@ -16,6 +17,8 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  Page,
+  PageOptions,
   PlayerSearchOptions,
   PlayerSearchResult,
   QueueType,
@@ -51,6 +54,19 @@ export interface ReplayDownloadGrant {
 
 /** A match row as the server sends it: everything except what is on somebody's disk. */
 export type ServerMatchSummary = Omit<MatchSummary, 'local'>
+
+/**
+ * A path with a query string of whichever values are set — a left-out limit is
+ * the server's default page, not `limit=undefined`.
+ */
+function withQuery(path: string, params: Record<string, string | number | undefined>): string {
+  const query = Object.entries(params)
+    .filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== '')
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+    .join('&')
+
+  return query ? `${path}?${query}` : path
+}
 
 function recordingPath(accountId: string, matchId: string): string {
   return `/riot-accounts/${encodeURIComponent(accountId)}/matches/${encodeURIComponent(matchId)}/recording`
@@ -180,7 +196,7 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
         if (queueId !== null) query.set('queueId', String(queueId))
 
-        return request<ServerMatchSummary[]>(`/riot-accounts/${accountId}/matches?${query}`)
+        return request<Page<ServerMatchSummary>>(`/riot-accounts/${accountId}/matches?${query}`)
       },
 
       matchDetail: (matchId: string) =>
@@ -275,7 +291,7 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         if (options.claimed) path += '&claimed=true'
         if (options.limit !== undefined) path += `&limit=${options.limit}`
         if (options.offset !== undefined) path += `&offset=${options.offset}`
-        return request<PlayerSearchResult[]>(path)
+        return request<Page<PlayerSearchResult>>(path)
       }
     },
 
@@ -338,8 +354,11 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     admin: {
       storage: () => request<ServerStorageUsage>('/admin/storage/'),
 
-      /** The biggest shared replays, so space can be reclaimed where it actually is. */
-      storedReplays: () => request<AdminReplay[]>('/admin/storage/replays'),
+      /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
+      storedReplays: (page: PageOptions = {}) =>
+        request<Page<AdminReplay>>(
+          withQuery('/admin/storage/replays', { limit: page.limit, offset: page.offset })
+        ),
 
       /**
        * Removes a shared replay, blob and record.
@@ -366,7 +385,11 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       addRiotAccount: (input: RiotIdInput) =>
         request<Account>('/admin/riot-accounts', { method: 'POST', body: input }),
 
-      users: () => request<AdminUser[]>('/admin/users/'),
+      /** A page of the members, by name, narrowed to a name or address when `q` says one. */
+      users: (query: AdminUserQuery = {}) =>
+        request<Page<AdminUser>>(
+          withQuery('/admin/users/', { q: query.q?.trim(), limit: query.limit, offset: query.offset })
+        ),
 
       updateUser: (id: string, patch: AdminUserPatch) =>
         attempt(() =>
@@ -398,7 +421,14 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
           })
         ),
 
-      invites: () => request<AdminInvite[]>('/admin/invites/'),
+      /** Every invite that can still be used. Whole: they expire, so there are never many. */
+      openInvites: () => request<AdminInvite[]>('/admin/invites/'),
+
+      /** A page of the invites somebody registered with, most recently used first. */
+      usedInvites: (page: PageOptions = {}) =>
+        request<Page<AdminInvite>>(
+          withQuery('/admin/invites/used', { limit: page.limit, offset: page.offset })
+        ),
 
       /**
        * Creates an invite, or hands back the one already outstanding for that

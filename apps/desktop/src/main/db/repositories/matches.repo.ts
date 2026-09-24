@@ -133,6 +133,23 @@ interface MatchSummaryRow {
  * uneven pages. The predicate goes on the outer query, leaving the team-totals
  * subquery whole so kill participation stays correct under any filter.
  */
+/**
+ * How many games one player's history holds under a queue filter — the total
+ * beside a page of {@link getMatchSummaries}, over the same WHERE.
+ */
+export function countMatchSummaries(db: DatabaseSync, puuid: string, queueId: number | null = null): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM match_participants p
+         JOIN matches m ON m.match_id = p.match_id
+        WHERE p.puuid = ?
+          AND (? IS NULL OR m.queue_id = ?)`
+    )
+    .get(puuid, queueId, queueId) as { n: number }
+  return row.n
+}
+
 export function getMatchSummaries(
   db: DatabaseSync,
   puuid: string,
@@ -203,7 +220,7 @@ export function getMatchSummaries(
           AND mr.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
         WHERE p.puuid = ?
           AND (? IS NULL OR m.queue_id = ?)
-        ORDER BY m.game_creation DESC
+        ORDER BY m.game_creation DESC, m.match_id DESC
         LIMIT ? OFFSET ?`
     )
     .all(puuid, queueId, queueId, limit, offset) as unknown as MatchSummaryRow[]

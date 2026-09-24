@@ -1,19 +1,12 @@
-import type { AdminUser } from '@foxfire/core'
-
 /**
- * Everybody whose name or address contains what was typed.
+ * What the members list says about its own length.
  *
- * Client-side, because the server hands over the whole list in one call and a
- * community that fills a page of it is a large one. Name and address both,
- * since an admin looking somebody up has whichever of the two they were given
- * — a Discord handle usually matches the username, a mail forward the address.
+ * The count is the server's — the whole list, or everybody matching what was
+ * typed — rather than the rows on screen, because the rows are a page of it. So
+ * "120 members" when nothing is typed, and "3 matching" while searching: the
+ * old "3 of 120" needs both numbers at once, and a page only carries one.
  */
-export function filterMembers(users: AdminUser[], query: string): AdminUser[] {
-  const needle = (query ?? '').trim().toLowerCase()
-  if (!needle) return users
-
-  return users.filter(
-    (user) =>
-      user.username.toLowerCase().includes(needle) || user.email.toLowerCase().includes(needle)
-  )
+export function memberCountLabel(total: number, query: string): string {
+  if ((query ?? '').trim()) return `${total} matching`
+  return `${total} ${total === 1 ? 'member' : 'members'}`
 }

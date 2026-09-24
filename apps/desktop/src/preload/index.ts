@@ -49,18 +49,19 @@ const api: Api = {
     }
   },
   serverAdmin: {
-    users: () => ipcRenderer.invoke(CH.serverAdmin.users),
+    users: (query) => ipcRenderer.invoke(CH.serverAdmin.users, query),
     updateUser: (id, patch) => ipcRenderer.invoke(CH.serverAdmin.updateUser, id, patch),
     deleteUser: (id) => ipcRenderer.invoke(CH.serverAdmin.deleteUser, id),
     createPasswordReset: (userId) => ipcRenderer.invoke(CH.serverAdmin.createPasswordReset, userId),
     revokePasswordReset: (userId) => ipcRenderer.invoke(CH.serverAdmin.revokePasswordReset, userId),
-    invites: () => ipcRenderer.invoke(CH.serverAdmin.invites),
+    openInvites: () => ipcRenderer.invoke(CH.serverAdmin.openInvites),
+    usedInvites: (page) => ipcRenderer.invoke(CH.serverAdmin.usedInvites, page),
     createInvite: (email) => ipcRenderer.invoke(CH.serverAdmin.createInvite, email),
     revokeInvite: (id) => ipcRenderer.invoke(CH.serverAdmin.revokeInvite, id),
     getSettings: () => ipcRenderer.invoke(CH.serverAdmin.getSettings),
     setSettings: (patch) => ipcRenderer.invoke(CH.serverAdmin.setSettings, patch),
     storage: () => ipcRenderer.invoke(CH.serverAdmin.storage),
-    storedReplays: () => ipcRenderer.invoke(CH.serverAdmin.storedReplays),
+    storedReplays: (page) => ipcRenderer.invoke(CH.serverAdmin.storedReplays, page),
     removeReplay: (matchId) => ipcRenderer.invoke(CH.serverAdmin.removeReplay, matchId),
     forceUnlink: (riotAccountId) => ipcRenderer.invoke(CH.serverAdmin.forceUnlink, riotAccountId),
     addRiotAccount: (input) => ipcRenderer.invoke(CH.serverAdmin.addRiotAccount, input),
@@ -193,7 +194,7 @@ const api: Api = {
     reconnect: () => ipcRenderer.invoke(CH.capture.reconnect)
   },
   recordings: {
-    list: (accountId) => ipcRenderer.invoke(CH.recordings.list, accountId),
+    list: (accountId, page) => ipcRenderer.invoke(CH.recordings.list, accountId, page),
     detail: (recordingId) => ipcRenderer.invoke(CH.recordings.detail, recordingId),
     usage: () => ipcRenderer.invoke(CH.recordings.usage),
     remove: (recordingId) => ipcRenderer.invoke(CH.recordings.remove, recordingId),
@@ -215,7 +216,8 @@ const api: Api = {
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
     },
     forget: (recordingId) => ipcRenderer.invoke(CH.recordings.forget, recordingId),
-    openRemote: (accountId, matchId) => ipcRenderer.invoke(CH.recordings.openRemote, accountId, matchId)
+    openRemote: (accountId, matchId) => ipcRenderer.invoke(CH.recordings.openRemote, accountId, matchId),
+    eligible: (accountId) => ipcRenderer.invoke(CH.recordings.eligible, accountId)
   },
   youtube: {
     getState: () => ipcRenderer.invoke(CH.youtube.getState),
@@ -249,7 +251,7 @@ const api: Api = {
     }
   },
   replays: {
-    list: (accountId) => ipcRenderer.invoke(CH.replays.list, accountId),
+    list: (accountId, page) => ipcRenderer.invoke(CH.replays.list, accountId, page),
     usage: (accountId) => ipcRenderer.invoke(CH.replays.usage, accountId),
     open: (replayId) => ipcRenderer.invoke(CH.replays.open, replayId),
     reveal: (replayId) => ipcRenderer.invoke(CH.replays.reveal, replayId),

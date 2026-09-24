@@ -13,19 +13,20 @@ public sealed record AdminReplayResponse(
     DateTimeOffset? UploadedAt);
 
 /// <summary>
-/// The library, biggest first.
+/// The library, biggest first, a page at a time.
 ///
 /// Biggest rather than newest, because the reason to open this list is that
-/// something needs to go. Capped, since a long-running community has thousands
-/// and nobody scrolls past the first screen looking for space.
+/// something needs to go. Paged rather than cut off: a long-running community
+/// has thousands, and while nobody scrolls far looking for space, the replay
+/// they came to delete should not be one the list simply cannot reach.
 /// </summary>
-public sealed record ListSharedReplaysRequest(int Limit = 50)
-    : IDomainRequest<IReadOnlyList<AdminReplayResponse>>;
+public sealed record ListSharedReplaysRequest(int? Limit = null, int? Offset = null)
+    : IDomainRequest<Page<AdminReplayResponse>>;
 
 internal sealed class ListSharedReplaysRequestHandler(FoxfireDbContext db)
-    : IDomainRequestHandler<ListSharedReplaysRequest, IReadOnlyList<AdminReplayResponse>>
+    : IDomainRequestHandler<ListSharedReplaysRequest, Page<AdminReplayResponse>>
 {
-    public async Task<Response<IReadOnlyList<AdminReplayResponse>>> Handle(
+    public async Task<Response<Page<AdminReplayResponse>>> Handle(
         ListSharedReplaysRequest request,
         CancellationToken cancellationToken)
     {
@@ -36,16 +37,11 @@ internal sealed class ListSharedReplaysRequestHandler(FoxfireDbContext db)
             .Include(r => r.UploadedBy)
             .Where(r => r.UploadedAt != null)
             .OrderByDescending(r => r.FileBytes)
-            // Clamped rather than refused, which is what this route has
-            // always done. Turning it into a validation failure would be a
-            // change to the contract for no gain nobody asked for.
-            .Take(Math.Clamp(request.Limit, 1, 200))
-            .ToListAsync(cancellationToken);
+            .ThenBy(r => r.MatchId)
+            .ToPageAsync(PageRequest.Of(request.Limit, request.Offset), cancellationToken);
 
-        return Response<IReadOnlyList<AdminReplayResponse>>.Success(
-        [
-            .. replays.Select(r => new AdminReplayResponse(
-                r.MatchId, r.Patch, r.FileBytes, r.UploadedBy?.UserName, r.UploadedAt))
-        ]);
+        return Response<Page<AdminReplayResponse>>.Success(
+            replays.Map(r => new AdminReplayResponse(
+                r.MatchId, r.Patch, r.FileBytes, r.UploadedBy?.UserName, r.UploadedAt)));
     }
 }

@@ -1,10 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
 
 namespace Foxfire.Api.Tests;
 
 /// <summary>
 /// Managing who is on the server.
+///
+/// The server is shared across the assembly and holds more than a page of
+/// people, so a test finds the member it made by searching for their address —
+/// which is unique — rather than reading the whole list.
 /// </summary>
 [Collection(FoxfireServerCollection.Name)]
 public class AdminUserTests(FoxfireServerFixture server)
@@ -13,8 +18,12 @@ public class AdminUserTests(FoxfireServerFixture server)
 
     private async Task<HttpClient> AdminAsync() => (await server.AdminAsync()).Client;
 
-    private static async Task<AdminUser[]> ListAsync(HttpClient admin) =>
-        (await admin.GetFromJsonAsync<AdminUser[]>(new Uri("/api/admin/users/", UriKind.Relative)))!;
+    private static async Task<Page<AdminUser>> PageAsync(HttpClient admin, string query) =>
+        (await admin.GetFromJsonAsync<Page<AdminUser>>(new Uri($"/api/admin/users/?{query}", UriKind.Relative)))!;
+
+    /// <summary>Everybody whose name or address contains <paramref name="q"/> — one page of them.</summary>
+    private static async Task<IReadOnlyList<AdminUser>> ListAsync(HttpClient admin, string q) =>
+        (await PageAsync(admin, $"q={Uri.EscapeDataString(q)}")).Items;
 
     /// <summary>Creates an invited account on a server with signup shut, then opens it again.</summary>
     private async Task<(Session Member, InviteInfo Invite)> InvitedMemberAsync(HttpClient admin, string username)
@@ -45,14 +54,16 @@ public class AdminUserTests(FoxfireServerFixture server)
         using var client = server.Client();
         var member = await server.RegisterAsync(client, "Listed", $"{Unique("listed")}@example.com");
 
-        var users = await ListAsync(admin);
-        var listed = users.Single(u => u.Id == member.User.Id);
+        var listed = Assert.Single(await ListAsync(admin, member.User.Email));
 
+        Assert.Equal(member.User.Id, listed.Id);
         Assert.False(listed.IsAdmin);
         Assert.False(listed.IsDisabled);
         // They registered a moment ago, which is one live session.
         Assert.Equal(1, listed.ActiveSessions);
-        Assert.Contains(users, u => u.Email == FoxfireServerFixture.AdminEmail && u.IsAdmin);
+        Assert.Contains(
+            await ListAsync(admin, FoxfireServerFixture.AdminEmail),
+            u => u.Email == FoxfireServerFixture.AdminEmail && u.IsAdmin);
     }
 
     [Fact]
@@ -64,11 +75,11 @@ public class AdminUserTests(FoxfireServerFixture server)
 
         await admin.PatchAsJsonAsync(
             new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = true });
-        Assert.True((await ListAsync(admin)).Single(u => u.Id == member.User.Id).IsAdmin);
+        Assert.True((await ListAsync(admin, member.User.Email)).Single(u => u.Id == member.User.Id).IsAdmin);
 
         await admin.PatchAsJsonAsync(
             new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = false });
-        Assert.False((await ListAsync(admin)).Single(u => u.Id == member.User.Id).IsAdmin);
+        Assert.False((await ListAsync(admin, member.User.Email)).Single(u => u.Id == member.User.Id).IsAdmin);
     }
 
     [Fact]
@@ -150,7 +161,7 @@ public class AdminUserTests(FoxfireServerFixture server)
         var deleted = await admin.DeleteAsync(new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
-        Assert.DoesNotContain(await ListAsync(admin), u => u.Id == member.User.Id);
+        Assert.DoesNotContain(await ListAsync(admin, member.User.Email), u => u.Id == member.User.Id);
     }
 
     [Fact]
@@ -192,6 +203,58 @@ public class AdminUserTests(FoxfireServerFixture server)
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
             Assert.Equal("last_admin", (await response.Content.ReadFromJsonAsync<ApiError>())?.Error);
         }
+    }
+
+    [Fact]
+    public async Task Members_are_found_by_name_or_address_in_any_case()
+    {
+        using var admin = await AdminAsync();
+        using var client = server.Client();
+        var stem = Guid.NewGuid().ToString("N")[..10];
+        var member = await server.RegisterAsync(client, $"Findable{stem}", $"post-{stem}@example.com");
+
+        // The username, shouted; the address, which does not contain the
+        // username at all.
+        Assert.Contains(await ListAsync(admin, $"FINDABLE{stem.ToUpperInvariant()}"), u => u.Id == member.User.Id);
+        Assert.Contains(await ListAsync(admin, $"post-{stem}"), u => u.Id == member.User.Id);
+        Assert.DoesNotContain(await ListAsync(admin, $"nobody-{stem}"), u => u.Id == member.User.Id);
+    }
+
+    [Fact]
+    public async Task Members_come_a_page_at_a_time_in_name_order_with_a_total()
+    {
+        using var admin = await AdminAsync();
+        var stem = Guid.NewGuid().ToString("N")[..10];
+
+        for (var i = 0; i < 5; i++)
+        {
+            using var client = server.Client();
+            await server.RegisterAsync(client, $"Paged{stem}{i}", $"paged-{stem}-{i}@example.com");
+        }
+
+        var q = $"q=paged{stem}";
+        var first = await PageAsync(admin, $"{q}&limit=2");
+        var second = await PageAsync(admin, $"{q}&limit=2&offset=2");
+        var last = await PageAsync(admin, $"{q}&limit=2&offset=4");
+
+        Assert.Equal(new[] { $"Paged{stem}0", $"Paged{stem}1" }, first.Items.Select(u => u.Username));
+        Assert.Equal(new[] { $"Paged{stem}2", $"Paged{stem}3" }, second.Items.Select(u => u.Username));
+        Assert.Equal(new[] { $"Paged{stem}4" }, last.Items.Select(u => u.Username));
+        Assert.All(new[] { first, second, last }, page => Assert.Equal(5, page.Total));
+    }
+
+    [Fact]
+    public async Task No_page_of_members_is_bigger_than_the_cap_or_smaller_than_one()
+    {
+        using var admin = await AdminAsync();
+
+        // Blank is everybody on the shared server, which is more than one.
+        var everybody = await PageAsync(admin, "limit=100000");
+        var one = await PageAsync(admin, "limit=0");
+
+        Assert.True(everybody.Items.Count <= PageRequest.MaxLimit);
+        Assert.Single(one.Items);
+        Assert.Equal(everybody.Total, one.Total);
     }
 
     [Fact]

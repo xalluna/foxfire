@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps } from 'react'
+import type { ComponentProps } from 'react'
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { Account } from '@foxfire/core'
@@ -6,8 +6,10 @@ import { playerSlug } from '@foxfire/core/routes'
 import { PlayersPage, type PlayerLink } from '@foxfire/ui'
 import { useClient } from '../client/context'
 import { useConnection } from '../client/useConnection'
+import { useDebounced } from '../hooks/useDebounced'
 import { useHomeAccount } from '../queries/accounts'
 import { queryKeys } from '../queries/keys'
+import { nextOffset, pageItems, pageTotal } from '../queries/paging'
 import { useRouteSearch } from '../routes/useRouteSearch'
 import type { PlayersSearch } from '../routes/params'
 
@@ -37,18 +39,6 @@ const TYPING_PAUSE_MS = 250
 
 /** Players per page of the finder. Half of what a server will answer one request with. */
 const PAGE_SIZE = 50
-
-/** A value that stops changing until it has been still for a moment. */
-function useDebounced<T>(value: T, ms: number): T {
-  const [settled, setSettled] = useState(value)
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), ms)
-    return () => clearTimeout(timer)
-  }, [value, ms])
-
-  return settled
-}
 
 /**
  * Finding somebody this server tracks.
@@ -84,8 +74,7 @@ export function PlayersScreen({ heading }: { heading?: string } = {}): JSX.Eleme
     queryKey: queryKeys.playerSearch(asked),
     queryFn: ({ pageParam }) => client.search.players(asked, { limit: PAGE_SIZE, offset: pageParam }),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < PAGE_SIZE ? undefined : allPages.reduce((count, page) => count + page.length, 0),
+    getNextPageParam: nextOffset,
     // Keeps the previous answer on screen while the next one is fetched, so the
     // list holds still rather than collapsing to a skeleton mid-word.
     placeholderData: keepPreviousData
@@ -121,8 +110,9 @@ export function PlayersScreen({ heading }: { heading?: string } = {}): JSX.Eleme
       intro={intro}
       query={query}
       onQueryChange={(next) => setSearch({ q: next || undefined }, { replace: true })}
-      players={players.data?.pages.flat() ?? []}
-      yours={yours.data ?? []}
+      players={pageItems(players.data, (player) => player.account.id)}
+      total={pageTotal(players.data)}
+      yours={yours.data?.items ?? []}
       loading={players.isPending || (!typed && yours.isPending)}
       hasMore={players.hasNextPage}
       loadingMore={players.isFetchingNextPage}

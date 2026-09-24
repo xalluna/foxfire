@@ -1,18 +1,43 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
 import { MembersPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useConnection } from '../client/useConnection'
+import { useDebounced } from '../hooks/useDebounced'
 import { queryKeys } from '../queries/keys'
+import { nextOffset, pageItems, pageTotal } from '../queries/paging'
 
-/** Everybody on the server you administer, and what can be done about them. */
+/** Members per page. */
+const PAGE_SIZE = 50
+
+/** How long the search waits before asking, as the finder's box does. */
+const TYPING_PAUSE_MS = 250
+
+/**
+ * The people on the server you administer, and what can be done about them.
+ *
+ * A page at a time, searched by the server: a community big enough to need the
+ * search box is exactly the one a whole list stops working for.
+ */
 export function MembersScreen(): JSX.Element {
   const client = useClient()
   const platform = usePlatform()
   const queryClient = useQueryClient()
   const connection = useConnection()
 
-  const users = useQuery({ queryKey: queryKeys.admin.users(), queryFn: () => client.admin.users() })
+  const [query, setQuery] = useState('')
+  const asked = useDebounced(query.trim(), TYPING_PAUSE_MS)
+
+  const users = useInfiniteQuery({
+    queryKey: queryKeys.admin.users(asked),
+    queryFn: ({ pageParam }) => client.admin.users({ q: asked, limit: PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset,
+    // The list holds still while the next search is asked, rather than
+    // collapsing to "Loading…" at every pause in typing.
+    placeholderData: keepPreviousData
+  })
 
   /**
    * Everything under the admin key, not just the members.
@@ -35,8 +60,14 @@ export function MembersScreen(): JSX.Element {
 
   return (
     <MembersPage
-      users={users.data ?? []}
+      users={pageItems(users.data, (user) => user.id)}
+      total={pageTotal(users.data)}
       usersLoading={users.isPending}
+      query={query}
+      onQueryChange={setQuery}
+      hasMore={users.hasNextPage}
+      loadingMore={users.isFetchingNextPage}
+      onShowMore={() => void users.fetchNextPage()}
       signedInAs={connection?.session?.email ?? null}
       onUpdateUser={(id, patch): Promise<AdminActionResult> =>
         thenRefresh(client.admin.updateUser(id, patch))

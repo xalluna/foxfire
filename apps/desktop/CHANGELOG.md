@@ -12,8 +12,9 @@ changes you would never notice while using the app.
 On a server, the account rail is a way between your own accounts rather than a list of everybody's,
 and looking after them happens in Settings. Foxfire also stops downloading every account on the
 server to find the one it is showing, which is what lets a server's community grow without every
-desktop on it slowing down. The Live game tab is gone, too: it redrew the scoreboard League already
-shows on Tab. Needs Foxfire Server 0.4.0.
+desktop on it slowing down — and every list that grows, here or on the server, now arrives a page at
+a time. The Live game tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs
+Foxfire Server 0.4.0.
 
 ### Added
 
@@ -36,8 +37,16 @@ shows on Tab. Needs Foxfire Server 0.4.0.
   it — and on anybody else's account the server refused it without a word. On this PC alone, the
   rail works as it always has.
 - **Search shows a page at a time.** With nothing typed it lists your accounts, then the first
-  fifty of everybody else, with Show more for the next fifty. Settings › League accounts, for an
-  admin, does the same with its list of claims, and has a box to find one.
+  fifty of everybody else, with Show more for the next fifty. Typing says how many match rather
+  than "50+". Settings › League accounts, for an admin, does the same with its list of claims, and
+  has a box to find one.
+- **Recordings and Replays show a page at a time.** Captures lists the newest fifty of each, with
+  Show more, rather than every game this PC has ever kept. "Select all not on YouTube" still means
+  all of them, not just the ones on screen, and the warnings above each list — missing files,
+  replays no installed client can play — still count every one.
+- **An admin's Members, Invites and replay library page too.** Members finds somebody by name or
+  email on the server and says how many there are; Invites lists the open ones in full and the
+  used ones fifty at a time; Data & storage lists shared replays biggest first with Show more.
 - **No stranger's profile at launch.** Signed in to a server with no League account linked yet,
   Foxfire used to open on the first account the server had — somebody else's history. It now says
   how to link yours, and that everybody else is in Search.
@@ -57,6 +66,14 @@ shows on Tab. Needs Foxfire Server 0.4.0.
   those reads.
 - The in-game reader keeps only what recording uses — the game clock, which player is you, and each
   player's champion — and no longer reads items, runes, spells or scores.
+- Every list that grows is read a page and a count at a time, from the server and from this PC's
+  own database alike: match history, search, recordings, replays and the admin lists. The replay
+  warnings count missing and unplayable files without building every row, checking playability once
+  per patch rather than once per replay.
+- One rule decides which recordings can go to YouTube, shared by the Recordings tab and the new
+  `recordings:eligible` channel behind "select all" — which exists only in builds with YouTube in
+  them.
+- Reads the lists of Foxfire Server 0.4.0's API version 3, and no older server's.
 
 ## [0.14.0] — 2026-09-23
 

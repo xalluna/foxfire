@@ -5,12 +5,23 @@ import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, inputClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
-import { filterMembers } from '../lib/members'
+import { ShowMoreButton } from '../components/ShowMore'
+import { memberCountLabel } from '../lib/members'
 import * as Icon from '../components/icons'
 
 export interface MembersPageProps {
+  /** The pages of members fetched so far, matching `query`. */
   users: AdminUser[]
+  /** How many match `query` altogether — everybody, when it is blank. */
+  total: number
   usersLoading: boolean
+  /** What the list is narrowed to: part of a username or an email address. */
+  query: string
+  onQueryChange: (query: string) => void
+  /** Whether there is another page after `users`. */
+  hasMore: boolean
+  loadingMore: boolean
+  onShowMore: () => void
   /** The address the person reading this signed in with, so their own row says so. */
   signedInAs?: string | null
 
@@ -28,13 +39,21 @@ export interface MembersPageProps {
  * A line rather than a card because this page is read far more often than it is
  * acted on — somebody checking whether a friend ever finished registering
  * should not have to scroll past four buttons per person to find out. The
- * detail and the actions are one click away, on the row itself, and a filter
+ * detail and the actions are one click away, on the row itself, and a search
  * covers the case this page was split out for: a server with more members than
- * fit on a screen.
+ * fit on a screen. The server does the searching and hands the list over a page
+ * at a time, since a community that fills a page of it is exactly the one a
+ * whole list stops working for.
  */
 export function MembersPage({
   users,
+  total,
   usersLoading,
+  query,
+  onQueryChange,
+  hasMore,
+  loadingMore,
+  onShowMore,
   signedInAs,
   onUpdateUser,
   onDeleteUser,
@@ -44,7 +63,6 @@ export function MembersPage({
 }: MembersPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
 
   /** Runs an action that can be refused, and shows the server's reason when it is. */
@@ -56,7 +74,7 @@ export function MembersPage({
       .finally(() => setBusy(false))
   }
 
-  const shown = filterMembers(users, query)
+  const typed = query.trim()
 
   return (
     <SettingsPage
@@ -74,36 +92,38 @@ export function MembersPage({
           <div className="flex items-center gap-3">
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by name or email"
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="Find by name or email"
               spellCheck={false}
               autoCapitalize="off"
-              aria-label="Filter members"
+              aria-label="Find members"
               className={clsx(inputClass, 'flex-1')}
             />
-            <span className="shrink-0 text-2xs tabular-nums text-text-mute">
-              {query.trim() ? `${shown.length} of ${users.length}` : plural(users.length, 'member')}
-            </span>
+            {!usersLoading && (
+              <span className="shrink-0 text-2xs tabular-nums text-text-mute">
+                {memberCountLabel(total, query)}
+              </span>
+            )}
           </div>
         </SettingsBlock>
 
         {usersLoading && <SettingsRow label="Loading…" />}
 
-        {!usersLoading && shown.length === 0 && (
+        {!usersLoading && users.length === 0 && (
           <SettingsBlock>
             <EmptyState
               icon={<Icon.Search />}
-              title={users.length === 0 ? 'Nobody here yet' : 'Nobody by that name'}
+              title={typed ? 'Nobody by that name' : 'Nobody here yet'}
               description={
-                users.length === 0
-                  ? 'Anybody who registers or takes an invite shows up here.'
-                  : 'Try part of a username or an email address.'
+                typed
+                  ? 'Try part of a username or an email address.'
+                  : 'Anybody who registers or takes an invite shows up here.'
               }
             />
           </SettingsBlock>
         )}
 
-        {shown.map((user) => (
+        {users.map((user) => (
           <Member
             key={user.id}
             user={user}
@@ -123,6 +143,8 @@ export function MembersPage({
             onCopy={onCopy}
           />
         ))}
+
+        {hasMore && <ShowMoreButton variant="settings" onClick={onShowMore} loading={loadingMore} />}
       </SettingsCard>
     </SettingsPage>
   )

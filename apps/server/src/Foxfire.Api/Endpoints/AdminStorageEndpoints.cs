@@ -31,7 +31,11 @@ public static class AdminStorageEndpoints
         admin.MapGet("/", (ISender sender, CancellationToken cancellationToken) =>
             sender.SendAsync(new GetStorageUsageRequest(), cancellationToken));
 
-        admin.MapGet("/replays", (ISender sender, CancellationToken cancellationToken, int limit = 50) =>
-            sender.SendAsync(new ListSharedReplaysRequest(limit), cancellationToken));
+        admin.MapGet("/replays", (
+                int? limit,
+                int? offset,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new ListSharedReplaysRequest(limit, offset), cancellationToken));
     }
 }

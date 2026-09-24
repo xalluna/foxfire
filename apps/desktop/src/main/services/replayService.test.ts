@@ -54,7 +54,10 @@ vi.mock('./clientArchiveService', () => ({
   resolveLiveClient: () => Promise.resolve({ path: 'C:\\live', patch: '16.16' })
 }))
 
-const { removeReplay, scanReplayFolder, listReplays } = await import('./replayService')
+const { removeReplay, scanReplayFolder, listReplays, getReplayUsage } = await import('./replayService')
+
+/** Every replay listed for an account — more than any test here makes, so one page is all of them. */
+const listed = async (accountId: string) => (await listReplays(accountId)).items
 
 /**
  * A .rofl the parser will accept: the magic, the offset table, and a metadata
@@ -100,7 +103,7 @@ describe('replay ingest', () => {
 
     expect(await scanReplayFolder()).toBe(1)
 
-    const replays = await listReplays('1')
+    const replays = await listed('1')
     expect(replays).toHaveLength(1)
     expect(replays[0]?.matchId).toBe('NA1_5312345678')
     // The patch is what decides which client can play it back.
@@ -115,7 +118,7 @@ describe('replay ingest', () => {
 
     expect(await scanReplayFolder()).toBe(1)
     expect(await scanReplayFolder()).toBe(0)
-    expect(await listReplays('1')).toHaveLength(1)
+    expect(await listed('1')).toHaveLength(1)
   })
 
   it('ingests a replay whose header cannot be read, keeping the name link', async () => {
@@ -124,7 +127,7 @@ describe('replay ingest', () => {
 
     expect(await scanReplayFolder()).toBe(1)
 
-    const replays = await listReplays('1')
+    const replays = await listed('1')
     expect(replays[0]?.matchId).toBe('NA1_5312345679')
     expect(replays[0]?.patch).toBeNull()
     expect(replays[0]?.blockedReason).toMatch(/could not read/i)
@@ -135,7 +138,7 @@ describe('replay ingest', () => {
     writeFileSync(join(live.sourceFolder, 'half-written.rofl'), Buffer.from('RIOT'))
 
     expect(await scanReplayFolder()).toBe(0)
-    expect(await listReplays('1')).toHaveLength(0)
+    expect(await listed('1')).toHaveLength(0)
   })
 
   it('ignores files that are not replays', async () => {
@@ -151,10 +154,10 @@ describe('replay deletion', () => {
     writeRofl(source)
     await scanReplayFolder()
 
-    const [replay] = await listReplays('1')
+    const [replay] = await listed('1')
     removeReplay(replay!.id)
 
-    expect(await listReplays('1')).toHaveLength(0)
+    expect(await listed('1')).toHaveLength(0)
     expect(readdirSync(live.destFolder)).toEqual([])
     expect(existsSync(source)).toBe(true)
   })
@@ -166,11 +169,11 @@ describe('replay deletion', () => {
     writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'))
     await scanReplayFolder()
 
-    const [replay] = await listReplays('1')
+    const [replay] = await listed('1')
     removeReplay(replay!.id)
 
     expect(await scanReplayFolder()).toBe(0)
-    expect(await listReplays('1')).toHaveLength(0)
+    expect(await listed('1')).toHaveLength(0)
   })
 })
 
@@ -179,14 +182,14 @@ describe('playability', () => {
     writeRofl(join(live.sourceFolder, 'NA1-5312345678.rofl'), '16.16.804.9184')
     await scanReplayFolder()
 
-    expect((await listReplays('1'))[0]?.blockedReason).toBeNull()
+    expect((await listed('1'))[0]?.blockedReason).toBeNull()
   })
 
   it('names the patch it needs when nothing can play it', async () => {
     writeRofl(join(live.sourceFolder, 'NA1-5312345600.rofl'), '15.14.600.4410')
     await scanReplayFolder()
 
-    expect((await listReplays('1'))[0]?.blockedReason).toBe('Needs a League client for patch 15.14')
+    expect((await listed('1'))[0]?.blockedReason).toBe('Needs a League client for patch 15.14')
   })
 
   it('becomes watchable once a matching archive is registered', async () => {
@@ -196,6 +199,38 @@ describe('playability', () => {
       .prepare("INSERT INTO client_archives (path, patch, patch_source) VALUES (?, '15.14', 'detected')")
       .run('D:\\archives\\15.14')
 
-    expect((await listReplays('1'))[0]?.blockedReason).toBeNull()
+    expect((await listed('1'))[0]?.blockedReason).toBeNull()
+  })
+})
+
+describe('the list and its warnings', () => {
+  it('comes a page at a time, and says how many there are', async () => {
+    for (const id of ['5312345601', '5312345602', '5312345603']) {
+      writeRofl(join(live.sourceFolder, `NA1-${id}.rofl`))
+    }
+    await scanReplayFolder()
+
+    const first = await listReplays('1', { limit: 2 })
+    const rest = await listReplays('1', { limit: 2, offset: 2 })
+
+    expect(first.items).toHaveLength(2)
+    expect(rest.items).toHaveLength(1)
+    expect(first.total).toBe(3)
+    expect(new Set([...first.items, ...rest.items].map((replay) => replay.id)).size).toBe(3)
+  })
+
+  it('counts what cannot be played across every replay, not the page on screen', async () => {
+    writeRofl(join(live.sourceFolder, 'NA1-5312345601.rofl'), '15.14.600.4410')
+    writeRofl(join(live.sourceFolder, 'NA1-5312345602.rofl'), '15.14.600.4410')
+    writeRofl(join(live.sourceFolder, 'NA1-5312345603.rofl'), '16.16.804.9184')
+    await scanReplayFolder()
+
+    // A page of one could hold any of them; the warning is about all three.
+    expect((await listReplays('1', { limit: 1 })).items).toHaveLength(1)
+
+    const usage = await getReplayUsage('1')
+    expect(usage.count).toBe(3)
+    expect(usage.unplayableCount).toBe(2)
+    expect(usage.missingCount).toBe(0)
   })
 })

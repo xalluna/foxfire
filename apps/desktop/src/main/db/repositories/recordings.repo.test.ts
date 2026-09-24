@@ -14,6 +14,7 @@ import {
   getRecordingFilePath,
   getRecordingUsage,
   getRecordings,
+  countRecordings,
   insertRecordingEvents,
   markRecordingUnmatched,
   matchAlreadyBound
@@ -39,6 +40,9 @@ import type { AccountContext } from '../accountScope'
  * still finds the row after that id changes.
  */
 const ACCOUNT: AccountContext = { accountId: '1', riotId: 'Faker#NA1', serverKey: null }
+
+/** More than any test here makes, so a read is every recording. */
+const EVERY = { limit: 100, offset: 0 }
 
 const ME = 'puuid-me'
 const T0 = 1_700_000_000_000
@@ -284,11 +288,11 @@ describe('recordings.repo', () => {
       serverKey: 'https://foxfire.example.com'
     }
 
-    expect(getRecordings(db, onAServer).map((r) => r.id)).toEqual([id])
+    expect(getRecordings(db, onAServer, EVERY).map((r) => r.id)).toEqual([id])
 
     // And an account that merely shares the server sees none of them.
     const somebodyElse: AccountContext = { ...onAServer, riotId: 'Someone#EUW' }
-    expect(getRecordings(db, somebodyElse)).toHaveLength(0)
+    expect(getRecordings(db, somebodyElse, EVERY)).toHaveLength(0)
   })
 
   it('keeps the footage and the match it names when the match row goes', () => {
@@ -369,6 +373,29 @@ describe('recordings.repo', () => {
     newRecording({ filePath: 'a.mp4', startedAt: T0 })
     const newest = newRecording({ filePath: 'b.mp4', startedAt: T0 + 60_000 })
 
-    expect(getRecordings(db, ACCOUNT)[0]?.id).toBe(newest)
+    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.id).toBe(newest)
+  })
+
+  it('pages newest first, and counts every recording beside the page', () => {
+    const ids = [0, 1, 2, 3, 4].map((i) => newRecording({ filePath: `${i}.mp4`, startedAt: T0 + i * 60_000 }))
+    const newestFirst = [...ids].reverse()
+
+    expect(getRecordings(db, ACCOUNT, { limit: 2, offset: 0 }).map((r) => r.id)).toEqual(newestFirst.slice(0, 2))
+    expect(getRecordings(db, ACCOUNT, { limit: 2, offset: 2 }).map((r) => r.id)).toEqual(newestFirst.slice(2, 4))
+    expect(getRecordings(db, ACCOUNT, { limit: 2, offset: 4 }).map((r) => r.id)).toEqual(newestFirst.slice(4))
+    expect(countRecordings(db, ACCOUNT)).toBe(5)
+    expect(countRecordings(db, { ...ACCOUNT, accountId: '2', riotId: 'Someone#EUW' })).toBe(0)
+  })
+
+  it('breaks a tie between two recordings that started together, so no page repeats one', () => {
+    const first = newRecording({ filePath: 'a.mp4', startedAt: T0 })
+    const second = newRecording({ filePath: 'b.mp4', startedAt: T0 })
+
+    const pages = [
+      ...getRecordings(db, ACCOUNT, { limit: 1, offset: 0 }),
+      ...getRecordings(db, ACCOUNT, { limit: 1, offset: 1 })
+    ]
+
+    expect(pages.map((r) => r.id)).toEqual([second, first])
   })
 })

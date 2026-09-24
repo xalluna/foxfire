@@ -15,6 +15,7 @@ import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
 import { useRecordingActions } from '../match/useRecordingActions'
 import { queryKeys } from '../queries/keys'
+import { nextOffset, pageItems } from '../queries/paging'
 import { isSyncing, useSyncProgress } from '../store/syncProgress'
 
 const PAGE_SIZE = 20
@@ -74,10 +75,7 @@ export function DashboardScreen({
     queryKey: queryKeys.matchList(account.id, queueId),
     queryFn: ({ pageParam }) => client.dashboard.matchList(account.id, PAGE_SIZE, pageParam, queueId),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < PAGE_SIZE
-        ? undefined
-        : allPages.reduce((count, page) => count + page.length, 0)
+    getNextPageParam: nextOffset
   })
 
   const sync = useMutation({
@@ -153,7 +151,7 @@ export function DashboardScreen({
   }
 
   // A client that cannot play YouTube is not offered the server's recordings.
-  const flat = matches.data?.pages.flat() ?? []
+  const flat = pageItems(matches.data, (match) => match.matchId)
   const rows = platform.youtube ? flat : flat.map(withoutServerRecording)
 
   return (

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Features.Reads;
 using Foxfire.Api.Reads;
@@ -248,6 +249,11 @@ public class ReadTests(FoxfireServerFixture server)
 
         // Newest first, the way history reads.
         Assert.True(ranked[0].GameCreation > ranked[1].GameCreation);
+
+        // The total beside a page counts the same filtered set the page is
+        // taken from — the two are written separately, so this holds them together.
+        Assert.Equal(3, await reads.MatchCountAsync(account.Puuid, 420));
+        Assert.Equal(6, await reads.MatchCountAsync(account.Puuid, null));
     }
 
     [Fact]
@@ -480,9 +486,10 @@ public class ReadTests(FoxfireServerFixture server)
 
         response.EnsureSuccessStatusCode();
 
-        var rows = await response.Content.ReadFromJsonAsync<List<MatchSummaryResponse>>();
+        var rows = await response.Content.ReadFromJsonAsync<Page<MatchSummaryResponse>>();
         Assert.NotNull(rows);
-        Assert.Single(rows);
+        Assert.Single(rows.Items);
+        Assert.Equal(1, rows.Total);
 
         // Reading is open; writing is not.
         var write = await stranger.PostAsJsonAsync(

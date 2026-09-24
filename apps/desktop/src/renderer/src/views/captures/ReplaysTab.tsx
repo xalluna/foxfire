@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Asset, EmptyState, Icon, MatchListSkeleton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { Asset, EmptyState, Icon, MatchListSkeleton, ShowMoreButton, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { nextOffset, pageItems } from '@foxfire/screens'
 import { formatBytes, GB } from './bytes'
+
+/** Replays per page of the list. */
+const PAGE_SIZE = 50
 import type { Account, Replay } from '@shared/types'
 
 /**
@@ -18,9 +22,13 @@ export function ReplaysTab({ account }: { account: Account }): JSX.Element {
   const [dropping, setDropping] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const replays = useQuery({
+  // A page at a time, each checked for whether it can be played. The warnings
+  // above the list count across every replay, not the page — see usage.
+  const replays = useInfiniteQuery({
     queryKey: ['replays', account.id],
-    queryFn: () => window.api.replays.list(account.id)
+    queryFn: ({ pageParam }) => window.api.replays.list(account.id, { limit: PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset
   })
 
   const usage = useQuery({
@@ -61,7 +69,7 @@ export function ReplaysTab({ account }: { account: Account }): JSX.Element {
     }
   })
 
-  const rows = replays.data ?? []
+  const rows = pageItems(replays.data, (replay) => replay.id)
   const overCap =
     usage.data && usage.data.softCapBytes > 0 && usage.data.totalBytes > usage.data.softCapBytes
 
@@ -163,11 +171,16 @@ export function ReplaysTab({ account }: { account: Account }): JSX.Element {
             description="Foxfire copies the .rofl files League saves after a game. Turn replay recording on in the League client, play a game, and they will appear here — or drop a .rofl onto this tab."
           />
         ) : (
-          <ul className="divide-y divide-hairline/60">
-            {rows.map((replay) => (
-              <ReplayRow key={replay.id} replay={replay} onDelete={() => remove.mutate(replay.id)} />
-            ))}
-          </ul>
+          <>
+            <ul className="divide-y divide-hairline/60">
+              {rows.map((replay) => (
+                <ReplayRow key={replay.id} replay={replay} onDelete={() => remove.mutate(replay.id)} />
+              ))}
+            </ul>
+            {replays.hasNextPage && (
+              <ShowMoreButton onClick={() => void replays.fetchNextPage()} loading={replays.isFetchingNextPage} />
+            )}
+          </>
         )}
       </div>
     </div>
