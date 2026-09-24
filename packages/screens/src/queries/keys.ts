@@ -1,4 +1,4 @@
-import type { QueueType, RankRange } from '@foxfire/core'
+import type { QueueType, RankRange, RiotIdInput } from '@foxfire/core'
 
 /**
  * Every query key the screens use, in one place.
@@ -15,13 +15,26 @@ import type { QueueType, RankRange } from '@foxfire/core'
  * of that account's history, and `matchLists()` every account's.
  */
 export const queryKeys = {
+  /**
+   * Every account query — yours, the home one, and each looked up by id or
+   * Riot ID — so linking, unlinking or moving home refreshes all of them.
+   */
   accounts: () => ['accounts'] as const,
+  myAccounts: () => ['accounts', 'mine'] as const,
+  homeAccount: () => ['accounts', 'home'] as const,
+  account: (accountId: string) => ['accounts', 'id', accountId] as const,
+  /** Riot IDs are not case-sensitive, so neither is the key. */
+  accountByRiotId: (riotId: RiotIdInput) =>
+    ['accounts', 'riotId', `${riotId.gameName}#${riotId.tagLine}`.toLowerCase()] as const,
+
   connection: () => ['connection'] as const,
   assets: () => ['assets'] as const,
 
   /** Every finder query, so one invalidation clears them all. */
   playerSearches: () => ['playerSearch'] as const,
-  playerSearch: (query: string) => ['playerSearch', query] as const,
+  /** One finder list, paged: `scope` is which of the page's lists it is. */
+  playerSearch: (query: string, scope: 'all' | 'mine' | 'claimed' = 'all') =>
+    ['playerSearch', scope, query] as const,
 
   dashboard: (accountId?: string) =>
     accountId === undefined ? (['dashboard'] as const) : (['dashboard', accountId] as const),

@@ -1,24 +1,19 @@
-import { useQuery } from '@tanstack/react-query'
 import { Navigate } from '@tanstack/react-router'
 import { playerSlug } from '@foxfire/core/routes'
-import { queryKeys, useClient } from '@foxfire/screens'
+import { useHomeAccount } from '@foxfire/screens'
 
 /**
  * Where `/` goes: the account this browser opens on, else the first one you
  * claimed, else the list of everybody — never a stranger's profile.
  *
- * The choosing is done by the account list itself; see applyHomeAccount.
+ * The choosing is done by the client's `getHome`; see homeAmong.
  */
 export function HomePage(): JSX.Element | null {
-  const client = useClient()
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
-  })
+  const found = useHomeAccount()
 
-  if (accounts.isPending) return null
+  if (found.isPending) return null
 
-  const home = accounts.data?.find((a) => a.isHomeAccount)
+  const home = found.data
   return home ? (
     <Navigate to="/players/$slug" params={{ slug: playerSlug(home) }} replace />
   ) : (

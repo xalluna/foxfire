@@ -70,6 +70,16 @@ a page does) that is not already under `/api` is moved there before routing. **D
 the same PR that takes 0.12.0 off `Allowed`** — from then on every desktop the server serves calls
 `/api` itself.
 
+No read answers with every League account on the server, because that number grows with the
+community rather than with the person asking. Your own accounts are a list
+(`/api/riot-accounts/mine`), anybody else's is one lookup (`/api/riot-accounts/{id}`,
+`/api/riot-accounts/lookup`), and the finder (`/api/search`) is paged and capped. Clients hold
+what they asked for, under `queryKeys.accounts()`, and never the whole server. The one exception
+is `GET /api/riot-accounts`, kept only because Desktop 0.14 reads nothing else. It is deprecated:
+`[Obsolete]` in code, so nothing new can reach for it without a `#pragma` saying so, and answered
+with a `Deprecation` header. **Delete it, its route and its test in the same PR that takes 0.14.x
+off `Allowed`.**
+
 A server that has not been updated refuses a desktop newer than anything it knows, and names the
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.

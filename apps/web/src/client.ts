@@ -61,9 +61,6 @@ export function createWebClient(): ServerClient {
     session,
     identity: WEB_IDENTITY,
     home: browserHomeStore(),
-    // On a list with nothing of yours and no home, the Players page rather
-    // than a stranger's profile.
-    fallbackToAnyAccount: false,
     assets: dataDragonAssets
   })
 

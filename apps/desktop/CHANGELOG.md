@@ -7,15 +7,46 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
-## [0.15.0] — Unreleased
+## [0.15.0] — 2026-09-24
 
-In progress on the version branch; the date and this summary are written when it is released.
+On a server, the account rail is a way between your own accounts rather than a list of everybody's,
+and looking after them happens in Settings. Foxfire also stops downloading every account on the
+server to find the one it is showing, which is what lets a server's community grow without every
+desktop on it slowing down. Needs Foxfire Server 0.4.0.
+
+### Added
+
+- **Unlink an account yourself.** Settings › Account lists the League accounts linked to you, each
+  with an Unlink button. Its games stay on the server; it just stops being yours, and whoever signs
+  in to it in the League client next can claim it. An account somebody else holds is still an
+  admin's to unlink.
 
 ### Changed
 
 - **Your account has its own page.** Your name, email, password and League accounts moved from
   Settings › Server to a new Account page just under it, so Server is back to which server Foxfire
   reads from and how to leave it. The page is only there while you are signed in to a server.
+- **On a server, the rail shows only your accounts.** It used to list every League account the
+  server tracks — everybody's. Now it lists the ones linked to you, and anybody else's is a search
+  away, as it is in the browser.
+- **No Add and no × on the rail on a server.** Adding an account there means claiming it through
+  the League client, which Settings › Account offers, so the rail's Add button only ever opened an
+  explanation. The × was the only way to give up a claim, one stray click from the avatar beside
+  it — and on anybody else's account the server refused it without a word. On this PC alone, the
+  rail works as it always has.
+- **Search shows a page at a time.** With nothing typed it lists your accounts, then the first
+  fifty of everybody else, with Show more for the next fifty. Settings › League accounts, for an
+  admin, does the same with its list of claims, and has a box to find one.
+- **No stranger's profile at launch.** Signed in to a server with no League account linked yet,
+  Foxfire used to open on the first account the server had — somebody else's history. It now says
+  how to link yours, and that everybody else is in Search.
+
+### Under the hood
+
+- Connected to a server, Foxfire asks for the accounts it needs — yours for the rail, the launch
+  sync and the League client watcher, and the one a page names — instead of fetching every account
+  the server tracks at launch and on nearly every page. Needs Foxfire Server 0.4.0, which added
+  those reads.
 
 ## [0.14.0] — 2026-09-23
 

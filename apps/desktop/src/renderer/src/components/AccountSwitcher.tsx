@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import type { Account } from '@foxfire/core'
 import { AccountRail } from '@foxfire/ui'
 import { queryKeys, useClient } from '@foxfire/screens'
+import { useServerHealth } from '../hooks/useKeyStatus'
 import { useLcuStatus } from '../hooks/useLcuStatus'
 import { useSwitchPlayer } from '../hooks/usePlayerNavigation'
 import { AddAccountForm } from './AddAccountForm'
@@ -11,14 +12,21 @@ import { AddAccountForm } from './AddAccountForm'
  * The account rail, as this app uses it.
  *
  * The rail itself only draws. What is wired here is the desktop's: picking an
- * account navigates to it, the League client's presence dot sits on whichever
- * account is signed in to it, and the form for adding one — a typed Riot ID
- * locally, an instruction to use the client on a server.
+ * account navigates to it, and the League client's presence dot sits on
+ * whichever account is signed in to it.
+ *
+ * The rest depends on where Foxfire reads from. Locally the rail is the whole of
+ * account management — a typed Riot ID adds one and × removes it. On a server it
+ * is only a way between your own accounts: everybody else's are a search away,
+ * one becomes yours by claiming it through the League client, and giving one up
+ * is Settings › Account. An × brushed on the way to an avatar is too easy a way to
+ * give up a claim, and on anybody else's account the server would refuse it.
  */
 export function AccountSwitcher({
   accounts,
   activeAccountId
 }: {
+  /** Yours: on a server the ones you have claimed, locally every one. */
   accounts: Account[]
   /** The account whose page is open, if any. */
   activeAccountId: string | null
@@ -27,6 +35,7 @@ export function AccountSwitcher({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const switchPlayer = useSwitchPlayer()
+  const { connected } = useServerHealth()
 
   const lcuStatus = useLcuStatus()
   const liveAccountId = lcuStatus.state === 'connected' ? lcuStatus.accountId : null
@@ -57,9 +66,9 @@ export function AccountSwitcher({
         if (account) switchPlayer(account)
       }}
       onSetHome={(id) => setHome.mutate(id)}
-      onRemove={(id) => remove.mutate(id)}
+      onRemove={connected ? undefined : (id) => remove.mutate(id)}
       liveAccountId={liveAccountId}
-      renderAddForm={(close) => <AddAccountForm onAdded={close} />}
+      renderAddForm={connected ? undefined : (close) => <AddAccountForm onAdded={close} />}
     />
   )
 }

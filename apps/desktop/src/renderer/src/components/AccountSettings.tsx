@@ -7,6 +7,7 @@ import {
 } from '@foxfire/ui'
 import { useConnection } from '@foxfire/screens'
 import { LinkAccountRow } from './LinkAccountRow'
+import { LinkedAccountRows } from './LinkedAccountRows'
 
 /**
  * Your own account, on the server this PC is signed in to.
@@ -50,6 +51,7 @@ export function AccountSettings(): JSX.Element {
         title="Your League accounts"
         description="A server links the account it can see you are signed in to, rather than one you type — which is what stops anybody claiming a Riot ID that is not theirs."
       >
+        <LinkedAccountRows />
         <LinkAccountRow />
       </SettingsCard>
     </SettingsPage>

@@ -23,7 +23,9 @@ export function createIpcClient(api: Api): FoxfireClient {
     },
 
     accounts: {
-      list: api.accounts.list,
+      mine: api.accounts.mine,
+      get: api.accounts.get,
+      find: api.accounts.find,
       getHome: api.accounts.getHome,
       remove: api.accounts.remove,
       setHome: api.accounts.setHome

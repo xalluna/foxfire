@@ -1,17 +1,46 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
 import { LeagueAccountsPage } from '@foxfire/ui'
 import { useClient } from '../client/context'
 import { queryKeys } from '../queries/keys'
 
-/** The League accounts this server keeps history for, and who owns them. */
+/** Claims per page. The same page the finder uses, since it is the finder answering. */
+const PAGE_SIZE = 50
+
+/** How long the filter waits before asking, as the finder's box does. */
+const TYPING_PAUSE_MS = 250
+
+/**
+ * The League accounts this server keeps history for, and who owns them.
+ *
+ * Neither half reads every account. The count is the one the storage page
+ * already keeps, and the claims are the finder asked for claimed accounts only,
+ * a page at a time and filtered by name — a community's worth of claims is not
+ * a list to fetch in one go.
+ */
 export function LeagueAccountsScreen(): JSX.Element {
   const client = useClient()
   const queryClient = useQueryClient()
 
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
+  const [query, setQuery] = useState('')
+  const [asked, setAsked] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(query), TYPING_PAUSE_MS)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const storage = useQuery({ queryKey: queryKeys.admin.storage(), queryFn: () => client.admin.storage() })
+
+  const claimed = useInfiniteQuery({
+    queryKey: queryKeys.playerSearch(asked, 'claimed'),
+    queryFn: ({ pageParam }) =>
+      client.search.players(asked, { claimed: true, limit: PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < PAGE_SIZE ? undefined : allPages.reduce((count, page) => count + page.length, 0),
+    placeholderData: keepPreviousData
   })
 
   /**
@@ -27,7 +56,13 @@ export function LeagueAccountsScreen(): JSX.Element {
 
   return (
     <LeagueAccountsPage
-      accounts={accounts.data}
+      tracked={storage.data?.riotAccounts}
+      claimed={claimed.data?.pages.flatMap((page) => page.map((player) => player.account))}
+      claimedQuery={query}
+      onClaimedQueryChange={setQuery}
+      hasMoreClaimed={claimed.hasNextPage}
+      loadingMoreClaimed={claimed.isFetchingNextPage}
+      onShowMoreClaimed={() => void claimed.fetchNextPage()}
       onAddAccount={async (input) => {
         const account = await client.admin.addRiotAccount(input)
         refresh()

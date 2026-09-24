@@ -86,26 +86,21 @@ const localReporting: LcuReporting = {
 
 const serverReporting: LcuReporting = {
   findAccount: async (gameName, tagLine) => {
-    // The server's list rather than a lookup endpoint: it is one request, it is
-    // the same request the rest of the app already makes, and an install
-    // follows a handful of accounts rather than thousands.
-    const accounts = await authedRequest<Account[]>('/riot-accounts')
+    // Among yours, not merely present. Everything on a server is visible to
+    // everybody, so a lookup across the server finds accounts nobody has
+    // claimed and accounts somebody else has — and every write the watcher
+    // goes on to make against one is refused with not_your_account.
+    //
+    // Anything else is reported as untracked, which is already the state for
+    // "a client is running and this is not an account we follow". The
+    // alternative was worse than a wrong label: the watcher said connected,
+    // the first write 403'd, the poll failed, and the client was reported as
+    // disconnected — so a League client that was running looked absent, on a
+    // loop, and the one screen offering to claim the account never saw it.
+    const accounts = await authedRequest<Account[]>('/riot-accounts/mine')
     const riotId = `${gameName}#${tagLine}`.toLowerCase()
 
-    const found = accounts.find((a) => `${a.gameName}#${a.tagLine}`.toLowerCase() === riotId)
-
-    // Yours, not merely present. Everything on a server is visible to
-    // everybody, so a list lookup finds accounts nobody has claimed and
-    // accounts somebody else has — and every write the watcher goes on to
-    // make against one is refused with not_your_account.
-    //
-    // Reported as untracked instead, which is already the state for "a client
-    // is running and this is not an account we follow". The alternative was
-    // worse than a wrong label: the watcher said connected, the first write
-    // 403'd, the poll failed, and the client was reported as disconnected —
-    // so a League client that was running looked absent, on a loop, and the
-    // one screen offering to claim the account never saw it.
-    return found?.isMine === false ? null : (found ?? null)
+    return accounts.find((a) => `${a.gameName}#${a.tagLine}`.toLowerCase() === riotId) ?? null
   },
 
   recordRank: async (accountId, reading, force) => {
