@@ -19,6 +19,10 @@ export const queryKeys = {
   connection: () => ['connection'] as const,
   assets: () => ['assets'] as const,
 
+  /** Every finder query, so one invalidation clears them all. */
+  playerSearches: () => ['playerSearch'] as const,
+  playerSearch: (query: string) => ['playerSearch', query] as const,
+
   dashboard: (accountId?: string) =>
     accountId === undefined ? (['dashboard'] as const) : (['dashboard', accountId] as const),
 
@@ -33,6 +37,14 @@ export const queryKeys = {
    * refreshes their history — a sync finishing, LP typed in — refreshes it too.
    */
   matchSummary: (accountId: string, matchId: string) => ['matchList', accountId, 'match', matchId] as const,
+
+  /**
+   * One player's recording of one game, markers and all. Under their match list
+   * too, so the refresh that puts a recording on the row reaches the page
+   * playing it.
+   */
+  matchRecording: (accountId: string, matchId: string) =>
+    ['matchList', accountId, 'recording', matchId] as const,
 
   matchDetail: (matchId: string) => ['matchDetail', matchId] as const,
 

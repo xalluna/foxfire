@@ -1,10 +1,13 @@
 import { serverApi } from './serverService'
 import type {
+  Account,
   AdminActionResult,
   AdminReplay,
   AdminInvite,
+  AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
+  RiotIdInput,
   ServerAdminSettings,
   ServerStorageUsage
 } from '@shared/types'
@@ -38,6 +41,11 @@ export async function forceUnlink(riotAccountId: string): Promise<AdminActionRes
   return serverApi().admin.forceUnlink(riotAccountId)
 }
 
+/** Starts tracking an account nobody on the server has claimed, and backfills it. */
+export async function addRiotAccount(input: RiotIdInput): Promise<Account> {
+  return serverApi().admin.addRiotAccount(input)
+}
+
 export async function listUsers(): Promise<AdminUser[]> {
   return serverApi().admin.users()
 }
@@ -48,6 +56,15 @@ export async function updateUser(id: string, patch: AdminUserPatch): Promise<Adm
 
 export async function deleteUser(id: string): Promise<AdminActionResult> {
   return serverApi().admin.deleteUser(id)
+}
+
+/** Makes a reset link for somebody, replacing whatever was outstanding for them. */
+export async function createPasswordReset(userId: string): Promise<AdminPasswordReset> {
+  return serverApi().admin.createPasswordReset(userId)
+}
+
+export async function revokePasswordReset(userId: string): Promise<AdminActionResult> {
+  return serverApi().admin.revokePasswordReset(userId)
 }
 
 export async function listInvites(): Promise<AdminInvite[]> {

@@ -380,6 +380,92 @@ namespace Foxfire.Data.Migrations
                     b.ToTable("MatchRanks");
                 });
 
+            modelBuilder.Entity("Foxfire.Data.Entities.MatchRecording", b =>
+                {
+                    b.Property<string>("MatchId")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("RiotAccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AttachedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("AttachedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EventsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Privacy")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("YouTubeVideoId")
+                        .IsRequired()
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)");
+
+                    b.HasKey("MatchId", "RiotAccountId");
+
+                    b.HasIndex("AttachedByUserId");
+
+                    b.HasIndex("RiotAccountId");
+
+                    b.ToTable("MatchRecordings");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.PasswordReset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("RedeemedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UserId", "RedeemedAt");
+
+                    b.ToTable("PasswordResets");
+                });
+
             modelBuilder.Entity("Foxfire.Data.Entities.RankSnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -873,6 +959,48 @@ namespace Foxfire.Data.Migrations
                     b.Navigation("Match");
 
                     b.Navigation("RiotAccount");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.MatchRecording", b =>
+                {
+                    b.HasOne("Foxfire.Data.Entities.FoxfireUser", "AttachedBy")
+                        .WithMany()
+                        .HasForeignKey("AttachedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Foxfire.Data.Entities.Match", "Match")
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Foxfire.Data.Entities.RiotAccount", "RiotAccount")
+                        .WithMany()
+                        .HasForeignKey("RiotAccountId")
+                        .IsRequired();
+
+                    b.Navigation("AttachedBy");
+
+                    b.Navigation("Match");
+
+                    b.Navigation("RiotAccount");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.PasswordReset", b =>
+                {
+                    b.HasOne("Foxfire.Data.Entities.FoxfireUser", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId");
+
+                    b.HasOne("Foxfire.Data.Entities.FoxfireUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Foxfire.Data.Entities.RankSnapshot", b =>

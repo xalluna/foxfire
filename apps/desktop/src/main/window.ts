@@ -20,7 +20,16 @@ export function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 }
 
-export function createMainWindow(): BrowserWindow {
+/**
+ * Builds the app window.
+ *
+ * `show: false` is for the two launches nobody asked to see: the one Windows
+ * makes at login, and the one the installer makes after an update that was
+ * started from the tray. The window is built either way — the app is a running
+ * process with or without it on screen — it simply never comes forward. Only
+ * ever passed in tray mode, where the tray icon is what brings it back.
+ */
+export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -55,6 +64,7 @@ export function createMainWindow(): BrowserWindow {
   })
 
   window.on('ready-to-show', () => {
+    if (options.show === false) return
     window.show()
   })
 

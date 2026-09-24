@@ -64,6 +64,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
   const syncListeners = new Set<(event: SyncProgressEvent) => void>()
   const editedListeners = new Set<(accountId: string) => void>()
   const changedListeners = new Set<(accountId: string) => void>()
+  const recordingListeners = new Set<(event: { accountId: string; matchId: string }) => void>()
   const connectionListeners = new Set<(state: ConnectionState) => void>()
 
   let version: VersionInfo | null = null
@@ -126,6 +127,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
         onSyncProgress: (event) => syncListeners.forEach((listener) => listener(event)),
         onRankEdited: (accountId) => editedListeners.forEach((listener) => listener(accountId)),
         onRankChanged: (accountId) => changedListeners.forEach((listener) => listener(accountId)),
+        onRecordingChanged: (event) => recordingListeners.forEach((listener) => listener(event)),
         onKeyInvalid: () => {
           riotKeyRejected = true
           announce()
@@ -150,6 +152,8 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       users: api.admin.users,
       updateUser: api.admin.updateUser,
       deleteUser: api.admin.deleteUser,
+      createPasswordReset: api.admin.createPasswordReset,
+      revokePasswordReset: api.admin.revokePasswordReset,
       invites: api.admin.invites,
       createInvite: api.admin.createInvite,
       revokeInvite: api.admin.revokeInvite,
@@ -158,13 +162,15 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       storage: api.admin.storage,
       storedReplays: api.admin.storedReplays,
       removeReplay: api.admin.removeReplay,
-      forceUnlink: api.admin.forceUnlink
+      forceUnlink: api.admin.forceUnlink,
+      addRiotAccount: api.admin.addRiotAccount
     },
 
     events: {
       onSyncProgress: (listener) => subscribe(syncListeners, listener),
       onRankEdited: (listener) => subscribe(editedListeners, listener),
-      onRankChanged: (listener) => subscribe(changedListeners, listener)
+      onRankChanged: (listener) => subscribe(changedListeners, listener),
+      onRecordingChanged: (listener) => subscribe(recordingListeners, listener)
     },
 
     connect: () => openHub().start(),

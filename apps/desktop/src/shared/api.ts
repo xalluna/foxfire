@@ -7,6 +7,7 @@ import type {
   Account,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminUser,
   AdminUserPatch,
   AppSettingsPublic,
@@ -17,11 +18,13 @@ import type {
   CaptureSettings,
   CaptureStatus,
   ClientArchive,
+  EmailChange,
   IdentityReport,
   InvitePreview,
   LcuStatus,
   LiveClient,
   ObsValidation,
+  PasswordChange,
   QueueType,
   Recording,
   RecordingDetail,
@@ -41,7 +44,15 @@ import type {
   ServerAdminSettings,
   ServerRegistration,
   ServerState,
-  SyncProgressEvent
+  SyncProgressEvent,
+  UpdateState,
+  AttachRecordingOutcome,
+  BulkUploadResult,
+  UploadDraft,
+  UploadRequest,
+  YouTubePrivacy,
+  YouTubeSettings,
+  YouTubeState
 } from './types'
 import type {
   LcuTelemetry,
@@ -85,6 +96,23 @@ export interface Api {
     getVersion: () => Promise<string>
   }
   /**
+   * Keeping this copy of Foxfire current.
+   *
+   * The renderer decides nothing here: which version may be installed is the
+   * active server's business and the main process asks it. This is the offer
+   * and the two answers to it.
+   */
+  updates: {
+    getState: () => Promise<UpdateState>
+    /** Asks now rather than waiting for the next scheduled check. */
+    check: () => Promise<UpdateState>
+    /** Installs what was downloaded. Refused while a game or recording is on. */
+    restart: () => Promise<void>
+    /** Drops the "what's new" note shown once after an update. */
+    dismissNote: () => Promise<void>
+    onChanged: (cb: (state: UpdateState) => void) => () => void
+  }
+  /**
    * Joining a Foxfire server, and choosing which one answers.
    *
    * Everything here is about the connection itself rather than the data
@@ -102,6 +130,17 @@ export interface Api {
     login: (url: string, credentials: ServerCredentials) => Promise<ServerAuthResult>
     /** Signs out of the active server and forgets its credential. */
     logout: () => Promise<ServerState>
+    /**
+     * Changes the password on the active server, and keeps this PC signed in.
+     *
+     * Every other device is signed out — the server revokes the lot and issues
+     * this one a fresh pair, which the session adopts on the way through.
+     */
+    changePassword: (change: PasswordChange) => Promise<ServerAuthResult>
+    /** Changes the address this account signs in with. Other devices stay signed in. */
+    changeEmail: (change: EmailChange) => Promise<ServerAuthResult>
+    /** Changes the name shown beside your games. */
+    changeUsername: (username: string) => Promise<ServerAuthResult>
     /** Null is local-only mode. Not the same as signing out: the credential stays. */
     setActive: (url: string | null) => Promise<ServerState>
     forget: (url: string) => Promise<ServerState>
@@ -119,6 +158,10 @@ export interface Api {
     users: () => Promise<AdminUser[]>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
+    /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
+    createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
+    /** Withdraws the reset link outstanding for somebody, if there is one. */
+    revokePasswordReset: (userId: string) => Promise<AdminActionResult>
     invites: () => Promise<AdminInvite[]>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>
@@ -140,6 +183,7 @@ export interface Api {
      * and its games stay; only the claim goes.
      */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
+    addRiotAccount: (input: RiotIdInput) => Promise<Account>
     chooseDatabase: () => Promise<string | null>
     /**
      * Reads an old stats.db and pushes it at the active server.
@@ -176,6 +220,14 @@ export interface Api {
     link: (input: RiotIdInput) => Promise<Account>
   }
   dashboard: FoxfireData['dashboard']
+  /**
+   * The recordings the active server holds on YouTube. Local-only has none to
+   * hold: reads answer null and writes say to connect to a server.
+   */
+  matchRecordings: NonNullable<FoxfireData['matchRecordings']> & {
+    /** A recording was attached to one account's game, replaced, or removed — pushed by the server. */
+    onChanged: (cb: (event: { accountId: string; matchId: string }) => void) => () => void
+  }
   sync: FoxfireData['sync'] & {
     onProgress: (cb: (event: SyncProgressEvent) => void) => () => void
   }
@@ -245,6 +297,43 @@ export interface Api {
     /** Sent by a recording window; the main window focuses and expands that match. */
     showMatch: (accountId: string, matchId: string) => Promise<void>
     onShowMatch: (cb: (accountId: string, matchId: string) => void) => () => void
+    /** Removes a recording's row once its file is gone. The YouTube video and the server's copy stay. */
+    forget: (recordingId: number) => Promise<void>
+    /** Opens a window for one account's recording of a game that this machine has no file of. */
+    openRemote: (accountId: string, matchId: string) => Promise<void>
+  }
+  /**
+   * Putting recordings on YouTube, through this machine's own Google sign-in.
+   *
+   * The refresh token stays in the main process; the renderer sees only
+   * whether there is a connection and whose. Every upload goes through a queue
+   * that survives restarts and waits out games.
+   */
+  youtube: {
+    getState: () => Promise<YouTubeState>
+    /** Opens Google's consent page in the browser. Resolves once connected; rejects with why not. */
+    connect: () => Promise<void>
+    cancelConnect: () => Promise<void>
+    /** Disconnects and revokes the grant. Videos already on YouTube stay there. */
+    disconnect: () => Promise<void>
+    getSettings: () => Promise<YouTubeSettings>
+    setSettings: (patch: Partial<YouTubeSettings>) => Promise<YouTubeSettings>
+    /** What the upload form opens with for a recording, from the templates. */
+    draft: (recordingId: number) => Promise<UploadDraft>
+    enqueue: (request: UploadRequest) => Promise<void>
+    /**
+     * Queues many recordings at once, oldest game first, each titled and
+     * described from the templates, all with one privacy. Recordings that
+     * cannot go — already on YouTube, file gone — are reported, not queued.
+     */
+    enqueueMany: (recordingIds: number[], privacy: YouTubePrivacy) => Promise<BulkUploadResult>
+    cancel: (recordingId: number) => Promise<void>
+    retry: (recordingId: number) => Promise<void>
+    /** Attaches a video somebody uploaded themselves to a recording on this disk, with its markers. */
+    attachLink: (recordingId: number, videoId: string, replace: boolean) => Promise<AttachRecordingOutcome>
+    /** Tells the active server about this recording's video again, replacing whatever the game has. */
+    reattach: (recordingId: number) => Promise<AttachRecordingOutcome>
+    onChanged: (cb: (state: YouTubeState) => void) => () => void
   }
   /**
    * Riot's own replays. No detail call and no player: a .rofl is handed to the

@@ -57,11 +57,16 @@ public sealed class RateLimitOptions
     public int AuthPerMinute { get; set; } = 20;
 
     /// <summary>
-    /// Searches. Every one is a live call to Riot on the server's one key, so
-    /// this is what keeps a single member from spending the whole community's
-    /// allowance.
+    /// Searches, which the finder sends as somebody types.
+    ///
+    /// It used to be 30, back when every search was fourteen Riot requests on
+    /// the community's one key and a spinner nobody would sit through twice.
+    /// A search reads the database now — an unindexed substring scan over the
+    /// tracked accounts, so still worth a limit, but a cheap one — and the
+    /// caller is a box being typed into rather than a button being pressed.
+    /// Thirty would have run out inside a couple of names.
     /// </summary>
-    public int SearchPerMinute { get; set; } = 30;
+    public int SearchPerMinute { get; set; } = 120;
 }
 
 /// <summary>The one Riot API key this server has.</summary>
@@ -103,7 +108,12 @@ public sealed class AuthOptions
     /// </summary>
     public string JwtSigningKey { get; set; } = "";
 
-    /// <summary>Signs invite tokens. A separate key, so leaking one does not leak both.</summary>
+    /// <summary>
+    /// Signs invite tokens, and — through a key derived from it — password
+    /// reset links. A separate key from the JWT one, so leaking either does not
+    /// leak both; see ResetToken for why the second kind is derived rather than
+    /// configured.
+    /// </summary>
     public string InviteSigningKey { get; set; } = "";
 
     /// <summary>
@@ -123,6 +133,16 @@ public sealed class AuthOptions
 
     /// <summary>How long an invite link works for.</summary>
     public TimeSpan InviteLifetime { get; set; } = TimeSpan.FromDays(14);
+
+    /// <summary>
+    /// How long a password reset link works for.
+    ///
+    /// Hours where an invite gets a fortnight, because the two are not the same
+    /// kind of thing. An invite makes an account; a reset link takes one over,
+    /// so it should stop being dangerous about as soon as somebody has had time
+    /// to read the message it arrived in.
+    /// </summary>
+    public TimeSpan PasswordResetLifetime { get; set; } = TimeSpan.FromHours(24);
 
     public byte[] JwtSigningKeyBytes => Encoding.UTF8.GetBytes(JwtSigningKey);
 
@@ -175,6 +195,44 @@ public sealed class SmtpOptions
 }
 
 /// <summary>
+/// Where the server's logs go, beyond the console.
+///
+/// The destinations a host is likely to want are here. Anything else — levels,
+/// and any of the other sinks the server ships — is Serilog's own
+/// <c>Serilog</c> section, read as Serilog documents it; see Logging/FoxfireLogging.cs.
+/// </summary>
+public sealed class LogOptions
+{
+    public const string Section = "Logs";
+
+    /// <summary>
+    /// Whether logs are kept in the blob store, in a container of their own.
+    ///
+    /// On by default, because the blob store is already there — it is where
+    /// replays go — and a log that lives only in a container's stdout is gone the
+    /// moment the container is recreated, which is usually the moment after
+    /// something went wrong. Off is for a host sending logs somewhere else.
+    /// </summary>
+    public bool ToBlob { get; set; } = true;
+
+    /// <summary>
+    /// How the console writes: "text" for a person reading docker logs, or
+    /// "json" for a collector reading the container's output on their behalf.
+    /// </summary>
+    public string ConsoleFormat { get; set; } = "text";
+
+    /// <summary>
+    /// How many days of logs the blob store keeps. Zero keeps them for good, for
+    /// a host whose storage account already has a lifecycle policy doing this.
+    ///
+    /// Thirty is long enough to still have the logs when somebody mentions a
+    /// week later that something went wrong, and short enough that nobody has to
+    /// think about what a homelab's disk is holding.
+    /// </summary>
+    public int RetentionDays { get; set; } = 30;
+}
+
+/// <summary>
 /// Checks the whole configuration at once, before anything starts.
 ///
 /// All of it, in one message, rather than failing on the first missing value and
@@ -194,10 +252,12 @@ public static class ConfigurationCheck
         RiotOptions riot,
         AuthOptions auth,
         AdminOptions admin,
-        RateLimitOptions rateLimits)
+        RateLimitOptions rateLimits,
+        LogOptions logs)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(rateLimits);
+        ArgumentNullException.ThrowIfNull(logs);
 
         List<string> problems = [];
 
@@ -277,6 +337,17 @@ public static class ConfigurationCheck
         if (rateLimits.SearchPerMinute < 1)
         {
             problems.Add($"RateLimit__SearchPerMinute is {rateLimits.SearchPerMinute}; it has to be at least 1.");
+        }
+
+        if (logs.ConsoleFormat is not ("text" or "json"))
+        {
+            problems.Add($"Logs__ConsoleFormat must be 'text' or 'json', not '{logs.ConsoleFormat}'.");
+        }
+
+        if (logs.RetentionDays < 0)
+        {
+            problems.Add(
+                $"Logs__RetentionDays is {logs.RetentionDays}. Use a number of days, or 0 to keep logs for good.");
         }
 
         return problems;

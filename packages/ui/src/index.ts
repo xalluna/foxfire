@@ -24,6 +24,7 @@ export {
   type ContextMenuState
 } from './components/ContextMenu'
 export { CopyLinkButton } from './components/CopyLinkButton'
+export { ConfirmDialog, Dialog, DialogActions } from './components/Dialog'
 export { Disclaimer } from './components/Disclaimer'
 export { EmptyState } from './components/EmptyState'
 export { ErrorBoundary } from './components/ErrorBoundary'
@@ -42,6 +43,24 @@ export { Segmented } from './components/Segmented'
 export { MatchListSkeleton, MatchRowSkeleton, Skeleton } from './components/Skeleton'
 export { SyncProgressBar } from './components/SyncProgressBar'
 export * as Icon from './components/icons'
+
+// Recordings
+export { AttachLinkDialog } from './recording/AttachLinkDialog'
+export { EventTimeline } from './recording/EventTimeline'
+export {
+  INITIAL_PLAYBACK,
+  type PlaybackController,
+  type PlaybackState,
+  type PlayerSource,
+  type YouTubeMount
+} from './recording/playback'
+export {
+  RecordingHeader,
+  recordingActionClass,
+  recordingPrimaryActionClass,
+  type RecordingHeaderFacts
+} from './recording/RecordingHeader'
+export { RecordingPlayer } from './recording/RecordingPlayer'
 
 // Settings primitives
 export { SettingsCard, SettingsPage } from './components/settings/SettingsCard'
@@ -75,10 +94,18 @@ export { DashboardPage, type DashboardPageProps, type MatchFocus } from './pages
 export { LpEditorPage } from './pages/LpEditorPage'
 export { MatchPage } from './pages/MatchPage'
 export { RankPage } from './pages/RankPage'
-export { SearchPage } from './pages/SearchPage'
+export { PlayersPage, type PlayerLink } from './pages/PlayersPage'
 export { RankInput, RankLabel, isApexTier } from './pages/RankInput'
 export { ServerDataPage, type ServerDataPageProps } from './admin/ServerData'
-export { ServerManagementPage, type ServerManagementPageProps } from './admin/ServerManagement'
+export { InvitesPage, type InvitesPageProps } from './admin/Invites'
+export { LeagueAccountsPage, type LeagueAccountsPageProps } from './admin/LeagueAccounts'
+export { MembersPage, type MembersPageProps } from './admin/Members'
+export {
+  ChangeEmailCard,
+  ChangePasswordCard,
+  ChangeUsernameCard,
+  type AccountSaveResult
+} from './account/AccountCards'
 export { SeasonsEditor } from './seasons/SeasonsEditor'
 
 // Hooks

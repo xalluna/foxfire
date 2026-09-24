@@ -1,7 +1,10 @@
-import type { Platform } from '@foxfire/screens'
+import type { Platform, RecordingTarget } from '@foxfire/screens'
 import type { ImportProgress } from '@foxfire/core'
 import type { Api } from '@shared/api'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import { LcuIndicator } from '../components/LcuIndicator'
+import { youtubeHostMount } from '../recording/youtubeHostMount'
+import { openUploadDialog } from '../youtube/uploadDialog'
 
 /**
  * What this machine can do that a browser cannot, as the shared screens ask
@@ -23,7 +26,36 @@ export function createDesktopPlatform(api: Api): Platform {
     openLpEditor: ({ account, queueType, matchId }) =>
       void api.rank.openEditor(account.id, queueType, matchId),
 
-    watchRecording: (recordingId) => void api.recordings.open(recordingId),
+    // The file on this disk when there is one — it plays from YouTube anyway
+    // if it has gone up, with a switch back to the file. Otherwise, in a build
+    // with YouTube, the server's copy: somebody else's recording, or this
+    // machine's own after its file was forgotten.
+    watchRecording: ({ account, match }) => {
+      const recordingId = match.local?.recordingId ?? null
+      if (recordingId !== null) void api.recordings.open(recordingId)
+      else if (YOUTUBE_ENABLED) void api.recordings.openRemote(account.id, match.matchId)
+    },
+
+    // Everything below is YouTube's, so only in a build made with it — see
+    // shared/features.ts. Without them the shared screens offer no upload, no
+    // link to attach, and no recording a server holds.
+    ...(YOUTUBE_ENABLED
+      ? {
+          youtube: youtubeHostMount,
+
+          uploadRecording: ({ match }: RecordingTarget) => {
+            const recordingId = match.local?.recordingId ?? null
+            if (recordingId !== null) openUploadDialog(recordingId)
+          },
+
+          // Through this machine's recording when it has one, so the markers go
+          // with the link; otherwise the screen attaches through the server itself.
+          attachRecordingLink: async ({ match, videoId, replace }: RecordingTarget & { videoId: string; replace: boolean }) => {
+            const recordingId = match.local?.recordingId ?? null
+            return recordingId === null ? null : api.youtube.attachLink(recordingId, videoId, replace)
+          }
+        }
+      : {}),
 
     launchReplay: async (replayId) => {
       const result = await api.replays.open(replayId)

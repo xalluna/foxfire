@@ -1,4 +1,4 @@
-import type { Position } from '@foxfire/core'
+import type { Position, RecordingEvent, YouTubePrivacy } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -37,7 +37,7 @@ export type {
   SyncState,
   SyncTrigger,
   SyncProgressEvent,
-  AdHocSummonerResult,
+  PlayerSearchResult,
   RiotIdInput,
   AssetManifest,
   DashboardData,
@@ -55,8 +55,16 @@ export type {
   AdminUser,
   AdminUserPatch,
   AdminInvite,
+  AdminPasswordReset,
   ServerAdminSettings,
-  AdminActionResult
+  AdminActionResult,
+  PasswordChange,
+  EmailChange,
+  YouTubePrivacy,
+  MatchRecording,
+  MatchRecordingSummary,
+  AttachRecordingInput,
+  AttachRecordingOutcome
 } from '@foxfire/core'
 
 /**
@@ -333,22 +341,117 @@ export interface Recording {
   durationSeconds: number | null
   selfChampionId: number | null
   match: LinkedMatchInfo | null
+
+  /**
+   * The file was deleted on purpose, and the row kept because the recording
+   * is on YouTube. Distinct from `fileExists`, which also turns false for a
+   * file that went missing behind the app's back.
+   */
+  fileDeleted: boolean
+  /** The copy on YouTube, once there is one. */
+  youtube: RecordingYouTube | null
+  /** An upload of this recording, queued, running, or finished. */
+  upload: RecordingUpload | null
+  /** Whether the active server has been told about the video. Null in local-only mode. */
+  attachment: RecordingAttachment | null
 }
 
-/** Which side of an event the tracked player was on. */
-export type RecordingEventRole = 'kill' | 'death' | 'assist' | 'multikill'
+/**
+ * The events a recording carries. Defined in @foxfire/core now that they
+ * travel to a server with the video; re-exported so the desktop's imports stay put.
+ */
+export type { RecordingEvent, RecordingEventRole } from '@foxfire/core'
 
-export interface RecordingEvent {
-  /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
-  eventId: number
-  name: string
-  /** Seconds on the game clock, as the game reported it. */
-  gameTime: number
-  /** Seconds into the video file — gameTime minus the offset captured at record start. */
-  videoTime: number
-  role: RecordingEventRole
-  /** The other player for a kill or death, the streak size for a multikill. */
-  label: string | null
+/** A recording's copy on YouTube. */
+export interface RecordingYouTube {
+  videoId: string
+  /** As YouTube reported it, which is not always what was asked for. */
+  privacy: YouTubePrivacy | null
+  /** Asked for public or unlisted and given private: the Google project has not been audited yet. */
+  forcedPrivate: boolean
+  source: 'upload' | 'link'
+  title: string | null
+  /** Epoch milliseconds. */
+  at: number
+}
+
+export type UploadState =
+  | 'queued'
+  | 'uploading'
+  | 'paused'
+  | 'waiting_quota'
+  | 'waiting_auth'
+  | 'failed'
+  | 'done'
+  | 'cancelled'
+
+/** An upload, as the Recordings tab draws it. */
+export interface RecordingUpload {
+  state: UploadState
+  trigger: 'manual' | 'auto'
+  bytesSent: number
+  fileBytes: number | null
+  /** Why it stopped, or what it is waiting for, in words. */
+  error: string | null
+  /** When the queue will try again, epoch milliseconds, when it is waiting on something. */
+  resumesAt: number | null
+}
+
+export type AttachmentState = 'attached' | 'conflict' | 'not_owner' | 'failed'
+
+export interface RecordingAttachment {
+  state: AttachmentState
+  message: string | null
+}
+
+/** What the upload form opens with, from the templates in settings. */
+export interface UploadDraft {
+  recordingId: number
+  title: string
+  description: string
+  privacy: YouTubePrivacy
+  durationSeconds: number | null
+}
+
+/** What the upload form sends back. */
+export interface UploadRequest {
+  recordingId: number
+  title: string
+  description: string
+  privacy: YouTubePrivacy
+}
+
+/** What queueing a batch did: how many went into the queue, and why the rest did not. */
+export interface BulkUploadResult {
+  queued: number
+  skipped: Array<{ recordingId: number; reason: string }>
+}
+
+/** Foxfire's Google connection on this machine, and the queue behind it. */
+export interface YouTubeState {
+  /**
+   * Whether this build carries Foxfire's Google client at all. A build made
+   * without it — a contributor's, or CI's — has no uploads, and says so rather
+   * than offering a button that cannot work.
+   */
+  configured: boolean
+  /** The Google account uploads go to, once connected. */
+  email: string | null
+  /** A sign-in is open in the browser, waiting for Google to hand it back. */
+  connecting: boolean
+  /** Why the last connect failed, or why the connection was dropped. */
+  error: string | null
+  /** The queue is holding because a game is on. */
+  pausedForGame: boolean
+  /** YouTube's daily upload quota is spent until this time, epoch milliseconds. */
+  quotaResumesAt: number | null
+}
+
+export interface YouTubeSettings {
+  /** Put every new recording on YouTube once it finds its match. Off unless somebody turns it on. */
+  autoUpload: boolean
+  defaultPrivacy: YouTubePrivacy
+  titleTemplate: string
 }
 
 /** Everything a recording window needs, fetched once when it opens. */
@@ -555,6 +658,67 @@ export interface ServerState {
    * is anything new arriving.
    */
   riotKeyRejected: boolean
+}
+
+/* -------------------------------------------------------------------------- */
+
+/** What the updater is doing, if anything. */
+export type UpdateStatus =
+  /** Not a packaged build, so there is nothing to update. */
+  | 'disabled'
+  | 'idle'
+  | 'checking'
+  | 'downloading'
+  /** Downloaded and verified. Installs on restart, or on the next quit. */
+  | 'ready'
+  | 'error'
+
+/** What is going on that a restart would interrupt. */
+export type UpdateBlocker = 'game' | 'recording'
+
+/**
+ * Everything the window and the tray need to say about updates.
+ *
+ * One shape for both, pushed on every change, because the two have to agree:
+ * an update offered in a banner while the tray menu still says the app is up
+ * to date would be a bug nobody could explain.
+ */
+export interface UpdateState {
+  status: UpdateStatus
+  /** The build running now. */
+  current: string
+  /** What is being fetched, or waiting to install. Null when neither. */
+  target: string | null
+  /** How far the download has got, 0-100. Null when nothing is downloading. */
+  percent: number | null
+  /** The target version's changelog section, as written in CHANGELOG.md. */
+  notes: string | null
+  /**
+   * Why restarting now would be a bad idea.
+   *
+   * A restart during a game loses the LP reading that game was played for, and
+   * during a recording it loses the recording. The offer stays on screen and
+   * the button is refused until whatever this names has finished.
+   */
+  blockedBy: UpdateBlocker | null
+  /**
+   * Set when a newer build exists and the active server will not take it.
+   *
+   * Not an error and not something this machine can fix: the server's allow
+   * list is what decides which build may run against it, so the remedy is its
+   * host updating the server. Said out loud so somebody knows to ask.
+   */
+  heldBy: { serverName: string; allows: string; newest: string } | null
+  /** The last failure, cleared by the next check that gets through. */
+  error: string | null
+  /**
+   * Set for the session that follows an update, and cleared once seen.
+   *
+   * The patch notes are the only account of what changed that reaches somebody
+   * who does not read the repository, so they are shown once on arrival rather
+   * than left for whoever thinks to open Settings.
+   */
+  justInstalled: { version: string; notes: string | null } | null
 }
 
 /**

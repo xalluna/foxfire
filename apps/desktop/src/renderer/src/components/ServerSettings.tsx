@@ -2,7 +2,23 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { InvitePreview, ServerProbe, ServerState } from '@shared/types'
 import { LinkAccountRow } from './LinkAccountRow'
-import { SettingsCard, SettingsPage, DangerRow, SettingsBlock, SettingsRow, StatusRow, ghostButtonClass, inputClass, primaryButtonClass, Icon } from '@foxfire/ui'
+import { useUpdates } from '../hooks/useUpdates'
+import {
+  SettingsCard,
+  SettingsPage,
+  ChangeEmailCard,
+  ChangePasswordCard,
+  ChangeUsernameCard,
+  DangerRow,
+  SettingsBlock,
+  SettingsRow,
+  StatusRow,
+  ghostButtonClass,
+  inputClass,
+  primaryButtonClass,
+  Icon
+} from '@foxfire/ui'
+import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
 
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'
@@ -62,8 +78,8 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
       {state.upgradeRequired !== null && (
         <SettingsCard>
           <StatusRow tone="error">
-            This server needs Foxfire {state.upgradeRequired}. Until this copy is updated it will
-            not serve anything — download the new version from the releases page.
+            This server needs Foxfire {state.upgradeRequired}, and will not serve anything until
+            this copy is updated. <UpgradeRemedy required={state.upgradeRequired} />
           </StatusRow>
         </SettingsCard>
       )}
@@ -92,6 +108,15 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
         />
         <SettingsRow label="Address" control={<Address url={state.activeUrl!} />} />
       </SettingsCard>
+
+      <ChangeUsernameCard
+        username={session.username}
+        onSave={(username) => window.api.server.changeUsername(username)}
+      />
+
+      <ChangeEmailCard email={session.email} onSave={(change) => window.api.server.changeEmail(change)} />
+
+      <ChangePasswordCard onSave={(change) => window.api.server.changePassword(change)} />
 
       <SettingsCard
         title="Your League accounts"
@@ -152,6 +177,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
   const [invite, setInvite] = useState('')
   const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null)
 
@@ -193,6 +219,18 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
   async function submit(): Promise<void> {
     if (!probe?.url) return
+
+    // Only when registering: signing in with a typo is one wrong password, and
+    // a confirmation box on that form would be asking somebody to type a
+    // password they already know twice.
+    if (mode === 'register') {
+      const problem = passwordProblem(password, confirmation)
+      if (problem !== null) {
+        setError(problem)
+        return
+      }
+    }
+
     setBusy(true)
     setError(null)
 
@@ -398,7 +436,9 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
           <SettingsBlock
             label="Password"
-            description={mode === 'register' ? 'At least 12 characters.' : undefined}
+            description={
+              mode === 'register' ? `At least ${MINIMUM_PASSWORD} characters.` : undefined
+            }
           >
             <input
               type="password"
@@ -411,12 +451,45 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
             />
           </SettingsBlock>
 
+          {mode === 'register' && (
+            <SettingsBlock
+              label="Confirm password"
+              description="Typed twice because a password nobody can read is a password nobody can check."
+            >
+              <input
+                type="password"
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submit()
+                }}
+                className={clsx(inputClass, 'w-full')}
+              />
+            </SettingsBlock>
+          )}
+
+          {mode === 'login' && (
+            <SettingsBlock>
+              {/* No self-service reset: a Foxfire server sends no mail, so
+                  there is nowhere to send a link except through its admin. */}
+              <p className="text-2xs leading-relaxed text-text-mute">
+                Forgotten your password? Ask whoever runs this server for a reset link, and open it
+                in a browser.
+              </p>
+            </SettingsBlock>
+          )}
+
           {error !== null && <StatusRow tone="error">{error}</StatusRow>}
 
           <div className="flex justify-end px-4 py-3">
             <button
               type="button"
-              disabled={busy || !email.trim() || !password || (mode === 'register' && !username.trim())}
+              disabled={
+                busy ||
+                !email.trim() ||
+                !password ||
+                (mode === 'register' && (!username.trim() || !confirmation))
+              }
               className={primaryButtonClass}
               onClick={() => void submit()}
             >
@@ -445,4 +518,52 @@ function Address({ url }: { url: string }): JSX.Element {
       <code className="select-text">{url}</code>
     </span>
   )
+}
+
+/**
+ * What is being done about a server that has refused this build.
+ *
+ * This sentence used to read "download the new version from the releases
+ * page", which was the whole of the remedy when nothing here could install
+ * anything. Now the app is already fetching the exact version the refusal
+ * named — the same one this page is complaining about — so the honest thing to
+ * say is how far that has got, and to offer the restart when it is ready.
+ */
+function UpgradeRemedy({ required }: { required: string }): JSX.Element {
+  const updates = useUpdates()
+
+  if (updates === null) return <>Foxfire is fetching it.</>
+
+  if (updates.status === 'disabled') {
+    return <>This is a development build, which does not update itself.</>
+  }
+
+  if (updates.target === required && updates.status === 'ready') {
+    if (updates.blockedBy !== null) {
+      return (
+        <>
+          It has been downloaded, and will install once this{' '}
+          {updates.blockedBy === 'recording' ? 'recording' : 'game'} has finished.
+        </>
+      )
+    }
+
+    return (
+      <>
+        It has been downloaded.{' '}
+        <button
+          onClick={() => void window.api.updates.restart()}
+          className="underline underline-offset-2 transition hover:text-text"
+        >
+          Restart Foxfire to install it.
+        </button>
+      </>
+    )
+  }
+
+  if (updates.target === required && updates.status === 'downloading') {
+    return <>It is downloading now{updates.percent === null ? '' : ` — ${updates.percent}%`}.</>
+  }
+
+  return <>Foxfire is fetching it; the About page says how that is going.</>
 }

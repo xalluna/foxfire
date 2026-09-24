@@ -79,6 +79,14 @@ public interface IServerEvents
     Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A recording was attached to one account's game, replaced, or taken off it.
+    ///
+    /// Carries the game as well as the account, because the row it changes is
+    /// that account's row for that game and nobody else's.
+    /// </summary>
+    Task RecordingChangedAsync(Guid riotAccountId, string matchId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Riot has refused this server's key.
     ///
     /// Pushed the moment it happens rather than discovered by a poll, because
@@ -99,6 +107,9 @@ public sealed class NullServerEvents : IServerEvents
         Task.CompletedTask;
 
     public Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task RecordingChangedAsync(Guid riotAccountId, string matchId, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
     public Task RiotKeyRejectedAsync(CancellationToken cancellationToken = default) =>

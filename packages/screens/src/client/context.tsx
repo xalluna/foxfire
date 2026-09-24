@@ -1,11 +1,20 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react'
 import type {
   Account,
+  AttachRecordingOutcome,
   FoxfireClient,
   ImportProgress,
   ImportResult,
+  MatchSummary,
   QueueType
 } from '@foxfire/core'
+import type { YouTubeMount } from '@foxfire/ui'
+
+/** One player's view of one game — which is what a recording is of. */
+export interface RecordingTarget {
+  account: Account
+  match: MatchSummary
+}
 
 /** How an action a platform carried out went, when it can fail for a reason worth saying. */
 export interface ActionOutcome {
@@ -32,8 +41,39 @@ export interface Platform {
   /** Opens the LP editor on a game: a window of its own on the desktop, a page in a browser. */
   openLpEditor?: (target: { account: Account; queueType: QueueType; matchId: string }) => void
 
-  /** A recording is footage on this machine's disk, so only a desktop has one to open. */
-  watchRecording?: (recordingId: number) => void
+  /**
+   * Opens one player's recording of a game.
+   *
+   * A window of its own on the desktop — this disk's file when it has one,
+   * YouTube when it does not — and the recording page in a browser. Takes the
+   * row rather than an id, because which recording to open depends on whose
+   * history the row is in.
+   */
+  watchRecording?: (target: RecordingTarget) => void
+
+  /**
+   * Plays a YouTube recording inside the shared player.
+   *
+   * The platform's to give, because how the frame is reached differs: a
+   * browser loads YouTube's IFrame API into the page, and the desktop keeps it
+   * in a separate origin so Google's script never shares a window with the
+   * bridge to the main process.
+   */
+  youtube?: YouTubeMount
+
+  /** Opens the upload form for this machine's recording of a game. Only a desktop has a file to send. */
+  uploadRecording?: (target: RecordingTarget) => void
+
+  /**
+   * Attaches a link from this machine's recording of the game, markers and all.
+   *
+   * Null when this machine has no recording of it — then the screen attaches
+   * through the client, as a browser always does, and the video plays without
+   * markers.
+   */
+  attachRecordingLink?: (
+    target: RecordingTarget & { videoId: string; replace: boolean }
+  ) => Promise<AttachRecordingOutcome | null>
 
   /** Hands a Riot replay to the League client. Can fail for a reason worth saying — no client plays that patch. */
   launchReplay?: (replayId: number) => Promise<ActionOutcome>

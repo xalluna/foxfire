@@ -11,6 +11,211 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.3.0] — 2026-09-23
+
+Accounts you can look after, and a search that looks through the people on this
+server rather than strangers on Riot. Everybody can change their own email,
+password and name; an admin can hand somebody a reset link the way they hand out
+invites, and can track a League account nobody here has claimed; and the pages
+that run a server are split so that a community with forty people on it is still
+readable. It also serves Foxfire 0.14.0, the first desktop that updates itself —
+which makes the allow list here the thing that decides which build your members
+are running. And the server now keeps its own logs, so that when something goes
+wrong there is still a record of it after the container has been restarted.
+
+### Added
+
+- **A way back in.** An admin can make a password reset link for any member, on
+  the Members page, and copy it wherever their community talks — this server
+  sends no mail, so a link you can paste is the whole mechanism. It lasts 24
+  hours, works once, and there is never more than one live per account: making a
+  newer one withdraws the last. Making a link changes nothing until it is used,
+  so somebody who remembers their password in the meantime is not locked out.
+  Using it sets the new password, signs them in on that browser, and ends every
+  session the account had.
+- **Your own account, in the web client.** A new Account page — your name in the
+  header opens it — for changing the address you sign in with, your password,
+  and the name shown beside your games. Changing your email or your password
+  asks for your current password, because a session is not proof of the person:
+  somebody at an unlocked browser has one.
+- **Changing your password signs out every other device**, and keeps the one you
+  changed it on. If the old password had got out, nothing minted from it
+  survives. The other devices ask for a password within a quarter of an hour,
+  when their access token next needs renewing.
+- **A confirm-password box** wherever a password is set: registering, taking an
+  invite, changing it, and following a reset link.
+- **Members and Invites are separate pages.** Members has a filter and one line
+  per person, which opens for their League accounts, sessions, when they joined,
+  and everything an admin can do to them. Invites keeps the public sign-up
+  switch beside the invites it governs.
+- **The sign-in page says what to do about a forgotten password**: ask this
+  server's administrator for a reset link.
+- **Serves Foxfire 0.14.0, and only that.** A desktop from 0.14.0 on reads
+  `recommendedDesktop` from `/version` and installs that build, so the allow list
+  here decides which version the people on your server are running. They move
+  when you update the server, and not before — a desktop never updates past what
+  its server will talk to. There is no grace window this time: search changed
+  shape, so 0.12.0 and 0.13.0 are refused rather than nudged, and neither has an
+  updater to carry itself across. Tell your members to install 0.14.0 by hand;
+  it is the last time you will have to.
+- **Tracked League accounts, added by an admin.** A League accounts page takes a Riot ID and starts tracking
+  it — resolved through Riot as it is saved, so a name that does not exist is refused rather than
+  filed, and backfilled straight away at the lowest priority. The account arrives claimed by nobody,
+  the same state an imported one is in, and whoever it belongs to can still claim it from the
+  desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
+  appear in, and what removing one should mean is a question for another release.
+- **Logs that outlast the container.** Everything the server logs is kept in the blob store it
+  already uses for replays, in a `logs` container of its own, one file an hour, for 30 days — so the
+  record of what went wrong is still there after the restart that fixed it. Nothing to set up: under
+  docker-compose that store is the Azurite beside it. `LOG_RETENTION_DAYS` changes how long,
+  `LOG_CONNECTION_STRING` keeps them in a different storage account, and `LOG_LEVEL` how much.
+- **Logs somewhere else, if you already have somewhere.** A file on a volume, an OpenTelemetry
+  collector (and so Grafana, Datadog, Honeycomb or Azure Monitor), Seq or Application Insights —
+  docker-compose.yml has a block for each to uncomment. `LOG_TO_BLOB=false` stops keeping them in the
+  blob store as well, and `LOG_CONSOLE_FORMAT=json` is for a collector reading the container's output.
+- **Every response carries an `X-Trace-Id`.** When somebody tells you something broke, that id finds
+  the request in the logs, and every line the server wrote while handling it.
+- **One log line per request**: what was asked for, by which client and version, which member, from
+  what address, what it got back and how long it took. Never the query string, which is where the
+  hub's access token travels.
+- **Sign-ins are logged**: a sign-in, a wrong password, and an account locking itself after too many,
+  along with every request turned away by a rate limit — the lines you want when you are wondering
+  whether somebody has been guessing passwords.
+
+### Changed
+
+- **The address in `ADMIN_EMAIL` is now pinned to the account that holds it.**
+  That account cannot change its email in the app, and nobody who is not already
+  an admin can move onto that address. Registering with it grants the Admin role
+  even on a server with sign-up shut, and it is re-granted on every boot, so
+  leaving it unheld would leave a claim on the server lying around. To move it,
+  change `ADMIN_EMAIL` and restart.
+- **A revoked refresh token is refused rather than treated as a theft.** Only a
+  token that was *rotated* and then presented again means a copy is in use
+  somewhere, which is what the whole-account revocation is for. One revoked by
+  signing out, by an admin, or by a password change has nothing continuing from
+  it. This is what lets a password change keep the device that made it — and it
+  also fixes signing back in after being demoted or disabled, where the first
+  device to return could be cut again by a stale one.
+- **Search finds the players this server tracks.** `GET /api/search` now takes `?q=` and answers out
+  of the database — every tracked account for a blank query, and whatever matches a name, a tag or a
+  whole Riot ID otherwise, each with its solo-queue rank. It used to resolve any Riot ID in the world
+  through fourteen Riot requests and answer with ten games that could carry no LP, because nothing
+  about a stranger is stored. In the browser this is the Players page, with a box at the top of it.
+- **Any member can start a sync, once every two minutes per account.** It used to be the owner's
+  alone. An account an admin tracks has no owner, nothing on this server syncs on a timer, and the
+  post-game ladder is armed by a desktop watching a League client nobody is running for it — so
+  owner-only meant its history froze on the day it arrived. The cooldown is read off the stored sync
+  timestamps, so a restart does not reopen the Riot budget. Recording a rank reading and writing LP
+  are still the owner's: those assert something about somebody's account rather than ask for what
+  Riot has already published.
+- **Importing a newer copy of a `stats.db` says what it did.** Keep using Foxfire on your own PC for
+  a few days, choose the newer copy of the same file, and what lands is what is new — that was always
+  so, but the result counted only what was added, so a server that already had everything and a file
+  it could not read looked exactly alike. It now says what was added and what the server already
+  had, the newest game and rank reading in the file, and anything it had to leave out and why.
+- **A re-import sends only what is new.** The importer asks which of the file's games the server
+  lacks and sends only those, and an account the server already knows is not looked up on Riot
+  again — so bringing a server up to date costs a fraction of the first import.
+- **Importing in the browser says to close Foxfire first.** A browser reads only the file you pick,
+  not the changes Foxfire keeps beside it while it is running, so the newest games can be missing.
+  The page says so before you start, and again beside the newest game in the file when an import
+  adds nothing.
+
+### Removed
+
+- **The legacy root shim.** Desktop 0.12.0 called the API at the root, where the web client's pages
+  are, and every such request was moved under `/api` before routing. 0.12.0 is off the allow list, so
+  every desktop this server answers now asks for `/api` itself.
+
+### Fixed
+
+- **Games imported before their account could be resolved come back.** If Riot's key was down, or
+  the account had been renamed, an import stored its games where nothing could find them, and every
+  later import skipped them as already stored. The import that finally resolves the account now
+  moves them onto it, and says how many it moved.
+- **Choosing a file to import in the browser could do nothing at all.** The picker sometimes never
+  reported the choice back.
+
+### Under the hood
+
+- One new table, `PasswordResets`, alongside `Invites` and built the same way: a
+  signed token that names a row, and the row alone deciding whether it has been
+  spent. The reset link signs with a key derived from `Auth__InviteSigningKey`
+  rather than one of its own, so no existing server needs new configuration on
+  upgrade, and neither kind of token can ever verify as the other. Each row keeps
+  the account's security stamp, so a link goes dead the moment the account
+  changes underneath it.
+- `Auth__PasswordResetLifetime` sets how long a link lasts. It defaults to 24
+  hours, where an invite gets 14 days: an invite makes an account, a reset link
+  takes one over.
+- Reset previews and redemptions are rate limited per address, unlike the invite
+  preview beside them.
+- Server releases are no longer marked as the repository's Latest release. That
+  badge is what a browser lands on, and what the desktop's updater reads the
+  newest desktop version from, so it belongs to the desktop installer. The
+  container image is unaffected: `:latest` on GHCR still follows every server
+  release.
+- The per-address search limit went from 30 a minute to 120, and the finder waits
+  a quarter-second after the last keystroke before asking. Thirty was sized for a
+  search that cost fourteen Riot requests and was sent by pressing a button; this
+  one reads the database and is sent by typing, and thirty would have run out
+  inside a couple of names. `RATE_LIMIT_SEARCH_PER_MINUTE` still overrides it.
+- The finder is one screen shared by the web client and the desktop, so the two cannot drift.
+- Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
+  accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
+  adding a tracked account, refusing a duplicate, and the sync cooldown.
+- `POST /api/admin/import/unstored-matches` takes a file's game ids and answers with the ones this
+  server does not hold. It is additive, so the API version did not move. Import batches answer with
+  what they took, what was already there and what they could not read, rather than a single count.
+- Moving stranded games onto an account's resolved id is the same move a Riot key rotation already
+  made, now one piece of code so the two cannot disagree. It happens in the transaction that records
+  the account's id, so a crash cannot leave the mapping filed with the games still stranded; a game
+  that already holds both ids is left alone and counted.
+- Tests against a real SQL Server import a file, add a game, a reading and an account, and import
+  again: only the new rows land, with LP worked out for the new game, a known account is not looked
+  up on Riot again, and games stored under an id nothing matched are moved once it resolves.
+- **Recordings on YouTube are in this build, switched off.** A desktop attaching the video it
+  uploaded to its owner's game, every member watching it from that player's history — and only that
+  player's — in the desktop or on a page of its own in the browser, and attaching a link by hand, are
+  all written, and none of it is served until Foxfire's Google project has been through YouTube's
+  review. Whether a build has it is decided when it is compiled, by the `FOXFIRE_FEATURE_YOUTUBE`
+  repository variable, for the server and the web client inside it together; this release was made
+  without it, so there are no recording routes, a match row's `recording` is always null, and the
+  content security policy lets nothing of YouTube's in. What turning it on brings:
+  - `GET`, `PUT` and `DELETE /api/riot-accounts/{id}/matches/{matchId}/recording`. Only the
+    account's owner can attach — admins included in the refusal — and the owner or an admin can
+    remove. A second attach answers 409 `recording_exists` unless it says `replace`.
+  - A new hub event, `recording:changed`, carrying the account and the game, so the rows showing that
+    player's view of that game refresh everywhere.
+  - The web client's content security policy allows YouTube's privacy-enhanced player at
+    `youtube-nocookie.com` in a frame, and YouTube's IFrame API script, which is what lets the
+    markers seek the video. Nothing else from YouTube, and nothing drawn over its player.
+  - Tests against a real SQL Server for owner-only attaching, the one-perspective rule on match rows,
+    replacing, removing, validation and the event. CI builds and tests the server both ways.
+- One new table, `MatchRecordings`, created whether or not a build serves recordings, so turning them
+  on later needs no migration of its own. It is keyed on the game and the Riot account — the
+  account's id rather than its puuid, which is re-resolved whenever the server's Riot key changes —
+  and stores the YouTube video id and the markers as sent, never the video. Deleting a game takes its
+  recordings with it.
+- Logging goes through Serilog, behind the `ILogger` everything already wrote to. The blob lines are
+  compact JSON with the message rendered and as its template, and the trace id on each. The sinks a
+  host can name are listed in code rather than discovered, because the single-file release archives
+  have no manifest for Serilog to search — and a sink it cannot find is skipped without a word. A test
+  configures each one exactly as docker-compose.yml spells it.
+- The health check, the handshake and the web client's own files log at Debug, since monitors and
+  updaters ask for the first two on a timer. A failed request is an Error, a rate-limited one a
+  Warning, and everything else Information.
+- Every line written during a sync carries the account and what started it. The Riot request pump no
+  longer inherits the context of whichever request first woke it, which would have put a long-finished
+  request's trace id on every line it wrote afterwards.
+- A database that cannot be reached or migrated at boot is logged as critical and flushed to the blob
+  store before the process exits, rather than lost in the unsent batch.
+- Old logs are cleared by a daily sweep, by age. The sink's own clean-up is left off: it lists the
+  whole container after every batch and counts by file rather than by day.
+- Serilog's own failures — a blob store that stops accepting writes — go to the console's error
+  stream, where they would otherwise go nowhere.
+
 ## [0.2.0] — 2026-09-21
 
 Foxfire in a browser. The server now hosts a web client of its own, so your
@@ -308,5 +513,6 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0
 [0.1.0]: https://github.com/xalluna/foxfire/releases/tag/server-v0.1.0

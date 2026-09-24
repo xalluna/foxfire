@@ -34,6 +34,12 @@ jobs:
     # container image has to be built on Linux anyway.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Build-time feature switches, from repository variables, for every step:
+    # the tests, the web client, both standalone builds and the image are all
+    # made with the same answer, and so is the desktop — release.yml reads the
+    # same variables. Unset is off. See apps/server/src/Foxfire.Core/BuildFeatures.cs.
+    env:
+      FOXFIRE_FEATURE_YOUTUBE: ${{ vars.FOXFIRE_FEATURE_YOUTUBE }}
     defaults:
       run:
         shell: bash
@@ -206,6 +212,7 @@ jobs:
         run: |
           docker build \
             --file apps/server/docker/Dockerfile \
+            --build-arg "FOXFIRE_FEATURE_YOUTUBE=$FOXFIRE_FEATURE_YOUTUBE" \
             --tag "foxfire-server:$VERSION" \
             .
 
@@ -254,8 +261,16 @@ jobs:
             echo "and tells you everything that is missing at once."
           } > body.md
 
+          # Never the repository's Latest release, whatever order the two apps
+          # are tagged in. Both release into one list, and that badge is what a
+          # browser lands on from the Releases page — where the thing to find
+          # is the desktop installer, not a server archive a host would be
+          # taking from GHCR anyway. The desktop's updater reads the newest
+          # desktop version from the same place, so a server release holding
+          # the badge would leave it looking at a tag with no installer on it.
           gh release create "$GITHUB_REF_NAME" \
             --draft \
+            --latest=false \
             --title "Server v$VERSION" \
             --notes-file body.md \
             artifacts/*
@@ -274,5 +289,7 @@ jobs:
             echo "::error::$name on the draft is ${uploaded:-absent}, not the $LINUX_SIZE bytes that were built"
             exit 1
           fi
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          # Stated again here: publishing a draft is what GitHub would
+          # otherwise treat as a new latest release, whatever the draft said.
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false
           echo "Published $GITHUB_REF_NAME."

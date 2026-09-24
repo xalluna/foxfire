@@ -34,7 +34,10 @@ coupled — they move independently. Compatibility is the server's to judge, two
 - **A desktop by its exact version**, against `DesktopCompatibility.Allowed` in
   `apps/server/src/Foxfire.Core`. A build that is not on the list is refused with 426. So **a PR
   that bumps the desktop's version adds that version to `Allowed` in the same change**, and a server
-  release is what ships it.
+  release is what ships it. From 0.14.0 that list decides more than who is served: a desktop
+  connected to a server updates itself to the newest version on *that server's* list — the
+  `recommendedDesktop` it publishes in `/version` — so a host updating their server is what moves
+  everybody on it, and an update can never carry somebody past what their own community accepts.
 - **The web client by the API version its page was built against** — `WEB_API_VERSION` in
   `packages/core/src/server/identity.ts`, admitted when it is in `DesktopCompatibility.WebApiVersions`.
   A test on the server side reads the TypeScript constant and fails if the two disagree. A tab left
@@ -70,6 +73,125 @@ the same PR that takes 0.12.0 off `Allowed`** — from then on every desktop the
 A server that has not been updated refuses a desktop newer than anything it knows, and names the
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
+
+## Server logging
+
+The server logs through `ILogger<T>`, with Serilog behind it — `apps/server/src/Foxfire.Api/Logging`.
+Two destinations by default: the console, and a `logs` container in the blob store replays already
+use (one `.clef` file an hour, compact JSON, cleared after `Logs__RetentionDays`). Anything else is
+Serilog's own `Serilog` section: levels, and sinks under `Serilog__WriteTo__<label>__…`.
+docker-compose.yml has a commented block for each sink the server ships. Serilog cannot discover sinks
+in the single-file release build, so they are listed in `FoxfireLogging.ReaderOptions` — **a new sink
+is a package, a line there, and a case in `LoggingTests`**, or it is skipped without a word.
+
+Every request gets one line, and every line written during it carries its trace id, the client, the
+member and their address; the response carries the trace id as `X-Trace-Id`. A sync puts the account
+on its lines with a log scope, and so should any other long piece of background work.
+
+When you add a log line:
+
+- A message template, never interpolation — `"Linked {RiotId} to {UserId}"`. The properties are what
+  make the line searchable.
+- Never a token, password, API key, signed URL or request body. Emails and usernames are fine; the
+  audit lines rely on them.
+- **Warning** is something a host should look at. **Error** is something that failed and should not
+  have. **Information** is a thing that happened, **Debug** is how it happened.
+- Record who did something to whom — an admin's action, a sign-in — at the point it is decided,
+  not only as the request line that carried it.
+
+## How the desktop updates itself
+
+From 0.14.0 the desktop keeps itself current, out of this repository's own Releases. The feed is one
+release's assets — `releases/download/desktop-v<version>/` — read by electron-updater's generic
+provider, which is also what keeps delta downloads working: it finds the installed build's blockmap
+by swapping the version inside that URL, and the version appears in both the tag and the file name.
+
+`apps/desktop/src/main/updater` holds it, and `target.ts` holds the rule worth knowing:
+
+- **Connected to a server** — install that server's `recommendedDesktop`, never what is newest. A
+  build past the server's allow list would be refused by it, so an update would lock somebody out
+  of their own community.
+- **Local-only** — install the newest desktop release, found from `releases/latest` (which answers
+  JSON with the tag on it, and costs none of `api.github.com`'s hourly budget).
+- **Server unreachable** — do nothing. Falling back to the newest release the moment a host's
+  machine is down installs the one build that server might refuse when it comes back.
+
+Nothing installs while the app is open except on request: the download is quiet, the offer sits in
+the window and the tray, and it is refused while a game is on or a recording is running. Otherwise
+it installs on the next quit. The Releases page stays the way in for a first install, which is why
+the repository is public.
+
+## How recordings reach YouTube
+
+A recording starts as an OBS file on one PC. From 0.14.0 it can go to YouTube, and from there be
+watched by everybody on a server — on the desktop and in the browser. The rule everything follows:
+**a recording is one player's view of one game**. A server keys it on (match, Riot account), never on
+the match alone, so in a game two members recorded each history plays its own and no other history
+offers either. That rule lives in the row query in `MatchReads.MatchListAsync`, which is where to
+look if a recording ever turns up on the wrong history.
+
+**It is switched off at build time, everywhere, by one switch.** `FOXFIRE_FEATURE_YOUTUBE` in the
+environment of a build — `1`, `true`, `yes` or `on` — is what includes it, and the release workflows
+read it from the repository variable of the same name, so the installer, the server and the web client
+inside the server are always built with the same answer. Unset, it is off:
+
+- **The desktop and the web client** get `__FEATURE_YOUTUBE__` as a literal from Vite's `define`
+  (`tooling/vite/features.ts`), read through `YOUTUBE_ENABLED` in `apps/desktop/src/shared/features.ts`
+  and `apps/web/src/features.ts`. Main registers no `youtube.*` or `matchRecordings.*` IPC, no
+  `foxfire-youtube://` scheme and no queue; the renderer draws no Settings page, upload button or
+  link; and the bundler drops the rest, the Google client included. The desktop's vitest config
+  turns it on, so the tests cover the code that ships switched off.
+- **The shared screens** have no switch of their own. They offer recordings only where the platform
+  hands them a YouTube player (`platform.youtube`), and strip a server's `recording` off a row where
+  it does not — so a switched-off client never promises a video it has nothing to play in.
+- **The server** compiles it out: Directory.Build.props defines `FEATURE_YOUTUBE`, read through
+  `BuildFeatures.YouTubeRecordings` in `Foxfire.Core`. Off, there are no recording routes (they fall
+  to the API's JSON 404, which a switched-on desktop reads as "this server takes no recordings" and
+  retries later), the row's `recording` is always null, and the CSP has nothing of YouTube's. The
+  `MatchRecordings` table is migrated either way, so switching it on needs no migration. The tests
+  for it are inside `#if FEATURE_YOUTUBE`, and CI runs the server's suites both ways.
+
+Run a harness with it on by setting the variable first — `FOXFIRE_FEATURE_YOUTUBE=1 npm run dev:web`
+in a POSIX shell, `$env:FOXFIRE_FEATURE_YOUTUBE='1'; npm run dev:web` in PowerShell; the server is
+`FOXFIRE_FEATURE_YOUTUBE=1 dotnet test apps/server`. It is an environment variable rather than a
+`.env` entry, because it is read by the build configs, not by the code they build.
+
+The path, in `apps/desktop/src/main/youtube`:
+
+- **Connect** once per install, in Settings › YouTube: Google's installed-app flow (system browser,
+  a one-request server on 127.0.0.1, PKCE), scopes `youtube.upload` and `openid email` only. The
+  refresh token is a secret in `keyStore`; nothing that crosses IPC carries it.
+- **Upload** through a queue in SQLite (`youtube_uploads`), one at a time, using YouTube's resumable
+  protocol so an upload survives a restart. It holds from champ select until the game is over, and
+  while OBS is recording; it waits out the quota until midnight Pacific. The uploader chooses title,
+  description and privacy every time — YouTube requires it — prefilled from the templates in
+  `@foxfire/core/youtube`.
+- **Attach** on the server, owner only, with the markers from this PC's database: whenever an
+  upload finishes, a recording finds its game, a server sync completes, or the active server
+  changes. `recording_attachments` remembers what each server was told, so a recording somebody took
+  off the server stays off.
+
+The player is shared (`packages/ui/src/recording`) and takes a mount function for YouTube, because
+the two clients reach YouTube's frame differently. The web loads the IFrame API into its page — the
+CSP in `SpaHosting.cs` allows exactly that script and the `youtube-nocookie.com` frame — and makes
+the frame itself so it can carry `referrerpolicy`, since YouTube refuses to play for a page that
+sends no Referer. The desktop never loads Google's script into a window that has the preload's
+bridge: the player lives on `foxfire-youtube://player`, a page with no preload, framed by the
+recording window and driven over postMessage, and main puts `https://com.brandonbarr.foxfire/` on
+its requests as the Referer. Nothing may be drawn over YouTube's player; the markers sit beneath it.
+
+Electron accepts `registerSchemesAsPrivileged` once. Every scheme of ours is in the single call in
+`main/schemes.ts` — registering a new one anywhere else silently unregisters the others.
+
+The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and, optionally,
+`MAIN_VITE_YOUTUBE_CLIENT_SECRET` (repository secrets in the release workflow; `.env.local` for
+development). Neither is a security boundary — anything in an installer can be read back out, and
+Google treats installed apps as unable to keep a secret — so the secret is sent only when a build has
+one, and a build without a client id has no uploads and says so. What protects a channel is the
+user's own refresh token, PKCE, and the loopback-only redirect. The quota is the Google project's,
+shared by every install; until YouTube's audit passes, every upload is forced private.
+`apps/desktop/docs/YOUTUBE_SETUP.md` covers the project, the reviews and the secrets, and
+`apps/desktop/docs/PRIVACY.md` is the policy Google needs a URL for.
 
 ## Patch notes
 
@@ -142,7 +264,10 @@ own workflow.
 
 When one PR bumps both apps, tag the server first. A desktop bump puts its version on the server's
 allow list, so the desktop that PR ships is refused by every server release before it — 0.13.0 also
-calls `/api`, which only Server 0.2.0 has — and its Release should not be the first to go out.
+calls `/api`, which only Server 0.2.0 has — and its Release should not be the first to go out. That
+ordering decides when the update reaches anybody, too: a desktop connected to a server installs the
+version *that server* names, so the desktop Release can sit there for a week and nobody moves until
+the server release carrying the new allow list is deployed. Local-only copies take it immediately.
 
 That tags the current commit as whatever version the app being released already names —
 `apps/desktop/package.json` for the desktop, `<VersionPrefix>` in
@@ -160,13 +285,17 @@ on never lands on main, and tagging it gives you a Release pointing at a commit 
 nothing.
 
 There is nothing to do by hand afterwards. The desktop workflow verifies the tag matches
-`package.json`, extracts that section, builds the Windows installer on a Windows runner, and
-publishes the Release with the installer, its `.blockmap` and `latest.yml` attached. The server
+`package.json`, extracts that section, builds the Windows installer on a Windows runner — with the
+section built into `latest.yml`, which is how the patch notes reach the app — and publishes the
+Release with the installer, its `.blockmap` and `latest.yml` attached, marked as the repository's
+**Latest** release. The server
 workflow does the same shape of thing on Linux: it runs the tests — including the ones that stand a
 real SQL Server up in a container, so a release cannot go out on a schema that does not migrate —
 then builds the web client, self-contained `linux-x64` and `win-x64` archives that carry it, and a
 container image that builds its own, pushes the image to GHCR, and publishes the Release with both
-archives attached.
+archives attached — explicitly **not** as Latest. Both apps release into one list, and that badge
+belongs to the desktop installer: it is where a browser lands from the Releases page, and where the
+updater reads the newest desktop version from.
 
 It builds before it publishes, and creates the Release as a draft that only becomes visible once the
 uploaded installer has been read back off the API at the size that was actually built. So a release

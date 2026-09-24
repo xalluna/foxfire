@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import type { ServerCredentials, ServerRegistration, SessionUser } from '@foxfire/core'
+import type {
+  EmailChange,
+  PasswordChange,
+  ServerCredentials,
+  ServerRegistration,
+  SessionUser
+} from '@foxfire/core'
 import { WEB_API_VERSION, createServerSession, type ServerSession } from '@foxfire/core/server'
 import { refreshLock } from './locks'
 
@@ -82,6 +88,41 @@ export async function signIn(credentials: ServerCredentials): Promise<SessionUse
 
 export async function register(registration: ServerRegistration): Promise<SessionUser> {
   const user = await session.register(registration)
+  useAuth.setState({ user })
+  tellOtherTabs('signed-in')
+  return user
+}
+
+/**
+ * Changes the password and keeps this browser signed in.
+ *
+ * The server ends every other session and sets a fresh cookie here, so the tabs
+ * of this browser carry on and every other device is asking for a password
+ * within a quarter of an hour. The other tabs are told the same way a sign-in
+ * tells them, since what they are holding is a session that has been replaced.
+ */
+export async function changePassword(change: PasswordChange): Promise<SessionUser> {
+  const user = await session.changePassword(change)
+  useAuth.setState({ user })
+  tellOtherTabs('signed-in')
+  return user
+}
+
+export async function changeEmail(change: EmailChange): Promise<SessionUser> {
+  const user = await session.changeEmail(change)
+  useAuth.setState({ user })
+  return user
+}
+
+export async function changeUsername(username: string): Promise<SessionUser> {
+  const user = await session.changeUsername(username)
+  useAuth.setState({ user })
+  return user
+}
+
+/** Sets a new password from a reset link, which signs this browser in as its owner. */
+export async function redeemPasswordReset(token: string, newPassword: string): Promise<SessionUser> {
+  const user = await session.redeemPasswordReset(token, newPassword)
   useAuth.setState({ user })
   tellOtherTabs('signed-in')
   return user

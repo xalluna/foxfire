@@ -1,7 +1,16 @@
-import type { ConnectionState, FoxfireClient, InvitePreview, SessionUser, VersionInfo } from '@foxfire/core'
+import type {
+  ConnectionState,
+  FoxfireClient,
+  InvitePreview,
+  PasswordResetPreview,
+  SessionUser,
+  VersionInfo
+} from '@foxfire/core'
 import { paths, rankQueueParam } from '@foxfire/core/routes'
-import type { Platform } from '@foxfire/screens'
-import { createFixtureClient, runFixtureImport } from '@foxfire/screens/dev'
+import type { Platform, RecordingTarget } from '@foxfire/screens'
+import { createFakeYouTubeMount, createFixtureClient, runFixtureImport } from '@foxfire/screens/dev'
+import { YOUTUBE_ENABLED } from '../features'
+import { createWebYouTubeMount } from '../platform/youtubePlayer'
 import { replaceServerInfoSource } from '../serverInfo'
 import { useAuth } from '../session/session'
 
@@ -15,7 +24,9 @@ import { useAuth } from '../session/session'
  * as it does on the desktop's.
  *
  * Signing out works, and lands on the sign-in page to look at; signing back in
- * does not, because there is no server to ask.
+ * does not, because there is no server to ask. The same goes for a reset link:
+ * /reset-password/<anything long> shows the form, and setting a password needs
+ * a server.
  */
 
 const SERVER_NAME = 'The Fox Den'
@@ -67,7 +78,27 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
     previewInvite: async (token): Promise<InvitePreview> =>
       token.length < 20
         ? { usable: false, serverName: SERVER_NAME, email: null, message: 'This invite link is not valid for this server.' }
-        : { usable: true, serverName: SERVER_NAME, email: 'invitee@example.com', message: 'Ready to use.' }
+        : { usable: true, serverName: SERVER_NAME, email: 'invitee@example.com', message: 'Ready to use.' },
+
+    // A short token is the unusable state, the same way the invite preview
+    // treats one. Setting the password itself needs a server, so the harness
+    // shows the two states of the page rather than the whole errand.
+    previewPasswordReset: async (token): Promise<PasswordResetPreview> =>
+      token.length < 20
+        ? {
+            usable: false,
+            serverName: SERVER_NAME,
+            username: null,
+            email: null,
+            message: 'This link has already been used.'
+          }
+        : {
+            usable: true,
+            serverName: SERVER_NAME,
+            username: 'phantomduval',
+            email: 'duval@example.com',
+            message: 'Ready to use.'
+          }
   })
 
   useAuth.setState({ user: USER, ready: true })
@@ -77,6 +108,21 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
     copyText: (text) => navigator.clipboard.writeText(text),
     openLpEditor: ({ account, queueType, matchId }) =>
       navigate(paths.lpEditor(account, { queue: rankQueueParam(queueType), match: matchId })),
+    // As the real page: only when the harness was started with YouTube on —
+    // FOXFIRE_FEATURE_YOUTUBE=1 npm run dev:mock -w @foxfire/web.
+    ...(YOUTUBE_ENABLED
+      ? {
+          watchRecording: ({ account, match }: RecordingTarget) => navigate(paths.recording(account, match.matchId)),
+          // A stand-in with a running clock by default, which is enough to judge
+          // the marker strip against and needs no network. ?youtube=real plays
+          // the fixture video through YouTube's own player instead, to check the
+          // IFrame API wiring end to end.
+          youtube:
+            new URLSearchParams(window.location.search).get('youtube') === 'real'
+              ? createWebYouTubeMount()
+              : createFakeYouTubeMount()
+        }
+      : {}),
     downloadReplay: async () => ({ ok: false, message: 'The harness has no blob store to download from.' }),
     statsDbImport: {
       pick: async () => ({ source: null, label: 'stats.db' }),

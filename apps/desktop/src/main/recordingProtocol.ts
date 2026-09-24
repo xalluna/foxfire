@@ -22,21 +22,13 @@ import { createLogger } from './telemetry/logger'
  */
 const log = createLogger('recordings')
 
-export const RECORDING_SCHEME = 'recording'
-
 /**
- * Registered before the app is ready, which is the only time Electron accepts
- * it. `stream: true` is what allows a Response body to be a stream rather than
- * a fully buffered blob — a 3GB recording cannot be buffered.
+ * Registered as privileged in schemes.ts, before the app is ready, which is
+ * the only time Electron accepts it. `stream: true` there is what allows a
+ * Response body to be a stream rather than a fully buffered blob — a 3GB
+ * recording cannot be buffered.
  */
-export function registerRecordingScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: RECORDING_SCHEME,
-      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true }
-    }
-  ])
-}
+export const RECORDING_SCHEME = 'recording'
 
 /** The URL a recording window puts in its <video src>. */
 export function recordingUrl(recordingId: number): string {

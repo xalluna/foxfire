@@ -1,5 +1,6 @@
 import type { ConnectionState, FoxfireClient } from '@foxfire/core'
 import type { Api } from '@shared/api'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import type { ServerState } from '@shared/types'
 
 /**
@@ -48,12 +49,27 @@ export function createIpcClient(api: Api): FoxfireClient {
 
     seasons: api.seasons,
     search: api.search,
+
+    // Answered by the server when connected to one; local-only has none, and
+    // says so rather than pretending. Absent altogether from a build without
+    // YouTube, whose main process answers none of these channels.
+    ...(YOUTUBE_ENABLED
+      ? {
+          matchRecordings: {
+            get: api.matchRecordings.get,
+            attach: api.matchRecordings.attach,
+            detach: api.matchRecordings.detach
+          }
+        }
+      : {}),
     assets: api.assets,
 
     admin: {
       users: api.serverAdmin.users,
       updateUser: api.serverAdmin.updateUser,
       deleteUser: api.serverAdmin.deleteUser,
+    createPasswordReset: api.serverAdmin.createPasswordReset,
+    revokePasswordReset: api.serverAdmin.revokePasswordReset,
       invites: api.serverAdmin.invites,
       createInvite: api.serverAdmin.createInvite,
       revokeInvite: api.serverAdmin.revokeInvite,
@@ -62,13 +78,15 @@ export function createIpcClient(api: Api): FoxfireClient {
       storage: api.serverAdmin.storage,
       storedReplays: api.serverAdmin.storedReplays,
       removeReplay: api.serverAdmin.removeReplay,
-      forceUnlink: api.serverAdmin.forceUnlink
+      forceUnlink: api.serverAdmin.forceUnlink,
+      addRiotAccount: api.serverAdmin.addRiotAccount
     },
 
     events: {
       onSyncProgress: api.sync.onProgress,
       onRankEdited: api.rank.onEdited,
-      onRankChanged: api.lcu.onRankChanged
+      onRankChanged: api.lcu.onRankChanged,
+      onRecordingChanged: YOUTUBE_ENABLED ? api.matchRecordings.onChanged : () => () => undefined
     }
   }
 }

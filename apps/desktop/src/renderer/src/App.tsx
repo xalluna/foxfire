@@ -7,8 +7,11 @@ import { Icon, Logo } from '@foxfire/ui'
 import { queryKeys, useClient } from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { LiveNavIcon } from './components/LiveNavIcon'
-import { useRecordingUpdates, useReplayUpdates } from './hooks/useDesktopUpdates'
+import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
+import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
+import { YOUTUBE_ENABLED } from '@shared/features'
 import { useKeyRejected, useServerHealth } from './hooks/useKeyStatus'
+import { useUpdates } from './hooks/useUpdates'
 import { useNavSlug } from './hooks/usePlayerNavigation'
 
 /** Pages of one account, found under its slug. */
@@ -44,24 +47,41 @@ const NAV: NavItem[] = [
  */
 function Banner({
   tone,
+  icon,
+  action,
   onClick,
   children
 }: {
-  tone: 'error' | 'warning'
+  /** `info` is news rather than a problem: an update waiting, or one that landed. */
+  tone: 'error' | 'warning' | 'info'
+  /** Defaults to the warning triangle, which is wrong for news. */
+  icon?: React.ReactNode
+  /**
+   * A control at the end of the strip, for a banner whose action is worth
+   * doing deliberately. Restarting the app is not something to trigger by
+   * clicking a sentence in passing, so that one carries a button instead of
+   * making the whole strip clickable.
+   */
+  action?: React.ReactNode
   onClick?: () => void
   children: React.ReactNode
 }): JSX.Element {
   const className = clsx(
     'flex shrink-0 items-center gap-2 border-b px-5 py-2 text-left text-sm',
-    tone === 'error' ? 'border-red/30 bg-red/10 text-red' : 'border-amber/30 bg-amber/10 text-amber',
+    tone === 'error' && 'border-red/30 bg-red/10 text-red',
+    tone === 'warning' && 'border-amber/30 bg-amber/10 text-amber',
+    tone === 'info' && 'border-accent-dim/40 bg-accent/10 text-accent',
     onClick !== undefined && 'transition',
-    onClick !== undefined && (tone === 'error' ? 'hover:bg-red/15' : 'hover:bg-amber/15')
+    onClick !== undefined && tone === 'error' && 'hover:bg-red/15',
+    onClick !== undefined && tone === 'warning' && 'hover:bg-amber/15',
+    onClick !== undefined && tone === 'info' && 'hover:bg-accent/15'
   )
 
   const body = (
     <>
-      <Icon.Warning className="shrink-0" />
+      {icon ?? <Icon.Warning className="shrink-0" />}
       <span>{children}</span>
+      {action !== undefined && <span className="ml-auto shrink-0">{action}</span>}
     </>
   )
 
@@ -114,8 +134,10 @@ function useShowMatchRequests(): void {
 export function AppShell(): JSX.Element {
   useRecordingUpdates()
   useReplayUpdates()
+  useYouTubeUpdates()
   useShowMatchRequests()
   const [keyRejected, clearRejected] = useKeyRejected()
+  const updates = useUpdates()
 
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
@@ -135,6 +157,11 @@ export function AppShell(): JSX.Element {
 
   const openRiotKeySettings = (): void => {
     void navigate({ to: '/settings/{-$category}', params: { category: 'riot-key' } })
+  }
+
+  const openWhatsNew = (): void => {
+    void window.api.updates.dismissNote()
+    void navigate({ to: '/settings/{-$category}', params: { category: 'about' } })
   }
 
   const isActive = (item: NavItem): boolean => {
@@ -235,9 +262,48 @@ export function AppShell(): JSX.Element {
         </Banner>
       )}
 
+      {/*
+        The two update banners, which are news rather than faults — hence the
+        accent rather than red or amber. One offers a restart, and refuses to
+        while a game or a recording is on, because a restart then costs the LP
+        reading or the recording that Foxfire was left running for. The other
+        is the only account of what changed that reaches somebody who does not
+        read the repository.
+      */}
+      {updates?.status === 'ready' && updates.target !== null && (
+        <Banner
+          tone="info"
+          icon={<Icon.Sync className="shrink-0" />}
+          action={
+            updates.blockedBy === null ? (
+              <button
+                onClick={() => void window.api.updates.restart()}
+                className="rounded border border-accent-dim px-2 py-0.5 text-xs text-accent transition hover:bg-accent/20"
+              >
+                Restart now
+              </button>
+            ) : undefined
+          }
+        >
+          {updates.blockedBy === null
+            ? `Foxfire ${updates.target} is ready to install.`
+            : updates.blockedBy === 'recording'
+              ? `Foxfire ${updates.target} is ready — it will install once this recording has finished.`
+              : `Foxfire ${updates.target} is ready — it will install once this game has finished.`}
+        </Banner>
+      )}
+
+      {updates?.justInstalled != null && (
+        <Banner tone="info" icon={<Icon.Check className="shrink-0" />} onClick={openWhatsNew}>
+          Updated to Foxfire {updates.justInstalled.version} — click here to see what&rsquo;s new.
+        </Banner>
+      )}
+
       <div className="flex min-h-0 flex-1">
         <Outlet />
       </div>
+
+      {YOUTUBE_ENABLED && <YouTubeUploadDialogHost />}
     </div>
   )
 }

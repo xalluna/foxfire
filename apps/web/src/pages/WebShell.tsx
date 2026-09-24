@@ -4,7 +4,7 @@ import { Icon, Logo } from '@foxfire/ui'
 import { useConnection } from '@foxfire/screens'
 import { signOut, useAuth } from '../session/session'
 
-function NavLink({ to, children }: { to: '/players' | '/search' | '/admin'; children: ReactNode }): JSX.Element {
+function NavLink({ to, children }: { to: '/players' | '/admin'; children: ReactNode }): JSX.Element {
   return (
     <Link
       to={to}
@@ -54,12 +54,19 @@ export function WebShell(): JSX.Element {
 
           <nav className="flex min-w-0 gap-0.5 overflow-x-auto">
             <NavLink to="/players">Players</NavLink>
-            <NavLink to="/search">Search</NavLink>
             {user?.isAdmin && <NavLink to="/admin">Admin</NavLink>}
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-3">
-            <span className="text-sm text-text-dim max-sm:hidden">{user?.username}</span>
+            {/* The name is the way to the account page, which is where a name
+                stops being a label and starts being a thing you can change. */}
+            <Link
+              to="/account"
+              className="rounded px-2 py-1 text-sm text-text-dim transition hover:bg-surface hover:text-text max-sm:hidden"
+              activeProps={{ className: 'bg-accent/10 text-accent' }}
+            >
+              {user?.username}
+            </Link>
             <button
               onClick={() => void signOut()}
               className="rounded-md border border-hairline px-2.5 py-1 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"

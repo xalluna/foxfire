@@ -87,12 +87,8 @@ public sealed class IdentityRepair(
     /// <summary>
     /// Moves every stored row from one puuid to another, atomically.
     ///
-    /// The raw payload is rewritten too, by textual replacement. That looks
-    /// crude and is exactly right: the payload is kept so future columns can be
-    /// backfilled out of it, and a backfill reading a puuid that no longer
-    /// matches the participant row beside it would write mismatched data. The
-    /// old value appears in the metadata roster and in one participant block,
-    /// and both should become the new one.
+    /// The games themselves move through <see cref="PuuidHistory"/>, which an
+    /// import shares — the payload and the participant row are moved by one rule.
     /// </summary>
     private async Task RekeyAsync(RiotAccount account, string newPuuid, CancellationToken cancellationToken)
     {
@@ -112,10 +108,7 @@ public sealed class IdentityRepair(
                 $"Cannot re-key {account.RiotId}: Riot account {takenBy} already holds that puuid.");
         }
 
-        var collisions = await db.MatchParticipants
-            .Where(mine => mine.Puuid == oldPuuid
-                && db.MatchParticipants.Any(theirs => theirs.MatchId == mine.MatchId && theirs.Puuid == newPuuid))
-            .CountAsync(cancellationToken);
+        var collisions = (await PuuidHistory.CollidingMatchesAsync(db, oldPuuid, newPuuid, cancellationToken)).Count;
 
         if (collisions > 0)
         {
@@ -131,17 +124,7 @@ public sealed class IdentityRepair(
         {
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-            // Before the participant rows move, while the old puuid still
-            // selects the matches to touch.
-            var matches = await db.Matches
-                .Where(m => db.MatchParticipants.Any(p => p.MatchId == m.MatchId && p.Puuid == oldPuuid))
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.RawJson, m => m.RawJson.Replace(oldPuuid, newPuuid)),
-                    cancellationToken);
-
-            var participants = await db.MatchParticipants
-                .Where(p => p.Puuid == oldPuuid)
-                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Puuid, newPuuid), cancellationToken);
+            var moved = await PuuidHistory.MoveAsync(db, oldPuuid, newPuuid, cancellationToken);
 
             await db.RiotAccounts
                 .Where(a => a.Id == account.Id)
@@ -170,8 +153,8 @@ public sealed class IdentityRepair(
             log.LogInformation(
                 "Re-keyed {RiotId} after an API key change: {Matches} match(es), {Participants} participant row(s)",
                 account.RiotId,
-                matches,
-                participants);
+                moved.Matches,
+                moved.Participants);
         });
 
         // ExecuteUpdate went round the change tracker, so the entity this method

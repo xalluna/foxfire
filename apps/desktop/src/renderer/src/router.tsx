@@ -10,11 +10,12 @@ import {
   type ErrorComponentProps
 } from '@tanstack/react-router'
 import {
-  SearchScreen,
+  PlayersScreen,
   createPlayerRoutes,
   parseSearch,
   stringifySearch,
-  usePlayer
+  usePlayer,
+  validatePlayersSearch
 } from '@foxfire/screens'
 import { AppShell } from './App'
 import { Main, PlayerLayout } from './components/PlayerLayout'
@@ -23,6 +24,7 @@ import { Captures } from './views/Captures'
 import { Home } from './views/Home'
 import { LiveGame } from './views/LiveGame'
 import { Settings } from './views/Settings'
+import { YOUTUBE_ENABLED } from '@shared/features'
 
 /*
  * Every window this app opens, as one route table.
@@ -63,13 +65,21 @@ const captures = createRoute({
   }
 })
 
+/**
+ * The finder, which the web client reaches as its Players page.
+ *
+ * Kept under "Search" here because that is the word for it in an app whose nav
+ * is otherwise one account's own pages — there is no list of everybody to fold
+ * it into, the way a browser has.
+ */
 const search = createRoute({
   getParentRoute: () => app,
   path: 'search',
+  validateSearch: validatePlayersSearch,
   component: function SearchRoute() {
     return (
       <Main>
-        <SearchScreen />
+        <PlayersScreen heading="Search" />
       </Main>
     )
   }
@@ -108,6 +118,13 @@ const recording = createRoute({
   component: lazyRouteComponent(() => import('./recording/RecordingApp'), 'RecordingApp')
 })
 
+/** A recording with no file on this machine, played from YouTube. See windowRoutes.remoteRecording. */
+const remoteRecording = createRoute({
+  getParentRoute: () => windows,
+  path: 'recording/match/$accountId/$matchId',
+  component: lazyRouteComponent(() => import('./recording/RemoteRecordingApp'), 'RemoteRecordingApp')
+})
+
 /**
  * The LP editor's window. Its own route rather than the shared `lp` page, which
  * sits under a player and so under the main window's header; the window is
@@ -127,7 +144,14 @@ const routeTree = root.addChildren([
     search,
     settings
   ]),
-  windows.addChildren([telemetry, archives, recording, lpEditor])
+  windows.addChildren([
+    telemetry,
+    archives,
+    recording,
+    // Somebody else's recording, from YouTube — only in a build that has it.
+    ...(YOUTUBE_ENABLED ? [remoteRecording] : []),
+    lpEditor
+  ])
 ])
 
 /**

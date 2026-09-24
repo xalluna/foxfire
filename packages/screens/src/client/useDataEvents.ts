@@ -30,7 +30,10 @@ export function useDataEvents(): void {
         refresh({ kind: 'syncProgress', event })
       }),
       client.events.onRankEdited((accountId) => refresh({ kind: 'rankEdited', accountId })),
-      client.events.onRankChanged((accountId) => refresh({ kind: 'rankChanged', accountId }))
+      client.events.onRankChanged((accountId) => refresh({ kind: 'rankChanged', accountId })),
+      client.events.onRecordingChanged(({ accountId, matchId }) =>
+        refresh({ kind: 'recordingChanged', accountId, matchId })
+      )
     ]
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe())

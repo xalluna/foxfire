@@ -8,6 +8,8 @@ A server also hosts a **web client** of its own, at its own address: the people 
 
 Built with Electron, React, and TypeScript. All data comes from **Riot's official Developer API** (op.gg's Terms of Use prohibit scraping their site, and everything here is available from Riot directly).
 
+**Getting it:** the Windows installer is on the [latest release](https://github.com/xalluna/foxfire/releases/latest). That is the only time you download Foxfire by hand — from 0.14.0 it keeps itself up to date.
+
 ## Features
 
 - **Multi-account tracking** — add your main and alt accounts, switch between them in the sidebar
@@ -18,6 +20,7 @@ Built with Electron, React, and TypeScript. All data comes from **Riot's officia
 - **Ad-hoc search** — look up any summoner without saving them
 - **Optional server** — join one your community hosts to share match history, rank and LP; local-only stays a first-class mode
 - **In a browser** — a server's web client shows profiles, match history, a page per game, champions and the rank graph, and "Copy link" in either client hands somebody the view you are looking at
+- **Updates itself** — a new version downloads quietly and installs when you restart, never in the middle of a game; connected to a server, it installs the version that server accepts, so an update cannot lock you out of your community
 
 ## Setup
 

@@ -35,6 +35,7 @@ import type { Api } from '@shared/api'
 export interface ServerBackedApi {
   accounts: Api['accounts']
   dashboard: Api['dashboard']
+  matchRecordings: Omit<Api['matchRecordings'], 'onChanged'>
   sync: Omit<Api['sync'], 'onProgress'>
   champions: Api['champions']
   mastery: Api['mastery']

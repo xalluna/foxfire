@@ -19,6 +19,11 @@ public class SpaHostingTests(FoxfireServerFixture server)
     [InlineData("/players/Faker-KR1/rank?queue=flex")]
     [InlineData("/matches/KR_7123?player=Faker-KR1")]
     [InlineData("/search")]
+    // Both kinds of link the server hands out. A token is two base64 halves
+    // joined by a dot, which the framework's own fallback would take for a
+    // missing file — so every invite and every reset link would 404.
+    [InlineData("/invite/ZmF1eC1pbnZpdGU.c2lnbmF0dXJl")]
+    [InlineData("/reset-password/ZmF1eC1yZXNldA.c2lnbmF0dXJl")]
     public async Task A_page_address_is_the_web_client(string path)
     {
         using var browser = server.AnonymousClient();
@@ -43,6 +48,18 @@ public class SpaHostingTests(FoxfireServerFixture server)
         Assert.Contains("default-src 'self'", csp, StringComparison.Ordinal);
         Assert.Contains("frame-ancestors 'none'", csp, StringComparison.Ordinal);
         Assert.Contains("https://ddragon.leagueoflegends.com", csp, StringComparison.Ordinal);
+
+#if FEATURE_YOUTUBE
+        // A recording plays in YouTube's privacy-enhanced player, driven by its
+        // IFrame API — and that is the only frame and the only foreign script.
+        Assert.Contains("frame-src https://www.youtube-nocookie.com;", csp, StringComparison.Ordinal);
+        Assert.Contains("script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com;", csp, StringComparison.Ordinal);
+#else
+        // A build without recordings lets nothing of YouTube's into the page.
+        Assert.Contains("script-src 'self' 'wasm-unsafe-eval';", csp, StringComparison.Ordinal);
+        Assert.DoesNotContain("youtube", csp, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("frame-src", csp, StringComparison.Ordinal);
+#endif
 
         Assert.Equal("noindex, nofollow", string.Join(",", headers.GetValues("X-Robots-Tag")));
         Assert.Equal("same-origin", string.Join(",", headers.GetValues("Referrer-Policy")));

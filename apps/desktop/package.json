@@ -1,7 +1,7 @@
 {
   "name": "@foxfire/desktop",
   "productName": "Foxfire",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Personal League of Legends stats and live-game tracker",
   "main": "./out/main/index.js",
   "author": "Brandon Barr",
@@ -28,6 +28,7 @@
     "@tanstack/react-router": "^1.170.38",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "electron-updater": "^6.8.9",
     "obs-websocket-js": "^5.0.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

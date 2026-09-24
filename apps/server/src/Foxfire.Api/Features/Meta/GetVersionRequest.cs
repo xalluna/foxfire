@@ -1,4 +1,3 @@
-using System.Reflection;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Services;
@@ -38,9 +37,10 @@ public sealed record VersionResponse(
 ///
 /// Answers without authentication and without a client-version header, which is
 /// the entire point of it. A desktop that is too old has to be able to find
-/// that out and say so — "this server needs Foxfire 0.13" — before somebody
-/// types a password and gets an error they cannot act on. There is no
-/// auto-update yet, so the message is the whole remedy.
+/// that out and say so — "this server needs Foxfire 0.14" — before somebody
+/// types a password and gets an error they cannot act on. It is also what a
+/// desktop's updater asks, on a schedule and before anybody has signed in:
+/// <c>recommendedDesktop</c> is the build it will install.
 ///
 /// It gives away the server's name, its version and whether signup is open. All
 /// three are things anybody who could register would see anyway, and none of
@@ -51,17 +51,12 @@ public sealed record GetVersionRequest : IDomainRequest<VersionResponse>;
 internal sealed class GetVersionRequestHandler(IOptions<ServerOptions> server, ServerSettingsService settings)
     : IDomainRequestHandler<GetVersionRequest, VersionResponse>
 {
-    private static readonly string Build =
-        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion.Split('+')[0]
-        ?? "0.0.0";
-
     public async Task<Response<VersionResponse>> Handle(
         GetVersionRequest request,
         CancellationToken cancellationToken) =>
         new VersionResponse(
             ServerName: server.Value.Name,
-            ServerVersion: Build,
+            ServerVersion: ServerBuild.Version,
             ApiVersion: DesktopCompatibility.ApiVersion,
             MinimumDesktop: DesktopCompatibility.AllowList.Minimum,
             RecommendedDesktop: DesktopCompatibility.AllowList.Recommended,

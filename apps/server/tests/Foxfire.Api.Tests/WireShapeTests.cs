@@ -262,8 +262,64 @@ public class WireShapeTests(FoxfireServerFixture server)
             "teamDamage",
             "isRemake",
             "rank",
-            "hasManualRank");
+            "hasManualRank",
+            "sharedReplay",
+            "recording");
     }
+
+#if FEATURE_YOUTUBE
+    [Fact]
+    public async Task A_recording_carries_every_field_the_player_page_reads()
+    {
+        // @foxfire/core MatchRecording, and its RecordingEvent — the desktop's
+        // own shape, so the web draws the markers the desktop always did.
+        var (client, accountId, matchId) = await RiggedAsync();
+        using var _client = client;
+
+        var uri = new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording", UriKind.Relative);
+
+        (await client.PutAsJsonAsync(uri, new
+        {
+            youtubeVideoId = "dQw4w9WgXcQ",
+            source = "upload",
+            privacy = "unlisted",
+            title = "Lee Sin · Ranked Solo/Duo · Victory · 8/4/6",
+            durationSeconds = 1790,
+            events = new[]
+            {
+                new { eventId = 3, name = "ChampionKill", gameTime = 342.5, videoTime = 252.5, role = "kill", label = "Ahri" }
+            }
+        })).EnsureSuccessStatusCode();
+
+        var recording = await client.GetFromJsonAsync<JsonElement>(uri);
+
+        AssertHasAll(
+            recording,
+            "youtubeVideoId",
+            "privacy",
+            "hasEvents",
+            "title",
+            "durationSeconds",
+            "source",
+            "attachedBy",
+            "attachedAt",
+            "events");
+
+        AssertHasAll(
+            recording.GetProperty("events")[0],
+            "eventId",
+            "name",
+            "gameTime",
+            "videoTime",
+            "role",
+            "label");
+
+        var rows = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
+
+        AssertHasAll(rows[0].GetProperty("recording"), "youtubeVideoId", "privacy", "hasEvents");
+    }
+#endif
 
     [Fact]
     public async Task A_dashboard_carries_the_three_things_the_account_page_opens_with()

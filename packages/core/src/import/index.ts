@@ -1,5 +1,6 @@
 export {
   IMPORT_BATCH,
+  IMPORT_ID_PAGE,
   emptyImport,
   importStatsDb,
   type ImportTarget,
@@ -9,6 +10,7 @@ export {
 export type {
   ImportAccountResult,
   ImportAccountRow,
+  ImportBatchOutcome,
   ImportMatchRow,
   ImportReadingRow,
   ImportSeasonRow

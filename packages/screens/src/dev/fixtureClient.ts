@@ -1,12 +1,14 @@
 import type {
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminReplay,
   AdminUser,
   AdminUserPatch,
   AssetManifest,
+  AttachRecordingInput,
+  AttachRecordingOutcome,
   ChampionStats,
   ConnectionState,
   DashboardData,
@@ -15,7 +17,9 @@ import type {
   ImportResult,
   MasteryData,
   MatchDetail,
+  MatchRecording,
   MatchSummary,
+  PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
@@ -35,6 +39,7 @@ import {
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
+  MATCH_RECORDINGS,
   RANK_SNAPSHOTS,
   championStatsFor
 } from './fixtures'
@@ -63,6 +68,32 @@ const progressListeners = new Set<(event: SyncProgressEvent) => void>()
 const editedListeners = new Set<(accountId: string) => void>()
 const rankChangedListeners = new Set<(accountId: string) => void>()
 const connectionListeners = new Set<(state: ConnectionState) => void>()
+const recordingListeners = new Set<(event: { accountId: string; matchId: string }) => void>()
+
+/**
+ * What the harness's server holds on YouTube, as it changes this session.
+ *
+ * Keyed `account:match` because a recording is one player's view of a game —
+ * the same match under the other account is a different key with, here,
+ * nothing in it.
+ */
+const recordings = new Map<string, MatchRecording>(Object.entries(MATCH_RECORDINGS))
+const recordingKey = (accountId: string, matchId: string): string => `${accountId}:${matchId}`
+
+function notifyRecording(accountId: string, matchId: string): void {
+  for (const listener of recordingListeners) listener({ accountId, matchId })
+}
+
+/** A row as the server sends it: with this account's recording of the game, or none. */
+function withRecording(accountId: string, match: MatchSummary): MatchSummary {
+  const recording = recordings.get(recordingKey(accountId, match.matchId))
+  return {
+    ...match,
+    recording: recording
+      ? { youtubeVideoId: recording.youtubeVideoId, privacy: recording.privacy, hasEvents: recording.hasEvents }
+      : null
+  }
+}
 
 function notifyEdited(accountId: string): void {
   for (const listener of editedListeners) listener(accountId)
@@ -208,7 +239,8 @@ let mockUsers: AdminUser[] = [
     isDisabled: false,
     createdAt: '2026-06-01T10:00:00.000Z',
     linkedRiotAccounts: 2,
-    activeSessions: 1
+    activeSessions: 1,
+    passwordReset: null
   },
   {
     id: 'u-2',
@@ -218,7 +250,16 @@ let mockUsers: AdminUser[] = [
     isDisabled: false,
     createdAt: '2026-07-14T18:30:00.000Z',
     linkedRiotAccounts: 1,
-    activeSessions: 2
+    activeSessions: 2,
+    // One member arrives with a link outstanding, so the harness shows the
+    // panel without anybody having to make one first.
+    passwordReset: {
+      id: 'r-1',
+      userId: 'u-2',
+      link: 'https://foxfire.example.com/reset-password/SGVsbG9SZXNldExpbmtGb3JIYXJuZXNz.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU',
+      createdAt: '2026-09-21T20:00:00.000Z',
+      expiresAt: '2026-09-22T20:00:00.000Z'
+    }
   },
   {
     id: 'u-3',
@@ -228,7 +269,8 @@ let mockUsers: AdminUser[] = [
     isDisabled: true,
     createdAt: '2026-08-02T09:15:00.000Z',
     linkedRiotAccounts: 0,
-    activeSessions: 0
+    activeSessions: 0,
+    passwordReset: null
   }
 ]
 
@@ -301,12 +343,66 @@ export function createFixtureClient(): FoxfireClient {
         // Filter before slicing, mirroring the real handler's SQL — otherwise the
         // harness pages differently to the app and hides paging bugs.
         const all = matchesFor(accountId).filter((m) => queueId === null || m.queueId === queueId)
-        return delay(all.slice(offset, offset + limit), 260)
+        return delay(
+          all.slice(offset, offset + limit).map((m) => withRecording(accountId, m)),
+          260
+        )
       },
       matchDetail: (matchId: string): Promise<MatchDetail | null> =>
         delay(MATCH_DETAILS[matchId] ?? null, 420),
-      matchSummary: (accountId: string, matchId: string): Promise<MatchSummary | null> =>
-        delay(matchesFor(accountId).find((m) => m.matchId === matchId) ?? null, 200)
+      matchSummary: (accountId: string, matchId: string): Promise<MatchSummary | null> => {
+        const match = matchesFor(accountId).find((m) => m.matchId === matchId)
+        return delay(match ? withRecording(accountId, match) : null, 200)
+      }
+    },
+
+    matchRecordings: {
+      get: (accountId: string, matchId: string): Promise<MatchRecording | null> =>
+        delay(recordings.get(recordingKey(accountId, matchId)) ?? null, 220),
+
+      // The server's rules, so the harness refuses what it would: only the
+      // account's owner attaches, and a second one asks first.
+      attach: (accountId: string, matchId: string, input: AttachRecordingInput): Promise<AttachRecordingOutcome> => {
+        const account = accounts().find((a) => a.id === accountId)
+        if (account?.isMine === false) {
+          return delay({ ok: false, reason: 'failed', message: 'That League account is not linked to your Foxfire account.' }, 300)
+        }
+
+        const key = recordingKey(accountId, matchId)
+        const existing = recordings.get(key)
+        if (existing && !input.replace) {
+          return delay(
+            {
+              ok: false,
+              reason: 'exists',
+              message: existing.title
+                ? `This game already has a recording attached: “${existing.title}”.`
+                : 'This game already has a recording attached.'
+            },
+            300
+          )
+        }
+
+        recordings.set(key, {
+          youtubeVideoId: input.youtubeVideoId,
+          privacy: input.privacy ?? null,
+          hasEvents: input.events !== undefined,
+          title: input.title ?? null,
+          durationSeconds: input.durationSeconds ?? null,
+          source: input.source,
+          attachedBy: 'Faker',
+          attachedAt: new Date().toISOString(),
+          events: input.events ?? []
+        })
+        notifyRecording(accountId, matchId)
+        return delay({ ok: true }, 300)
+      },
+
+      detach: (accountId: string, matchId: string): Promise<AdminActionResult> => {
+        const removed = recordings.delete(recordingKey(accountId, matchId))
+        if (removed) notifyRecording(accountId, matchId)
+        return delay({ ok: removed, error: removed ? null : 'There is no recording on that game.' }, 250)
+      }
     },
 
     sync: {
@@ -419,23 +515,27 @@ export function createFixtureClient(): FoxfireClient {
     },
 
     search: {
-      summoner: (input): Promise<AdHocSummonerResult> => {
-        if (input.gameName.toLowerCase() === 'nobody') {
-          return fail('No summoner found with that Riot ID.')
-        }
+      // The same substring rule the server applies, so the harness answers a
+      // half-typed name the way a real one does. Blank is everybody, which is
+      // what the finder opens on.
+      players: (query: string): Promise<PlayerSearchResult[]> => {
+        const needle = query.trim().toLowerCase()
+
+        const matches = ACCOUNTS.filter(
+          (account) =>
+            needle.length === 0 ||
+            account.gameName.toLowerCase().includes(needle) ||
+            account.tagLine.toLowerCase().includes(needle) ||
+            `${account.gameName}#${account.tagLine}`.toLowerCase().includes(needle)
+        )
+
         return delay(
-          {
-            profile: {
-              puuid: 'puuid-searched',
-              gameName: input.gameName,
-              tagLine: input.tagLine,
-              profileIconId: 5788,
-              summonerLevel: 214
-            },
-            leagueEntries: LEAGUE_ENTRIES[2],
-            recentMatches: MATCHES[2].slice(0, 10)
-          },
-          900
+          matches.map((account) => ({
+            account,
+            soloEntry:
+              (LEAGUE_ENTRIES[account.id] ?? []).find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? null
+          })),
+          200
         )
       }
     },
@@ -482,6 +582,42 @@ export function createFixtureClient(): FoxfireClient {
         return delay({ ok: true, error: null }, 200, false)
       },
 
+      // Actually appends, so the harness shows the account turning up unclaimed
+      // in the finder afterwards rather than only that the form submitted.
+      addRiotAccount: (input): Promise<Account> => {
+        const gameName = input.gameName.trim()
+        const tagLine = input.tagLine.replace(/^#/, '').trim()
+
+        if (gameName.toLowerCase() === 'nobody') {
+          return fail(`Riot has no account called ${gameName}#${tagLine} in this region.`)
+        }
+
+        const existing = ACCOUNTS.find(
+          (a) => a.gameName.toLowerCase() === gameName.toLowerCase() && a.tagLine.toLowerCase() === tagLine.toLowerCase()
+        )
+        if (existing) return fail(`This server already tracks ${existing.gameName}#${existing.tagLine}.`)
+
+        const account: Account = {
+          id: `added-${ACCOUNTS.length + 1}`,
+          puuid: `puuid-${gameName.toLowerCase()}`,
+          gameName,
+          tagLine,
+          platform: 'na1',
+          regionalRoute: 'americas',
+          summonerId: null,
+          profileIconId: 5788,
+          summonerLevel: 214,
+          isHomeAccount: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isMine: false,
+          ownerUsername: null
+        }
+
+        ACCOUNTS.push(account)
+        return delay(account, 400, false)
+      },
+
       updateUser: (id: string, patch: AdminUserPatch): Promise<AdminActionResult> => {
         const target = mockUsers.find((u) => u.id === id)
         const admins = mockUsers.filter((u) => u.isAdmin)
@@ -519,6 +655,34 @@ export function createFixtureClient(): FoxfireClient {
         }
 
         mockUsers = mockUsers.filter((u) => u.id !== id)
+        return delay({ ok: true, error: null }, 200, false)
+      },
+
+      createPasswordReset: (userId: string): Promise<AdminPasswordReset> => {
+        const user = mockUsers.find((u) => u.id === userId)
+
+        if (user?.isDisabled) {
+          return Promise.reject(
+            new Error(`${user.username} is disabled, so a reset link would not get them in. Enable them first.`)
+          )
+        }
+
+        const reset: AdminPasswordReset = {
+          id: `r-${Date.now()}`,
+          userId,
+          link: `https://foxfire.example.com/reset-password/${btoa(userId).replace(/=/g, '')}-harness-token.aaaaaaaaaaaa`,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString()
+        }
+
+        // A newer link replaces whatever was outstanding, the way the server
+        // does it — there is never more than one live per account.
+        mockUsers = mockUsers.map((u) => (u.id === userId ? { ...u, passwordReset: reset } : u))
+        return delay(reset, 300, false)
+      },
+
+      revokePasswordReset: (userId: string): Promise<AdminActionResult> => {
+        mockUsers = mockUsers.map((u) => (u.id === userId ? { ...u, passwordReset: null } : u))
         return delay({ ok: true, error: null }, 200, false)
       },
 
@@ -569,10 +733,17 @@ export function createFixtureClient(): FoxfireClient {
       onRankChanged: (cb) => {
         rankChangedListeners.add(cb)
         return () => rankChangedListeners.delete(cb)
+      },
+      onRecordingChanged: (cb) => {
+        recordingListeners.add(cb)
+        return () => recordingListeners.delete(cb)
       }
     }
   }
 }
+
+/** How many times the harness's import has run, so each run can be a different outcome. */
+let fixtureImportRuns = 0
 
 /**
  * A stats.db import that reports its way through the phases and finishes with
@@ -581,11 +752,23 @@ export function createFixtureClient(): FoxfireClient {
  * The harness has no file system and no server, so this is the one shape the
  * panel has to draw for real. Either platform's harness can hand it to the
  * Data & storage page.
+ *
+ * Each run is a different outcome, in turn, so all of them can be looked at by
+ * pressing the button: the first import of a file, the same file again three
+ * days later (mostly already there, some new, a few problems), and the same
+ * file again with nothing new in it.
  */
 export async function runFixtureImport(
   onProgress: (progress: ImportProgress) => void
 ): Promise<ImportResult> {
-  for (const [phase, total] of [['accounts', 3], ['matches', 412], ['readings', 190]] as const) {
+  const outcome = FIXTURE_IMPORTS[fixtureImportRuns++ % FIXTURE_IMPORTS.length]
+
+  for (const [phase, total] of [
+    ['accounts', 3],
+    ['comparing', outcome.total],
+    ['matches', outcome.matches],
+    ['readings', outcome.readings]
+  ] as const) {
     for (const current of [0, total / 2, total]) {
       onProgress({ phase, current: Math.round(current), total })
       await new Promise((resolve) => setTimeout(resolve, 120))
@@ -596,14 +779,79 @@ export async function runFixtureImport(
   await new Promise((resolve) => setTimeout(resolve, 400))
   onProgress({ phase: 'done', current: 0, total: 0 })
 
-  return {
-    ok: true,
-    message: null,
-    accounts: 3,
+  return outcome.result
+}
+
+const DAY = 86_400_000
+
+const FIXTURE_IMPORTS: Array<{
+  /** Games in the file. */
+  total: number
+  /** Payloads actually sent. */
+  matches: number
+  readings: number
+  result: ImportResult
+}> = [
+  {
+    total: 412,
     matches: 412,
     readings: 190,
-    seasons: 1,
-    attributed: 88,
-    unresolved: ['OldName#NA1']
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 412,
+      readings: 190,
+      seasons: 1,
+      attributed: 88,
+      unresolved: ['OldName#NA1'],
+      alreadyThere: { matches: 0, readings: 0, seasons: 0 },
+      matchesFailed: 0,
+      readingsUnplaced: 0,
+      healed: 0,
+      newest: { matchAt: Date.now() - 4 * DAY, readingAt: Date.now() - 4 * DAY }
+    }
+  },
+  {
+    total: 431,
+    matches: 19,
+    readings: 190,
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 17,
+      readings: 24,
+      seasons: 0,
+      attributed: 17,
+      unresolved: [],
+      alreadyThere: { matches: 412, readings: 166, seasons: 1 },
+      matchesFailed: 2,
+      readingsUnplaced: 5,
+      healed: 6,
+      newest: { matchAt: Date.now() - 3_600_000, readingAt: Date.now() - 3_000_000 }
+    }
+  },
+  {
+    total: 431,
+    matches: 0,
+    readings: 190,
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 0,
+      readings: 0,
+      seasons: 0,
+      attributed: 0,
+      unresolved: [],
+      alreadyThere: { matches: 431, readings: 190, seasons: 1 },
+      matchesFailed: 0,
+      readingsUnplaced: 0,
+      healed: 0,
+      // Stops where the last copy did — what a file read without its
+      // write-ahead log looks like.
+      newest: { matchAt: Date.now() - 3 * DAY, readingAt: Date.now() - 3 * DAY }
+    }
   }
-}
+]

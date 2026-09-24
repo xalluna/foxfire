@@ -26,6 +26,25 @@ export type Scenario =
   // Signed in to a server older than this build, which refuses it — the case
   // where the remedy is the host's, not anybody's download.
   | 'server-behind'
+  // The desktop's updater, which has four states worth looking at: one waiting
+  // to be installed, one that cannot be installed yet because a game is on, one
+  // still downloading, and one held back by what the active server accepts.
+  // The fifth is the note the build shows once, after an update has landed.
+  | 'update-ready'
+  | 'update-blocked'
+  | 'update-downloading'
+  | 'update-held'
+  | 'just-installed'
+  // Recordings on YouTube. The queue in every state it can be in; a build with
+  // no Google client in it; one with a client and nobody connected; and a
+  // recording that plays for nobody but its owner.
+  | 'youtube-queue'
+  // A season of games recorded and none of them on YouTube yet, for the
+  // batch upload: select all, one privacy, queue the lot.
+  | 'youtube-backlog'
+  | 'youtube-unconfigured'
+  | 'youtube-disconnected'
+  | 'recording-private'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

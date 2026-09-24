@@ -4,6 +4,16 @@ export const CH = {
   app: {
     getVersion: 'app:getVersion'
   },
+  // Keeping this copy current. `changed` is pushed on every move the updater
+  // makes, because the window and the tray both draw from it and must not be
+  // able to disagree about whether an update is waiting.
+  updates: {
+    getState: 'updates:getState',
+    check: 'updates:check',
+    restart: 'updates:restart',
+    dismissNote: 'updates:dismissNote',
+    changed: 'updates:changed'
+  },
   // Joining, leaving and switching Foxfire servers. Separate from `settings`,
   // which is the Riot API key and its limits: that is configuration for
   // local-only mode, and connected to a server this machine holds no key at
@@ -15,6 +25,9 @@ export const CH = {
     register: 'server:register',
     login: 'server:login',
     logout: 'server:logout',
+    changePassword: 'server:changePassword',
+    changeEmail: 'server:changeEmail',
+    changeUsername: 'server:changeUsername',
     setActive: 'server:setActive',
     forget: 'server:forget',
     changed: 'server:changed'
@@ -27,6 +40,8 @@ export const CH = {
     users: 'serverAdmin:users',
     updateUser: 'serverAdmin:updateUser',
     deleteUser: 'serverAdmin:deleteUser',
+    createPasswordReset: 'serverAdmin:createPasswordReset',
+    revokePasswordReset: 'serverAdmin:revokePasswordReset',
     invites: 'serverAdmin:invites',
     createInvite: 'serverAdmin:createInvite',
     revokeInvite: 'serverAdmin:revokeInvite',
@@ -36,6 +51,7 @@ export const CH = {
     storedReplays: 'serverAdmin:storedReplays',
     removeReplay: 'serverAdmin:removeReplay',
     forceUnlink: 'serverAdmin:forceUnlink',
+    addRiotAccount: 'serverAdmin:addRiotAccount',
     chooseDatabase: 'serverAdmin:chooseDatabase',
     importDatabase: 'serverAdmin:importDatabase',
     importProgress: 'serverAdmin:importProgress'
@@ -58,7 +74,19 @@ export const CH = {
   dashboard: {
     get: 'dashboard:get',
     matchList: 'dashboard:matchList',
-    matchDetail: 'dashboard:matchDetail'
+    matchDetail: 'dashboard:matchDetail',
+    /** One game as one player's row — the header over a recording that has no file here. */
+    matchSummary: 'dashboard:matchSummary'
+  },
+  // The recordings a server holds on YouTube, one per game per account. Named
+  // apart from `recordings`, which are this disk's files: a server's copy can
+  // be somebody else's, and can outlive the file it came from.
+  matchRecordings: {
+    get: 'matchRecordings:get',
+    attach: 'matchRecordings:attach',
+    detach: 'matchRecordings:detach',
+    /** Pushed from the server's hub when one is attached, replaced or removed. */
+    changed: 'matchRecordings:changed'
   },
   sync: {
     start: 'sync:start',
@@ -141,7 +169,35 @@ export const CH = {
     /** Broadcast when a recording is added, bound or deleted, so lists refetch. */
     changed: 'recordings:changed',
     /** A recording window asking the main window to show its match. */
-    showMatch: 'recordings:showMatch'
+    showMatch: 'recordings:showMatch',
+    /** Removes a recording's row once its file is gone. Never touches YouTube or a server. */
+    forget: 'recordings:forget',
+    /** Opens a window for a recording this machine has no file of, from YouTube. */
+    openRemote: 'recordings:openRemote'
+  },
+  // Putting recordings on YouTube. The Google connection lives in the main
+  // process — its refresh token never crosses IPC — and the renderer only ever
+  // sees whether there is one and whose it is.
+  youtube: {
+    getState: 'youtube:getState',
+    connect: 'youtube:connect',
+    cancelConnect: 'youtube:cancelConnect',
+    disconnect: 'youtube:disconnect',
+    getSettings: 'youtube:getSettings',
+    setSettings: 'youtube:setSettings',
+    /** The upload form's starting point for one recording, from the templates. */
+    draft: 'youtube:draft',
+    enqueue: 'youtube:enqueue',
+    /** Many recordings at once, titled from the template, with one privacy for all. */
+    enqueueMany: 'youtube:enqueueMany',
+    cancel: 'youtube:cancel',
+    retry: 'youtube:retry',
+    /** Attaches a hand-uploaded video to a recording on this disk, markers and all. */
+    attachLink: 'youtube:attachLink',
+    /** Tells the active server about a recording's video again, replacing what is there. */
+    reattach: 'youtube:reattach',
+    /** Pushed when the connection or the queue changes. */
+    changed: 'youtube:changed'
   },
   // Riot's own replays. Separate from `recordings` throughout: the two are
   // different artefacts with different lifecycles, and one shared domain would
@@ -184,7 +240,7 @@ export const CH = {
     openWindow: 'archives:openWindow'
   },
   search: {
-    summoner: 'search:summoner'
+    players: 'search:players'
   },
   assets: {
     get: 'assets:get'

@@ -1,9 +1,15 @@
-import type { ServerCredentials, ServerRegistration, SessionUser } from '../types'
+import type {
+  EmailChange,
+  PasswordChange,
+  ServerCredentials,
+  ServerRegistration,
+  SessionUser
+} from '../types'
 import { silentLogger, type Logger } from '../log'
 import { ServerError } from './errors'
 import type { ClientIdentity } from './identity'
 import { createTransport, type Transport } from './transport'
-import { inviteTokenFrom } from './url'
+import { tokenFromLink } from './url'
 
 /**
  * How early to renew an access token.
@@ -96,6 +102,27 @@ export interface ServerSession {
    */
   restore(): Promise<SessionUser | null>
   logout(): Promise<void>
+  /**
+   * Changes the password and takes the session that comes back.
+   *
+   * The server ends every session on the account, this one included, and hands
+   * back a fresh pair in the same answer — so the device doing the changing
+   * stays signed in and every other one is asking for a password within the
+   * access token's quarter of an hour.
+   */
+  changePassword(change: PasswordChange): Promise<SessionUser>
+  /** Changes the address you sign in with. Other devices stay signed in. */
+  changeEmail(change: EmailChange): Promise<SessionUser>
+  /** Changes the name shown beside your games. */
+  changeUsername(username: string): Promise<SessionUser>
+  /**
+   * Sets a new password from a reset link, which signs this client in as
+   * whoever the link was for.
+   *
+   * Unauthenticated, like registering: whoever follows one of these cannot sign
+   * in, which is the entire problem it exists to solve.
+   */
+  redeemPasswordReset(token: string, newPassword: string): Promise<SessionUser>
   /** A live access token, renewed first if it is about to expire. */
   accessToken(): Promise<string>
   /** Who the server last said this is, or null before anything has been asked. */
@@ -181,6 +208,59 @@ export function createServerSession(options: ServerSessionOptions): ServerSessio
     }
   }
 
+  /**
+   * An authenticated call that answers with a whole new session, adopted here.
+   *
+   * The token is taken before the lock rather than inside it. Renewing takes
+   * the same lock, and a Web Lock is not reentrant — asking for one while
+   * holding it is a tab that stops for good.
+   *
+   * The lock is worth taking at all because of what the server does on the
+   * other side: every refresh token on the account is revoked and one is
+   * minted. A renewal already in flight with the old one would be refused, and
+   * a refusal is what signs a client out locally — so renewals wait, and then
+   * find the replacement this call has already stored.
+   */
+  async function exchange(path: string, body: Record<string, unknown>): Promise<SessionUser> {
+    const token = await accessToken()
+
+    const run = async (): Promise<SessionUser> => {
+      try {
+        const session = await transport.request<SessionResponse>(`${basePath}${path}`, {
+          method: 'POST',
+          body: { ...body, deviceLabel: options.deviceLabel },
+          accessToken: token
+        })
+        return await adopt(session)
+      } catch (err) {
+        upgradeRequired(err)
+        throw err
+      }
+    }
+
+    return options.refreshLock ? options.refreshLock.run(run) : run()
+  }
+
+  /**
+   * A change to who this session is, followed by the catching up it needs.
+   *
+   * The access token still carries the old name and address in its claims, so
+   * it is dropped: the next request renews and comes back current, rather than
+   * the server logging somebody under a name they left a quarter of an hour ago.
+   */
+  async function changed(
+    path: string,
+    body: Record<string, unknown>
+  ): Promise<SessionUser> {
+    const user = await session.request<SessionUser>(path, { method: 'PATCH', body })
+
+    current = user
+    held = null
+    options.onUserRefreshed?.(user)
+
+    return user
+  }
+
   async function renew(): Promise<string> {
     const attempt = async (): Promise<string> => {
       let body: { refreshToken: string } | undefined
@@ -240,7 +320,7 @@ export function createServerSession(options: ServerSessionOptions): ServerSessio
     }
   }
 
-  return {
+  const session: ServerSession = {
     baseUrl: options.baseUrl,
     basePath,
     transport,
@@ -250,7 +330,7 @@ export function createServerSession(options: ServerSessionOptions): ServerSessio
         username: registration.username,
         email: registration.email,
         password: registration.password,
-        inviteToken: registration.inviteToken ? inviteTokenFrom(registration.inviteToken) : undefined
+        inviteToken: registration.inviteToken ? tokenFromLink(registration.inviteToken) : undefined
       }),
 
     login: (credentials) =>
@@ -292,6 +372,22 @@ export function createServerSession(options: ServerSessionOptions): ServerSessio
       }
     },
 
+    changePassword: (change) =>
+      exchange('/auth/password', {
+        currentPassword: change.currentPassword,
+        newPassword: change.newPassword
+      }),
+
+    changeEmail: (change) =>
+      changed('/auth/email', { email: change.email, currentPassword: change.currentPassword }),
+
+    changeUsername: (username) => changed('/auth/username', { username }),
+
+    redeemPasswordReset: (token, newPassword) =>
+      authenticate(`/password-resets/${encodeURIComponent(tokenFromLink(token))}/redeem`, {
+        newPassword
+      }),
+
     accessToken,
 
     user: () => current,
@@ -317,4 +413,6 @@ export function createServerSession(options: ServerSessionOptions): ServerSessio
       }
     }
   }
+
+  return session
 }

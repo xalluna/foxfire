@@ -9,8 +9,11 @@ public enum DesktopSupportLevel
     /// <summary>
     /// On the list but behind. Everything works; the desktop shows a nudge.
     /// This is the grace window — without it, a host upgrading their server cuts
-    /// off every friend at the same instant, and there is no auto-update to
-    /// soften the landing.
+    /// off every friend at the same instant. From 0.14.0 a desktop spends that
+    /// window updating itself, to the version named below rather than to
+    /// whatever is newest: this list is what decides which build its copies
+    /// move to, so a server that has not been updated never pulls anybody onto
+    /// a build it would then refuse.
     /// </summary>
     Supported,
 
@@ -53,7 +56,10 @@ public sealed class DesktopAllowList
     /// <summary>Oldest build on the list.</summary>
     public string Minimum { get; }
 
-    /// <summary>Newest build on the list — what a fresh install should be.</summary>
+    /// <summary>
+    /// Newest build on the list — what a fresh install should be, and what the
+    /// desktops connected here update themselves to.
+    /// </summary>
     public string Recommended { get; }
 
     /// <summary>
@@ -87,7 +93,9 @@ public sealed class DesktopAllowList
 /// three screens in, on somebody else's machine.
 ///
 /// So the rule when changing the desktop is: add its version here, in the same
-/// change. If the contract itself moved — a field dropped, a route renamed,
+/// change. That rule now also decides what gets installed on somebody else's
+/// machine: a desktop asks this server which build to be, and updates itself to
+/// the newest version on this list. If the contract itself moved — a field dropped, a route renamed,
 /// anything an older build would mis-read — bump <see cref="ApiVersion"/> and
 /// remove the builds that cannot speak it.
 ///
@@ -103,10 +111,10 @@ public static class DesktopCompatibility
     /// patches and features that change nothing a desktop can observe, and
     /// nobody should be told to update for those.
     /// </summary>
-    public const int ApiVersion = 1;
+    public const int ApiVersion = 2;
 
     /// <summary>Every desktop version this server answers, in any order.</summary>
-    public static readonly IReadOnlyList<string> Allowed = ["0.12.0", "0.13.0"];
+    public static readonly IReadOnlyList<string> Allowed = ["0.14.0"];
 
     /// <summary>The compiled-in list, ready to judge against.</summary>
     public static DesktopAllowList AllowList { get; } = new(Allowed);
@@ -124,7 +132,7 @@ public static class DesktopCompatibility
     /// packages/core states the web client's side as WEB_API_VERSION, and a
     /// test holds the two together.
     /// </summary>
-    public static readonly IReadOnlyList<int> WebApiVersions = [1];
+    public static readonly IReadOnlyList<int> WebApiVersions = [2];
 
     /// <summary>Whether a web page built against this API version is served.</summary>
     public static bool ServesWebApiVersion(int apiVersion) => WebApiVersions.Contains(apiVersion);

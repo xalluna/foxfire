@@ -45,18 +45,59 @@ services:
       Server__TrustedProxies: "${TRUSTED_PROXIES:-}"
       Server__TrustedNetworks: "${TRUSTED_PROXY_NETWORKS:-172.16.0.0/12}"
       RateLimit__AuthPerMinute: "${RATE_LIMIT_AUTH_PER_MINUTE:-20}"
-      RateLimit__SearchPerMinute: "${RATE_LIMIT_SEARCH_PER_MINUTE:-30}"
+      RateLimit__SearchPerMinute: "${RATE_LIMIT_SEARCH_PER_MINUTE:-120}"
       Riot__ApiKey: "${RIOT_API_KEY}"
       Riot__KeyType: "${RIOT_KEY_TYPE:-personal}"
       Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"
       Auth__InviteSigningKey: "${INVITE_SIGNING_KEY}"
       Admin__Email: "${ADMIN_EMAIL}"
+      Auth__PasswordResetLifetime: "${PASSWORD_RESET_LIFETIME:-24:00:00}"
       Smtp__Host: "${SMTP_HOST:-}"
       Smtp__Port: "${SMTP_PORT:-587}"
       Smtp__Username: "${SMTP_USERNAME:-}"
       Smtp__Password: "${SMTP_PASSWORD:-}"
       Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
       Smtp__FromName: "${SMTP_FROM_NAME:-Foxfire}"
+
+      # Logs go to the console and to a `logs` container in the blob store
+      # above. See .env.example.
+      Serilog__MinimumLevel__Default: "${LOG_LEVEL:-Information}"
+      Logs__RetentionDays: "${LOG_RETENTION_DAYS:-30}"
+      Logs__ToBlob: "${LOG_TO_BLOB:-true}"
+      Logs__ConsoleFormat: "${LOG_CONSOLE_FORMAT:-text}"
+      ConnectionStrings__Logs: "${LOG_CONNECTION_STRING:-}"
+
+      # Somewhere else as well, or instead (set LOG_TO_BLOB=false for instead).
+      # Uncomment one block and fill it in; any number can be on at once. These
+      # are Serilog's own settings, spelled as environment variables — the word
+      # after WriteTo__ is only a label.
+      #
+      # Files on a volume. Give this service `volumes: ["logs:/home/foxfire/logs"]`
+      # and add `logs:` to the volumes at the bottom of this file. That path and
+      # no other: the server does not run as root, and the image makes that
+      # directory for it, owned by the user it runs as.
+      # Serilog__WriteTo__file__Name: "File"
+      # Serilog__WriteTo__file__Args__path: "/home/foxfire/logs/foxfire-.clef"
+      # Serilog__WriteTo__file__Args__rollingInterval: "Day"
+      # Serilog__WriteTo__file__Args__retainedFileCountLimit: "30"
+      # Serilog__WriteTo__file__Args__formatter: "Serilog.Formatting.Compact.CompactJsonFormatter, Serilog.Formatting.Compact"
+      #
+      # An OpenTelemetry collector — or anything that takes OTLP: Grafana,
+      # Datadog, Honeycomb, Azure Monitor, Seq.
+      # Serilog__WriteTo__otlp__Name: "OpenTelemetry"
+      # Serilog__WriteTo__otlp__Args__endpoint: "http://otel-collector:4317"
+      # Serilog__WriteTo__otlp__Args__protocol: "Grpc"
+      # OTEL_SERVICE_NAME: "foxfire-server"
+      #
+      # Seq.
+      # Serilog__WriteTo__seq__Name: "Seq"
+      # Serilog__WriteTo__seq__Args__serverUrl: "http://seq:5341"
+      # Serilog__WriteTo__seq__Args__apiKey: ""
+      #
+      # Application Insights.
+      # Serilog__WriteTo__appinsights__Name: "ApplicationInsights"
+      # Serilog__WriteTo__appinsights__Args__connectionString: "InstrumentationKey=...;IngestionEndpoint=..."
+      # Serilog__WriteTo__appinsights__Args__telemetryConverter: "Serilog.Sinks.ApplicationInsights.TelemetryConverters.TraceTelemetryConverter, Serilog.Sinks.ApplicationInsights"
     ports:
       # Localhost only. Point your reverse proxy here; do not forward this port.
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"

@@ -1,19 +1,23 @@
 import type {
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminReplay,
   AdminUser,
   AdminUserPatch,
   AssetManifest,
+  AttachRecordingInput,
+  AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
+  MatchRecording,
   MatchSummary,
+  PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
@@ -108,7 +112,31 @@ export interface FoxfireData {
     save: (seasons: SeasonInput[]) => Promise<Season[]>
   }
   search: {
-    summoner: (input: RiotIdInput) => Promise<AdHocSummonerResult>
+    /**
+     * The tracked players matching a query, or every one of them when it is
+     * blank. Reads stored data only — no Riot call, on a server or a desktop.
+     */
+    players: (query: string) => Promise<PlayerSearchResult[]>
+  }
+  /**
+   * The YouTube recordings a server holds, one per game per account.
+   *
+   * Keyed by the pair on purpose: a recording is one player's screen, so the
+   * account whose history is open is part of the question. Only that account's
+   * owner can attach one; its owner or an admin can take it off again, which
+   * never touches the video on YouTube.
+   *
+   * Optional because local-only has no server to hold one. There, a recording
+   * that went to YouTube keeps its video on the desktop's own recording row.
+   */
+  matchRecordings?: {
+    get: (accountId: string, matchId: string) => Promise<MatchRecording | null>
+    attach: (
+      accountId: string,
+      matchId: string,
+      input: AttachRecordingInput
+    ) => Promise<AttachRecordingOutcome>
+    detach: (accountId: string, matchId: string) => Promise<AdminActionResult>
   }
 }
 
@@ -169,6 +197,10 @@ export interface FoxfireClient extends FoxfireData {
     users: () => Promise<AdminUser[]>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
+    /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
+    createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
+    /** Withdraws the reset link outstanding for somebody, if there is one. */
+    revokePasswordReset: (userId: string) => Promise<AdminActionResult>
     invites: () => Promise<AdminInvite[]>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>
@@ -181,6 +213,13 @@ export interface FoxfireClient extends FoxfireData {
     removeReplay: (matchId: string) => Promise<AdminActionResult>
     /** Takes a League account away from whoever claimed it. The account and its games stay. */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
+    /**
+     * Starts tracking a League account nobody here has claimed, and backfills it.
+     *
+     * Unlike linking, this claims nothing for the caller: the account arrives
+     * with no owner, the state an imported one already has.
+     */
+    addRiotAccount: (input: RiotIdInput) => Promise<Account>
   }
   /** What changed underneath the screens, from wherever the change happened. */
   events: {
@@ -189,5 +228,7 @@ export interface FoxfireClient extends FoxfireData {
     onRankEdited: (cb: (accountId: string) => void) => Unsubscribe
     /** A League client recorded a rank that moved. */
     onRankChanged: (cb: (accountId: string) => void) => Unsubscribe
+    /** A recording was attached to one account's game, replaced, or taken off it. */
+    onRecordingChanged: (cb: (event: { accountId: string; matchId: string }) => void) => Unsubscribe
   }
 }

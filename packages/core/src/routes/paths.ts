@@ -81,7 +81,14 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 export const paths = {
   home: () => '/',
 
-  players: () => '/players',
+  /**
+   * Everybody this server tracks, optionally narrowed to a query.
+   *
+   * The finder lives here in the web client, so this is the address a shared
+   * link to one carries. The desktop draws the same screen under its own
+   * Search page; a link is always into the web client, which has one.
+   */
+  players: (query?: string) => withQuery('/players', { q: query || undefined }),
 
   /** A profile, and optionally one of its games opened in the history. */
   player: (player: PlayerRef, search: { queue?: number | null; match?: string } = {}) =>
@@ -108,16 +115,30 @@ export const paths = {
       match: search.match
     }),
 
+  /**
+   * One player's recording of one game.
+   *
+   * Under the player rather than the match, because a recording is one
+   * player's screen: the same game has a different recording, or none, in
+   * each of its histories, and a link that did not say whose would have to
+   * pick.
+   */
+  recording: (player: PlayerRef, matchId: string) =>
+    `/players/${segment(playerSlug(player))}/recordings/${segment(matchId)}`,
+
   /** One game, optionally as one of its players saw it — their LP, their row picked out. */
   match: (matchId: string, search: { player?: PlayerRef } = {}) =>
     withQuery(`/matches/${segment(matchId)}`, {
       player: search.player ? playerSlug(search.player) : undefined
     }),
 
-  search: (player?: PlayerRef) =>
-    withQuery('/search', { q: player ? `${player.gameName}#${player.tagLine}` : undefined }),
-
   invite: (token: string) => `/invite/${segment(token)}`,
+
+  /**
+   * Where a reset link lands. The server builds these itself when it describes
+   * a reset — this is the same path, for anybody on this side who needs it.
+   */
+  resetPassword: (token: string) => `/reset-password/${segment(token)}`,
 
   signIn: (redirect?: string) => withQuery('/sign-in', { redirect })
 }

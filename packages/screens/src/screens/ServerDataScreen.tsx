@@ -23,7 +23,6 @@ export function ServerDataScreen(): JSX.Element {
     queryKey: queryKeys.admin.settings(),
     queryFn: () => client.admin.getSettings()
   })
-  const accounts = useQuery({ queryKey: queryKeys.accounts(), queryFn: () => client.accounts.list() })
   const replays = useQuery({
     queryKey: queryKeys.admin.replays(),
     queryFn: () => client.admin.storedReplays()
@@ -61,7 +60,13 @@ export function ServerDataScreen(): JSX.Element {
     <ServerDataPage
       importer={
         importer
-          ? { running, progress, result, onStart: () => void runImport() }
+          ? {
+              running,
+              progress,
+              result,
+              onStart: () => void runImport(),
+              inBrowser: platform.kind === 'web'
+            }
           : undefined
       }
       storage={storage.data}
@@ -69,15 +74,6 @@ export function ServerDataScreen(): JSX.Element {
       onSaveReplayCap={async (bytes) => {
         await client.admin.setSettings({ replayByteCap: bytes })
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
-      }}
-      accounts={accounts.data}
-      onUnlink={async (accountId) => {
-        const outcome = await client.admin.forceUnlink(accountId)
-        if (outcome.ok) {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
-          void queryClient.invalidateQueries({ queryKey: queryKeys.admin.storage() })
-        }
-        return outcome
       }}
       replays={replays.data}
       onRemoveReplay={async (matchId) => {

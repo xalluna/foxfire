@@ -44,3 +44,25 @@ function isEndPhase(phase: string | null): boolean {
 export function isGameEndTransition(previous: string | null, next: string | null): boolean {
   return isPlayingPhase(previous) && isEndPhase(next)
 }
+
+/**
+ * Phases during which an upload should leave the connection alone.
+ *
+ * From champ select until the game has finished reporting: a two-gigabyte
+ * upload competing with the game for somebody's upstream is lag they would
+ * blame on the game. Champ select counts because the game starts from it with
+ * no phase in between long enough to notice, and the end phases count because
+ * the client is still sending the game's stats.
+ */
+const UPLOAD_QUIET_PHASES = [
+  'ChampSelect',
+  'GameStart',
+  'InProgress',
+  'Reconnect',
+  'WaitingForStats',
+  'PreEndOfGame'
+] as const
+
+export function isUploadQuietPhase(phase: string | null): boolean {
+  return phase !== null && (UPLOAD_QUIET_PHASES as readonly string[]).includes(phase)
+}

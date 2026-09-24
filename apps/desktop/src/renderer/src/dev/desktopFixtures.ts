@@ -16,7 +16,9 @@ import {
   NOW,
   ROLE_ITEM,
   S,
-  matchIdAt
+  FIXTURE_VIDEO_ID,
+  matchIdAt,
+  scenario
 } from '@foxfire/screens/dev'
 
 /**
@@ -51,12 +53,112 @@ export const SCOREBOARD: Scoreboard = {
   ]
 }
 
+/** What every recording carries about YouTube before anything has happened. */
+const NOT_ON_YOUTUBE = { fileDeleted: false, youtube: null, upload: null, attachment: null } as const
+
+const ON_YOUTUBE = {
+  videoId: FIXTURE_VIDEO_ID,
+  privacy: 'unlisted' as const,
+  forcedPrivate: false,
+  source: 'upload' as const,
+  title: 'Viktor · Ranked Solo/Duo · Victory · 11/3/8',
+  at: NOW - 5 * 60_000
+}
+
+/** An upload in some state, for the rows below. */
+function upload(state: NonNullable<Recording['upload']>['state'], over: Partial<NonNullable<Recording['upload']>> = {}): Recording['upload'] {
+  return { state, trigger: 'manual', bytesSent: 0, fileBytes: 1_400_000_000, error: null, resumesAt: null, ...over }
+}
+
 /**
- * Recordings, covering the three states the Recordings view has to draw.
+ * The queue in every state it can be in, for ?scenario=youtube-queue: running,
+ * waiting its turn, paused for a game, out of quota, failed, done but forced
+ * private, on YouTube with the file deleted, and on YouTube but refused by a
+ * server that already had a video on that game.
+ */
+function queueStates(): Recording[] {
+  const base = (id: number, minutesAgo: number, champion: number): Recording => ({
+    id,
+    accountId: '1',
+    matchId: matchIdAt(id - 1),
+    bindState: 'bound',
+    fileBytes: 1_400_000_000,
+    fileExists: true,
+    queueId: 420,
+    startedAt: NOW - minutesAgo * 60_000,
+    endedAt: NOW - minutesAgo * 60_000 + 1_680_000,
+    durationSeconds: 1_680,
+    selfChampionId: champion,
+    match: null,
+    ...NOT_ON_YOUTUBE
+  })
+
+  return [
+    { ...base(4, 200, C.Ahri), upload: upload('queued') },
+    { ...base(5, 260, C.Zed), upload: upload('paused', { bytesSent: 380_000_000, error: 'Paused while a game is on.' }) },
+    { ...base(6, 320, C.Syndra), upload: upload('waiting_quota', { error: "Waiting for YouTube's daily upload quota to come back.", resumesAt: NOW + 5 * 60 * 60_000 }) },
+    { ...base(7, 380, C.Orianna), upload: upload('failed', { error: 'This Google account has no YouTube channel yet. Create one on youtube.com, then try again.' }) },
+    {
+      ...base(8, 440, C.Lux),
+      youtube: { ...ON_YOUTUBE, privacy: 'private', forcedPrivate: true },
+      upload: upload('done', { bytesSent: 1_400_000_000, error: 'YouTube made this video private: Foxfire’s Google project has not passed YouTube’s review yet, so nobody else can watch it for now.' })
+    },
+    { ...base(9, 500, C.Yone), fileExists: false, fileDeleted: true, fileBytes: null, youtube: ON_YOUTUBE },
+    {
+      ...base(10, 560, C.Qiyana),
+      youtube: { ...ON_YOUTUBE, source: 'link', title: null, privacy: null },
+      attachment: { state: 'conflict', message: 'This game already has a recording attached: “Qiyana mid, full game”.' }
+    }
+  ]
+}
+
+/** Fifty-odd recorded games, none of them uploaded, for ?scenario=youtube-backlog. */
+function backlog(): Recording[] {
+  const champions = [C.Viktor, C.Ahri, C.Syndra, C.Orianna, C.Zed, C.Lux, C.Yone, C.Qiyana]
+  return Array.from({ length: 55 }, (_, i) => {
+    const startedAt = NOW - (i + 1) * 5 * 60 * 60_000
+    const championId = champions[i % champions.length]!
+    const win = i % 3 !== 0
+    return {
+      id: 100 + i,
+      accountId: '1',
+      matchId: matchIdAt(10 + i),
+      bindState: i % 11 === 10 ? 'unmatched' : 'bound',
+      fileBytes: 1_100_000_000 + (i % 7) * 90_000_000,
+      fileExists: true,
+      queueId: 420,
+      startedAt,
+      endedAt: startedAt + (1_500 + (i % 9) * 60) * 1000,
+      durationSeconds: 1_500 + (i % 9) * 60,
+      selfChampionId: championId,
+      match:
+        i % 11 === 10
+          ? null
+          : {
+              matchId: matchIdAt(10 + i),
+              gameCreation: startedAt - 120_000,
+              gameDuration: 1_500 + (i % 9) * 60,
+              gameMode: 'CLASSIC',
+              queueId: 420,
+              win,
+              championId,
+              championName: null,
+              kills: 3 + (i % 9),
+              deaths: 1 + (i % 6),
+              assists: 4 + (i % 8)
+            },
+      ...NOT_ON_YOUTUBE
+    } satisfies Recording
+  })
+}
+
+/**
+ * Recordings, covering the states the Recordings view has to draw.
  *
  * A bound recording, one still hunting for its match, and one that never found a
  * game — the Practice Tool case, which is the normal reason a recording stays
- * unmatched and is exactly the row most likely to be got wrong.
+ * unmatched and is exactly the row most likely to be got wrong. The first is
+ * already on YouTube; the second is on its way there.
  */
 export const RECORDINGS: Record<string, Recording[]> = {
   1: [
@@ -84,7 +186,11 @@ export const RECORDINGS: Record<string, Recording[]> = {
         kills: 11,
         deaths: 3,
         assists: 8
-      }
+      },
+      ...NOT_ON_YOUTUBE,
+      youtube: ON_YOUTUBE,
+      upload: upload('done', { bytesSent: 1_820_000_000, fileBytes: 1_820_000_000 }),
+      attachment: scenario === 'server-connected' ? { state: 'attached', message: null } : null
     },
     {
       id: 2,
@@ -98,7 +204,12 @@ export const RECORDINGS: Record<string, Recording[]> = {
       endedAt: NOW - 60_000,
       durationSeconds: 1_412,
       selfChampionId: C.Ahri,
-      match: null
+      match: null,
+      ...NOT_ON_YOUTUBE,
+      upload:
+        scenario === 'youtube-queue'
+          ? upload('uploading', { bytesSent: 462_000_000, fileBytes: 1_100_000_000 })
+          : null
     },
     {
       id: 3,
@@ -114,8 +225,11 @@ export const RECORDINGS: Record<string, Recording[]> = {
       endedAt: NOW - 3 * 60 * 60_000 + 420_000,
       durationSeconds: 420,
       selfChampionId: C.LeeSin,
-      match: null
-    }
+      match: null,
+      ...NOT_ON_YOUTUBE
+    },
+    ...(scenario === 'youtube-queue' ? queueStates() : []),
+    ...(scenario === 'youtube-backlog' ? backlog() : [])
   ],
   2: []
 }

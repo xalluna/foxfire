@@ -7,6 +7,135 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.14.0] — 2026-09-23
+
+Foxfire updates itself, search looks through the people your server tracks rather than strangers on
+Riot, and you can look after your own account without leaving the app. A new version now arrives
+quietly in the background and waits for you to restart — never in the middle of a game — and the
+patch notes travel with it. Needs Foxfire Server 0.3.0.
+
+### Added
+
+- **Updates install themselves.** Foxfire looks for a new version shortly after it starts and a few
+  times a day after that, downloads it in the background, and then offers to restart. The offer
+  appears across the top of the window and in the tray menu, so it reaches you whether or not the
+  window is open. If you never take it, the update installs the next time you quit Foxfire.
+- **Nothing is installed in the middle of a game.** While a game is on, or while a game is being
+  recorded, the restart is refused and says which of the two it is waiting for — a restart then
+  would cost the LP reading or the recording that Foxfire was left running for.
+- **What's new, in the app.** Settings › About now has an Updates section: which version this is,
+  what the updater is doing, a button to check now, and the patch notes for the version arriving.
+  After an update lands, a line across the top of the window offers the same notes once.
+- **Change your email, password or name** from Settings › Server, where your account already was.
+  Changing your email or your password asks for your current password; changing your password signs
+  out every other device and keeps this one, so a password that had got out is worth nothing
+  anywhere.
+- **Confirm password when making an account.** Two boxes rather than one, because a password nobody
+  can read is a password nobody can check — and a typo used to mean a sign-in that could never work.
+- **Reset links, for whoever administers a server.** Settings › Members now offers a reset link for
+  any member: copy it, send it however your community talks, and they set a new password in a
+  browser. It lasts a day, works once, and making a new one withdraws the last. Nothing about their
+  account changes until they use it.
+- **Members, Invites and League accounts are separate pages** in Settings, where Server management
+  used to be one. Members filters by name or address and opens a line for the detail and the
+  actions; Invites keeps public sign-up beside the invites it governs; League accounts is where an
+  admin starts tracking somebody and where a claim is taken back.
+- **The sign-in form says what to do about a forgotten password**: ask whoever runs the server for a
+  reset link.
+
+### Changed
+
+- **Connected to a server, Foxfire installs the version that server accepts** rather than the
+  newest one that exists. A server only talks to the builds it knows, so updating past it would
+  lock you out of your own community; this way an update can only ever move you to a build that
+  still works there. Local-only, it takes the newest version there is.
+- **A server that refuses this build now says what is being done about it.** The message named the
+  version to install and sent you to the releases page; it now tells you that version is already
+  downloading, and offers the restart when it is ready.
+- **Search finds the players on your server.** Typing a name turns up the accounts your server keeps
+  history for, and opening one is the ordinary profile: every game, what each was worth in LP, the
+  rows that open for the scoreboard, and a replay to download where the server holds one. It used to
+  look up any Riot ID in the world and show ten games with no LP on them at all — nothing about a
+  stranger is stored, so there was never any to show. Searching costs no Riot requests now, so it is
+  as fast as the rest of the app and never queues behind a sync.
+- **Anybody can refresh any account.** Asking the server to fetch what it does not have used to be
+  the owner's alone. Accounts an admin tracks belong to nobody, so nobody would ever have refreshed
+  them; now any member can, and an account that was refreshed in the last two minutes is left alone
+  so a busy evening cannot spend the server's Riot budget twice over.
+- **Importing a newer copy of a `stats.db` says what it did.** On Settings › Data & storage, choosing
+  a newer copy of a file you imported before adds only what is new — that was always so, but the
+  result counted only what was added, so a server that already had everything and a file it could
+  not read looked exactly alike. It now says what was added and what the server already had, the
+  newest game and rank reading in the file, and anything it had to leave out and why. Only the games
+  the server lacks are sent, so bringing a server up to date is far quicker than the first import.
+- **Needs Foxfire Server 0.3.0.** Search asks the server a different question, and everything above
+  that touches your account is the server's to answer, so this version and older servers cannot talk
+  to each other. A server that has not been updated says so, and its host needs to update it.
+- **This is the last version you install by hand.** Foxfire Server 0.3.0 will not answer 0.12.0 or
+  0.13.0 at all — search changed shape underneath them — and neither of those builds has an updater
+  to carry itself across. Install this one yourself; after it, updates arrive on their own.
+
+### Fixed
+
+- **Connected to a server, a recording finds its game as soon as the server has it.** It used to wait
+  until the next time Foxfire started.
+- **"Start with Windows" no longer opens a window you did not ask for.** It always said it launches
+  hidden in the tray, and on Windows it never did — every sign-in put the window on screen. It now
+  starts in the tray, and an update started from the tray comes back to the tray rather than
+  reopening the window in front of whatever you were doing.
+
+### Under the hood
+
+- Updates are read from this repository's own GitHub Releases: `latest.yml` beside the installer it
+  describes, which the release workflow has been attaching since 0.12.0 in anticipation of this.
+  Only the changed parts of an installer are downloaded where possible.
+- Which version to fetch is settled before anything is downloaded — the active server's
+  `recommendedDesktop` when there is one, the newest desktop release otherwise — and never a
+  version older than the one running.
+- Desktop releases now carry the Latest badge on the releases page, and server releases no longer
+  take it: the desktop installer is what somebody arriving at that page is looking for, and it is
+  where the updater reads the newest version from.
+- The version's changelog section is built into `latest.yml` by the release workflow, which is how
+  the notes reach the app at all.
+- The Members and Invites screens are shared with the web client, as Server management was.
+- The rule that a password is at least twelve characters lives in one place now, rather than in the
+  desktop's form, the web client's, and the server.
+- The Search page and the web client's Players page are one screen now, mounted under the name that
+  fits each app. Its query lives in the address, so a filtered list can be linked to.
+- Local-only mode searches its own database rather than Riot, the same as everywhere else, and the
+  ad-hoc lookup service is gone.
+- The `stats.db` import asks the server which of the file's games it lacks before sending any, and
+  reads them in a fixed order — creation time, then id — so two games from the same millisecond
+  cannot fall either side of a page unpredictably.
+- Database migration 014: the YouTube copy on each recording, whether its file was deleted on
+  purpose, the upload queue, and which servers have been told about each video.
+- **Recordings on YouTube are in this build, switched off.** Uploading a recording to YouTube,
+  attaching the video to its game on a server, and playing it from there with Foxfire's markers
+  beneath YouTube's player are all written, and none of it can be reached until Foxfire's Google
+  project has been through YouTube's review. Whether a build has it is decided when the installer is
+  made, by the `FOXFIRE_FEATURE_YOUTUBE` repository variable, and this release was made without it:
+  there is no YouTube page in Settings, nothing offers an upload, and neither the `foxfire-youtube://`
+  scheme nor the Google client is in the bundle. What turning it on brings:
+  - Uploads use YouTube's resumable protocol in 8 MiB chunks and save their place after every one.
+    The daily quota is waited out until midnight Pacific time; other failures back off from thirty
+    seconds to an hour.
+  - The Google sign-in is the installed-app flow — the system browser, a one-request server on
+    127.0.0.1, and PKCE — asking only to upload and for the account's email. The refresh token is
+    encrypted with the other secrets.
+  - YouTube's player runs in a page on a scheme of its own, `foxfire-youtube://`, with no preload,
+    so Google's script never shares a window with the bridge to the main process. The two talk over
+    postMessage, and that page's requests carry `https://com.brandonbarr.foxfire/` as their Referer,
+    which is how YouTube identifies a desktop app. It is registered in the one call to
+    `registerSchemesAsPrivileged` Electron allows, beside `recording://`.
+  - The Google client is built into the installer from repository secrets. The client secret is
+    optional and only sent when a build has one; a build without the client id has no uploads and
+    says so.
+  - A server built without recordings answers their routes with a plain 404, and a desktop with
+    them keeps its videos to attach once the server has them, rather than counting them refused.
+  - `apps/desktop/docs/YOUTUBE_SETUP.md` is how to turn it on, and `apps/desktop/docs/PRIVACY.md`
+    the privacy policy the Google review asks for.
+- The recording player, its timeline and its markers are shared with the web client now.
+
 ## [0.13.0] — 2026-09-21
 
 Foxfire Server 0.2.0 hosts a web client of its own, so the people on your server can read everybody's
@@ -986,6 +1115,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
 [0.12.0]: https://github.com/xalluna/foxfire/compare/v0.11.0...desktop-v0.12.0
 [0.11.0]: https://github.com/xalluna/foxfire/compare/v0.10.3...v0.11.0

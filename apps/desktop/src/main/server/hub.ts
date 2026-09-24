@@ -20,6 +20,22 @@ const log = createLogger('hub')
  */
 let connection: ServerHub | null = null
 
+type SyncCompleteListener = (accountId: string) => void
+const syncCompleteListeners = new Set<SyncCompleteListener>()
+
+/**
+ * Called when the server finishes syncing an account.
+ *
+ * The moment a game this machine recorded can first be found on the server,
+ * so it is when a recording waiting for its game should look again — which
+ * until now only happened at the next launch. Wired from index.ts rather than
+ * imported here, so the hub does not reach into the recording service.
+ */
+export function onServerSyncComplete(listener: SyncCompleteListener): () => void {
+  syncCompleteListeners.add(listener)
+  return () => syncCompleteListeners.delete(listener)
+}
+
 /** The server this connection belongs to, so a switch can be told from a reconnect. */
 let connectedTo: string | null = null
 
@@ -47,7 +63,13 @@ export async function connectHub(
     accessTokenFactory,
     log,
     handlers: {
-      onSyncProgress: (event) => broadcast(CH.sync.progress, event),
+      onSyncProgress: (event) => {
+        broadcast(CH.sync.progress, event)
+        if (event.phase === 'complete') {
+          for (const listener of syncCompleteListeners) listener(event.accountId)
+        }
+      },
+      onRecordingChanged: (event) => broadcast(CH.matchRecordings.changed, event),
       onRankEdited: (accountId) => broadcast(CH.rank.edited, accountId),
       onRankChanged: (accountId) => broadcast(CH.lcu.rankChanged, accountId),
 

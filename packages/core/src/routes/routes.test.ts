@@ -106,7 +106,8 @@ describe('paths', () => {
   it('leaves the query off when there is nothing to say', () => {
     expect(paths.player(FAKER)).toBe('/players/Faker-KR1')
     expect(paths.champions(FAKER)).toBe('/players/Faker-KR1/champions')
-    expect(paths.search()).toBe('/search')
+    expect(paths.players()).toBe('/players')
+    expect(paths.players('')).toBe('/players')
   })
 
   it('names a match, and optionally whose view of it', () => {
@@ -114,8 +115,15 @@ describe('paths', () => {
     expect(paths.match('KR_7123', { player: FAKER })).toBe('/matches/KR_7123?player=Faker-KR1')
   })
 
-  it('searches by Riot ID', () => {
-    expect(paths.search(FAKER)).toBe('/search?q=Faker%23KR1')
+  it('puts a recording under the player whose screen it is', () => {
+    expect(paths.recording(FAKER, 'KR_7123')).toBe('/players/Faker-KR1/recordings/KR_7123')
+    expect(paths.recording({ gameName: 'Hide on bush', tagLine: 'KR1' }, 'KR_7123')).toBe(
+      '/players/Hide%20on%20bush-KR1/recordings/KR_7123'
+    )
+  })
+
+  it('carries a finder query', () => {
+    expect(paths.players('Faker#KR1')).toBe('/players?q=Faker%23KR1')
   })
 })
 
@@ -123,6 +131,6 @@ describe('absoluteUrl', () => {
   it('joins a public address and a path with exactly one slash', () => {
     expect(absoluteUrl('https://fox.example', '/players/Faker-KR1')).toBe('https://fox.example/players/Faker-KR1')
     expect(absoluteUrl('https://fox.example/', '/players/Faker-KR1')).toBe('https://fox.example/players/Faker-KR1')
-    expect(absoluteUrl('https://fox.example', 'search')).toBe('https://fox.example/search')
+    expect(absoluteUrl('https://fox.example', 'players')).toBe('https://fox.example/players')
   })
 })

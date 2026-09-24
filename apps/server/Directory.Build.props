@@ -14,7 +14,7 @@
     bumps major.
   -->
   <PropertyGroup>
-    <VersionPrefix>0.2.0</VersionPrefix>
+    <VersionPrefix>0.3.0</VersionPrefix>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -30,6 +30,21 @@
     -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!--
+    Build-time feature switches, read from the environment the way the desktop's
+    installer and the web client read theirs (tooling/vite/features.ts), and
+    with the same spellings of "on". The release workflow sets every one of
+    them from a single repository variable, so the server, the web client it
+    carries and the desktop that talks to it are built with the same answer.
+    See Foxfire.Core/BuildFeatures.cs.
+  -->
+  <PropertyGroup>
+    <_FoxfireYouTube>$([System.String]::Copy('$(FOXFIRE_FEATURE_YOUTUBE)').Trim().ToLowerInvariant())</_FoxfireYouTube>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_FoxfireYouTube)' == '1' Or '$(_FoxfireYouTube)' == 'true' Or '$(_FoxfireYouTube)' == 'yes' Or '$(_FoxfireYouTube)' == 'on'">
+    <DefineConstants>$(DefineConstants);FEATURE_YOUTUBE</DefineConstants>
   </PropertyGroup>
 
 </Project>

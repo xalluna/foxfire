@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Core;
 
 namespace Foxfire.Api.Tests;
 
@@ -14,14 +15,14 @@ public class VersionTests(FoxfireServerFixture server)
     {
         // The whole reason this endpoint is exempt from the gate. A desktop too
         // old to be served has to be able to find that out and say which version
-        // to install — with no auto-update, that message is the entire remedy.
+        // to install — and, from 0.14.0, to go and install it.
         using var client = server.AnonymousClient();
 
         var version = await client.GetFromJsonAsync<VersionInfo>(new Uri("/version", UriKind.Relative));
 
         Assert.NotNull(version);
         Assert.Equal(FoxfireServerFixture.ServerName, version.ServerName);
-        Assert.Equal(1, version.ApiVersion);
+        Assert.Equal(DesktopCompatibility.ApiVersion, version.ApiVersion);
         Assert.Equal(FoxfireServerFixture.CurrentDesktop, version.RecommendedDesktop);
     }
 

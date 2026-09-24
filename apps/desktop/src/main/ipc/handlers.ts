@@ -3,6 +3,9 @@ import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
 import { getAssetManifest } from '../services/ddragonService'
 import {
+  changeEmail,
+  changePassword,
+  changeUsername,
   forgetServer,
   getServerState,
   login as serverLogin,
@@ -14,7 +17,9 @@ import {
 } from '../services/serverService'
 import {
   createInvite,
+  createPasswordReset,
   deleteUser,
+  addRiotAccount,
   forceUnlink,
   getStorageUsage,
   listStoredReplays,
@@ -23,6 +28,7 @@ import {
   listInvites,
   listUsers,
   revokeInvite,
+  revokePasswordReset,
   setSettings as setServerAdminSettings,
   updateUser
 } from '../services/serverAdminService'
@@ -31,6 +37,12 @@ import { getScoreboard } from '../services/liveClientService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
+import {
+  checkForUpdates,
+  dismissInstalledNote,
+  getUpdateState,
+  restartToUpdate
+} from '../updater/updater'
 import {
   addReplayByPath,
   getReplayUsage,
@@ -73,6 +85,8 @@ import {
 import { openTelemetryWindow } from '../telemetryWindow'
 import { openLpEditorWindow } from '../lpEditorWindow'
 import { openRecordingWindow } from '../recordingWindow'
+import { YOUTUBE_ENABLED } from '@shared/features'
+import { registerYouTubeHandlers } from './youtubeHandlers'
 import {
   clearObsPassword,
   getCaptureSettings,
@@ -81,6 +95,7 @@ import {
 } from '../services/captureSettings'
 import { getCaptureStatus, refreshCapture } from '../capture/captureService'
 import {
+  forgetRecording,
   getDiskUsage,
   getRecordingDetail,
   listRecordings,
@@ -97,7 +112,9 @@ import type {
   AdminUserPatch,
   BackgroundSettings,
   CaptureSettings,
+  EmailChange,
   ManualRankEdit,
+  PasswordChange,
   QueueType,
   RankRange,
   RiotIdInput,
@@ -128,6 +145,11 @@ import type { TelemetryRequestQuery } from '@shared/telemetry'
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.app.getVersion, () => app.getVersion())
 
+  ipcMain.handle(CH.updates.getState, () => getUpdateState())
+  ipcMain.handle(CH.updates.check, () => checkForUpdates())
+  ipcMain.handle(CH.updates.restart, () => restartToUpdate())
+  ipcMain.handle(CH.updates.dismissNote, () => dismissInstalledNote())
+
   ipcMain.handle(CH.server.getState, () => getServerState())
   ipcMain.handle(CH.server.probe, (_e, url: string) => serverProbe(url))
   ipcMain.handle(CH.server.previewInvite, (_e, url: string, token: string) =>
@@ -140,6 +162,9 @@ export function registerIpcHandlers(): void {
     serverLogin(url, credentials)
   )
   ipcMain.handle(CH.server.logout, () => serverLogout())
+  ipcMain.handle(CH.server.changePassword, (_e, change: PasswordChange) => changePassword(change))
+  ipcMain.handle(CH.server.changeEmail, (_e, change: EmailChange) => changeEmail(change))
+  ipcMain.handle(CH.server.changeUsername, (_e, username: string) => changeUsername(username))
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
@@ -148,6 +173,12 @@ export function registerIpcHandlers(): void {
     updateUser(id, patch)
   )
   ipcMain.handle(CH.serverAdmin.deleteUser, (_e, id: string) => deleteUser(id))
+  ipcMain.handle(CH.serverAdmin.createPasswordReset, (_e, userId: string) =>
+    createPasswordReset(userId)
+  )
+  ipcMain.handle(CH.serverAdmin.revokePasswordReset, (_e, userId: string) =>
+    revokePasswordReset(userId)
+  )
   ipcMain.handle(CH.serverAdmin.invites, () => listInvites())
   ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
@@ -156,6 +187,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.storedReplays, () => listStoredReplays())
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
   ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
+  ipcMain.handle(CH.serverAdmin.addRiotAccount, (_e, input: RiotIdInput) => addRiotAccount(input))
   ipcMain.handle(CH.serverAdmin.chooseDatabase, () => chooseImportDatabase())
   ipcMain.handle(CH.serverAdmin.importDatabase, (_e, filePath: string) => importDatabase(filePath))
   ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>
@@ -193,6 +225,9 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.dashboard.matchDetail, (_e, matchId: string) =>
     serverBacked().dashboard.matchDetail(matchId)
+  )
+  ipcMain.handle(CH.dashboard.matchSummary, (_e, accountId: string, matchId: string) =>
+    serverBacked().dashboard.matchSummary?.(accountId, matchId) ?? null
   )
 
   ipcMain.handle(CH.sync.start, (_e, accountId: string) => serverBacked().sync.start(accountId))
@@ -336,6 +371,12 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.recordings.open, (_e, recordingId: number) => openRecordingWindow(recordingId))
   ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
+  ipcMain.handle(CH.recordings.forget, (_e, recordingId: number) => forgetRecording(recordingId))
+
+  // YouTube, and a server's recordings, only in a build made with them. Without,
+  // nothing answers those channels — and nothing in the renderer asks.
+  if (YOUTUBE_ENABLED) registerYouTubeHandlers()
+
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */
   ipcMain.handle(CH.replays.list, (_e, accountId: string) => listReplays(accountId))
@@ -395,8 +436,8 @@ export function registerIpcHandlers(): void {
     main.webContents.send(CH.recordings.showMatch, accountId, matchId)
   })
 
-  ipcMain.handle(CH.search.summoner, (_e, input: RiotIdInput) =>
-    serverBacked().search.summoner(input)
+  ipcMain.handle(CH.search.players, (_e, query: string) =>
+    serverBacked().search.players(query)
   )
 
   ipcMain.handle(CH.telemetry.getState, () => getTelemetryState())

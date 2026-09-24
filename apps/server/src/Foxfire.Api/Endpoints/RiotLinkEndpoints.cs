@@ -11,7 +11,8 @@ namespace Foxfire.Api.Endpoints;
 ///
 /// Reads are open to every member, because everything on this server is: match
 /// history is shared, and so is who owns which account. Writes are not — only
-/// the owner may release a link, and only an admin may take one away.
+/// the owner may release a link, and only an admin may take one away or start
+/// tracking somebody nobody here has claimed.
 /// </summary>
 public static class RiotLinkEndpoints
 {
@@ -30,6 +31,14 @@ public static class RiotLinkEndpoints
 
         group.MapDelete("/{id:guid}", (Guid id, ISender sender, CancellationToken cancellationToken) =>
             sender.SendAsync(new UnlinkRiotAccountRequest(id), cancellationToken));
+
+        app.MapPost("/admin/riot-accounts", (
+                    [FromBody] AddTrackedAccountRequest request,
+                    ISender sender,
+                    CancellationToken cancellationToken) =>
+                sender.SendAsync(request, cancellationToken))
+            .WithTags("Riot accounts")
+            .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.Admin));
 
         app.MapDelete("/admin/riot-accounts/{id:guid}/owner", (
                     Guid id,

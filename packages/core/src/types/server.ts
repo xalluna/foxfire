@@ -112,20 +112,35 @@ export interface AdminReplay {
  * promise would have nothing to say for any of it.
  */
 export interface ImportProgress {
-  phase: 'accounts' | 'matches' | 'readings' | 'finishing' | 'done'
+  /**
+   * `comparing` is asking the server which of the file's games it already has,
+   * before any of their payloads are sent.
+   */
+  phase: 'accounts' | 'comparing' | 'matches' | 'readings' | 'finishing' | 'done'
   current: number
   /** Zero while finishing, which has no countable work. */
   total: number
 }
 
-/** What an import came to. */
+/**
+ * What an import came to.
+ *
+ * Every count of what was added has a partner for what was not, and the two are
+ * never the same number: running the same file a second time is supposed to add
+ * nothing, and "added nothing" has to be distinguishable from "could not read
+ * it" and from "the file had nothing new in it".
+ */
 export interface ImportResult {
   ok: boolean
   /** Why it could not run, when it could not. Null on success. */
   message: string | null
+  /** Accounts in the file that the server now recognises, new to it or not. */
   accounts: number
+  /** Added by this run. */
   matches: number
+  /** Added by this run. */
   readings: number
+  /** Added by this run. */
   seasons: number
   /** Games the server worked LP out for once everything had arrived. */
   attributed: number
@@ -136,6 +151,25 @@ export interface ImportResult {
    * plays under now, and that is not something a number can tell anybody.
    */
   unresolved: string[]
+  /** What the server already held, and so did not take again. */
+  alreadyThere: { matches: number; readings: number; seasons: number }
+  /** Games whose payload the server could not read. */
+  matchesFailed: number
+  /** Readings for an account that never resolved, or a queue the server does not track. */
+  readingsUnplaced: number
+  /**
+   * Games that were stored under an account's dead id by an earlier run and
+   * have now been moved onto the one that works, because this run finally
+   * resolved the account.
+   */
+  healed: number
+  /**
+   * The newest game and the newest rank reading *in the file*, in epoch
+   * milliseconds — null where it has none. It is how a run that added nothing
+   * tells "the server already has all of it" from "this copy of the file stops
+   * three days ago", which is what a file read without its write-ahead log does.
+   */
+  newest: { matchAt: number | null; readingAt: number | null }
 }
 
 /** Credentials for signing in to a server. */
@@ -162,6 +196,28 @@ export interface InvitePreview {
   message: string
 }
 
+/** What a server will say about a reset link without anybody signing in. */
+export interface PasswordResetPreview {
+  usable: boolean
+  serverName: string
+  /** Whose account the link sets, so nobody types a password for the wrong one. */
+  username: string | null
+  email: string | null
+  message: string
+}
+
+/** Changing the password of the account you are signed in to. */
+export interface PasswordChange {
+  currentPassword: string
+  newPassword: string
+}
+
+/** Changing the address you sign in with. */
+export interface EmailChange {
+  email: string
+  currentPassword: string
+}
+
 /* -------------------------------------------------------------------------- */
 /* Server administration                                                      */
 /* -------------------------------------------------------------------------- */
@@ -178,6 +234,31 @@ export interface AdminUser {
   linkedRiotAccounts: number
   /** Live sessions — roughly, machines signed in. */
   activeSessions: number
+  /**
+   * The reset link outstanding for them, or null.
+   *
+   * On the member rather than behind a call of its own, so the list can say who
+   * is waiting on one — and so the admin who made a link an hour ago can copy
+   * it again instead of replacing it.
+   */
+  passwordReset: AdminPasswordReset | null
+}
+
+/**
+ * A password reset link, as the admin who made it sees it.
+ *
+ * The same arrangement as an invite, and for the same reason: this server sends
+ * no mail, so the link is readable and copyable and goes wherever the community
+ * actually talks. What differs is what it is worth — an invite makes an
+ * account, this hands one over — so it lasts hours rather than a fortnight, and
+ * there is never more than one outstanding per member.
+ */
+export interface AdminPasswordReset {
+  id: string
+  userId: string
+  link: string
+  createdAt: string
+  expiresAt: string
 }
 
 /** What to change about somebody. Undefined leaves a field alone. */

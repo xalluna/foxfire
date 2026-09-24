@@ -26,6 +26,7 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Invite> Invites => Set<Invite>();
+    public DbSet<PasswordReset> PasswordResets => Set<PasswordReset>();
     public DbSet<RiotAccount> RiotAccounts => Set<RiotAccount>();
     public DbSet<ServerSetting> ServerSettings => Set<ServerSetting>();
 
@@ -50,6 +51,7 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     public DbSet<RetiredPuuid> RetiredPuuids => Set<RetiredPuuid>();
     public DbSet<RankedSeason> Seasons => Set<RankedSeason>();
     public DbSet<SharedReplay> SharedReplays => Set<SharedReplay>();
+    public DbSet<MatchRecording> MatchRecordings => Set<MatchRecording>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -36,6 +36,12 @@ COPY tsconfig.base.json ./
 COPY tooling/ ./tooling/
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
+
+# Build-time feature switches — see tooling/vite/features.ts. Declared in both
+# stages, because the web client and the server it is served by must be built
+# with the same answer; a build argument reaches only the stage that names it.
+# Unset is off. The release passes the repository's variables.
+ARG FOXFIRE_FEATURE_YOUTUBE=
 RUN npm run build -w @foxfire/web
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -63,6 +69,9 @@ COPY apps/server/ ./apps/server/
 # where Web/SpaHosting.cs looks for it.
 COPY --from=web /src/apps/web/dist ./apps/server/src/Foxfire.Api/wwwroot
 
+# The same switches as the web stage, read by Directory.Build.props. After the
+# restore, so turning one on does not throw away the package layer.
+ARG FOXFIRE_FEATURE_YOUTUBE=
 RUN dotnet publish apps/server/src/Foxfire.Api/Foxfire.Api.csproj \
       --no-restore \
       --configuration Release \
@@ -76,6 +85,13 @@ WORKDIR /app
 # filesystem to be for.
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin foxfire
 USER 10001
+
+# The one exception, and only if a host asks for it: logs written to files, for
+# which docker-compose.yml has a commented-out block. Made here, as the user the
+# server runs as, because a named volume mounted over a directory takes that
+# directory's owner — and over one that does not exist, it is root's and the
+# server cannot write to it.
+RUN mkdir /home/foxfire/logs
 
 COPY --from=build /app .
 

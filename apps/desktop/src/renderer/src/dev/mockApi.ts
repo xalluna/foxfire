@@ -6,7 +6,9 @@ import type {
   BackgroundSettings,
   CaptureSettings,
   CaptureStatus,
+  EmailChange,
   LcuStatus,
+  PasswordChange,
   QueueType,
   ObsValidation,
   Recording,
@@ -28,7 +30,13 @@ import type {
   ServerState,
   Scoreboard,
   InvitePreview,
-  ImportProgress
+  ImportProgress,
+  UpdateState,
+  AttachRecordingOutcome,
+  BulkUploadResult,
+  UploadDraft,
+  YouTubeSettings,
+  YouTubeState
 } from '@shared/types'
 import type {
   LcuTelemetry,
@@ -41,11 +49,18 @@ import type {
 import {
   ACCOUNTS,
   MOCK_SERVER_URL,
+  NOW,
   createFixtureClient,
   delay,
   runFixtureImport,
   scenario
 } from '@foxfire/screens/dev'
+import {
+  DEFAULT_TITLE_TEMPLATE,
+  UNMATCHED_TITLE_TEMPLATE,
+  buildRecordingDescription,
+  renderRecordingTitle
+} from '@foxfire/core/youtube'
 import {
   RECORDINGS,
   RECORDING_EVENTS,
@@ -62,6 +77,31 @@ import {
  * has and a browser does not.
  */
 const fixture = createFixtureClient()
+
+/**
+ * The Google connection, as the three YouTube scenarios need it: a build with
+ * no client in it, one with a client and nobody connected, and — everywhere
+ * else — connected, so the upload form and the queue are what gets reviewed.
+ */
+let youtubeState: YouTubeState = {
+  configured: scenario !== 'youtube-unconfigured',
+  email: scenario === 'youtube-unconfigured' || scenario === 'youtube-disconnected' ? null : 'faker@example.com',
+  connecting: false,
+  error: null,
+  pausedForGame: false,
+  quotaResumesAt: scenario === 'youtube-queue' ? NOW + 5 * 60 * 60_000 : null
+}
+let youtubeSettings: YouTubeSettings = {
+  autoUpload: false,
+  defaultPrivacy: 'unlisted',
+  titleTemplate: DEFAULT_TITLE_TEMPLATE
+}
+const youtubeListeners = new Set<(state: YouTubeState) => void>()
+
+function setYouTubeState(patch: Partial<YouTubeState>): void {
+  youtubeState = { ...youtubeState, ...patch }
+  for (const listener of youtubeListeners) listener(youtubeState)
+}
 
 /**
  * A fake window.api for running the renderer in a plain browser.
@@ -162,6 +202,75 @@ function setServerState(next: ServerState): ServerState {
   return next
 }
 
+/**
+ * The patch notes an update carries, in the shape CHANGELOG.md is written in.
+ *
+ * Wrapped mid-sentence on purpose: the real notes arrive as the file was
+ * typed, and the renderer has to put the lines back together.
+ */
+const UPDATE_NOTES = `Foxfire now updates itself.
+
+### Added
+
+- **Updates arrive on their own.** Foxfire checks for a new build, downloads it
+  quietly, and offers to restart — never in the middle of a game.
+- **Patch notes travel with the update**, so what changed is in the app.
+
+### Fixed
+
+- Starting with Windows no longer opens a window nobody asked for.`
+
+/** What the updater is doing, per scenario. See the Scenario type. */
+function mockUpdateState(): UpdateState {
+  const base: UpdateState = {
+    status: 'idle',
+    current: '0.14.0',
+    target: null,
+    percent: null,
+    notes: null,
+    blockedBy: null,
+    heldBy: null,
+    error: null,
+    justInstalled: null
+  }
+
+  switch (scenario) {
+    case 'update-ready':
+      return { ...base, status: 'ready', target: '0.15.0', notes: UPDATE_NOTES }
+    case 'update-blocked':
+      return {
+        ...base,
+        status: 'ready',
+        target: '0.15.0',
+        notes: UPDATE_NOTES,
+        blockedBy: 'game'
+      }
+    case 'update-downloading':
+      return { ...base, status: 'downloading', target: '0.15.0', percent: 45 }
+    case 'update-held':
+      return {
+        ...base,
+        heldBy: { serverName: 'Late Night', allows: '0.14.0', newest: '0.15.0' }
+      }
+    case 'just-installed':
+      return {
+        ...base,
+        notes: UPDATE_NOTES,
+        justInstalled: { version: '0.14.0', notes: UPDATE_NOTES }
+      }
+    default:
+      return base
+  }
+}
+
+let updateState = mockUpdateState()
+const updateListeners = new Set<(state: UpdateState) => void>()
+
+function setUpdateState(next: UpdateState): void {
+  updateState = next
+  for (const listener of updateListeners) listener(next)
+}
+
 export const mockApi: Api = {
   // The browser harness has no Electron and so no real path for a File.
   pathForFile: () => null,
@@ -169,7 +278,28 @@ export const mockApi: Api = {
     // The harness has no main process to ask, so this is the browser-only
     // stand-in; the packaged app reads it from app.getVersion().
     // Never held, even in the loading scenario — this is chrome, not data.
-    getVersion: (): Promise<string> => delay('0.0.0-dev', 0, false)
+    getVersion: (): Promise<string> => delay(updateState.current, 0, false)
+  },
+  updates: {
+    getState: (): Promise<UpdateState> => delay(updateState, 0, false),
+    // No feed to ask in a browser, so this is the shape of the round trip
+    // rather than its outcome: checking, then whatever was already true.
+    check: async (): Promise<UpdateState> => {
+      const settled = updateState
+      setUpdateState({ ...settled, status: 'checking' })
+      await delay(null, 700, false)
+      setUpdateState(settled)
+      return settled
+    },
+    // Nothing to restart into. The harness is here to look at the offer.
+    restart: (): Promise<void> => delay(undefined, 0, false),
+    dismissNote: async (): Promise<void> => {
+      setUpdateState({ ...updateState, justInstalled: null })
+    },
+    onChanged: (cb) => {
+      updateListeners.add(cb)
+      return () => updateListeners.delete(cb)
+    }
   },
   server: {
     getState: (): Promise<ServerState> => delay(serverState, 120, false),
@@ -299,6 +429,48 @@ export const mockApi: Api = {
           serverOutdated: false,
           riotKeyRejected: false
         }),
+        300,
+        false
+      ),
+
+    // The account forms, answered the way the server would: the wrong current
+    // password is refused, everything else is accepted and shows up in the
+    // "Signed in" card.
+    changePassword: ({ currentPassword }: PasswordChange): Promise<ServerAuthResult> =>
+      delay(
+        currentPassword === 'wrong'
+          ? { ok: false, error: 'That is not your current password.', state: serverState }
+          : { ok: true, error: null, state: serverState },
+        300,
+        false
+      ),
+
+    changeEmail: ({ email, currentPassword }: EmailChange): Promise<ServerAuthResult> =>
+      delay(
+        currentPassword === 'wrong'
+          ? { ok: false, error: 'That is not your current password.', state: serverState }
+          : {
+              ok: true,
+              error: null,
+              state: setServerState({
+                ...serverState,
+                session: serverState.session ? { ...serverState.session, email } : null
+              })
+            },
+        300,
+        false
+      ),
+
+    changeUsername: (username: string): Promise<ServerAuthResult> =>
+      delay(
+        {
+          ok: true,
+          error: null,
+          state: setServerState({
+            ...serverState,
+            session: serverState.session ? { ...serverState.session, username } : null
+          })
+        },
         300,
         false
       ),
@@ -587,7 +759,68 @@ export const mockApi: Api = {
     reveal: (): Promise<void> => delay(undefined, 0, false),
     onChanged: () => () => undefined,
     showMatch: (): Promise<void> => delay(undefined, 0, false),
-    onShowMatch: () => () => undefined
+    onShowMatch: () => () => undefined,
+    forget: (): Promise<void> => delay(undefined, 120, false),
+    // The harness has one window, so a recording "window" is a navigation in
+    // it, the way the LP editor's is.
+    openRemote: (accountId: string, matchId: string): Promise<void> => {
+      window.location.hash = `#${windowRoutes.remoteRecording(accountId, matchId)}`
+      return delay(undefined, 0, false)
+    }
+  },
+  matchRecordings: {
+    ...fixture.matchRecordings!,
+    onChanged: fixture.events.onRecordingChanged
+  },
+  youtube: {
+    getState: (): Promise<YouTubeState> => delay(youtubeState, 120, false),
+    connect: async (): Promise<void> => {
+      setYouTubeState({ connecting: true, error: null })
+      await delay(undefined, 1_200, false)
+      setYouTubeState({ connecting: false, email: 'faker@example.com' })
+    },
+    cancelConnect: async (): Promise<void> => setYouTubeState({ connecting: false }),
+    disconnect: async (): Promise<void> => setYouTubeState({ email: null }),
+    getSettings: (): Promise<YouTubeSettings> => delay(youtubeSettings, 120, false),
+    setSettings: (patch: Partial<YouTubeSettings>): Promise<YouTubeSettings> => {
+      youtubeSettings = { ...youtubeSettings, ...patch }
+      return delay(youtubeSettings, 120, false)
+    },
+    draft: (recordingId: number): Promise<UploadDraft> => {
+      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
+      const match = recording?.match
+      return delay(
+        {
+          recordingId,
+          title: renderRecordingTitle(match ? youtubeSettings.titleTemplate : UNMATCHED_TITLE_TEMPLATE, {
+            champion: match?.championName ?? 'Ahri',
+            queueId: match?.queueId ?? recording?.queueId ?? null,
+            gameMode: match?.gameMode ?? null,
+            win: match ? match.win : null,
+            kills: match?.kills ?? null,
+            deaths: match?.deaths ?? null,
+            assists: match?.assists ?? null,
+            playedAt: recording?.startedAt ?? NOW
+          }),
+          description: buildRecordingDescription(RECORDING_EVENTS),
+          privacy: youtubeSettings.defaultPrivacy,
+          durationSeconds: recording?.durationSeconds ?? null
+        },
+        250,
+        false
+      )
+    },
+    enqueue: (): Promise<void> => delay(undefined, 200, false),
+    enqueueMany: (recordingIds: number[]): Promise<BulkUploadResult> =>
+      delay({ queued: recordingIds.length, skipped: [] }, 400, false),
+    cancel: (): Promise<void> => delay(undefined, 100, false),
+    retry: (): Promise<void> => delay(undefined, 100, false),
+    attachLink: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),
+    reattach: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),
+    onChanged: (cb) => {
+      youtubeListeners.add(cb)
+      return () => youtubeListeners.delete(cb)
+    }
   },
   // Riot replays. The fixtures deliberately cover the three states the tab has
   // to draw: linked and playable, linked but on a patch nothing can play, and

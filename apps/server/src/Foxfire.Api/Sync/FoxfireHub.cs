@@ -28,6 +28,15 @@ public static class HubEvents
     public const string RankChanged = "lcu:rankChanged";
 
     /// <summary>
+    /// A recording was attached to one account's game, replaced, or removed.
+    ///
+    /// Sent as { riotAccountId, matchId }: the row it changes belongs to the
+    /// pair, and a screen showing somebody else's view of the same game has
+    /// nothing to refresh.
+    /// </summary>
+    public const string RecordingChanged = "recording:changed";
+
+    /// <summary>
     /// Riot has rejected this server's key.
     ///
     /// Same channel the desktop already renders a banner for, deliberately: in
@@ -49,10 +58,7 @@ public static class HubEvents
 [Authorize]
 public sealed class FoxfireHub : Hub
 {
-    /// <summary>
-    /// Where clients connect. Under the API like every other route; desktop
-    /// 0.12.0, which connects to /hub, is moved here by LegacyRootShim.
-    /// </summary>
+    /// <summary>Where clients connect. Under the API, like every other route.</summary>
     public const string Path = "/api/hub";
 }
 
@@ -74,6 +80,9 @@ public sealed class SignalRServerEvents(IHubContext<FoxfireHub> hub) : IServerEv
 
     public Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default) =>
         hub.Clients.All.SendAsync(HubEvents.RankChanged, riotAccountId, cancellationToken);
+
+    public Task RecordingChangedAsync(Guid riotAccountId, string matchId, CancellationToken cancellationToken = default) =>
+        hub.Clients.All.SendAsync(HubEvents.RecordingChanged, new { riotAccountId, matchId }, cancellationToken);
 
     public Task RiotKeyRejectedAsync(CancellationToken cancellationToken = default) =>
         hub.Clients.All.SendAsync(HubEvents.KeyInvalid, cancellationToken);

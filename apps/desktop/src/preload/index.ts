@@ -7,7 +7,9 @@ import type {
   ReplayImportProgress,
   ServerState,
   SyncProgressEvent,
-  ImportProgress
+  ImportProgress,
+  UpdateState,
+  YouTubeState
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -17,6 +19,17 @@ const api: Api = {
   app: {
     getVersion: () => ipcRenderer.invoke(CH.app.getVersion)
   },
+  updates: {
+    getState: () => ipcRenderer.invoke(CH.updates.getState),
+    check: () => ipcRenderer.invoke(CH.updates.check),
+    restart: () => ipcRenderer.invoke(CH.updates.restart),
+    dismissNote: () => ipcRenderer.invoke(CH.updates.dismissNote),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, state: UpdateState): void => cb(state)
+      ipcRenderer.on(CH.updates.changed, handler)
+      return () => ipcRenderer.removeListener(CH.updates.changed, handler)
+    }
+  },
   server: {
     getState: () => ipcRenderer.invoke(CH.server.getState),
     probe: (url) => ipcRenderer.invoke(CH.server.probe, url),
@@ -24,6 +37,9 @@ const api: Api = {
     register: (url, registration) => ipcRenderer.invoke(CH.server.register, url, registration),
     login: (url, credentials) => ipcRenderer.invoke(CH.server.login, url, credentials),
     logout: () => ipcRenderer.invoke(CH.server.logout),
+    changePassword: (change) => ipcRenderer.invoke(CH.server.changePassword, change),
+    changeEmail: (change) => ipcRenderer.invoke(CH.server.changeEmail, change),
+    changeUsername: (username) => ipcRenderer.invoke(CH.server.changeUsername, username),
     setActive: (url) => ipcRenderer.invoke(CH.server.setActive, url),
     forget: (url) => ipcRenderer.invoke(CH.server.forget, url),
     onChanged: (cb) => {
@@ -36,6 +52,8 @@ const api: Api = {
     users: () => ipcRenderer.invoke(CH.serverAdmin.users),
     updateUser: (id, patch) => ipcRenderer.invoke(CH.serverAdmin.updateUser, id, patch),
     deleteUser: (id) => ipcRenderer.invoke(CH.serverAdmin.deleteUser, id),
+    createPasswordReset: (userId) => ipcRenderer.invoke(CH.serverAdmin.createPasswordReset, userId),
+    revokePasswordReset: (userId) => ipcRenderer.invoke(CH.serverAdmin.revokePasswordReset, userId),
     invites: () => ipcRenderer.invoke(CH.serverAdmin.invites),
     createInvite: (email) => ipcRenderer.invoke(CH.serverAdmin.createInvite, email),
     revokeInvite: (id) => ipcRenderer.invoke(CH.serverAdmin.revokeInvite, id),
@@ -45,6 +63,7 @@ const api: Api = {
     storedReplays: () => ipcRenderer.invoke(CH.serverAdmin.storedReplays),
     removeReplay: (matchId) => ipcRenderer.invoke(CH.serverAdmin.removeReplay, matchId),
     forceUnlink: (riotAccountId) => ipcRenderer.invoke(CH.serverAdmin.forceUnlink, riotAccountId),
+    addRiotAccount: (input) => ipcRenderer.invoke(CH.serverAdmin.addRiotAccount, input),
     chooseDatabase: () => ipcRenderer.invoke(CH.serverAdmin.chooseDatabase),
     importDatabase: (filePath) => ipcRenderer.invoke(CH.serverAdmin.importDatabase, filePath),
     onImportProgress: (cb) => {
@@ -76,7 +95,19 @@ const api: Api = {
     get: (accountId) => ipcRenderer.invoke(CH.dashboard.get, accountId),
     matchList: (accountId, limit, offset, queueId) =>
       ipcRenderer.invoke(CH.dashboard.matchList, accountId, limit, offset, queueId),
-    matchDetail: (matchId) => ipcRenderer.invoke(CH.dashboard.matchDetail, matchId)
+    matchDetail: (matchId) => ipcRenderer.invoke(CH.dashboard.matchDetail, matchId),
+    matchSummary: (accountId, matchId) => ipcRenderer.invoke(CH.dashboard.matchSummary, accountId, matchId)
+  },
+  matchRecordings: {
+    get: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.get, accountId, matchId),
+    attach: (accountId, matchId, input) =>
+      ipcRenderer.invoke(CH.matchRecordings.attach, accountId, matchId, input),
+    detach: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.detach, accountId, matchId),
+    onChanged: (cb) => {
+      const listener = (_e: IpcRendererEvent, event: { accountId: string; matchId: string }): void => cb(event)
+      ipcRenderer.on(CH.matchRecordings.changed, listener)
+      return () => ipcRenderer.removeListener(CH.matchRecordings.changed, listener)
+    }
   },
   sync: {
     start: (accountId) => ipcRenderer.invoke(CH.sync.start, accountId),
@@ -183,6 +214,29 @@ const api: Api = {
         cb(accountId, matchId)
       ipcRenderer.on(CH.recordings.showMatch, listener)
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
+    },
+    forget: (recordingId) => ipcRenderer.invoke(CH.recordings.forget, recordingId),
+    openRemote: (accountId, matchId) => ipcRenderer.invoke(CH.recordings.openRemote, accountId, matchId)
+  },
+  youtube: {
+    getState: () => ipcRenderer.invoke(CH.youtube.getState),
+    connect: () => ipcRenderer.invoke(CH.youtube.connect),
+    cancelConnect: () => ipcRenderer.invoke(CH.youtube.cancelConnect),
+    disconnect: () => ipcRenderer.invoke(CH.youtube.disconnect),
+    getSettings: () => ipcRenderer.invoke(CH.youtube.getSettings),
+    setSettings: (patch) => ipcRenderer.invoke(CH.youtube.setSettings, patch),
+    draft: (recordingId) => ipcRenderer.invoke(CH.youtube.draft, recordingId),
+    enqueue: (request) => ipcRenderer.invoke(CH.youtube.enqueue, request),
+    enqueueMany: (recordingIds, privacy) => ipcRenderer.invoke(CH.youtube.enqueueMany, recordingIds, privacy),
+    cancel: (recordingId) => ipcRenderer.invoke(CH.youtube.cancel, recordingId),
+    retry: (recordingId) => ipcRenderer.invoke(CH.youtube.retry, recordingId),
+    attachLink: (recordingId, videoId, replace) =>
+      ipcRenderer.invoke(CH.youtube.attachLink, recordingId, videoId, replace),
+    reattach: (recordingId) => ipcRenderer.invoke(CH.youtube.reattach, recordingId),
+    onChanged: (cb) => {
+      const listener = (_e: IpcRendererEvent, state: YouTubeState): void => cb(state)
+      ipcRenderer.on(CH.youtube.changed, listener)
+      return () => ipcRenderer.removeListener(CH.youtube.changed, listener)
     }
   },
   // Synchronous and local: webUtils reads the path off a File the user already
@@ -236,7 +290,7 @@ const api: Api = {
     openWindow: () => ipcRenderer.invoke(CH.archives.openWindow)
   },
   search: {
-    summoner: (input) => ipcRenderer.invoke(CH.search.summoner, input)
+    players: (query) => ipcRenderer.invoke(CH.search.players, query)
   },
   telemetry: {
     getState: () => ipcRenderer.invoke(CH.telemetry.getState),

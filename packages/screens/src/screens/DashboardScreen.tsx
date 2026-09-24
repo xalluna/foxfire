@@ -11,8 +11,9 @@ import { paths } from '@foxfire/core/routes'
 import { DashboardPage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useShareLink } from '../client/useShareLink'
-import { matchContextItems } from '../match/matchMenu'
+import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
+import { useRecordingActions } from '../match/useRecordingActions'
 import { queryKeys } from '../queries/keys'
 import { isSyncing, useSyncProgress } from '../store/syncProgress'
 
@@ -56,6 +57,8 @@ export function DashboardScreen({
     if (focus) setExpandedMatchId(focus.matchId)
   }, [focus])
 
+  const recordings = useRecordingActions(account)
+
   const progress = useSyncProgress(account.id)
   const syncing = isSyncing(progress)
 
@@ -92,7 +95,6 @@ export function DashboardScreen({
   const openMatchMenu = (event: MouseEvent, match: MatchSummary): void => {
     event.preventDefault()
     const queueType = queueTypeForQueueId(match.queueId)
-    const recordingId = match.local?.recordingId ?? null
     const replayId = match.local?.replayId ?? null
 
     setMenu({
@@ -115,11 +117,9 @@ export function DashboardScreen({
             if (queueType) clearLp.mutate({ queueType, matchId: match.matchId })
           },
 
-          onWatchRecording: platform.watchRecording
-            ? () => {
-                if (recordingId !== null) platform.watchRecording?.(recordingId)
-              }
-            : undefined,
+          // Always this history's player's recording: the row is theirs, so
+          // is what it offers to play.
+          ...recordings.actionsFor(match),
 
           // Unlike a recording, opening this can fail for a reason the person
           // can act on — no installed client still plays that patch. The menu
@@ -147,41 +147,48 @@ export function DashboardScreen({
         },
         // On a server the history is everybody's and the writes are not, so the
         // menu has to know whose account this is.
-        { isMine: account.isMine }
+        { isMine: account.isMine, ...recordings.menuContext }
       )
     })
   }
 
+  // A client that cannot play YouTube is not offered the server's recordings.
+  const flat = matches.data?.pages.flat() ?? []
+  const rows = platform.youtube ? flat : flat.map(withoutServerRecording)
+
   return (
-    <DashboardPage
-      account={dashboard.data?.account ?? account}
-      leagueEntries={dashboard.data?.leagueEntries ?? []}
-      syncProgress={progress}
-      syncing={syncing}
-      onSync={() => sync.mutate()}
-      onCopyProfileLink={
-        share
-          ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))
-          : undefined
-      }
-      matches={matches.data?.pages.flat() ?? []}
-      matchesLoading={matches.isLoading}
-      hasMoreMatches={matches.hasNextPage}
-      loadingMoreMatches={matches.isFetchingNextPage}
-      onLoadMoreMatches={() => void matches.fetchNextPage()}
-      queueId={queueId}
-      onQueueChange={onQueueChange}
-      expandedMatchId={expandedMatchId}
-      onToggleMatch={(matchId) => setExpandedMatchId(expandedMatchId === matchId ? null : matchId)}
-      reveal={focus}
-      renderMatchDetail={(match) => (
-        <MatchDetailPanel matchId={match.matchId} trackedPuuid={account.puuid} />
-      )}
-      onMatchContextMenu={openMatchMenu}
-      menu={menu}
-      onCloseMenu={() => setMenu(null)}
-      notice={notice}
-      onDismissNotice={() => setNotice(null)}
-    />
+    <>
+      {recordings.dialogs}
+      <DashboardPage
+        account={dashboard.data?.account ?? account}
+        leagueEntries={dashboard.data?.leagueEntries ?? []}
+        syncProgress={progress}
+        syncing={syncing}
+        onSync={() => sync.mutate()}
+        onCopyProfileLink={
+          share
+            ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))
+            : undefined
+        }
+        matches={rows}
+        matchesLoading={matches.isLoading}
+        hasMoreMatches={matches.hasNextPage}
+        loadingMoreMatches={matches.isFetchingNextPage}
+        onLoadMoreMatches={() => void matches.fetchNextPage()}
+        queueId={queueId}
+        onQueueChange={onQueueChange}
+        expandedMatchId={expandedMatchId}
+        onToggleMatch={(matchId) => setExpandedMatchId(expandedMatchId === matchId ? null : matchId)}
+        reveal={focus}
+        renderMatchDetail={(match) => (
+          <MatchDetailPanel matchId={match.matchId} trackedPuuid={account.puuid} />
+        )}
+        onMatchContextMenu={openMatchMenu}
+        menu={menu}
+        onCloseMenu={() => setMenu(null)}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+      />
+    </>
   )
 }

@@ -62,12 +62,69 @@ describe('createServerApi', () => {
     await expect(api.admin.users()).rejects.toBeInstanceOf(ServerError)
   })
 
-  it('encodes a Riot ID into the search query', async () => {
-    const { calls, request } = recorder(() => ({}))
+  it('encodes a finder query, hash and all', async () => {
+    const { calls, request } = recorder(() => [])
     const api = createServerApi(request)
 
-    await api.search.summoner({ gameName: 'Hide on bush', tagLine: 'KR1' })
+    await api.search.players('Hide on bush#KR1')
 
-    expect(calls[0].path).toBe('/search?gameName=Hide%20on%20bush&tagLine=KR1')
+    expect(calls[0].path).toBe('/search?q=Hide%20on%20bush%23KR1')
+  })
+
+  it('asks for every tracked player when the query is blank', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.search.players('')
+
+    expect(calls[0].path).toBe('/search?q=')
+  })
+
+  describe('importer', () => {
+    it('answers null, rather than failing, from a server too old to be asked which games it lacks', async () => {
+      // An unknown route on the API is a 404, and that is an answer: the import
+      // sends everything instead, which the matches batch de-duplicates.
+      const { request } = recorder(() => new ServerError('The server answered 404.', 404))
+      const api = createServerApi(request)
+
+      await expect(api.importer.unstoredMatches(['NA1_1'])).resolves.toBeNull()
+    })
+
+    it('still lets a real failure through when asked which games the server lacks', async () => {
+      // Only "there is no such route" means send everything. A 403 is a person
+      // who is not an administrator, and pretending otherwise would send a year
+      // of payloads at a server that is going to refuse every one of them.
+      const { request } = recorder(() => new ServerError('Forbidden', 403))
+      const api = createServerApi(request)
+
+      await expect(api.importer.unstoredMatches(['NA1_1'])).rejects.toBeInstanceOf(ServerError)
+    })
+
+    it('fills in the counts a server older than the change leaves out', async () => {
+      // One that predates counting sent only what it accepted, and one that
+      // predates `unplaced` counted those as skipped. Nothing downstream should
+      // have to wonder which it is talking to.
+      const { request } = recorder(() => ({ accepted: 3 }))
+      const api = createServerApi(request)
+
+      await expect(api.importer.rankReadings([])).resolves.toEqual({
+        accepted: 3,
+        skipped: 0,
+        failed: 0,
+        unplaced: 0
+      })
+    })
+
+    it('passes along all four counts from a server that sends them', async () => {
+      const { request } = recorder(() => ({ accepted: 1, skipped: 2, failed: 3, unplaced: 4 }))
+      const api = createServerApi(request)
+
+      await expect(api.importer.matches([])).resolves.toEqual({
+        accepted: 1,
+        skipped: 2,
+        failed: 3,
+        unplaced: 4
+      })
+    })
   })
 })

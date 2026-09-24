@@ -1,18 +1,22 @@
 import type {
   Account,
-  AdHocSummonerResult,
   AdminActionResult,
   AdminInvite,
+  AdminPasswordReset,
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AttachRecordingInput,
+  AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
+  MatchRecording,
   MatchSummary,
+  PlayerSearchResult,
   QueueType,
   RankHistory,
   RankRange,
@@ -27,6 +31,7 @@ import { silentLogger, type Logger } from '../log'
 import type {
   ImportAccountResult,
   ImportAccountRow,
+  ImportBatchOutcome,
   ImportMatchRow,
   ImportReadingRow,
   ImportSeasonRow
@@ -45,6 +50,10 @@ export interface ReplayDownloadGrant {
 
 /** A match row as the server sends it: everything except what is on somebody's disk. */
 export type ServerMatchSummary = Omit<MatchSummary, 'local'>
+
+function recordingPath(accountId: string, matchId: string): string {
+  return `/riot-accounts/${encodeURIComponent(accountId)}/matches/${encodeURIComponent(matchId)}/recording`
+}
 
 /**
  * Every route both clients call on a Foxfire server, typed.
@@ -95,6 +104,27 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
   const editable = (accountId: string, queueType: QueueType): Promise<EditableMatch[]> =>
     request<EditableMatch[]>(`/riot-accounts/${accountId}/rank/editable?queueType=${queueType}`)
+
+  /**
+   * One page of an import, answered in all four counts.
+   *
+   * Filled in where a server leaves one out, so nothing downstream has to
+   * wonder: one that predates `unplaced` counted those as skipped, and one that
+   * predates counting at all sent only what it accepted.
+   */
+  const importBatch = async (path: string, rows: unknown[]): Promise<ImportBatchOutcome> => {
+    const answer = await request<Partial<ImportBatchOutcome> & { accepted: number }>(path, {
+      method: 'POST',
+      body: rows
+    })
+
+    return {
+      accepted: answer.accepted,
+      skipped: answer.skipped ?? 0,
+      failed: answer.failed ?? 0,
+      unplaced: answer.unplaced ?? 0
+    }
+  }
 
   return {
     accounts: {
@@ -219,17 +249,64 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     search: {
-      summoner: (input: RiotIdInput) =>
-        request<AdHocSummonerResult>(
-          `/search?gameName=${encodeURIComponent(input.gameName)}`
-            + `&tagLine=${encodeURIComponent(input.tagLine)}`
-        )
+      players: (query: string) =>
+        request<PlayerSearchResult[]>(`/search?q=${encodeURIComponent(query)}`)
     },
 
     replays: {
       /** A signed URL for the replay this server holds of a game. Throws when it holds none. */
       downloadGrant: (matchId: string) =>
         request<ReplayDownloadGrant>(`/replays/${encodeURIComponent(matchId)}/download`)
+    },
+
+    /**
+     * One account's YouTube recording of one game.
+     *
+     * The path names both, because the recording is that player's screen and
+     * nobody else's — the same game on somebody else's history is a different
+     * address with a different answer.
+     */
+    matchRecordings: {
+      /** Null when that player's view of that game is not on YouTube. */
+      get: async (accountId: string, matchId: string): Promise<MatchRecording | null> => {
+        try {
+          return await request<MatchRecording>(recordingPath(accountId, matchId))
+        } catch (err) {
+          if (err instanceof ServerError && err.status === 404) return null
+          throw err
+        }
+      },
+
+      /**
+       * Attaches a video to the game, as its account's owner.
+       *
+       * A game that already has one answers `exists` rather than failing, so the
+       * screen can ask whether to replace it and send again with `replace` set.
+       */
+      attach: async (
+        accountId: string,
+        matchId: string,
+        input: AttachRecordingInput
+      ): Promise<AttachRecordingOutcome> => {
+        try {
+          await request<MatchRecording>(recordingPath(accountId, matchId), {
+            method: 'PUT',
+            body: input
+          })
+          return { ok: true }
+        } catch (err) {
+          if (!(err instanceof ServerError)) log.error('Attaching a recording failed', err)
+          const message = err instanceof Error ? err.message : String(err)
+          if (err instanceof ServerError && err.code === 'recording_exists') {
+            return { ok: false, reason: 'exists', message }
+          }
+          return { ok: false, reason: 'failed', message }
+        }
+      },
+
+      /** Takes the recording off the game. The video itself stays on YouTube. */
+      detach: (accountId: string, matchId: string) =>
+        attempt(() => request<void>(recordingPath(accountId, matchId), { method: 'DELETE' }))
     },
 
     admin: {
@@ -256,6 +333,13 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
           })
         ),
 
+      /**
+       * Starts tracking an account nobody has claimed. Throws rather than
+       * answering with a result, because the caller wants the account back.
+       */
+      addRiotAccount: (input: RiotIdInput) =>
+        request<Account>('/admin/riot-accounts', { method: 'POST', body: input }),
+
       users: () => request<AdminUser[]>('/admin/users/'),
 
       updateUser: (id: string, patch: AdminUserPatch) =>
@@ -265,6 +349,28 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
       deleteUser: (id: string) =>
         attempt(() => request<void>(`/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' })),
+
+      /**
+       * Makes a link that lets somebody set a new password, replacing whatever
+       * was outstanding for them.
+       *
+       * Throws rather than answering with a result, like createInvite and for
+       * the same reason: what the caller wants is the link, and there is
+       * nothing to show if there is not one.
+       */
+      createPasswordReset: (userId: string) =>
+        request<AdminPasswordReset>(
+          `/admin/users/${encodeURIComponent(userId)}/password-reset`,
+          { method: 'POST' }
+        ),
+
+      /** Withdraws the link outstanding for somebody, if there is one. */
+      revokePasswordReset: (userId: string) =>
+        attempt(() =>
+          request<void>(`/admin/users/${encodeURIComponent(userId)}/password-reset`, {
+            method: 'DELETE'
+          })
+        ),
 
       invites: () => request<AdminInvite[]>('/admin/invites/'),
 
@@ -293,14 +399,30 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       accounts: (rows: ImportAccountRow[]) =>
         request<ImportAccountResult[]>('/admin/import/accounts', { method: 'POST', body: rows }),
 
-      seasons: (rows: ImportSeasonRow[]) =>
-        request<{ accepted: number }>('/admin/import/seasons', { method: 'POST', body: rows }),
+      seasons: (rows: ImportSeasonRow[]) => importBatch('/admin/import/seasons', rows),
 
-      matches: (rows: ImportMatchRow[]) =>
-        request<{ accepted: number }>('/admin/import/matches', { method: 'POST', body: rows }),
+      /**
+       * Which of these game ids the server has never stored.
+       *
+       * Null from a server too old to have the route, which answers an unknown
+       * one with a 404 — and that is an answer rather than a failure: the caller
+       * sends everything instead, and the matches batch skips what is there.
+       */
+      unstoredMatches: async (matchIds: string[]): Promise<string[] | null> => {
+        try {
+          return await request<string[]>('/admin/import/unstored-matches', {
+            method: 'POST',
+            body: matchIds
+          })
+        } catch (err) {
+          if (err instanceof ServerError && (err.status === 404 || err.status === 405)) return null
+          throw err
+        }
+      },
 
-      rankReadings: (rows: ImportReadingRow[]) =>
-        request<{ accepted: number }>('/admin/import/rank-readings', { method: 'POST', body: rows }),
+      matches: (rows: ImportMatchRow[]) => importBatch('/admin/import/matches', rows),
+
+      rankReadings: (rows: ImportReadingRow[]) => importBatch('/admin/import/rank-readings', rows),
 
       finish: () =>
         request<{ accounts: number; attributed: number }>('/admin/import/finish', { method: 'POST' })
