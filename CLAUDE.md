@@ -69,11 +69,9 @@ community rather than with the person asking. Your own accounts are a list
 (`/api/riot-accounts/mine`), anybody else's is one lookup (`/api/riot-accounts/{id}`,
 `/api/riot-accounts/lookup`), and the finder (`/api/search`) is paged like every other list that
 grows (see below). Clients hold
-what they asked for, under `queryKeys.accounts()`, and never the whole server. The one exception
-is `GET /api/riot-accounts`, kept only because Desktop 0.14 reads nothing else. It is deprecated:
-`[Obsolete]` in code, so nothing new can reach for it without a `#pragma` saying so, and answered
-with a `Deprecation` header. **Delete it, its route and its test in the same PR that takes 0.14.x
-off `Allowed`.**
+what they asked for, under `queryKeys.accounts()`, and never the whole server. There used to be a
+`GET /api/riot-accounts` that answered with all of them; Server 0.4.0 removed it along with
+Desktop 0.14, the last client that read it.
 
 A server that has not been updated refuses a desktop newer than anything it knows, and names the
 newest it does know — an older one. The desktop reads that as the server being behind rather than
@@ -132,8 +130,8 @@ its neighbours anywhere in the list.
 A new list that can grow is paged the same way, and its route goes in
 `WireShapeTests.Every_list_that_grows_answers_with_a_page`. Turning an existing array into a page
 breaks every client that reads it: bump `ApiVersion` and `WEB_API_VERSION` in the same change, and
-take the desktops that cannot read it off `Allowed` — API 3 is that change, and 0.14.0 leaves the
-list in the release commit that puts 0.15.0 on it.
+take the desktops that cannot read it off `Allowed` — API 3 was that change, and 0.14.0 left the
+list in the release commit that put 0.15.0 on it.
 
 ## Server logging
 

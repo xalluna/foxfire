@@ -177,13 +177,11 @@ public class WireShapeTests(FoxfireServerFixture server)
     public async Task An_account_carries_every_field_the_desktops_Account_reads()
     {
         // @foxfire/core Account, plus the two a shared server adds.
-        var (client, _, _) = await RiggedAsync();
+        var (client, accountId, _) = await RiggedAsync();
         using var _client = client;
 
-        var accounts = await client.GetFromJsonAsync<JsonElement>(
-            new Uri("/api/riot-accounts", UriKind.Relative));
-
-        var account = accounts.EnumerateArray().First();
+        var account = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/riot-accounts/{accountId}", UriKind.Relative));
 
         AssertHasAll(
             account,

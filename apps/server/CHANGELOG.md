@@ -119,10 +119,9 @@ season's most-played champions.
   each a copy of the player as last seen, so the list draws without a request.
   The rules — ten at most, newest first, one per account, and a copy replaced
   only by a newer one — are shared with the desktop and tested.
-- `GET /api/riot-accounts`, every account at once, is deprecated. It still
-  answers for Foxfire 0.14, which reads nothing else, but says so with a
-  `Deprecation` header (RFC 9745), and is marked obsolete in the code so nothing
-  new calls it. It goes in the release that takes 0.14 off the allow list.
+- `GET /api/riot-accounts`, every account at once, is gone. Foxfire 0.14 was the
+  last client that read it, and 0.14 is no longer served; nothing from 0.15 or
+  the web client asks for it.
 - Every list that grows answers `{ items, total }` rather than an array:
   `/api/search`, `/api/riot-accounts/{id}/matches`, `/api/admin/users` (which
   now takes `q`, `limit` and `offset`), `/api/admin/invites/used` (new) and
@@ -130,9 +129,8 @@ season's most-played champions.
   hundred rather than two hundred). `GET /api/admin/invites/` answers with the
   open invites only. Each is counted over the same filters it pages, in an order
   that ends in a unique column so no row falls between two pages.
-- API version 3, and the web client is built against it. Admitting 0.15 and
-  taking 0.14 off the allow list — with the deprecated `GET /api/riot-accounts`
-  going at the same time — happen in the commit that releases both.
+- API version 3, and the web client is built against it. The allow list is
+  Foxfire 0.15.0 alone.
 - Rank history is deliberately still answered whole: the milestones and "over
   this period" need every reading in the range, and the range is what bounds it.
   The web client thins them to closes for the graph itself, by the rule the

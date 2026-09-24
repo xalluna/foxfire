@@ -16,23 +16,13 @@ namespace Foxfire.Api.Endpoints;
 ///
 /// No read answers with every account. Yours are a list, because that is as
 /// many as one person plays on; anybody else's is one lookup by id or Riot ID,
-/// or a page of /search. The bare list below is Desktop 0.14's.
+/// or a page of /search.
 /// </summary>
 public static class RiotLinkEndpoints
 {
     public static void MapRiotLinkEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/riot-accounts").WithTags("Riot accounts").RequireAuthorization();
-
-        // DEPRECATED — every account on the server, for Desktop 0.14 and nobody
-        // else. The one place allowed to reach for it; see ListRiotAccountsRequest.
-#pragma warning disable CS0618
-        group.MapGet("/", (HttpContext http, ISender sender, CancellationToken cancellationToken) =>
-        {
-            WholeServerAccountList.MarkDeprecated(http.Response);
-            return sender.SendAsync(new ListRiotAccountsRequest(), cancellationToken);
-        });
-#pragma warning restore CS0618
 
         group.MapGet("/mine", (ISender sender, CancellationToken cancellationToken) =>
             sender.SendAsync(new ListMyRiotAccountsRequest(), cancellationToken));

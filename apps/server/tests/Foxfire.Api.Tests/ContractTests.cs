@@ -697,7 +697,7 @@ public class AuthorizationTests(FoxfireServerFixture server)
     {
         using var client = server.Client();
 
-        var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
+        var response = await client.GetAsync(new Uri("/api/riot-accounts/mine", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -710,40 +710,6 @@ public class AuthorizationTests(FoxfireServerFixture server)
 public class RiotLinkTests(FoxfireServerFixture server)
 {
     private static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
-
-    [Fact]
-    public async Task Desktop_0_14s_list_of_every_account_still_answers_and_says_it_is_deprecated()
-    {
-        // Every account on the server in one answer, which nothing from Server
-        // 0.4.0 on asks for — but Desktop 0.14 reads nothing else, and it is on
-        // the allow list. Delete this test with the route.
-        using var client = server.Client();
-        var session = await server.RegisterAsync(client, "Looker", $"{Unique("look")}@example.com");
-        FoxfireServerFixture.Authenticated(client, session);
-
-        var response = await client.GetAsync(new Uri("/api/riot-accounts/", UriKind.Relative));
-
-        response.EnsureSuccessStatusCode();
-
-        // RFC 9745: the date it was deprecated, as "@" and Unix seconds.
-        Assert.True(response.Headers.TryGetValues("Deprecation", out var deprecation));
-        Assert.Equal(
-            $"@{WholeServerAccountList.DeprecatedSince.ToUnixTimeSeconds()}",
-            Assert.Single(deprecation));
-    }
-
-    [Fact]
-    public async Task Only_the_deprecated_list_says_it_is_deprecated()
-    {
-        using var client = server.Client();
-        var session = await server.RegisterAsync(client, "Current", $"{Unique("current")}@example.com");
-        FoxfireServerFixture.Authenticated(client, session);
-
-        var response = await client.GetAsync(new Uri("/api/riot-accounts/mine", UriKind.Relative));
-
-        response.EnsureSuccessStatusCode();
-        Assert.False(response.Headers.Contains("Deprecation"));
-    }
 
     [Fact]
     public async Task A_riot_id_that_is_not_one_is_refused_before_riot_is_asked()
