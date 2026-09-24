@@ -1,7 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import type { Account, LcuStatus } from '@shared/types'
+import type { LcuStatus } from '@shared/types'
 import { SettingsRow, primaryButtonClass } from '@foxfire/ui'
+import { queryKeys, useAccountByRiotId } from '@foxfire/screens'
 
 /**
  * Claiming the League account this machine is signed in to.
@@ -32,10 +33,11 @@ export function LinkAccountRow(): JSX.Element | null {
     return window.api.lcu.onStatus(setStatus)
   }, [])
 
-  const accounts = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => window.api.accounts.list()
-  })
+  // Whoever the server has under the Riot ID the client is signed in to —
+  // yours, somebody else's, nobody's, or nobody at all.
+  const known = useAccountByRiotId(
+    status.state === 'disconnected' ? null : { gameName: status.gameName, tagLine: status.tagLine }
+  ).data
 
   if (status.state === 'disconnected') {
     return (
@@ -47,7 +49,6 @@ export function LinkAccountRow(): JSX.Element | null {
   }
 
   const riotId = `${status.gameName}#${status.tagLine}`
-  const known = matching(accounts.data, status.gameName, status.tagLine)
 
   // Already yours, so it is among the linked rows above — which is also where
   // "did that work?" is answered, the moment after pressing the button.
@@ -83,8 +84,8 @@ export function LinkAccountRow(): JSX.Element | null {
             window.api.accounts
               .link({ gameName: status.gameName, tagLine: status.tagLine })
               .then(() => {
-                // The rail, the dashboard and this row all read the same list.
-                void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+                // The rail, the linked rows above and this row all refresh.
+                void queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
               })
               .catch((err: Error) => setError(err.message))
               .finally(() => setBusy(false))
@@ -95,10 +96,4 @@ export function LinkAccountRow(): JSX.Element | null {
       }
     />
   )
-}
-
-/** The stored account for a Riot ID, if this server has one. Riot IDs are not case-sensitive. */
-function matching(accounts: Account[] | undefined, gameName: string, tagLine: string): Account | undefined {
-  const wanted = `${gameName}#${tagLine}`.toLowerCase()
-  return accounts?.find((a) => `${a.gameName}#${a.tagLine}`.toLowerCase() === wanted)
 }

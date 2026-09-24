@@ -11,6 +11,46 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.4.0] — 2026-09-24
+
+A server that answers what a screen asks rather than handing over every account
+it has. Clients used to download the whole list of League accounts on the server
+— at launch and on nearly every page — and search it themselves, which is fine
+for a dozen people and not for a community that keeps growing. Now your own
+accounts are a list, anybody else's is one lookup, and the finder answers a page
+at a time.
+
+### Changed
+
+- **Players shows a page at a time.** The Players page opens on the accounts you
+  have claimed, then the first fifty of everybody else in name order, with Show
+  more for the next fifty. Typing still finds anybody on the server, a page at a
+  time as well.
+- **Every search is capped.** A search that does not ask for a page gets fifty
+  players, and none gets more than a hundred. That includes Foxfire 0.14, whose
+  Search page has no Show more: a blank search there lists the first fifty by
+  name, and typing still finds anybody.
+- **League accounts pages its claims.** An admin's list of claimed accounts
+  arrives fifty at a time, with a box to find one by name, rather than every
+  claim on the server at once.
+
+### Under the hood
+
+- Three reads replace the one that answered with every account:
+  `GET /api/riot-accounts/mine` for the accounts you have claimed,
+  `GET /api/riot-accounts/{id}`, and
+  `GET /api/riot-accounts/lookup?gameName=…&tagLine=…`, which a player's link
+  and the League client's signed-in account are both matched by. The lookup is
+  answered by the unique index on the Riot ID, in any capitalisation.
+- `/api/search` takes `limit` and `offset`, and `mine` and `claimed` to narrow it.
+  A blank search pages through the Riot ID index in name order instead of sorting
+  the table.
+- `GET /api/riot-accounts`, every account at once, still answers for Foxfire
+  0.14, which reads nothing else. It goes in the release that takes 0.14 off
+  the allow list.
+- Tests for each read — including that "yours" never picks up an account nobody
+  has claimed — and for paging, the cap and both filters.
+
 ## [0.3.1] — 2026-09-23
 
 A fix for the sync bar, which on a server never went away.
@@ -533,6 +573,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0
 [0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1
 [0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
 [0.2.0]: https://github.com/xalluna/foxfire/compare/server-v0.1.0...server-v0.2.0

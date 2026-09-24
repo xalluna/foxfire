@@ -5,12 +5,18 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Features.RiotAccounts;
 
 /// <summary>
-/// Every League account this server tracks, not just the caller's.
+/// Every League account this server tracks, in one answer. Only Desktop 0.14 asks.
 ///
-/// Two things in one list, distinguished by IsMine rather than by being
-/// separate endpoints: the accounts you may edit, and the accounts you may only
-/// look at. The desktop needs both — one to write LP against, one to render
-/// everybody else's games.
+/// This was how every client learned about accounts: the whole table, with
+/// IsMine telling the caller's apart, held in memory and searched there for
+/// whichever one a page named. That is a number that grows with the community
+/// rather than with the person asking, and a server with a large one would hand
+/// every desktop all of it on every launch. Clients from Server 0.4.0 ask for
+/// what they need instead — their own accounts, one account by id or Riot ID,
+/// and a page of search.
+///
+/// Kept, unchanged, because Desktop 0.14.0 is on the allow list and reads
+/// nothing else. Delete it in the PR that takes 0.14.x off Allowed.
 /// </summary>
 public sealed record ListRiotAccountsRequest : IDomainRequest<IReadOnlyList<RiotAccountResponse>>;
 

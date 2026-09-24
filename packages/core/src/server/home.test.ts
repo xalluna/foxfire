@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Account } from '../types'
-import { applyHomeAccount } from './home'
+import { homeAmong, markHome } from './home'
 
-function account(id: string, isMine?: boolean): Account {
+function account(id: string): Account {
   return {
     id,
     puuid: `p-${id}`,
@@ -16,38 +16,40 @@ function account(id: string, isMine?: boolean): Account {
     isHomeAccount: false,
     createdAt: '',
     updatedAt: '',
-    isMine
+    isMine: true
   }
 }
 
 const home = (accounts: Account[]) => accounts.filter((a) => a.isHomeAccount).map((a) => a.id)
 
-describe('applyHomeAccount', () => {
-  it('opens on the remembered account whenever it is still there', () => {
-    const accounts = [account('a', true), account('b'), account('c')]
-    expect(home(applyHomeAccount(accounts, 'c'))).toEqual(['c'])
+describe('homeAmong', () => {
+  it('is the remembered account when it is one of yours', () => {
+    expect(homeAmong([account('a'), account('b')], 'b')?.id).toBe('b')
   })
 
-  it('falls back to an account you have claimed', () => {
-    const accounts = [account('a', false), account('b', true)]
-    expect(home(applyHomeAccount(accounts, 'gone'))).toEqual(['b'])
+  it('is your first when nothing is remembered, so a new server opens somewhere', () => {
+    expect(homeAmong([account('a'), account('b')], null)?.id).toBe('a')
   })
 
-  it('opens on somebody on a desktop, where there is always history to look at', () => {
-    const accounts = [account('a', false), account('b', false)]
-    expect(home(applyHomeAccount(accounts, null))).toEqual(['a'])
+  it("is none of yours when the remembered one is not yours — a friend's, starred in a browser", () => {
+    expect(homeAmong([account('a'), account('b')], 'friend')).toBeNull()
   })
 
-  it('opens on nobody for the web client, which would rather show its list of players', () => {
-    const accounts = [account('a', false), account('b', false)]
-    expect(home(applyHomeAccount(accounts, null, { fallbackToAny: false }))).toEqual([])
+  it('is nobody when nothing is yours, rather than a stranger', () => {
+    expect(homeAmong([], null)).toBeNull()
   })
+})
 
+describe('markHome', () => {
   it('marks exactly one account, and never mutates the list it was given', () => {
-    const accounts = [account('a', true), account('b', true)]
-    const stamped = applyHomeAccount(accounts, null)
+    const accounts = [account('a'), account('b')]
+    const stamped = markHome(accounts, null)
 
     expect(home(stamped)).toEqual(['a'])
     expect(accounts.every((a) => !a.isHomeAccount)).toBe(true)
+  })
+
+  it('marks none when home is somebody else', () => {
+    expect(home(markHome([account('a'), account('b')], 'friend'))).toEqual([])
   })
 })

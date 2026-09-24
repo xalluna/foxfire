@@ -1,6 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { queryKeys, useClient, type PlayerLayoutProps } from '@foxfire/screens'
+import { useMyAccounts, type PlayerLayoutProps } from '@foxfire/screens'
 import { useLastPlayer } from '../store/lastPlayer'
 import { AccountSwitcher } from './AccountSwitcher'
 
@@ -18,13 +17,8 @@ export function Main({ children }: { children: ReactNode }): JSX.Element {
  * of those.
  */
 export function PlayerLayout({ account, children }: PlayerLayoutProps): JSX.Element {
-  const client = useClient()
   const remember = useLastPlayer((s) => s.remember)
-
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
-  })
+  const accounts = useMyAccounts()
 
   useEffect(() => {
     if (account) remember(account.id)

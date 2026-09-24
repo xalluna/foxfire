@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Account } from '@foxfire/core'
 import { SettingsRow, ghostButtonClass } from '@foxfire/ui'
-import { queryKeys, useClient } from '@foxfire/screens'
+import { queryKeys, useClient, useMyAccounts } from '@foxfire/screens'
 
 /**
  * The League accounts linked to you on this server, each with a way to give it up.
@@ -13,15 +13,9 @@ import { queryKeys, useClient } from '@foxfire/screens'
  * the half that needs no admin.
  */
 export function LinkedAccountRows(): JSX.Element {
-  const client = useClient()
-
   // The rail's query, so an unlink here takes the account off the rail too.
-  const accounts = useQuery({
-    queryKey: queryKeys.accounts(),
-    queryFn: () => client.accounts.list()
-  })
-
-  const yours = (accounts.data ?? []).filter((a) => a.isMine === true)
+  const accounts = useMyAccounts()
+  const yours = accounts.data ?? []
 
   return (
     <>

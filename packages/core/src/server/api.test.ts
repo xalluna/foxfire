@@ -71,13 +71,51 @@ describe('createServerApi', () => {
     expect(calls[0].path).toBe('/search?q=Hide%20on%20bush%23KR1')
   })
 
-  it('asks for every tracked player when the query is blank', async () => {
+  it('leaves the page to the server when a blank query names none', async () => {
     const { calls, request } = recorder(() => [])
     const api = createServerApi(request)
 
     await api.search.players('')
 
     expect(calls[0].path).toBe('/search?q=')
+  })
+
+  it('asks the finder for a page, and for only yours or only the claimed', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.search.players('', { limit: 50, offset: 100 })
+    await api.search.players('', { mine: true })
+    await api.search.players('fak', { claimed: true, limit: 50, offset: 0 })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/search?q=&limit=50&offset=100',
+      '/search?q=&mine=true',
+      '/search?q=fak&claimed=true&limit=50&offset=0'
+    ])
+  })
+
+  it('reads accounts one question at a time, never the whole server', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.accounts.mine()
+    await api.accounts.get('acc-1')
+    await api.accounts.find({ gameName: 'Hide on bush', tagLine: 'KR1' })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/riot-accounts/mine',
+      '/riot-accounts/acc-1',
+      '/riot-accounts/lookup?gameName=Hide%20on%20bush&tagLine=KR1'
+    ])
+  })
+
+  it('answers an account the server does not have with null', async () => {
+    const { request } = recorder(() => new ServerError('The server answered 404.', 404))
+    const api = createServerApi(request)
+
+    await expect(api.accounts.get('gone')).resolves.toBeNull()
+    await expect(api.accounts.find({ gameName: 'Nobody', tagLine: 'NA1' })).resolves.toBeNull()
   })
 
   describe('importer', () => {

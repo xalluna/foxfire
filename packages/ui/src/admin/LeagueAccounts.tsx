@@ -11,8 +11,18 @@ import * as Icon from '../components/icons'
 import { useRowAction } from './rowAction'
 
 export interface LeagueAccountsPageProps {
-  /** Every League account on the server, claimed or not. */
-  accounts: Account[] | undefined
+  /** How many League accounts the server tracks, claimed or not. Undefined while it loads. */
+  tracked: number | undefined
+
+  /** The pages of claimed accounts fetched so far, matching `claimedQuery`. Undefined while they load. */
+  claimed: Account[] | undefined
+  /** What the list of claims is filtered to — a name, a tag or a whole Riot ID. */
+  claimedQuery: string
+  onClaimedQueryChange: (query: string) => void
+  /** Whether there is another page of claims after `claimed`. */
+  hasMoreClaimed: boolean
+  loadingMoreClaimed: boolean
+  onShowMoreClaimed: () => void
 
   /**
    * Starts tracking an account nobody here has claimed, and backfills it.
@@ -40,7 +50,13 @@ export interface LeagueAccountsPageProps {
  * admin added, and of every account an import brought across.
  */
 export function LeagueAccountsPage({
-  accounts,
+  tracked,
+  claimed,
+  claimedQuery,
+  onClaimedQueryChange,
+  hasMoreClaimed,
+  loadingMoreClaimed,
+  onShowMoreClaimed,
   onAddAccount,
   onUnlink
 }: LeagueAccountsPageProps): JSX.Element {
@@ -49,8 +65,16 @@ export function LeagueAccountsPage({
       title="League accounts"
       intro="Everybody this server keeps match history for. Anybody signed in can find a tracked account and read its games; only whoever claimed one can type its LP."
     >
-      <TrackedAccountsCard accounts={accounts} onAdd={onAddAccount} />
-      <LinkedAccountsCard accounts={accounts} onUnlink={onUnlink} />
+      <TrackedAccountsCard tracked={tracked} onAdd={onAddAccount} />
+      <LinkedAccountsCard
+        claimed={claimed}
+        query={claimedQuery}
+        onQueryChange={onClaimedQueryChange}
+        hasMore={hasMoreClaimed}
+        loadingMore={loadingMoreClaimed}
+        onShowMore={onShowMoreClaimed}
+        onUnlink={onUnlink}
+      />
     </SettingsPage>
   )
 }
@@ -70,10 +94,10 @@ export function LeagueAccountsPage({
  * thought to press refresh would read as one that did not work.
  */
 function TrackedAccountsCard({
-  accounts,
+  tracked,
   onAdd
 }: {
-  accounts: Account[] | undefined
+  tracked: number | undefined
   onAdd: (input: RiotIdInput) => Promise<Account>
 }): JSX.Element {
   const [example] = useState(randomExampleRiotId)
@@ -83,7 +107,6 @@ function TrackedAccountsCard({
   const [added, setAdded] = useState<string | null>(null)
 
   const parsed = parseRiotId(value)
-  const tracked = accounts?.length ?? 0
 
   const submit = (): void => {
     if (!parsed) {
@@ -157,7 +180,7 @@ function TrackedAccountsCard({
         description="Everything this server keeps history for, claimed or not."
         control={
           <span className="text-sm tabular-nums text-text-dim">
-            {accounts === undefined ? '—' : tracked}
+            {tracked === undefined ? '—' : tracked}
           </span>
         }
       />
@@ -179,14 +202,24 @@ function TrackedAccountsCard({
  * claims it again the ordinary way.
  */
 function LinkedAccountsCard({
-  accounts,
+  claimed,
+  query,
+  onQueryChange,
+  hasMore,
+  loadingMore,
+  onShowMore,
   onUnlink
 }: {
-  accounts: Account[] | undefined
+  claimed: Account[] | undefined
+  query: string
+  onQueryChange: (query: string) => void
+  hasMore: boolean
+  loadingMore: boolean
+  onShowMore: () => void
   onUnlink: (accountId: string) => Promise<AdminActionResult>
 }): JSX.Element {
   const unlink = useRowAction(onUnlink)
-  const claimed = (accounts ?? []).filter((account) => account.ownerUsername != null)
+  const typed = query.trim()
 
   return (
     <SettingsCard
@@ -199,15 +232,36 @@ function LinkedAccountsCard({
     >
       {unlink.error !== null && <StatusRow tone="error">{unlink.error}</StatusRow>}
 
-      {accounts !== undefined && claimed.length === 0 && (
-        <EmptyState
-          icon={<Icon.Server />}
-          title="Nobody has claimed an account yet"
-          description="Members claim their own by signing in to the League client with Foxfire connected."
+      {/* A page at a time, so an admin looking for one claim among many
+          finds it by name rather than by scrolling. */}
+      <SettingsBlock>
+        <input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Find a claimed account by name or Riot ID"
+          spellCheck={false}
+          aria-label="Find a claimed account"
+          className={clsx(inputClass, 'w-full')}
         />
+      </SettingsBlock>
+
+      {claimed !== undefined && claimed.length === 0 && (
+        typed.length > 0 ? (
+          <EmptyState
+            icon={<Icon.Search />}
+            title="No claimed account by that name"
+            description={`Nobody has claimed an account matching ${typed}. It may be tracked and unclaimed — the finder lists those too.`}
+          />
+        ) : (
+          <EmptyState
+            icon={<Icon.Server />}
+            title="Nobody has claimed an account yet"
+            description="Members claim their own by signing in to the League client with Foxfire connected."
+          />
+        )
       )}
 
-      {claimed.map((account) => (
+      {claimed?.map((account) => (
         <LinkedAccountRow
           key={account.id}
           account={account}
@@ -215,6 +269,14 @@ function LinkedAccountsCard({
           unlinking={unlink.pendingId === account.id}
         />
       ))}
+
+      {hasMore && (
+        <div className="flex justify-center px-4 py-3">
+          <button type="button" className={ghostButtonClass} onClick={onShowMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading…' : 'Show more'}
+          </button>
+        </div>
+      )}
     </SettingsCard>
   )
 }

@@ -84,7 +84,9 @@ const api: Api = {
     }
   },
   accounts: {
-    list: () => ipcRenderer.invoke(CH.accounts.list),
+    mine: () => ipcRenderer.invoke(CH.accounts.mine),
+    get: (accountId) => ipcRenderer.invoke(CH.accounts.get, accountId),
+    find: (riotId) => ipcRenderer.invoke(CH.accounts.find, riotId),
     getHome: () => ipcRenderer.invoke(CH.accounts.getHome),
     add: (input) => ipcRenderer.invoke(CH.accounts.add, input),
     link: (input) => ipcRenderer.invoke(CH.accounts.link, input),
@@ -290,7 +292,7 @@ const api: Api = {
     openWindow: () => ipcRenderer.invoke(CH.archives.openWindow)
   },
   search: {
-    players: (query) => ipcRenderer.invoke(CH.search.players, query)
+    players: (query, options) => ipcRenderer.invoke(CH.search.players, query, options)
   },
   telemetry: {
     getState: () => ipcRenderer.invoke(CH.telemetry.getState),

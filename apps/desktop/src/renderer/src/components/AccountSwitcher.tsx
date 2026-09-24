@@ -26,7 +26,7 @@ export function AccountSwitcher({
   accounts,
   activeAccountId
 }: {
-  /** Every account the app can read, which on a server is everybody's. */
+  /** Yours: on a server the ones you have claimed, locally every one. */
   accounts: Account[]
   /** The account whose page is open, if any. */
   activeAccountId: string | null
@@ -57,17 +57,12 @@ export function AccountSwitcher({
     }
   })
 
-  // Read off the accounts rather than the connection: a server says whose each
-  // one is and a local database never does, so this is right from the first
-  // render — not a flash of everybody's avatars while the connection loads.
-  const yours = accounts.filter((a) => a.isMine !== false)
-
   return (
     <AccountRail
-      accounts={yours}
+      accounts={accounts}
       activeAccountId={activeAccountId}
       onSelect={(id) => {
-        const account = yours.find((a) => a.id === id)
+        const account = accounts.find((a) => a.id === id)
         if (account) switchPlayer(account)
       }}
       onSetHome={(id) => setHome.mutate(id)}
