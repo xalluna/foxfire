@@ -126,11 +126,12 @@ export interface FoxfireData {
   rank: {
     /**
      * Every reading in the range, whole — the one list that grows which is not
-     * paged. The graph draws a line through all of them and reads milestones
-     * off neighbouring pairs, so a page would leave a gap and a cap would start
-     * the line late. The range bounds it instead: about one reading per ranked
-     * game, a few hundred for the thirty days the screen opens on. The profile
-     * reads `trend` rather than this; making "all" cheaper as seasons pile up is
+     * paged. Milestones are read off neighbouring pairs and the change over the
+     * period counts every game, so a page would leave a gap and a cap would
+     * start the line late. The range bounds it instead: about one reading per
+     * ranked game, a few hundred for the thirty days the screen opens on. The
+     * graph thins it to closes on the client (rankRangeCloses); the profile
+     * reads `trend` rather than this. Making "all" cheaper as seasons pile up is
      * separate work — see CLAUDE.md.
      */
     history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>

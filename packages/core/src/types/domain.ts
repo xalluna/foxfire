@@ -414,13 +414,14 @@ export type RankTrendReading = Pick<
 >
 
 /**
- * One day's close on the profile's rank graph.
+ * One close on a rank graph — a day's on the profile, a day's or six hours' on
+ * the Rank page.
  *
  * Always a real reading, repeated onto the day it closed — never an average, so
  * a tooltip can only ever show a rank somebody actually held.
  */
 export interface RankTrendPoint {
-  /** Where it is drawn: the end of its day, `to − k·24h`. Never the reading's own time. */
+  /** Where it is drawn: the end of its span, `to − k·step`. Never the reading's own time. */
   at: number
   tier: string | null
   rank: string | null
@@ -436,8 +437,8 @@ export interface RankTrendPoint {
  * The last thirty days of one queue, thinned to a close a day.
  *
  * Bounded by construction at 31 points, whatever the history holds — the
- * profile's graph, where the Rank page's whole line would be hundreds of
- * readings drawn 300px wide. See rules/rankTrend.ts.
+ * profile's graph, where every reading in the month would be hundreds of
+ * points drawn 300px wide. See rules/rankTrend.ts.
  */
 export interface RankTrend {
   /** The window, epoch milliseconds: thirty days back from `to`, which is now. */
@@ -447,6 +448,23 @@ export interface RankTrend {
   points: RankTrendPoint[]
   /** The ladder change over the window, from the raw readings. Null across a season change. */
   netLp: number | null
+}
+
+/**
+ * The Rank page's graph: a range's readings as closes, by the profile's rule.
+ *
+ * A close every six hours over a week and every day over anything longer.
+ * Worked out on the client from the history it already reads — see
+ * rankRangeCloses in rules/rankTrend.ts — so it has no wire shape of its own.
+ */
+export interface RankCloses {
+  /** The window, epoch milliseconds. `to` is now, or a past season's last moment. */
+  from: number
+  to: number
+  /** How far apart the closes are drawn. */
+  step: number
+  /** Oldest first, `step` apart except where the line breaks. */
+  points: RankTrendPoint[]
 }
 
 /**

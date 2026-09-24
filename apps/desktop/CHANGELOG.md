@@ -48,6 +48,12 @@ tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs Fo
   Flex, and All champions for the rest. The five are the Champions page's first five, so the list
   it opens on carries straight on. The recent-games block keeps its own three, for its own twenty
   games.
+- **The Rank page's graph is drawn the profile's way.** One point a day — the rank you closed the
+  day on — rather than one for every game, so a busy evening is where it ended instead of a
+  sawtooth of wins and losses, and a quiet week is a flat line across its own days rather than a
+  straight line to the next game. Over 7 days it is a point every six hours, so a big session still
+  shows. Every point is a rank you actually held, never an average, 30 days is the same line the
+  profile draws, and the milestones beneath still list every promotion at the minute it happened.
 - **A way back from Rank and Champions.** Both pages open with a link back to the profile they
   came from, the way a game's own page already did.
 - **Rank and champions stay full size in a narrow window.** Below 1280 pixels wide the cards move
@@ -123,10 +129,11 @@ tab is gone, too: it redrew the scoreboard League already shows on Tab. Needs Fo
   them.
 - Reads the lists of Foxfire Server 0.4.0's API version 3, and no older server's.
 - The profile's graph asks for thirty days as a close a day — the last reading of each day, at most
-  31 points, never an average — rather than every reading in the month, which is what the Rank
-  page still reads. Connected to a server, Foxfire Server 0.4.0 answers it; on this PC alone the
-  same rule runs over the local database, and a shared corpus of cases holds the two to the same
-  answers.
+  31 points, never an average — rather than every reading in the month. Connected to a server,
+  Foxfire Server 0.4.0 answers it; on this PC alone the same rule runs over the local database, and
+  a shared corpus of cases holds the two to the same answers. The Rank page still reads every
+  reading, for its milestones and its change over the period, and runs the same rule over them
+  itself to draw its graph, against the whole season table so no close is carried past a reset.
 
 ## [0.14.0] — 2026-09-23
 

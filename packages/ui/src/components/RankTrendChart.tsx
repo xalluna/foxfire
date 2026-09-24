@@ -31,9 +31,11 @@ function daysAgo(days: number): string {
 /**
  * The profile's rank graph: thirty days, a close a day.
  *
- * The small sibling of RankChart, drawn from the thinned series the server
- * sends for exactly this (see rules/rankTrend.ts) rather than from every
- * reading. The x axis is the whole month whatever was played in it, so a
+ * The small sibling of RankChart, and drawn by the same rule — closes, see
+ * rules/rankTrend.ts — though from the thirty days the server thins for
+ * exactly this rather than from the Rank page's whole range, so its thirty
+ * days and the Rank page's are the same line. The x axis is the whole month
+ * whatever was played in it, so a
  * quiet fortnight is a flat stretch rather than a line that starts late — and
  * where it does start late, that is where tracking began.
  *
