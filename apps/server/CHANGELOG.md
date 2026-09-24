@@ -25,7 +25,6 @@ wrong there is still a record of it after the container has been restarted.
 
 ### Added
 
-
 - **A way back in.** An admin can make a password reset link for any member, on
   the Members page, and copy it wherever their community talks — this server
   sends no mail, so a link you can paste is the whole mechanism. It lasts 24
@@ -59,14 +58,12 @@ wrong there is still a record of it after the container has been restarted.
   shape, so 0.12.0 and 0.13.0 are refused rather than nudged, and neither has an
   updater to carry itself across. Tell your members to install 0.14.0 by hand;
   it is the last time you will have to.
-
 - **Tracked League accounts, added by an admin.** A League accounts page takes a Riot ID and starts tracking
   it — resolved through Riot as it is saved, so a name that does not exist is refused rather than
   filed, and backfilled straight away at the lowest priority. The account arrives claimed by nobody,
   the same state an imported one is in, and whoever it belongs to can still claim it from the
   desktop. There is no way to stop tracking one: matches are shared rows that other tracked players
   appear in, and what removing one should mean is a question for another release.
-
 - **Logs that outlast the container.** Everything the server logs is kept in the blob store it
   already uses for replays, in a `logs` container of its own, one file an hour, for 30 days — so the
   record of what went wrong is still there after the restart that fixed it. Nothing to set up: under
@@ -87,7 +84,6 @@ wrong there is still a record of it after the container has been restarted.
 
 ### Changed
 
-
 - **The address in `ADMIN_EMAIL` is now pinned to the account that holds it.**
   That account cannot change its email in the app, and nobody who is not already
   an admin can move onto that address. Registering with it grants the Admin role
@@ -101,7 +97,6 @@ wrong there is still a record of it after the container has been restarted.
   it. This is what lets a password change keep the device that made it — and it
   also fixes signing back in after being demoted or disabled, where the first
   device to return could be cut again by a stale one.
-
 - **Search finds the players this server tracks.** `GET /api/search` now takes `?q=` and answers out
   of the database — every tracked account for a blank query, and whatever matches a name, a tag or a
   whole Riot ID otherwise, each with its solo-queue rank. It used to resolve any Riot ID in the world
@@ -114,16 +109,35 @@ wrong there is still a record of it after the container has been restarted.
   timestamps, so a restart does not reopen the Riot budget. Recording a rank reading and writing LP
   are still the owner's: those assert something about somebody's account rather than ask for what
   Riot has already published.
+- **Importing a newer copy of a `stats.db` says what it did.** Keep using Foxfire on your own PC for
+  a few days, choose the newer copy of the same file, and what lands is what is new — that was always
+  so, but the result counted only what was added, so a server that already had everything and a file
+  it could not read looked exactly alike. It now says what was added and what the server already
+  had, the newest game and rank reading in the file, and anything it had to leave out and why.
+- **A re-import sends only what is new.** The importer asks which of the file's games the server
+  lacks and sends only those, and an account the server already knows is not looked up on Riot
+  again — so bringing a server up to date costs a fraction of the first import.
+- **Importing in the browser says to close Foxfire first.** A browser reads only the file you pick,
+  not the changes Foxfire keeps beside it while it is running, so the newest games can be missing.
+  The page says so before you start, and again beside the newest game in the file when an import
+  adds nothing.
 
 ### Removed
-
 
 - **The legacy root shim.** Desktop 0.12.0 called the API at the root, where the web client's pages
   are, and every such request was moved under `/api` before routing. 0.12.0 is off the allow list, so
   every desktop this server answers now asks for `/api` itself.
 
-### Under the hood
+### Fixed
 
+- **Games imported before their account could be resolved come back.** If Riot's key was down, or
+  the account had been renamed, an import stored its games where nothing could find them, and every
+  later import skipped them as already stored. The import that finally resolves the account now
+  moves them onto it, and says how many it moved.
+- **Choosing a file to import in the browser could do nothing at all.** The picker sometimes never
+  reported the choice back.
+
+### Under the hood
 
 - One new table, `PasswordResets`, alongside `Invites` and built the same way: a
   signed token that names a row, and the row alone deciding whether it has been
@@ -142,7 +156,6 @@ wrong there is still a record of it after the container has been restarted.
   newest desktop version from, so it belongs to the desktop installer. The
   container image is unaffected: `:latest` on GHCR still follows every server
   release.
-
 - The per-address search limit went from 30 a minute to 120, and the finder waits
   a quarter-second after the last keystroke before asking. Thirty was sized for a
   search that cost fourteen Riot requests and was sent by pressing a button; this
@@ -152,6 +165,16 @@ wrong there is still a record of it after the container has been restarted.
 - Tests cover the new search against a real SQL Server — that a blank query includes unclaimed
   accounts, that a tag and a pasted `name#tag` both match, and that rank is joined on — along with
   adding a tracked account, refusing a duplicate, and the sync cooldown.
+- `POST /api/admin/import/unstored-matches` takes a file's game ids and answers with the ones this
+  server does not hold. It is additive, so the API version did not move. Import batches answer with
+  what they took, what was already there and what they could not read, rather than a single count.
+- Moving stranded games onto an account's resolved id is the same move a Riot key rotation already
+  made, now one piece of code so the two cannot disagree. It happens in the transaction that records
+  the account's id, so a crash cannot leave the mapping filed with the games still stranded; a game
+  that already holds both ids is left alone and counted.
+- Tests against a real SQL Server import a file, add a game, a reading and an account, and import
+  again: only the new rows land, with LP worked out for the new game, a known account is not looked
+  up on Riot again, and games stored under an id nothing matched are moved once it resolves.
 - **Recordings on YouTube are in this build, switched off.** A desktop attaching the video it
   uploaded to its owner's game, every member watching it from that player's history — and only that
   player's — in the desktop or on a page of its own in the browser, and attaching a link by hand, are
@@ -175,7 +198,6 @@ wrong there is still a record of it after the container has been restarted.
   account's id rather than its puuid, which is re-resolved whenever the server's Riot key changes —
   and stores the YouTube video id and the markers as sent, never the video. Deleting a game takes its
   recordings with it.
-
 - Logging goes through Serilog, behind the `ILogger` everything already wrote to. The blob lines are
   compact JSON with the message rendered and as its template, and the trace id on each. The sinks a
   host can name are listed in code rather than discovered, because the single-file release archives

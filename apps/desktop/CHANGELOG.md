@@ -42,6 +42,7 @@ patch notes travel with it. Needs Foxfire Server 0.3.0.
   admin starts tracking somebody and where a claim is taken back.
 - **The sign-in form says what to do about a forgotten password**: ask whoever runs the server for a
   reset link.
+
 ### Changed
 
 - **Connected to a server, Foxfire installs the version that server accepts** rather than the
@@ -61,6 +62,12 @@ patch notes travel with it. Needs Foxfire Server 0.3.0.
   the owner's alone. Accounts an admin tracks belong to nobody, so nobody would ever have refreshed
   them; now any member can, and an account that was refreshed in the last two minutes is left alone
   so a busy evening cannot spend the server's Riot budget twice over.
+- **Importing a newer copy of a `stats.db` says what it did.** On Settings › Data & storage, choosing
+  a newer copy of a file you imported before adds only what is new — that was always so, but the
+  result counted only what was added, so a server that already had everything and a file it could
+  not read looked exactly alike. It now says what was added and what the server already had, the
+  newest game and rank reading in the file, and anything it had to leave out and why. Only the games
+  the server lacks are sent, so bringing a server up to date is far quicker than the first import.
 - **Needs Foxfire Server 0.3.0.** Search asks the server a different question, and everything above
   that touches your account is the server's to answer, so this version and older servers cannot talk
   to each other. A server that has not been updated says so, and its host needs to update it.
@@ -97,6 +104,9 @@ patch notes travel with it. Needs Foxfire Server 0.3.0.
   fits each app. Its query lives in the address, so a filtered list can be linked to.
 - Local-only mode searches its own database rather than Riot, the same as everywhere else, and the
   ad-hoc lookup service is gone.
+- The `stats.db` import asks the server which of the file's games it lacks before sending any, and
+  reads them in a fixed order — creation time, then id — so two games from the same millisecond
+  cannot fall either side of a page unpredictably.
 - Database migration 014: the YouTube copy on each recording, whether its file was deleted on
   purpose, the upload queue, and which servers have been told about each video.
 - **Recordings on YouTube are in this build, switched off.** Uploading a recording to YouTube,
