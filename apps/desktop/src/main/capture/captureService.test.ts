@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Scoreboard, ScoreboardPlayer } from '@shared/types'
+import type { Scoreboard, ScoreboardPlayer } from '../liveClient/scoreboardMapping'
 import type { RecordStateEvent } from './recordEvents'
 
 /**
@@ -191,31 +191,7 @@ function fireConnectionChange(): void {
 
 /** The one player the service actually reads: the account being recorded. */
 function self(): ScoreboardPlayer {
-  return {
-    slot: 0,
-    gameName: 'Faker',
-    tagLine: 'NA1',
-    isSelf: true,
-    isBot: false,
-    isDead: false,
-    respawnTimer: 0,
-    level: 1,
-    position: null,
-    teamId: 100,
-    championId: 112,
-    championName: 'Viktor',
-    spell1Id: 4,
-    spell2Id: 14,
-    keystoneId: null,
-    secondaryTreeId: null,
-    items: [0, 0, 0, 0, 0, 0, 0],
-    roleBoundItem: 0,
-    kills: 0,
-    deaths: 0,
-    assists: 0,
-    creepScore: 0,
-    wardScore: 0
-  }
+  return { gameName: 'Faker', tagLine: 'NA1', isSelf: true, championId: 112 }
 }
 
 /** Arms, polls once, and lets OBS confirm — a game recording, in three steps. */
@@ -249,7 +225,7 @@ beforeEach(() => {
   live.connection = 'disconnected'
   live.connectionListeners = []
   live.recordListeners = []
-  live.board = { gameMode: 'CLASSIC', mapName: "Summoner's Rift", gameTime: 12, players: [self()] }
+  live.board = { gameTime: 12, players: [self()] }
   live.events = [{ EventName: 'GameStart' }]
   live.startObsCalls = 0
   live.startRecordCalls = 0

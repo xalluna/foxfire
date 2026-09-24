@@ -37,7 +37,6 @@ import type {
   RiotKeyLimits,
   RiotKeyType,
   RoflSettings,
-  Scoreboard,
   ServerAuthResult,
   ServerCredentials,
   ServerProbe,
@@ -233,15 +232,6 @@ export interface Api {
   }
   assets: {
     get: () => Promise<AssetManifest>
-  }
-  /**
-   * The in-game scoreboard, read from the game running on this machine over the
-   * Live Client Data API on 127.0.0.1:2999. Costs no Riot call and needs no key,
-   * so it works identically in local-only and server mode.
-   */
-  liveClient: {
-    /** Null whenever no game is running on this machine, which is not an error. */
-    scoreboard: (accountId: string) => Promise<Scoreboard | null>
   }
   champions: FoxfireData['champions']
   seasons: FoxfireData['seasons']

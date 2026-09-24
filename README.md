@@ -1,6 +1,6 @@
 # Foxfire
 
-An ad-free desktop app for viewing League of Legends stats and live games — a private alternative to op.gg for your own accounts. Foxfire records your ranked games and keeps the LP ledger for every season you have played.
+An ad-free desktop app for viewing League of Legends stats — a private alternative to op.gg for your own accounts. Foxfire records your ranked games and keeps the LP ledger for every season you have played.
 
 It runs entirely on your own machine by default. It can also read from a **Foxfire Server** that you or your community hosts, so match history, rank and LP are shared rather than kept per PC. There is no central Foxfire service — anyone can run one, and recordings, Riot replays and the League client connection always stay on your machine either way. See [apps/server](apps/server) to host one.
 
@@ -15,7 +15,6 @@ Built with Electron, React, and TypeScript. All data comes from **Riot's officia
 - **Multi-account tracking** — add your main and alt accounts, switch between them in the sidebar
 - **Profile & rank** — solo/duo and flex tier, LP, win/loss, win rate
 - **Match history** — expandable rows showing all 10 participants with items, runes, summoner spells, CS, gold, and damage
-- **Live game** — the live scoreboard of the match running on this PC: levels, items, runes, KDA, CS and vision, updated as it plays. Read from the game itself over the Live Client Data API, so it costs no Riot call and works without an API key
 - **Champions** — Riot's mastery points/levels alongside win rates computed locally from your synced games
 - **Ad-hoc search** — look up any summoner without saving them
 - **Optional server** — join one your community hosts to share match history, rank and LP; local-only stays a first-class mode
@@ -96,7 +95,7 @@ src/
   main/         Electron main process — the only place that touches Riot's API or SQLite
     riot/       API client, rate limiter, per-endpoint wrappers
     db/         node:sqlite connection, migrations, repositories
-    services/   account, sync, live game, mastery, search, settings, Data Dragon, the server
+    services/   account, sync, mastery, search, settings, Data Dragon, the server
     ipc/        channel names + handlers
     security/   encrypted API key storage
   preload/      contextBridge — exposes a typed `window.api` surface

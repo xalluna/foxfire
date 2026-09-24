@@ -12,7 +12,8 @@ changes you would never notice while using the app.
 On a server, the account rail is a way between your own accounts rather than a list of everybody's,
 and looking after them happens in Settings. Foxfire also stops downloading every account on the
 server to find the one it is showing, which is what lets a server's community grow without every
-desktop on it slowing down. Needs Foxfire Server 0.4.0.
+desktop on it slowing down. The Live game tab is gone, too: it redrew the scoreboard League already
+shows on Tab. Needs Foxfire Server 0.4.0.
 
 ### Added
 
@@ -38,12 +39,21 @@ desktop on it slowing down. Needs Foxfire Server 0.4.0.
   Foxfire used to open on the first account the server had — somebody else's history. It now says
   how to link yours, and that everybody else is in Search.
 
+### Removed
+
+- **The Live game tab.** It redrew the scoreboard League already shows on Tab, and had nothing to
+  show the rest of the time. Recording is unaffected: Foxfire still watches the game to know when
+  to start and stop, the title bar still says when a game is being recorded, and the dot on the
+  taskbar button still turns teal while a game is on and red while it is being recorded.
+
 ### Under the hood
 
 - Connected to a server, Foxfire asks for the accounts it needs — yours for the rail, the launch
   sync and the League client watcher, and the one a page names — instead of fetching every account
   the server tracks at launch and on nearly every page. Needs Foxfire Server 0.4.0, which added
   those reads.
+- The in-game reader keeps only what recording uses — the game clock, which player is you, and each
+  player's champion — and no longer reads items, runes, spells or scores.
 
 ## [0.14.0] — 2026-09-23
 

@@ -32,7 +32,7 @@ let lastDispatchAt = 0
 /**
  * Fed by the rate limiter's existing `dispatch` event, which until now had no
  * listeners at all. Doubles as the activity signal for the cadence below —
- * recent dispatches mean a sync or a live-game check is in flight, with no need
+ * recent dispatches mean a sync or a search is in flight, with no need
  * for this module to know anything about those services.
  */
 export function observeDispatch(depth: number): void {

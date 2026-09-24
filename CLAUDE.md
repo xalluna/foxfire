@@ -7,8 +7,8 @@ This is a monorepo. The repo root holds only the npm workspace (`package.json` +
 package, this file, the README, and `.github/`.
 
 - `apps/desktop` — the Electron app: main process, preload, the IPC client, and the desktop's
-  own screens (live game, captures, the recording player, telemetry, archives, the settings that
-  are about this PC).
+  own screens (captures, the recording player, telemetry, archives, the settings that are about
+  this PC).
 - `apps/server` — the Foxfire Server (.NET). Its API is under `/api`, and it hosts the web client
   at the root of the same address.
 - `apps/web` — the web client. Built into the server's image and archives and served by the server

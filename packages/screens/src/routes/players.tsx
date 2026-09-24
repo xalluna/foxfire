@@ -80,7 +80,7 @@ function Unwrapped({ children }: PlayerLayoutProps): JSX.Element {
  *
  * Returned unassembled, so an app can mount only the pages it has and hang its
  * own beside them: the desktop leaves out `lp`, which it opens as a window, and
- * adds its live game and captures pages.
+ * adds its captures page.
  */
 export function createPlayerRoutes<TParent extends AnyRoute>(
   parent: TParent,

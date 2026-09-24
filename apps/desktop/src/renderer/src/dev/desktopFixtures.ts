@@ -3,55 +3,15 @@ import type {
   Recording,
   RecordingEvent,
   Replay,
-  RoflSettings,
-  Scoreboard
+  RoflSettings
 } from '@shared/types'
-import {
-  C,
-  ITEMS_AD,
-  ITEMS_AP,
-  ITEMS_SUPPORT,
-  ITEMS_TANK,
-  K,
-  NOW,
-  ROLE_ITEM,
-  S,
-  FIXTURE_VIDEO_ID,
-  matchIdAt,
-  scenario
-} from '@foxfire/screens/dev'
+import { C, NOW, FIXTURE_VIDEO_ID, matchIdAt, scenario } from '@foxfire/screens/dev'
 
 /**
- * Fixtures only the desktop draws: a live game on this machine, recordings, Riot
- * replays on this disk, and archived League installs. The League data they
- * point at is the shared set in @foxfire/screens/dev.
+ * Fixtures only the desktop draws: recordings, Riot replays on this disk, and
+ * archived League installs. The League data they point at is the shared set in
+ * @foxfire/screens/dev.
  */
-
-/**
- * A board mid-game, already in lane order the way the mapper hands it over.
- *
- * Covers the states the row has to survive: the tracked account (slot 4), a
- * player who is dead and counting down (slot 3), a bot (slot 9), and a champion
- * the manifest has never heard of (slot 8), which is what a brand-new release
- * looks like on the day it ships.
- */
-export const SCOREBOARD: Scoreboard = {
-  gameMode: 'CLASSIC',
-  mapName: 'Map11',
-  gameTime: 847.5,
-  players: [
-    { slot: 1, gameName: 'Runnit Downy Jr', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'TOP', teamId: 100, championId: C.Sett, championName: 'Sett', spell1Id: S.Flash, spell2Id: S.Teleport, keystoneId: K.Conqueror[0], secondaryTreeId: K.Conqueror[1], items: ITEMS_TANK, roleBoundItem: ROLE_ITEM.TOP, kills: 3, deaths: 2, assists: 4, creepScore: 121, wardScore: 9.4 },
-    { slot: 2, gameName: 'phantomduval', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 10, position: 'JUNGLE', teamId: 100, championId: C.Vi, championName: 'Vi', spell1Id: S.Smite, spell2Id: S.Flash, keystoneId: K.Electrocute[0], secondaryTreeId: K.Electrocute[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.JUNGLE, kills: 5, deaths: 4, assists: 8, creepScore: 96, wardScore: 14.2 },
-    { slot: 0, gameName: 'Faker', tagLine: 'NA1', isSelf: true, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'MIDDLE', teamId: 100, championId: C.Viktor, championName: 'Viktor', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.ArcaneComet[0], secondaryTreeId: K.ArcaneComet[1], items: ITEMS_AP, roleBoundItem: ROLE_ITEM.MIDDLE, kills: 7, deaths: 1, assists: 5, creepScore: 154, wardScore: 11.8 },
-    { slot: 3, gameName: 'Killua', tagLine: 'NA1', isSelf: false, isBot: false, isDead: true, respawnTimer: 18.4, level: 11, position: 'BOTTOM', teamId: 100, championId: C.Kaisa, championName: "Kai'Sa", spell1Id: S.Flash, spell2Id: S.Heal, keystoneId: K.PressTheAttack[0], secondaryTreeId: K.PressTheAttack[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.BOTTOM, kills: 4, deaths: 6, assists: 3, creepScore: 143, wardScore: 8.1 },
-    { slot: 4, gameName: 'ward andersen', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 9, position: 'UTILITY', teamId: 100, championId: C.Thresh, championName: 'Thresh', spell1Id: S.Flash, spell2Id: S.Ignite, keystoneId: K.Grasp[0], secondaryTreeId: K.Grasp[1], items: ITEMS_SUPPORT, roleBoundItem: ROLE_ITEM.UTILITY, kills: 1, deaths: 5, assists: 12, creepScore: 24, wardScore: 41.6 },
-    { slot: 5, gameName: 'cpdd Ontario', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 12, position: 'TOP', teamId: 200, championId: C.Aatrox, championName: 'Aatrox', spell1Id: S.Teleport, spell2Id: S.Flash, keystoneId: K.Conqueror[0], secondaryTreeId: K.Conqueror[1], items: ITEMS_TANK, roleBoundItem: ROLE_ITEM.TOP, kills: 6, deaths: 3, assists: 2, creepScore: 138, wardScore: 7.2 },
-    { slot: 6, gameName: 'jg TTVritchhi', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 10, position: 'JUNGLE', teamId: 200, championId: C.LeeSin, championName: 'Lee Sin', spell1Id: S.Smite, spell2Id: S.Flash, keystoneId: K.LethalTempo[0], secondaryTreeId: K.LethalTempo[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.JUNGLE, kills: 2, deaths: 5, assists: 9, creepScore: 88, wardScore: 12.9 },
-    { slot: 7, gameName: 'StayyKawaii', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'MIDDLE', teamId: 200, championId: C.Ahri, championName: 'Ahri', spell1Id: S.Flash, spell2Id: S.Ignite, keystoneId: K.Electrocute[0], secondaryTreeId: K.Electrocute[1], items: ITEMS_AP, roleBoundItem: ROLE_ITEM.MIDDLE, kills: 5, deaths: 4, assists: 6, creepScore: 147, wardScore: 10.5 },
-    { slot: 8, gameName: 'Harrowhold', tagLine: 'NA1', isSelf: false, isBot: false, isDead: false, respawnTimer: 0, level: 11, position: 'BOTTOM', teamId: 200, championId: null, championName: 'Someone New', spell1Id: S.Flash, spell2Id: S.Heal, keystoneId: K.FirstStrike[0], secondaryTreeId: K.FirstStrike[1], items: ITEMS_AD, roleBoundItem: ROLE_ITEM.BOTTOM, kills: 8, deaths: 2, assists: 4, creepScore: 161, wardScore: 6.8 },
-    { slot: 9, gameName: 'Nami Bot', tagLine: 'BOT', isSelf: false, isBot: true, isDead: false, respawnTimer: 0, level: 9, position: 'UTILITY', teamId: 200, championId: C.Nami, championName: 'Nami', spell1Id: S.Flash, spell2Id: S.Exhaust, keystoneId: K.Grasp[0], secondaryTreeId: K.Grasp[1], items: ITEMS_SUPPORT, roleBoundItem: ROLE_ITEM.UTILITY, kills: 0, deaths: 7, assists: 10, creepScore: 18, wardScore: 33.1 }
-  ]
-}
 
 /** What every recording carries about YouTube before anything has happened. */
 const NOT_ON_YOUTUBE = { fileDeleted: false, youtube: null, upload: null, attachment: null } as const

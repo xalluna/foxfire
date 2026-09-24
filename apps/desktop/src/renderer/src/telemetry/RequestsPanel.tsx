@@ -133,8 +133,7 @@ export function RequestsPanel({ windowMs }: { windowMs: number }): JSX.Element {
 
         {rows.length === 0 && (
           <p className="p-8 text-center text-sm text-text-mute">
-            Nothing recorded in this window. Sync an account or check a live game to generate
-            traffic.
+            Nothing recorded in this window. Sync an account to generate traffic.
           </p>
         )}
       </div>

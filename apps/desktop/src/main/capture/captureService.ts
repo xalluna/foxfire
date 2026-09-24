@@ -6,6 +6,7 @@ import { setAppIconCapture } from '../appIcon'
 import { createLogger } from '../telemetry/logger'
 import { isNotRunning, liveClientGet } from '../liveClient/client'
 import { accountContext } from '../api/accountContext'
+import type { Scoreboard } from '../liveClient/scoreboardMapping'
 import { getScoreboard } from '../services/liveClientService'
 import { getCaptureSettings } from '../services/captureSettings'
 import { bindPendingRecordings, broadcastRecordingsChanged } from '../services/recordingService'
@@ -42,7 +43,7 @@ import {
 import { selfNameSet, toRecordingEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
 import { containsGameStart, gameReadiness } from './gameClock'
-import type { CaptureStatus, Scoreboard } from '@shared/types'
+import type { CaptureStatus } from '@shared/types'
 
 /**
  * Drives recording: watches for a game, tells OBS when to roll, and collects

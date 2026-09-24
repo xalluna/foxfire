@@ -4,11 +4,9 @@ import type { CaptureStatus, LcuStatus } from '@shared/types'
  * What the taskbar button is saying, derived from the two facts the app already
  * tracks: whether a game is on, and whether it is being recorded.
  *
- * The same convention the Live tab uses — see
- * src/renderer/src/components/LiveNavIcon.tsx, where teal means a game is on
- * and red means it is being kept. This adds a fourth state that has no in-app
- * equivalent on that icon: amber, for a game that is *not* being recorded when
- * it was meant to be.
+ * Teal means a game is on and red means it is being kept, with a fourth state
+ * for what would otherwise go unnoticed: amber, for a game that is *not* being
+ * recorded when it was meant to be.
  */
 export type AppIconState = 'none' | 'game' | 'stalled' | 'recording'
 
