@@ -6,6 +6,7 @@ import { tierCrest, tierLabel } from '../lib/rank'
 import { Asset } from '../components/Asset'
 import { EmptyState } from '../components/EmptyState'
 import { MatchListSkeleton } from '../components/Skeleton'
+import { ShowMoreButton } from '../components/ShowMore'
 import * as Icon from '../components/icons'
 
 /**
@@ -125,6 +126,7 @@ export function PlayersPage({
   query,
   onQueryChange,
   players,
+  total,
   yours,
   loading,
   hasMore,
@@ -141,6 +143,8 @@ export function PlayersPage({
   onQueryChange: (query: string) => void
   /** The pages of matches fetched so far — of everybody, when nothing is typed. */
   players: PlayerSearchResult[]
+  /** How many match altogether, across every page. */
+  total: number
   /** Your own accounts, which head the list while nothing is typed. */
   yours: PlayerSearchResult[]
   loading: boolean
@@ -156,15 +160,7 @@ export function PlayersPage({
   const typed = query.trim()
   const others = players.filter((p) => p.account.isMine === false)
 
-  const showMore = hasMore && (
-    <button
-      onClick={onShowMore}
-      disabled={loadingMore}
-      className="w-full border-t border-hairline py-2.5 text-sm text-text-dim transition hover:bg-surface hover:text-accent disabled:opacity-50"
-    >
-      {loadingMore ? 'Loading…' : 'Show more'}
-    </button>
-  )
+  const showMore = hasMore && <ShowMoreButton onClick={onShowMore} loading={loadingMore} />
 
   const rows = (list: PlayerSearchResult[]): JSX.Element => (
     <ul className="divide-y divide-hairline/60">
@@ -209,9 +205,7 @@ export function PlayersPage({
             description={`This server keeps history for the accounts it tracks, and none of them match ${typed}. An administrator can start tracking somebody new.`}
           />
         ) : (
-          <Section
-            label={`${players.length}${hasMore ? '+' : ''} ${players.length === 1 && !hasMore ? 'player' : 'players'}`}
-          >
+          <Section label={`${total} ${total === 1 ? 'player' : 'players'}`}>
             {rows(players)}
             {showMore}
           </Section>

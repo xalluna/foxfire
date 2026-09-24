@@ -18,6 +18,15 @@ import type { QueueType, RankHistory, RankRange, Season } from '@shared/types'
 
 const log = createLogger('rank')
 
+/**
+ * The rank graph's readings and milestones over a range, whole.
+ *
+ * Not paged, on purpose — the one list that grows which is read in one go
+ * (see "Lists that grow are paged" in CLAUDE.md). The graph draws a line
+ * through every reading and milestones come from neighbouring pairs, so it
+ * needs all of them; the range is what bounds it, at about one reading per
+ * ranked game.
+ */
 export function getRankHistory(
   accountId: number,
   queueType: QueueType,

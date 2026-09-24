@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
 using Foxfire.Api.Features.Search;
 using Foxfire.Core;
 using Foxfire.Data;
@@ -99,7 +100,7 @@ public class SearchTests(FoxfireServerFixture server)
         await db.SaveChangesAsync();
     }
 
-    private async Task<IReadOnlyList<PlayerSearchResponse>> SearchAsync(
+    private static async Task<Page<PlayerSearchResponse>> SearchPageAsync(
         HttpClient client,
         string query,
         string extra = "")
@@ -109,9 +110,15 @@ public class SearchTests(FoxfireServerFixture server)
 
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<IReadOnlyList<PlayerSearchResponse>>()
+        return await response.Content.ReadFromJsonAsync<Page<PlayerSearchResponse>>()
                ?? throw new InvalidOperationException("Search answered with no body.");
     }
+
+    private static async Task<IReadOnlyList<PlayerSearchResponse>> SearchAsync(
+        HttpClient client,
+        string query,
+        string extra = "") =>
+        (await SearchPageAsync(client, query, extra)).Items;
 
     [Fact]
     public async Task The_unclaimed_are_found_as_well_as_the_claimed()
@@ -141,9 +148,10 @@ public class SearchTests(FoxfireServerFixture server)
         // More than a page of accounts on the server, whatever else is here.
         await TrackManyAsync($"Crowd{Guid.NewGuid().ToString("N")[..8]}", SearchPlayersRequest.DefaultLimit + 1);
 
-        var found = await SearchAsync(client, "");
+        var found = await SearchPageAsync(client, "");
 
-        Assert.Equal(SearchPlayersRequest.DefaultLimit, found.Count);
+        Assert.Equal(SearchPlayersRequest.DefaultLimit, found.Items.Count);
+        Assert.True(found.Total > SearchPlayersRequest.DefaultLimit);
     }
 
     [Fact]
@@ -155,15 +163,20 @@ public class SearchTests(FoxfireServerFixture server)
         var stem = $"Pager{Guid.NewGuid().ToString("N")[..8]}";
         await TrackManyAsync(stem, 5);
 
-        var first = await SearchAsync(client, stem, "&limit=2");
-        var second = await SearchAsync(client, stem, "&limit=2&offset=2");
-        var last = await SearchAsync(client, stem, "&limit=2&offset=4");
+        var first = await SearchPageAsync(client, stem, "&limit=2");
+        var second = await SearchPageAsync(client, stem, "&limit=2&offset=2");
+        var last = await SearchPageAsync(client, stem, "&limit=2&offset=4");
+        var past = await SearchPageAsync(client, stem, "&limit=2&offset=6");
 
-        Assert.Equal(new[] { $"{stem}000", $"{stem}001" }, first.Select(p => p.Account.GameName));
-        Assert.Equal(new[] { $"{stem}002", $"{stem}003" }, second.Select(p => p.Account.GameName));
+        Assert.Equal(new[] { $"{stem}000", $"{stem}001" }, first.Items.Select(p => p.Account.GameName));
+        Assert.Equal(new[] { $"{stem}002", $"{stem}003" }, second.Items.Select(p => p.Account.GameName));
+        Assert.Equal(new[] { $"{stem}004" }, last.Items.Select(p => p.Account.GameName));
 
-        // A short page is how a client knows there is nothing after it.
-        Assert.Equal(new[] { $"{stem}004" }, last.Select(p => p.Account.GameName));
+        // Every page says how many there are under the filter, which is how a
+        // client knows there is nothing after the last one; asking past the
+        // end is not an error, just nothing.
+        Assert.All(new[] { first, second, last, past }, page => Assert.Equal(5, page.Total));
+        Assert.Empty(past.Items);
     }
 
     [Fact]
@@ -175,9 +188,10 @@ public class SearchTests(FoxfireServerFixture server)
         var stem = $"Greedy{Guid.NewGuid().ToString("N")[..8]}";
         await TrackManyAsync(stem, SearchPlayersRequest.MaxLimit + 1);
 
-        var found = await SearchAsync(client, stem, "&limit=100000");
+        var found = await SearchPageAsync(client, stem, "&limit=100000");
 
-        Assert.Equal(SearchPlayersRequest.MaxLimit, found.Count);
+        Assert.Equal(SearchPlayersRequest.MaxLimit, found.Items.Count);
+        Assert.Equal(SearchPlayersRequest.MaxLimit + 1, found.Total);
     }
 
     [Fact]

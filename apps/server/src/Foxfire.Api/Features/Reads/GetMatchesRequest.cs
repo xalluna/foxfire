@@ -7,19 +7,27 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Features.Reads;
 
 /// <summary>
-/// A page of match history.
+/// A page of match history, and how many games there are under the same queue
+/// filter.
 ///
 /// The page size is capped rather than trusted. An uncapped limit is one typo
 /// away from asking a shared server for somebody's entire history as a single
 /// response, and nothing renders more than a page at a time anyway.
 /// </summary>
-public sealed record GetMatchesRequest(Guid RiotAccountId, int Limit, int Offset, int? QueueId)
-    : IDomainRequest<IReadOnlyList<MatchSummaryResponse>>;
+public sealed record GetMatchesRequest(Guid RiotAccountId, int? Limit, int? Offset, int? QueueId)
+    : IDomainRequest<Page<MatchSummaryResponse>>
+{
+    /// <summary>
+    /// Smaller than the other lists' page: a match row carries six subqueries,
+    /// and twenty is already more than a window shows.
+    /// </summary>
+    public const int DefaultLimit = 20;
+}
 
 internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads matches)
-    : IDomainRequestHandler<GetMatchesRequest, IReadOnlyList<MatchSummaryResponse>>
+    : IDomainRequestHandler<GetMatchesRequest, Page<MatchSummaryResponse>>
 {
-    public async Task<Response<IReadOnlyList<MatchSummaryResponse>>> Handle(
+    public async Task<Response<Page<MatchSummaryResponse>>> Handle(
         GetMatchesRequest request,
         CancellationToken cancellationToken)
     {
@@ -28,16 +36,22 @@ internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads m
         var account = await db.RiotAccounts.AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == request.RiotAccountId, cancellationToken);
 
-        if (account is null) return Response<IReadOnlyList<MatchSummaryResponse>>.NotFound();
+        if (account is null) return Response<Page<MatchSummaryResponse>>.NotFound();
 
-        return Response<IReadOnlyList<MatchSummaryResponse>>.Success(
-            await matches.MatchListAsync(
+        var page = PageRequest.Of(request.Limit, request.Offset, GetMatchesRequest.DefaultLimit);
+        var total = await matches.MatchCountAsync(account.Puuid, request.QueueId, cancellationToken);
+
+        IReadOnlyList<MatchSummaryResponse> rows = page.Offset >= total
+            ? []
+            : await matches.MatchListAsync(
                 account.Puuid,
                 request.RiotAccountId,
-                Math.Clamp(request.Limit, 1, 100),
-                Math.Max(request.Offset, 0),
+                page.Limit,
+                page.Offset,
                 request.QueueId,
-                cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken);
+
+        return Response<Page<MatchSummaryResponse>>.Success(new Page<MatchSummaryResponse>(rows, total));
     }
 }
 

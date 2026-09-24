@@ -73,8 +73,10 @@ export const httpApi: ServerBackedApi = {
   dashboard: {
     ...shared.dashboard,
 
-    matchList: async (accountId, limit, offset, queueId) =>
-      withLocalArtefacts(accountId, await shared.dashboard.matchList(accountId, limit, offset, queueId))
+    matchList: async (accountId, limit, offset, queueId) => {
+      const page = await shared.dashboard.matchList(accountId, limit, offset, queueId)
+      return { total: page.total, items: await withLocalArtefacts(accountId, page.items) }
+    }
   },
 
   // The same routes the web client calls. Attaching from here, with the

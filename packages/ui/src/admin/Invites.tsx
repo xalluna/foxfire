@@ -5,11 +5,19 @@ import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, inputClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
+import { ShowMoreButton } from '../components/ShowMore'
 import * as Icon from '../components/icons'
 
 export interface InvitesPageProps {
-  invites: AdminInvite[]
+  /** Every invite that can still be used. They expire, so this is never long. */
+  outstanding: AdminInvite[]
+  /** The pages of used invites fetched so far, most recently used first. */
+  used: AdminInvite[]
   invitesLoading: boolean
+  /** Whether there is another page of used invites after `used`. */
+  hasMoreUsed: boolean
+  loadingMoreUsed: boolean
+  onShowMoreUsed: () => void
   publicSignup: boolean
   settingsLoading: boolean
 
@@ -30,8 +38,12 @@ export interface InvitesPageProps {
  * reach the box that sends an invite.
  */
 export function InvitesPage({
-  invites,
+  outstanding,
+  used,
   invitesLoading,
+  hasMoreUsed,
+  loadingMoreUsed,
+  onShowMoreUsed,
   publicSignup,
   settingsLoading,
   onSetPublicSignup,
@@ -89,8 +101,12 @@ export function InvitesPage({
       </SettingsCard>
 
       <Invites
-        invites={invites}
+        outstanding={outstanding}
+        used={used}
         loading={invitesLoading}
+        hasMoreUsed={hasMoreUsed}
+        loadingMoreUsed={loadingMoreUsed}
+        onShowMoreUsed={onShowMoreUsed}
         publicSignup={publicSignup}
         onCreate={onCreateInvite}
         onRevoke={(id) => act(() => onRevokeInvite(id))}
@@ -104,16 +120,24 @@ export function InvitesPage({
 /* -------------------------------------------------------------------------- */
 
 function Invites({
-  invites,
+  outstanding,
+  used,
   loading,
+  hasMoreUsed,
+  loadingMoreUsed,
+  onShowMoreUsed,
   publicSignup,
   onCreate,
   onRevoke,
   onCopy,
   onError
 }: {
-  invites: AdminInvite[]
+  outstanding: AdminInvite[]
+  used: AdminInvite[]
   loading: boolean
+  hasMoreUsed: boolean
+  loadingMoreUsed: boolean
+  onShowMoreUsed: () => void
   publicSignup: boolean
   onCreate: (email: string) => Promise<AdminInvite>
   onRevoke: (id: string) => void
@@ -137,9 +161,6 @@ function Invites({
       .catch((err: unknown) => onError(err instanceof Error ? err.message : String(err)))
       .finally(() => setCreating(false))
   }
-
-  const outstanding = invites.filter((i) => i.isOpen)
-  const used = invites.filter((i) => i.redeemedAt !== null)
 
   return (
     <SettingsCard
@@ -238,6 +259,8 @@ function Invites({
           control={<span className="text-2xs text-text-mute">Used</span>}
         />
       ))}
+
+      {hasMoreUsed && <ShowMoreButton variant="settings" onClick={onShowMoreUsed} loading={loadingMoreUsed} />}
     </SettingsCard>
   )
 }

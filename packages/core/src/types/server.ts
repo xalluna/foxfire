@@ -5,6 +5,8 @@
  * these: the desktop from its main process, the web client from the browser.
  */
 
+import type { PageOptions } from './domain'
+
 /**
  * What a server said about itself when asked, before anybody typed a password.
  *
@@ -259,6 +261,12 @@ export interface AdminPasswordReset {
   link: string
   createdAt: string
   expiresAt: string
+}
+
+/** Which page of the members, and whose name or address to look for. */
+export interface AdminUserQuery extends PageOptions {
+  /** Part of a username or email, any case. Blank or absent is everybody. */
+  q?: string
 }
 
 /** What to change about somebody. Undefined leaves a field alone. */

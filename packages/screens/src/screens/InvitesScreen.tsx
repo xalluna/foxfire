@@ -1,8 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
 import { InvitesPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { queryKeys } from '../queries/keys'
+import { nextOffset, pageItems } from '../queries/paging'
+
+/** Used invites per page. */
+const PAGE_SIZE = 50
 
 /** How somebody gets an account on the server you administer. */
 export function InvitesScreen(): JSX.Element {
@@ -10,9 +14,18 @@ export function InvitesScreen(): JSX.Element {
   const platform = usePlatform()
   const queryClient = useQueryClient()
 
-  const invites = useQuery({
-    queryKey: queryKeys.admin.invites(),
-    queryFn: () => client.admin.invites()
+  // The open ones whole — they expire, so there are never many — and the used
+  // ones, which are everybody who ever joined this way, a page at a time.
+  const outstanding = useQuery({
+    queryKey: queryKeys.admin.openInvites(),
+    queryFn: () => client.admin.openInvites()
+  })
+
+  const used = useInfiniteQuery({
+    queryKey: queryKeys.admin.usedInvites(),
+    queryFn: ({ pageParam }) => client.admin.usedInvites({ limit: PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset
   })
 
   const settings = useQuery({
@@ -35,8 +48,12 @@ export function InvitesScreen(): JSX.Element {
 
   return (
     <InvitesPage
-      invites={invites.data ?? []}
-      invitesLoading={invites.isPending}
+      outstanding={outstanding.data ?? []}
+      used={pageItems(used.data, (invite) => invite.id)}
+      invitesLoading={outstanding.isPending || used.isPending}
+      hasMoreUsed={used.hasNextPage}
+      loadingMoreUsed={used.isFetchingNextPage}
+      onShowMoreUsed={() => void used.fetchNextPage()}
       publicSignup={settings.data?.publicSignup ?? true}
       settingsLoading={settings.isPending}
       onSetPublicSignup={async (on) => {

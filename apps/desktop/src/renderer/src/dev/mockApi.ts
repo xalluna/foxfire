@@ -8,6 +8,8 @@ import type {
   CaptureStatus,
   EmailChange,
   LcuStatus,
+  Page,
+  PageOptions,
   PasswordChange,
   QueueType,
   ObsValidation,
@@ -60,6 +62,8 @@ import {
   buildRecordingDescription,
   renderRecordingTitle
 } from '@foxfire/core/youtube'
+import { pageOf } from '@foxfire/core'
+import { canUploadRecording } from '@shared/uploadEligibility'
 import {
   RECORDINGS,
   RECORDING_EVENTS,
@@ -752,7 +756,11 @@ export const mockApi: Api = {
     reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
   },
   recordings: {
-    list: (accountId: string): Promise<Recording[]> => delay(RECORDINGS[accountId] ?? [], 220),
+    list: (accountId: string, page?: PageOptions): Promise<Page<Recording>> =>
+      delay(pageOf(RECORDINGS[accountId] ?? [], page), 220),
+    // Everything that could go up, whole — what "select all" selects, pages or no pages.
+    eligible: (accountId: string): Promise<Recording[]> =>
+      delay((RECORDINGS[accountId] ?? []).filter(canUploadRecording), 180),
     detail: (recordingId: number): Promise<RecordingDetail | null> => {
       const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
       return delay(recording ? { recording, events: RECORDING_EVENTS } : null, 220)
@@ -761,9 +769,9 @@ export const mockApi: Api = {
       delay(
         {
           totalBytes: 3_180_000_000,
-          count: 3,
+          count: (RECORDINGS[1] ?? []).length,
           unmatchedCount: 1,
-          missingCount: 1,
+          missingCount: (RECORDINGS[1] ?? []).filter((recording) => !recording.fileExists).length,
           softCapBytes: 50 * 1024 * 1024 * 1024
         },
         180,
@@ -842,18 +850,19 @@ export const mockApi: Api = {
   // to draw: linked and playable, linked but on a patch nothing can play, and
   // ingested with no match yet.
   replays: {
-    list: (): Promise<Replay[]> => delay(MOCK_REPLAYS, 220),
+    list: (_accountId: string, page?: PageOptions): Promise<Page<Replay>> => delay(pageOf(MOCK_REPLAYS, page), 220),
     // The harness has no server behind it, so there is never one to fetch —
     // which is also what local-only mode answers.
     download: (): Promise<number | null> => delay(null, 400, false),
     usage: (): Promise<ReplayDiskUsage> =>
       delay(
         {
-          totalBytes: 96_000_000,
-          count: 3,
-          unlinkedCount: 1,
-          missingCount: 0,
-          unplayableCount: 1,
+          totalBytes: MOCK_REPLAYS.reduce((total, replay) => total + (replay.fileBytes ?? 0), 0),
+          count: MOCK_REPLAYS.length,
+          unlinkedCount: MOCK_REPLAYS.filter((replay) => replay.match === null).length,
+          missingCount: MOCK_REPLAYS.filter((replay) => !replay.fileExists).length,
+          unplayableCount: MOCK_REPLAYS.filter((replay) => replay.fileExists && replay.blockedReason !== null)
+            .length,
           softCapBytes: 5 * 1024 * 1024 * 1024
         },
         180,

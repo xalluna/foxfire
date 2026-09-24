@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs'
 import { getDb } from '../db'
-import { getRecordingIdentity, PENDING_UPLOAD_STATE_LIST } from '../db/repositories/recordings.repo'
+import { getRecordingIdentity } from '../db/repositories/recordings.repo'
 import { getUpload } from '../db/repositories/youtubeUploads.repo'
 import { createLogger } from '../telemetry/logger'
 import { describeSkip, planBulkUpload, type BulkCandidate } from './bulkPlan'
 import { draftFor } from './drafts'
 import { enqueueMany } from './queue'
 import type { BulkUploadResult, UploadRequest, YouTubePrivacy } from '@shared/types'
+import { isUploadPending } from '@shared/uploadEligibility'
 
 const log = createLogger('youtube')
 
@@ -36,7 +37,7 @@ export async function enqueueBatch(recordingIds: readonly number[], privacy: You
       startedAt: identity.startedAt,
       hasFile: !identity.fileDeleted && existsSync(identity.filePath),
       onYouTube: identity.youtubeVideoId !== null,
-      uploadPending: upload !== null && PENDING_UPLOAD_STATE_LIST.includes(upload.state)
+      uploadPending: isUploadPending(upload)
     })
   }
 

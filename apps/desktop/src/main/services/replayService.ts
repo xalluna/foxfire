@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { closeSync, copyFileSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -20,6 +20,7 @@ import {
   getClaimedMatchIds,
   getKnownSourcePaths,
   getReplay,
+  getReplayFileChecks,
   getReplayFilePath,
   getReplays,
   getUnownedReplays,
@@ -30,7 +31,8 @@ import {
 } from '../db/repositories/replays.repo'
 import { getRoflSettings } from './roflSettings'
 import { resolveLiveClient, resolveSourceFolder } from './clientArchiveService'
-import type { Replay, ReplayDiskUsage, ReplayImportProgress } from '@shared/types'
+import type { Page, PageOptions, Replay, ReplayDiskUsage, ReplayImportProgress } from '@shared/types'
+import { clampPage } from '@foxfire/core'
 
 /**
  * Riot's replays, from the folder they land in to the client that plays them.
@@ -57,41 +59,72 @@ function broadcastImportProgress(progress: ReplayImportProgress): void {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Every replay for one account, each told whether it can actually be watched.
+ * A page of one account's replays, each told whether it can actually be watched.
  *
  * The playability check happens here rather than in the repository because it
  * depends on which clients are installed at this moment, which is not something
  * the database knows or should be told.
  */
-export async function listReplays(accountId: string): Promise<Replay[]> {
+export async function listReplays(accountId: string, page?: PageOptions): Promise<Page<Replay>> {
   const db = getDb()
-  const replays = getReplays(db, await accountContext(accountId))
-  if (replays.length === 0) return replays
+  const account = await accountContext(accountId)
+  const total = getUsage(db, account).count
+  const replays = getReplays(db, account, clampPage(page))
+  if (replays.length === 0) return { items: replays, total }
 
-  const archives = getArchivePatches(db)
-  const live = await resolveLiveClient()
+  const blockedFor = await playability()
 
-  return replays.map((replay) => ({
-    ...replay,
-    blockedReason: replay.fileExists
-      ? replayBlockedReason(replay.patch, runnerFor(replay.patch, archives, live.patch, live.path))
-      : 'Foxfire can no longer find this file'
-  }))
+  return {
+    total,
+    items: replays.map((replay) => ({
+      ...replay,
+      blockedReason: replay.fileExists ? blockedFor(replay.patch) : 'Foxfire can no longer find this file'
+    }))
+  }
 }
 
 export async function getReplayUsage(accountId: string): Promise<ReplayDiskUsage> {
-  const usage = getUsage(getDb(), await accountContext(accountId))
-  // Reuses the list rather than re-deriving playability: both answers come from
-  // the same per-row check, and the live client's patch is cached behind it.
-  const replays = await listReplays(accountId)
+  const db = getDb()
+  const account = await accountContext(accountId)
+  const usage = getUsage(db, account)
+
+  // Across every replay, not the page on screen, and without building one:
+  // whether a file is there is a stat, and whether it plays depends only on
+  // its patch, so that is decided once per patch rather than once per replay.
+  let missingCount = 0
+  const byPatch = new Map<string | null, number>()
+
+  for (const { filePath, patch } of getReplayFileChecks(db, account)) {
+    if (!existsSync(filePath)) missingCount += 1
+    else byPatch.set(patch, (byPatch.get(patch) ?? 0) + 1)
+  }
+
+  let unplayableCount = 0
+  if (byPatch.size > 0) {
+    const blockedFor = await playability()
+    for (const [patch, count] of byPatch) {
+      if (blockedFor(patch) !== null) unplayableCount += count
+    }
+  }
 
   return {
     ...usage,
-    missingCount: replays.filter((replay) => !replay.fileExists).length,
-    unplayableCount: replays.filter((replay) => replay.fileExists && replay.blockedReason !== null)
-      .length,
+    missingCount,
+    unplayableCount,
     softCapBytes: getRoflSettings().softCapBytes
   }
+}
+
+/**
+ * Why a replay of a given patch cannot be watched on this machine right now,
+ * or null when it can — against the clients installed at this moment. The live
+ * client's patch is cached behind resolveLiveClient, so asking is cheap.
+ */
+async function playability(): Promise<(patch: string | null) => string | null> {
+  const archives = getArchivePatches(getDb())
+  const live = await resolveLiveClient()
+
+  return (patch) => replayBlockedReason(patch, runnerFor(patch, archives, live.patch, live.path))
 }
 
 /* -------------------------------------------------------------------------- */

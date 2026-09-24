@@ -95,6 +95,58 @@ describe('createServerApi', () => {
     ])
   })
 
+  it('asks for the members a page at a time, by name or address', async () => {
+    const { calls, request } = recorder(() => ({ items: [], total: 0 }))
+    const api = createServerApi(request)
+
+    await api.admin.users()
+    await api.admin.users({ q: '  Faker@Example.com ', limit: 50, offset: 50 })
+    await api.admin.users({ q: '   ' })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/admin/users/',
+      '/admin/users/?q=Faker%40Example.com&limit=50&offset=50',
+      '/admin/users/'
+    ])
+  })
+
+  it('asks for the open invites whole and the used ones a page at a time', async () => {
+    const { calls, request } = recorder(() => [])
+    const api = createServerApi(request)
+
+    await api.admin.openInvites()
+    await api.admin.usedInvites()
+    await api.admin.usedInvites({ limit: 50, offset: 100 })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/admin/invites/',
+      '/admin/invites/used',
+      '/admin/invites/used?limit=50&offset=100'
+    ])
+  })
+
+  it('asks for the replay library a page at a time', async () => {
+    const { calls, request } = recorder(() => ({ items: [], total: 0 }))
+    const api = createServerApi(request)
+
+    await api.admin.storedReplays()
+    await api.admin.storedReplays({ limit: 50, offset: 50 })
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/admin/storage/replays',
+      '/admin/storage/replays?limit=50&offset=50'
+    ])
+  })
+
+  it('hands a page back as the server sent it, total and all', async () => {
+    const page = { items: [{ matchId: 'NA1_1' }], total: 37 }
+    const { request } = recorder(() => page)
+    const api = createServerApi(request)
+
+    await expect(api.dashboard.matches('acc-1', 20, 0, null)).resolves.toEqual(page)
+    await expect(api.search.players('')).resolves.toEqual(page)
+  })
+
   it('reads accounts one question at a time, never the whole server', async () => {
     const { calls, request } = recorder(() => [])
     const api = createServerApi(request)

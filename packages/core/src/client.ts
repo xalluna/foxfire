@@ -6,6 +6,7 @@ import type {
   AdminReplay,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AssetManifest,
   AttachRecordingInput,
   AttachRecordingOutcome,
@@ -17,6 +18,8 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  Page,
+  PageOptions,
   PlayerSearchOptions,
   PlayerSearchResult,
   QueueType,
@@ -79,13 +82,17 @@ export interface FoxfireData {
   }
   dashboard: {
     get: (accountId: string) => Promise<DashboardData | null>
-    /** `queueId` null means every queue; filtering happens where the rows are, so paging stays even. */
+    /**
+     * A page of one player's games, newest first, and how many there are.
+     * `queueId` null means every queue; filtering happens where the rows are,
+     * so pages stay even and `total` counts the filtered set.
+     */
     matchList: (
       accountId: string,
       limit: number,
       offset: number,
       queueId: number | null
-    ) => Promise<MatchSummary[]>
+    ) => Promise<Page<MatchSummary>>
     matchDetail: (matchId: string) => Promise<MatchDetail | null>
     /**
      * One game as one player's row — the result, the queue, the LP it moved.
@@ -108,10 +115,23 @@ export interface FoxfireData {
     get: (accountId: string, refresh: boolean, queueId: number | null) => Promise<MasteryData>
   }
   rank: {
+    /**
+     * Every reading in the range, whole — the one list that grows which is not
+     * paged. The graph draws a line through all of them and reads milestones
+     * off neighbouring pairs, so a page would leave a gap and a cap would start
+     * the line late. The range bounds it instead: about one reading per ranked
+     * game, a few hundred for the thirty days the screen opens on. Making "all"
+     * cheaper as seasons pile up is separate work; see CLAUDE.md.
+     */
     history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
     /** Seasons with data, newest first. The first is what the pickers open on. */
     periods: (accountId: string) => Promise<Season[]>
-    /** Ranked games with no LP figure — everything the editor can offer. */
+    /**
+     * Ranked games with no LP figure — everything the editor can offer.
+     *
+     * Not paged, and it should be: it grows with a player's history. It is
+     * known debt, recorded in CLAUDE.md, rather than an exception.
+     */
     editable: (accountId: string, queueType: QueueType) => Promise<EditableMatch[]>
     /**
      * Stores a batch of entries and returns what still needs one. Fewer rows can
@@ -139,7 +159,7 @@ export interface FoxfireData {
      * is blank, in name order. Reads stored data only — no Riot call, on a
      * server or a desktop.
      */
-    players: (query: string, options?: PlayerSearchOptions) => Promise<PlayerSearchResult[]>
+    players: (query: string, options?: PlayerSearchOptions) => Promise<Page<PlayerSearchResult>>
   }
   /**
    * The YouTube recordings a server holds, one per game per account.
@@ -217,22 +237,26 @@ export interface FoxfireClient extends FoxfireData {
    * a refused write has a reason worth showing.
    */
   admin: {
-    users: () => Promise<AdminUser[]>
+    /** A page of the members, by name, narrowed to a name or address when `q` says one. */
+    users: (query?: AdminUserQuery) => Promise<Page<AdminUser>>
     updateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
     deleteUser: (id: string) => Promise<AdminActionResult>
     /** Makes a reset link for somebody, replacing whatever was outstanding for them. */
     createPasswordReset: (userId: string) => Promise<AdminPasswordReset>
     /** Withdraws the reset link outstanding for somebody, if there is one. */
     revokePasswordReset: (userId: string) => Promise<AdminActionResult>
-    invites: () => Promise<AdminInvite[]>
+    /** Every invite that can still be used. Whole: they expire, so there are never many. */
+    openInvites: () => Promise<AdminInvite[]>
+    /** A page of the invites somebody registered with, most recently used first. */
+    usedInvites: (page?: PageOptions) => Promise<Page<AdminInvite>>
     /** Returns the outstanding invite for that address if there already is one. */
     createInvite: (email: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
     storage: () => Promise<ServerStorageUsage>
-    /** The biggest shared replays, so space can be reclaimed where it actually is. */
-    storedReplays: () => Promise<AdminReplay[]>
+    /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
+    storedReplays: (page?: PageOptions) => Promise<Page<AdminReplay>>
     removeReplay: (matchId: string) => Promise<AdminActionResult>
     /** Takes a League account away from whoever claimed it. The account and its games stay. */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>

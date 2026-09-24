@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Foxfire.Api.Common;
 
 namespace Foxfire.Api.Tests;
 
@@ -66,8 +67,9 @@ public class PasswordResetTests(FoxfireServerFixture server)
         client.Dispose();
 
         var reset = await CreateAsync(admin, member.User.Id);
-        var users = (await admin.GetFromJsonAsync<AdminUser[]>(Api("/api/admin/users/")))!;
-        var listed = users.Single(u => u.Id == member.User.Id);
+        var users = (await admin.GetFromJsonAsync<Page<AdminUser>>(
+            Api($"/api/admin/users/?q={Uri.EscapeDataString(member.User.Email)}")))!;
+        var listed = users.Items.Single(u => u.Id == member.User.Id);
 
         Assert.StartsWith("https://test.example.com/reset-password/", reset.Link, StringComparison.Ordinal);
         Assert.Equal(member.User.Id, reset.UserId);
@@ -181,12 +183,13 @@ public class PasswordResetTests(FoxfireServerFixture server)
         var withdrawn = await admin.DeleteAsync(ResetFor(member.User.Id));
 
         var preview = await PreviewAsync(reset.Token);
-        var users = (await admin.GetFromJsonAsync<AdminUser[]>(Api("/api/admin/users/")))!;
+        var users = (await admin.GetFromJsonAsync<Page<AdminUser>>(
+            Api($"/api/admin/users/?q={Uri.EscapeDataString(member.User.Email)}")))!;
 
         Assert.Equal(HttpStatusCode.NoContent, withdrawn.StatusCode);
         Assert.False(preview.Usable);
         Assert.Contains("withdrawn", preview.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(users.Single(u => u.Id == member.User.Id).PasswordReset);
+        Assert.Null(users.Items.Single(u => u.Id == member.User.Id).PasswordReset);
     }
 
     [Fact]

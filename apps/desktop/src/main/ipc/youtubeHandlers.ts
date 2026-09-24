@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { serverBacked } from '../api'
 import { openRemoteRecordingWindow } from '../recordingWindow'
+import { listUploadableRecordings } from '../services/recordingService'
 import { attachLink, reattach } from '../youtube/attach'
 import { enqueueBatch } from '../youtube/bulk'
 import { draftFor } from '../youtube/drafts'
@@ -37,6 +38,10 @@ export function registerYouTubeHandlers(): void {
   ipcMain.handle(CH.recordings.openRemote, (_e, accountId: string, matchId: string) =>
     openRemoteRecordingWindow(accountId, matchId)
   )
+
+  // Every recording that could go up, whole, for "select all" on a list that is
+  // otherwise paged.
+  ipcMain.handle(CH.recordings.eligible, (_e, accountId: string) => listUploadableRecordings(accountId))
 
   ipcMain.handle(CH.youtube.getState, () => youTubeState())
   ipcMain.handle(CH.youtube.connect, async () => {
