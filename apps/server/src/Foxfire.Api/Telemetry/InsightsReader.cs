@@ -203,7 +203,24 @@ public sealed class InsightsReader(
 
         if (stored) await ReadStoredAsync(frame, wanted, flushed, cancellationToken);
 
-        foreach (var bucket in buffer.Closed(memoryFrom).Append(buffer.Open()))
+        var open = buffer.Open();
+
+        // Up from the bucket still filling through now, whatever the collector
+        // has closed: this process is answering, so it is running. Without it a
+        // read that lands just past a ten-second boundary, before the tick has
+        // opened the bucket for it, draws the newest point as a gap.
+        // From the window's start at the earliest, so a buffer that was never
+        // begun — or a collector that stopped ticking hours ago — costs at most
+        // the window's own points.
+        var live = InsightWindow.Floor(open.Start, frame.Window.Step);
+        if (live < frame.From) live = frame.From;
+
+        for (var step = live; step <= frame.Now; step += frame.Window.Step)
+        {
+            frame.MarkUp(step);
+        }
+
+        foreach (var bucket in buffer.Closed(memoryFrom).Append(open))
         {
             if (bucket.Start < memoryFrom) continue;
 
