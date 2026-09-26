@@ -183,6 +183,15 @@ export function Inbox(props: IconProps): JSX.Element {
   )
 }
 
+export function Mail(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
+    </Icon>
+  )
+}
+
 export function Key(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>

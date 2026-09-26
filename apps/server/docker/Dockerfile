@@ -59,6 +59,7 @@ COPY apps/server/Foxfire.Server.slnx ./apps/server/
 COPY apps/server/src/Foxfire.Api/Foxfire.Api.csproj ./apps/server/src/Foxfire.Api/
 COPY apps/server/src/Foxfire.Core/Foxfire.Core.csproj ./apps/server/src/Foxfire.Core/
 COPY apps/server/src/Foxfire.Data/Foxfire.Data.csproj ./apps/server/src/Foxfire.Data/
+COPY apps/server/src/Foxfire.Email/Foxfire.Email.csproj ./apps/server/src/Foxfire.Email/
 COPY apps/server/src/Foxfire.Riot/Foxfire.Riot.csproj ./apps/server/src/Foxfire.Riot/
 COPY apps/server/src/Foxfire.Storage/Foxfire.Storage.csproj ./apps/server/src/Foxfire.Storage/
 RUN dotnet restore apps/server/src/Foxfire.Api/Foxfire.Api.csproj

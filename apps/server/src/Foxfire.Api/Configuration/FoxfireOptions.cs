@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text;
+using Foxfire.Email;
+using Foxfire.Email.Resend;
 
 namespace Foxfire.Api.Configuration;
 
@@ -169,29 +171,59 @@ public sealed class AdminOptions
     public string Email { get; set; } = "";
 }
 
-/// <summary>How outbound mail gets sent, when it does.</summary>
-public sealed class SmtpOptions
+/// <summary>
+/// Whether the server sends email, through whom, and how much.
+///
+/// Optional. With no provider, nothing is emailed and every link — invites,
+/// resets — is one an admin copies and pastes wherever their community talks,
+/// exactly as before the server could send mail. With one, those links go to
+/// the address as well, and members can reset their own password and confirm
+/// their address. See Email/ and CLAUDE.md, "Server email".
+///
+/// Everything a provider needs of its own — a key, a webhook secret, the limits
+/// of the plan it is on — is in its own section beneath this one, because it is
+/// that provider's account that sets them.
+/// </summary>
+public sealed class EmailOptions
 {
-    public const string Section = "Smtp";
+    public const string Section = "Email";
 
-    public string? Host { get; set; }
-    public int Port { get; set; } = 587;
-    public string? Username { get; set; }
-    public string? Password { get; set; }
-    public string? FromAddress { get; set; }
-    public string FromName { get; set; } = "Foxfire";
-    public bool UseStartTls { get; set; } = true;
+    /// <summary>The provider mail goes through, by name — <c>resend</c>. Empty sends nothing.</summary>
+    public string Provider { get; set; } = "";
+
+    /// <summary>The address mail comes from. It has to be on a domain the provider has verified.</summary>
+    public string FromAddress { get; set; } = "";
+
+    /// <summary>The name mail comes from. Empty is the server's own name.</summary>
+    public string FromName { get; set; } = "";
 
     /// <summary>
-    /// Whether there is enough here to try sending anything.
+    /// How many days the log of sent mail is kept. Zero keeps it for good.
     ///
-    /// Optional on purpose. Homelab SMTP without a relay lands in spam when it
-    /// is not refused outright, and the failure is silent — the host believes it
-    /// works and the invitee never sees the mail. So nothing here is required to
-    /// boot: every link the server would have emailed is also readable by an
-    /// admin, who can paste it wherever their community actually talks.
+    /// Ninety, because the log holds members' addresses and a month is what the
+    /// quota needs. Never fewer than 35: the monthly count is read off this
+    /// table, and a log shorter than a month would forget mail it still counts.
     /// </summary>
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(FromAddress);
+    public int RetentionDays { get; set; } = 90;
+
+    /// <summary>
+    /// The share of the daily limit that invites, test sends and new-account
+    /// confirmations may use, 0–1. The rest is kept for account security —
+    /// resets, confirming a new address — so a batch of invites cannot leave a
+    /// locked-out member waiting until tomorrow.
+    /// </summary>
+    public double InviteShare { get; set; } = 0.8;
+
+    /// <summary>Resend's settings, used when <see cref="Provider"/> is resend.</summary>
+    public ResendOptions Resend { get; set; } = new();
+
+    public bool IsEnabled => !string.IsNullOrWhiteSpace(Provider);
+
+    /// <summary>The provider named, as it is compared.</summary>
+    public string ProviderName => Provider.Trim().ToLowerInvariant();
+
+    /// <summary>The fewest days of log that still cover a month.</summary>
+    public const int MinimumRetentionDays = 35;
 }
 
 /// <summary>
@@ -285,12 +317,14 @@ public static class ConfigurationCheck
         AdminOptions admin,
         RateLimitOptions rateLimits,
         LogOptions logs,
-        TelemetryOptions? telemetry = null)
+        TelemetryOptions? telemetry = null,
+        EmailOptions? email = null)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(rateLimits);
         ArgumentNullException.ThrowIfNull(logs);
         telemetry ??= new TelemetryOptions();
+        email ??= new EmailOptions();
 
         List<string> problems = [];
 
@@ -390,7 +424,88 @@ public static class ConfigurationCheck
                 + "the insights history for good.");
         }
 
+        CheckEmail(problems, email);
+
         return problems;
+    }
+
+    /// <summary>
+    /// Mail is optional, so nothing here is required — but a provider named is
+    /// a provider meant, and one set up wrongly fails quietly: every message
+    /// held or refused while the host believes it works. So a half-set-up one
+    /// stops the server, like any other setting that is there and wrong.
+    /// </summary>
+    private static void CheckEmail(List<string> problems, EmailOptions email)
+    {
+        if (email.RetentionDays < 0 || email.RetentionDays is > 0 and < EmailOptions.MinimumRetentionDays)
+        {
+            problems.Add(
+                $"Email__RetentionDays is {email.RetentionDays}. Use at least {EmailOptions.MinimumRetentionDays} "
+                + "days — the monthly limit is counted from the log — or 0 to keep it for good.");
+        }
+
+        if (email.InviteShare is <= 0 or > 1 || double.IsNaN(email.InviteShare))
+        {
+            problems.Add(
+                $"Email__InviteShare is {email.InviteShare}. It is a share of the daily limit, above 0 and at most 1 "
+                + "— 0.8 keeps a fifth of each day for password resets.");
+        }
+
+        if (!email.IsEnabled) return;
+
+        if (!EmailProviders.Known.Contains(email.ProviderName))
+        {
+            problems.Add(
+                $"Email__Provider is '{email.Provider}', which this server cannot send through. "
+                + $"Use one of: {string.Join(", ", EmailProviders.Known)} — or leave it empty to send no mail.");
+            return;
+        }
+
+        var from = email.FromAddress.Trim();
+        if (from.Length == 0)
+        {
+            problems.Add(
+                "Email__FromAddress is not set. Mail has to come from an address on a domain the provider has "
+                + "verified, e.g. foxfire@mail.example.com.");
+        }
+        else if (!from.Contains('@', StringComparison.Ordinal) || from.Any(char.IsWhiteSpace) || from.Contains('<'))
+        {
+            problems.Add($"Email__FromAddress is '{email.FromAddress}', which is not an address. Just the address — the name is Email__FromName.");
+        }
+
+        if (email.ProviderName == EmailProviders.Resend) CheckResend(problems, email.Resend);
+    }
+
+    private static void CheckResend(List<string> problems, ResendOptions resend)
+    {
+        if (string.IsNullOrWhiteSpace(resend.ApiKey))
+        {
+            problems.Add("Email__Resend__ApiKey is not set. Make a sending-only key at resend.com/api-keys.");
+        }
+
+        if (resend.DailyLimit < 0)
+        {
+            problems.Add($"Email__Resend__DailyLimit is {resend.DailyLimit}. Use the plan's daily limit, or 0 for none.");
+        }
+
+        if (resend.MonthlyLimit < 0)
+        {
+            problems.Add($"Email__Resend__MonthlyLimit is {resend.MonthlyLimit}. Use the plan's monthly limit, or 0 for none.");
+        }
+
+        if (resend.MonthlyResetDay is < 1 or > 31)
+        {
+            problems.Add(
+                $"Email__Resend__MonthlyResetDay is {resend.MonthlyResetDay}. It is a day of the month, 1 to 31 — "
+                + "the billing day on Resend's usage page.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(resend.WebhookSecret) && !SvixSignature.IsWellFormedSecret(resend.WebhookSecret))
+        {
+            problems.Add(
+                "Email__Resend__WebhookSecret is not a webhook signing secret. Copy it from the webhook's page on "
+                + "resend.com — it starts whsec_.");
+        }
     }
 
     private static void CheckSigningKey(List<string> problems, string name, string value)

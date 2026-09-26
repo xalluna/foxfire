@@ -1,6 +1,8 @@
 using System.Net;
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
+using Foxfire.Api.Features.Account;
+using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -10,7 +12,11 @@ namespace Foxfire.Api.Features.Auth;
 /// <summary>The long-lived half of a session, traded for a fresh pair.</summary>
 public sealed record RefreshSessionRequest(string RefreshToken) : IDomainRequest<SessionResponse>;
 
-internal sealed class RefreshSessionRequestHandler(TokenService tokens, UserManager<FoxfireUser> users)
+internal sealed class RefreshSessionRequestHandler(
+    TokenService tokens,
+    UserManager<FoxfireUser> users,
+    FoxfireDbContext db,
+    TimeProvider time)
     : IDomainRequestHandler<RefreshSessionRequest, SessionResponse>
 {
     private static Response<SessionResponse> Ended() =>
@@ -35,6 +41,7 @@ internal sealed class RefreshSessionRequestHandler(TokenService tokens, UserMana
         if (user is null) return Ended();
 
         var roles = await users.GetRolesAsync(user);
-        return Sessions.Describe(pair, user, roles);
+        var pending = await AccountEmail.PendingChangeAsync(db, user, time.GetUtcNow(), cancellationToken);
+        return Sessions.Describe(pair, user, roles, pending?.Email);
     }
 }

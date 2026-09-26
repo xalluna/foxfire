@@ -12,8 +12,11 @@ import type { PageOptions } from './domain'
 /** The spans the page offers, and how finely each is drawn. */
 export type InsightsWindow = '15m' | '1h' | '6h' | '24h' | '48h' | '7d' | '30d'
 
-/** The page's tabs that are charts. The logs are a list of their own; see `ServerLogEntry`. */
-export type InsightsSection = 'overview' | 'requests' | 'riot' | 'sync' | 'runtime'
+/**
+ * The page's tabs that are charts. The logs are a list of their own; see
+ * `ServerLogEntry`. `email` is a head admin's only, beside the Email page.
+ */
+export type InsightsSection = 'overview' | 'requests' | 'riot' | 'sync' | 'runtime' | 'email'
 
 /**
  * Where a response's points sit. Every series in it has `points` values, the
@@ -222,6 +225,45 @@ export interface InsightsRuntime {
   topExceptions: { type: string; count: number }[]
 }
 
+/** How the server's mail has been going. */
+export interface InsightsEmail {
+  frame: InsightsFrame
+  totals: {
+    /** Handed to the provider. */
+    sent: number
+    /** Moved into waiting on a limit, or on the provider. */
+    held: number
+    /** Attempts to be made again — an outage, a rate limit. */
+    retried: number
+    /** Given up on, or refused outright. */
+    failed: number
+    /** Never sent: their link lapsed or was withdrawn first. */
+    dropped: number
+    delivered: number
+    bounced: number
+    complained: number
+  }
+  now: {
+    /** Whether the server sends mail at all. */
+    configured: boolean
+    queued: number
+    held: number
+    dailyUsed: number
+    /** Zero is no cap. */
+    dailyLimit: number
+    monthlyUsed: number
+    monthlyLimit: number
+  }
+  /** Attempts per point, by outcome: sent, held, retry, failed, dropped. */
+  sends: InsightSeries[]
+  /** What the provider said per point: delivered, bounced, complained. */
+  events: InsightSeries[]
+  /** The most waiting in each point: queued, held. */
+  queue: InsightSeries[]
+  /** The day's and the month's count, as the dispatcher last saw them: daily, monthly. */
+  quota: InsightSeries[]
+}
+
 /** What each section of the page answers with. */
 export interface InsightsSections {
   overview: InsightsOverview
@@ -229,6 +271,7 @@ export interface InsightsSections {
   riot: InsightsRiot
   sync: InsightsSync
   runtime: InsightsRuntime
+  email: InsightsEmail
 }
 
 export type ServerLogLevel = 'information' | 'warning' | 'error' | 'fatal'

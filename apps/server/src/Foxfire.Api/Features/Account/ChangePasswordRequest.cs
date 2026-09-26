@@ -1,5 +1,6 @@
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
+using Foxfire.Api.Email;
 using Foxfire.Api.Features.Auth;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -25,6 +26,7 @@ public sealed record ChangePasswordRequest(string CurrentPassword, string NewPas
 internal sealed class ChangePasswordRequestHandler(
     UserManager<FoxfireUser> users,
     TokenService tokens,
+    EmailOutbox outbox,
     IIdentityContext me,
     ILogger<ChangePasswordRequestHandler> logger)
     : IDomainRequestHandler<ChangePasswordRequest, SessionResponse>
@@ -61,6 +63,9 @@ internal sealed class ChangePasswordRequestHandler(
 
         logger.LogInformation(
             "{Username} changed their password; every other session was ended", user.UserName);
+
+        // So that somebody whose session was not theirs finds out.
+        await outbox.NotifyPasswordChangedAsync(user, cancellationToken);
 
         return Sessions.Describe(pair, user, roles);
     }

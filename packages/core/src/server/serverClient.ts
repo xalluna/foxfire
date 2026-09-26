@@ -154,6 +154,8 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
 
     assets: { get: options.assets },
 
+    account: api.account,
+
     admin: {
       users: api.admin.users,
       updateUser: api.admin.updateUser,
@@ -164,6 +166,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       usedInvites: api.admin.usedInvites,
       createInvite: api.admin.createInvite,
       revokeInvite: api.admin.revokeInvite,
+      emailInvite: api.admin.emailInvite,
       getSettings: api.admin.getSettings,
       setSettings: api.admin.setSettings,
       storage: api.admin.storage,
@@ -172,7 +175,12 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       forceUnlink: api.admin.forceUnlink,
       addRiotAccount: api.admin.addRiotAccount,
       insights: api.admin.insights,
-      serverLogs: api.admin.serverLogs
+      serverLogs: api.admin.serverLogs,
+      emailOverview: api.admin.emailOverview,
+      emailLog: api.admin.emailLog,
+      emailSuppressions: api.admin.emailSuppressions,
+      clearEmailSuppression: api.admin.clearEmailSuppression,
+      sendTestEmail: api.admin.sendTestEmail
     },
 
     events: {

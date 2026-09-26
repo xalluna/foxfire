@@ -57,6 +57,14 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     // anybody's games; see TelemetryRollup.
     public DbSet<TelemetryRollup> TelemetryRollups => Set<TelemetryRollup>();
 
+    // Mail: the outbox that is also the log, the addresses not to send to again,
+    // the links that confirm an address, and what the provider last said about
+    // its quota. See EmailMessage.
+    public DbSet<EmailMessage> EmailMessages => Set<EmailMessage>();
+    public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
+    public DbSet<EmailVerification> EmailVerifications => Set<EmailVerification>();
+    public DbSet<EmailQuotaObservation> EmailQuotaObservations => Set<EmailQuotaObservation>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

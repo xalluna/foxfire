@@ -349,8 +349,8 @@ public class InviteTests(FoxfireServerFixture server)
     [Fact]
     public async Task An_invite_comes_back_with_a_link_an_admin_can_copy()
     {
-        // SMTP is optional, so this is load-bearing rather than a convenience:
-        // a host with no working mail pastes this into Discord instead.
+        // Mail is optional, so this is load-bearing rather than a convenience:
+        // a host with no email provider pastes this into Discord instead.
         using var admin = await AdminAsync();
 
         var invite = await CreateInviteAsync(admin, $"{Unique("linked")}@example.com");
@@ -363,8 +363,8 @@ public class InviteTests(FoxfireServerFixture server)
     [Fact]
     public async Task An_invite_needs_no_address()
     {
-        // Foxfire sends no mail, so an address is only ever a label. What an
-        // admin needs is a link to paste into Discord, without making one up.
+        // Without an email provider an address is only a label. What an admin
+        // needs is a link to paste into Discord, without making one up.
         using var admin = await AdminAsync();
 
         var response = await admin.PostAsJsonAsync(new Uri("/api/admin/invites/", UriKind.Relative), new { });

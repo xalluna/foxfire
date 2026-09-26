@@ -19,11 +19,13 @@ import {
   type SettingsNavItem
 } from '@foxfire/ui'
 import {
+  EmailAdminScreen,
   InvitesScreen,
   LeagueAccountsScreen,
   MembersScreen,
   ServerDataScreen,
   ServerInsightsScreen,
+  useIsHeadAdmin,
   useIsServerAdmin
 } from '@foxfire/screens'
 import { AccountSettings } from '../components/AccountSettings'
@@ -54,6 +56,7 @@ export type SettingsCategory =
   | 'server-accounts'
   | 'server-data'
   | 'server-insights'
+  | 'server-email'
   | 'riot-key'
   | 'rank'
   | 'capture'
@@ -76,6 +79,11 @@ const FIRST_CATEGORY: SettingsCategory = 'riot-key'
 interface NavItem extends SettingsNavItem<SettingsCategory> {
   /** Shown only to an administrator of the server currently connected. */
   adminOnly?: boolean
+  /**
+   * Shown only to a head admin of it. For the Email page, whose log is a list
+   * of members' addresses; the server refuses it to anybody else.
+   */
+  headAdminOnly?: boolean
   /**
    * Hidden while a server is answering.
    *
@@ -112,6 +120,7 @@ const GROUPS: NavItem[][] = [
     // The server's own measurements. Not to be confused with Developer
     // telemetry below, which is this PC's.
     { id: 'server-insights', label: 'Server insights', icon: <Icon.Activity />, adminOnly: true },
+    { id: 'server-email', label: 'Email', icon: <Icon.Mail />, headAdminOnly: true },
     { id: 'riot-key', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],
@@ -158,12 +167,14 @@ export function Settings({ category }: { category?: string }): JSX.Element {
   // request it serves, so a window belonging to somebody demoted a minute ago
   // shows a page whose every call is refused — which is the right way round.
   const isServerAdmin = useIsServerAdmin()
+  const isHeadAdmin = useIsHeadAdmin()
   const { connected: isConnected } = useServerHealth()
 
   const groups = GROUPS.map((group) =>
     group.filter(
       (item) =>
         (!item.adminOnly || isServerAdmin) &&
+        (!item.headAdminOnly || isHeadAdmin) &&
         (!item.localOnly || !isConnected) &&
         (!item.serverOnly || isConnected)
     )
@@ -196,6 +207,7 @@ export function Settings({ category }: { category?: string }): JSX.Element {
         {active === 'server-accounts' && <LeagueAccountsScreen />}
         {active === 'server-data' && <ServerDataScreen />}
         {active === 'server-insights' && <ServerInsightsScreen />}
+        {active === 'server-email' && <EmailAdminScreen />}
         {active === 'riot-key' && <RiotKeySettings />}
         {active === 'rank' && <RankTrackingSettings />}
         {active === 'capture' && <CaptureSettings />}

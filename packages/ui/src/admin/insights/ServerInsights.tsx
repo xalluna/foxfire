@@ -13,6 +13,7 @@ import { Segmented } from '../../components/Segmented'
 import * as Icon from '../../components/icons'
 import { formatUptime } from '../../lib/format'
 import { LogsTab, type InsightsLogsProps } from './logs'
+import { EmailTab } from './email'
 import { OverviewTab, RequestsTab, RiotTab, RuntimeTab, SyncTab } from './sections'
 
 export type InsightsTab = InsightsSection | 'logs'
@@ -36,6 +37,11 @@ export interface ServerInsightsPageProps {
     /** True when the server keeps no logs to show — one older than insights. */
     unsupported: boolean
   }
+  /**
+   * Whether to offer the Email tab — head admins only, beside the Email page
+   * that lists the addresses behind it. The server refuses it to anybody else.
+   */
+  showEmail?: boolean
 }
 
 const TABS: Array<[InsightsTab, string]> = [
@@ -44,6 +50,7 @@ const TABS: Array<[InsightsTab, string]> = [
   ['riot', 'Riot API'],
   ['sync', 'Syncs'],
   ['runtime', 'Runtime'],
+  ['email', 'Email'],
   ['logs', 'Logs']
 ]
 
@@ -64,9 +71,11 @@ export function ServerInsightsPage({
   onWindow,
   view,
   error,
-  logs
+  logs,
+  showEmail = false
 }: ServerInsightsPageProps): JSX.Element {
   const unsupported = tab === 'logs' ? logs.unsupported : view === null
+  const tabs = showEmail ? TABS : TABS.filter(([key]) => key !== 'email')
 
   return (
     <SettingsPage
@@ -82,7 +91,7 @@ export function ServerInsightsPage({
       <div className="space-y-3">
         <div className="-mx-1 overflow-x-auto px-1">
           <div className="w-max">
-            <Segmented<InsightsTab> options={TABS} value={tab} onChange={onTab} />
+            <Segmented<InsightsTab> options={tabs} value={tab} onChange={onTab} />
           </div>
         </div>
         {tab !== 'logs' && (
@@ -136,6 +145,8 @@ function Section({ view }: { view: InsightsView }): JSX.Element {
       return <SyncTab data={view.data} />
     case 'runtime':
       return <RuntimeTab data={view.data} />
+    case 'email':
+      return <EmailTab data={view.data} />
   }
 }
 

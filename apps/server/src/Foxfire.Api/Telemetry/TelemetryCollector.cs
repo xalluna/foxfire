@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Api.Sync;
 using Foxfire.Core;
 using Foxfire.Data;
@@ -50,6 +51,7 @@ public sealed class TelemetryCollector : BackgroundService
     private readonly PostGameSyncScheduler _postGame;
     private readonly ConnectedClients _clients;
     private readonly RecentLogs _logs;
+    private readonly EmailState _email;
     private readonly ILogger<TelemetryCollector> _log;
     private readonly MeterListener _listener = new();
     private readonly Lock _gate = new();
@@ -73,6 +75,7 @@ public sealed class TelemetryCollector : BackgroundService
         PostGameSyncScheduler postGame,
         ConnectedClients clients,
         RecentLogs logs,
+        EmailState email,
         ILogger<TelemetryCollector> log)
     {
         _meters = meters;
@@ -85,6 +88,7 @@ public sealed class TelemetryCollector : BackgroundService
         _postGame = postGame;
         _clients = clients;
         _logs = logs;
+        _email = email;
         _log = log;
 
         StartedAt = time.GetUtcNow();
@@ -347,6 +351,17 @@ public sealed class TelemetryCollector : BackgroundService
         }
 
         _lastLogCounts = counts;
+
+        // Only on a server that sends mail, and only once the dispatcher has
+        // looked: a flat zero would say "nothing waiting" about a queue
+        // nobody has counted.
+        if (_email.Current is { } email)
+        {
+            _buffer.Record(InsightMetrics.EmailQueueDepth, "queued", email.Queued);
+            _buffer.Record(InsightMetrics.EmailQueueDepth, "held", email.Held);
+            _buffer.Record(InsightMetrics.EmailQuotaUsed, "daily", email.DailyUsed);
+            _buffer.Record(InsightMetrics.EmailQuotaUsed, "monthly", email.MonthlyUsed);
+        }
     }
 
     private delegate string? DimensionReader(ReadOnlySpan<KeyValuePair<string, object?>> tags);
@@ -420,6 +435,12 @@ public sealed class TelemetryCollector : BackgroundService
 
         (ServerMetrics.MeterName, ServerMetrics.DbCommandDuration) =>
             new Mapping(InsightMetrics.DbCommands, 1, tags => InsightMetrics.Dimensions(Tag(tags, "kind"))),
+
+        (ServerMetrics.MeterName, ServerMetrics.EmailSends) =>
+            new Mapping(InsightMetrics.EmailSends, 1, tags => InsightMetrics.Dimensions(Tag(tags, "kind"), Tag(tags, "outcome"))),
+
+        (ServerMetrics.MeterName, ServerMetrics.EmailEvents) =>
+            new Mapping(InsightMetrics.EmailEvents, 1, tags => InsightMetrics.Dimensions(Tag(tags, "kind"), Tag(tags, "event"))),
 
         _ => null
     };

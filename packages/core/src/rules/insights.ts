@@ -20,8 +20,15 @@ export const INSIGHTS_WINDOWS: readonly InsightsWindowOption[] = [
   { key: '30d', label: '30 days' }
 ]
 
-/** The page's chart tabs, which the server answers one route each. */
-export const INSIGHTS_SECTIONS: readonly InsightsSection[] = ['overview', 'requests', 'riot', 'sync', 'runtime']
+/** The page's chart tabs, which the server answers one route each. `email` is a head admin's only. */
+export const INSIGHTS_SECTIONS: readonly InsightsSection[] = [
+  'overview',
+  'requests',
+  'riot',
+  'sync',
+  'runtime',
+  'email'
+]
 
 export function isInsightsSection(value: unknown): value is InsightsSection {
   return INSIGHTS_SECTIONS.some((s) => s === value)

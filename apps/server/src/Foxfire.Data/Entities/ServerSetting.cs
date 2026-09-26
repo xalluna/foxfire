@@ -11,8 +11,8 @@ namespace Foxfire.Data.Entities;
 /// change without a migration, not a record with a fixed set of fields.
 ///
 /// What is pointedly NOT here is anything secret. The Riot API key, the database
-/// and blob connection strings, the JWT and invite signing keys and the SMTP
-/// credentials are all environment configuration, read once at boot, and the
+/// and blob connection strings, the JWT and invite signing keys and the email
+/// provider's API key are all environment configuration, read once at boot, and the
 /// server refuses to start without them. That means rotating the Riot key is an
 /// edit and a restart rather than a button — a deliberate trade, taken because
 /// the alternative is an encrypted column, a Data Protection key ring, and a

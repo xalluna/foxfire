@@ -52,12 +52,18 @@ services:
       Auth__InviteSigningKey: "${INVITE_SIGNING_KEY}"
       Admin__Email: "${ADMIN_EMAIL}"
       Auth__PasswordResetLifetime: "${PASSWORD_RESET_LIFETIME:-24:00:00}"
-      Smtp__Host: "${SMTP_HOST:-}"
-      Smtp__Port: "${SMTP_PORT:-587}"
-      Smtp__Username: "${SMTP_USERNAME:-}"
-      Smtp__Password: "${SMTP_PASSWORD:-}"
-      Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
-      Smtp__FromName: "${SMTP_FROM_NAME:-Foxfire}"
+
+      # Email, when EMAIL_PROVIDER names one. See .env.example.
+      Email__Provider: "${EMAIL_PROVIDER:-}"
+      Email__FromAddress: "${EMAIL_FROM_ADDRESS:-}"
+      Email__FromName: "${EMAIL_FROM_NAME:-}"
+      Email__RetentionDays: "${EMAIL_RETENTION_DAYS:-90}"
+      Email__InviteShare: "${EMAIL_INVITE_SHARE:-0.8}"
+      Email__Resend__ApiKey: "${RESEND_API_KEY:-}"
+      Email__Resend__WebhookSecret: "${RESEND_WEBHOOK_SECRET:-}"
+      Email__Resend__DailyLimit: "${RESEND_DAILY_LIMIT:-100}"
+      Email__Resend__MonthlyLimit: "${RESEND_MONTHLY_LIMIT:-3000}"
+      Email__Resend__MonthlyResetDay: "${RESEND_MONTHLY_RESET_DAY:-1}"
 
       # Logs go to the console and to a `logs` container in the blob store
       # above. See .env.example.

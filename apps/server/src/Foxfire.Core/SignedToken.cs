@@ -26,10 +26,10 @@ public enum SignedTokenStatus
 /// and nothing else — whether row X has been spent, withdrawn or aimed at
 /// somebody else is a question for the row, which is the half that remembers.
 ///
-/// Two kinds of link are built on it, invites and password resets, and each
-/// signs with its own key so that a token of one kind can never verify as the
-/// other. See <see cref="ResetToken"/> for how the second key is arrived at
-/// without asking a host to configure one.
+/// Three kinds of link are built on it — invites, password resets and email
+/// confirmations — and each signs with its own key so that a token of one kind
+/// can never verify as another. See <see cref="ResetToken"/> for how the other
+/// keys are arrived at without asking a host to configure them.
 /// </summary>
 internal static class SignedToken
 {

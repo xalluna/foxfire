@@ -10,6 +10,7 @@ import {
 } from '@foxfire/core'
 import { ServerInsightsPage, type InsightsTab, type InsightsView, type LogLevelFilter } from '@foxfire/ui'
 import { useClient } from '../client/context'
+import { useIsHeadAdmin } from '../client/useConnection'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems, pageTotal } from '../queries/paging'
 
@@ -36,8 +37,12 @@ interface LogPageParam {
  */
 export function ServerInsightsScreen(): JSX.Element {
   const client = useClient()
+  const isHeadAdmin = useIsHeadAdmin()
 
-  const [tab, setTab] = useState<InsightsTab>('overview')
+  const [chosen, setTab] = useState<InsightsTab>('overview')
+  // The Email tab is a head admin's, and the server refuses it to anybody
+  // else; somebody demoted with it open lands back on the overview.
+  const tab: InsightsTab = chosen === 'email' && !isHeadAdmin ? 'overview' : chosen
   const [window, setWindow] = useState<InsightsWindow>(DEFAULT_INSIGHTS_WINDOW)
   const [level, setLevel] = useState<LogLevelFilter>('warning')
 
@@ -115,6 +120,7 @@ export function ServerInsightsScreen(): JSX.Element {
         onShowMore: () => void logs.fetchNextPage(),
         unsupported: logs.data?.pages[0] === null
       }}
+      showEmail={isHeadAdmin}
     />
   )
 }

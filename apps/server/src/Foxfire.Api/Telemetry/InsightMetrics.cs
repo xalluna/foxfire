@@ -92,6 +92,18 @@ public static class InsightMetrics
     /// <summary>Log lines written. level.</summary>
     public const string LogEvents = "logs.events";
 
+    /// <summary>What became of each attempt to send an email. kind | outcome.</summary>
+    public const string EmailSends = "email.sends";
+
+    /// <summary>What the provider said about emails after they went. kind | event.</summary>
+    public const string EmailEvents = "email.events";
+
+    /// <summary>Emails waiting. queued | held.</summary>
+    public const string EmailQueueDepth = "email.queue_depth";
+
+    /// <summary>How much of the provider's quota has gone. daily | monthly.</summary>
+    public const string EmailQuotaUsed = "email.quota_used";
+
     /// <summary>The metric whose presence says the server was up. See <see cref="RuntimeWorkingSet"/>.</summary>
     public const string Heartbeat = RuntimeWorkingSet;
 
@@ -113,7 +125,8 @@ public static class InsightMetrics
     public static InsightKind KindOf(string metric) => metric switch
     {
         HttpRequests or RiotRequests or RiotQueueWait or SyncRuns or DbCommands => InsightKind.Duration,
-        HttpRateLimited or SyncMatches or RuntimeGcPause or RuntimeExceptions or LogEvents => InsightKind.Counter,
+        HttpRateLimited or SyncMatches or RuntimeGcPause or RuntimeExceptions or LogEvents or EmailSends or EmailEvents
+            => InsightKind.Counter,
         _ => InsightKind.Gauge
     };
 

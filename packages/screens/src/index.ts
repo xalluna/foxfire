@@ -29,6 +29,13 @@ export { useDataEvents } from './client/useDataEvents'
 export { queryKeys } from './queries/keys'
 export { useAccount, useAccountByRiotId, useHomeAccount, useMyAccounts } from './queries/accounts'
 export {
+  useAccountEmail,
+  useCancelEmailChange,
+  useEmailVerificationNudge,
+  useResendEmailConfirmation,
+  type EmailNudge
+} from './queries/accountEmail'
+export {
   FAVORITES_FULL,
   useFavorites,
   useFavoritesRefresher,
@@ -67,6 +74,7 @@ export { InvitesScreen } from './screens/InvitesScreen'
 export { LeagueAccountsScreen } from './screens/LeagueAccountsScreen'
 export { MembersScreen } from './screens/MembersScreen'
 export { ServerInsightsScreen } from './screens/ServerInsightsScreen'
+export { EmailAdminScreen } from './screens/EmailAdminScreen'
 
 export {
   createPlayerRoutes,

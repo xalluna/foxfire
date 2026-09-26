@@ -46,6 +46,11 @@ public static class InviteEndpoints
         admin.MapDelete("/{id:guid}", (Guid id, ISender sender, CancellationToken cancellationToken) =>
             sender.SendAsync(new RevokeInviteRequest(id), cancellationToken));
 
+        // Email the link to the invite's address: again after a failure, or
+        // for the first time for an invite made before the server sent mail.
+        admin.MapPost("/{id:guid}/email", (Guid id, ISender sender, CancellationToken cancellationToken) =>
+            sender.SendAsync(new EmailInviteRequest(id), cancellationToken));
+
         // Unauthenticated and version-free: somebody following a link may not
         // have Foxfire installed yet, which is rather the point of an invite.
         //

@@ -1,5 +1,7 @@
 import type {
   Account,
+  AccountEmail,
+  AccountEmailResult,
   AdminActionResult,
   AdminInvite,
   AdminPasswordReset,
@@ -12,6 +14,11 @@ import type {
   ChampionStats,
   DashboardData,
   EditableMatch,
+  EmailLogEntry,
+  EmailLogQuery,
+  EmailOverview,
+  EmailSuppression,
+  EmailSuppressionQuery,
   InsightsSection,
   InsightsSections,
   InsightsWindow,
@@ -132,6 +139,16 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     } catch (err) {
       if (err instanceof ServerError && err.status === 404) return null
       throw err
+    }
+  }
+
+  /** A write about your own address, answered with the address as it now stands or why not. */
+  async function accountEmail(write: () => Promise<AccountEmail>): Promise<AccountEmailResult> {
+    try {
+      return { ok: true, error: null, email: await write() }
+    } catch (err) {
+      if (!(err instanceof ServerError)) log.error('A write to the server failed', err)
+      return { ok: false, error: err instanceof Error ? err.message : String(err), email: null }
     }
   }
 
@@ -464,6 +481,10 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       revokeInvite: (id: string) =>
         attempt(() => request<void>(`/admin/invites/${encodeURIComponent(id)}`, { method: 'DELETE' })),
 
+      /** Emails an invite's link to its address, when the invite says it can be. */
+      emailInvite: (id: string) =>
+        attempt(() => request<void>(`/admin/invites/${encodeURIComponent(id)}/email`, { method: 'POST' })),
+
       getSettings: () => request<ServerAdminSettings>('/admin/settings/'),
 
       setSettings: (patch: Partial<ServerAdminSettings>) =>
@@ -494,7 +515,59 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
               before: query.before
             })
           )
-        )
+        ),
+
+      /**
+       * Where the server's mail stands. Head admins only; null from a server
+       * too old to send mail, whose JSON 404 says so.
+       */
+      emailOverview: () => orNullIfMissing(() => request<EmailOverview>('/admin/email/')),
+
+      emailLog: (query: EmailLogQuery = {}) =>
+        orNullIfMissing(() =>
+          request<Page<EmailLogEntry>>(
+            withQuery('/admin/email/messages', {
+              kind: query.kind,
+              status: query.status,
+              q: query.q?.trim(),
+              limit: query.limit,
+              offset: query.offset
+            })
+          )
+        ),
+
+      emailSuppressions: (query: EmailSuppressionQuery = {}) =>
+        orNullIfMissing(() =>
+          request<Page<EmailSuppression>>(
+            withQuery('/admin/email/suppressions', {
+              q: query.q?.trim(),
+              limit: query.limit,
+              offset: query.offset
+            })
+          )
+        ),
+
+      clearEmailSuppression: (id: string) =>
+        attempt(() =>
+          request<void>(`/admin/email/suppressions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        ),
+
+      sendTestEmail: (to: string) =>
+        attempt(() => request<void>('/admin/email/test', { method: 'POST', body: { to: to.trim() } }))
+    },
+
+    /**
+     * The member's own address. A group of its own on the server, so one older
+     * than mail answers the lot with its JSON 404 — null here, and no banner.
+     */
+    account: {
+      email: () => orNullIfMissing(() => request<AccountEmail>('/account/email/')),
+
+      resendEmailConfirmation: () =>
+        accountEmail(() => request<AccountEmail>('/account/email/confirmation', { method: 'POST' })),
+
+      cancelEmailChange: () =>
+        accountEmail(() => request<AccountEmail>('/account/email/pending', { method: 'DELETE' }))
     },
 
     /** The endpoints an old stats.db is pushed through. See import/statsDbImporter. */

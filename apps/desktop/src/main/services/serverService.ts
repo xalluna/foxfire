@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import type { SessionUser } from '@foxfire/core'
+import type { AccountEmail, AccountEmailResult, SessionUser } from '@foxfire/core'
 import {
   ServerError,
   createServerApi,
@@ -465,6 +465,7 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
       recommendedDesktop: null,
       publicSignup: null,
       publicUrl: null,
+      email: null,
       compatibility: 'unknown'
     }
   }
@@ -625,6 +626,30 @@ export function changeEmail(change: EmailChange): Promise<ServerAuthResult> {
 
 export function changeUsername(username: string): Promise<ServerAuthResult> {
   return changeAccount((session) => session.changeUsername(username))
+}
+
+/**
+ * Your own address on the active server — confirmed or not, and any move to a
+ * new one waiting on its link. Null in local-only mode, and from a server
+ * older than mail.
+ */
+export async function accountEmail(): Promise<AccountEmail | null> {
+  if (!isServerMode()) return null
+  return serverApi().account.email()
+}
+
+const notConnected: AccountEmailResult = { ok: false, error: 'Not connected to a Foxfire server.', email: null }
+
+/** Another confirmation link, for the address being moved to or else the one you have. */
+export async function resendEmailConfirmation(): Promise<AccountEmailResult> {
+  if (!isServerMode()) return notConnected
+  return serverApi().account.resendEmailConfirmation()
+}
+
+/** Stops a move to a new address that has not been confirmed. */
+export async function cancelEmailChange(): Promise<AccountEmailResult> {
+  if (!isServerMode()) return notConnected
+  return serverApi().account.cancelEmailChange()
 }
 
 /**

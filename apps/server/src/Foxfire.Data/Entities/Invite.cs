@@ -27,14 +27,15 @@ public sealed class Invite
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Who it was meant for, when the admin said. Null is the usual case: Foxfire
-    /// sends no mail, so an invite is a link somebody pastes into Discord, and it
-    /// registers whoever opens it first.
+    /// Who it was meant for, when the admin said. Without one, an invite is a
+    /// link somebody pastes into Discord, and it registers whoever opens it
+    /// first.
     ///
-    /// With an address, registration must use it. That is mostly a convenience
-    /// rather than a lock — the preview tells anybody holding the link which
-    /// address it names, so it fills the form in for them — but it does mean the
-    /// account ends up with the address the admin expected.
+    /// With an address, registration must use it, and a server with an email
+    /// provider mails the link there. The rule is mostly a convenience rather
+    /// than a lock — the preview tells anybody holding the link which address it
+    /// names, so it fills the form in for them — but it does mean the account
+    /// ends up with the address the admin expected.
     /// </summary>
     public string? Email { get; set; }
 

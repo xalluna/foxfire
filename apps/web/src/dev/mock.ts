@@ -1,5 +1,6 @@
 import type {
   ConnectionState,
+  EmailConfirmation,
   FoxfireClient,
   InvitePreview,
   PasswordResetPreview,
@@ -46,7 +47,9 @@ const VERSION: VersionInfo = {
   recommendedDesktop: '0.12.0',
   publicSignup: true,
   apiBase: '/api',
-  publicUrl: window.location.origin
+  publicUrl: window.location.origin,
+  // ?scenario=email-off is a server with no provider: no "Forgot password?".
+  email: scenario !== 'email-off'
 }
 
 export function startMock(navigate: (path: string) => void): { client: FoxfireClient; platform: Platform } {
@@ -105,7 +108,24 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
             username: 'phantomduval',
             email: 'duval@example.com',
             message: 'Ready to use.'
-          }
+          },
+
+    // The same answer whatever the address, as the server gives it.
+    requestPasswordReset: async () => ({
+      message:
+        "If an account on this server uses that address and has confirmed it, a link to reset its password is on its way. It works for a day. Nothing arrived? Check your spam folder, or ask this server's administrator."
+    }),
+
+    // A short token is a link that was already used; anything longer confirms.
+    confirmEmail: async (token): Promise<EmailConfirmation> => {
+      if (token.length < 20) throw new Error('This link has already been used.')
+      return {
+        serverName: SERVER_NAME,
+        email: 'faker@example.com',
+        purpose: 'verify',
+        message: 'Your email is confirmed. If you ever forget your password, you can reset it yourself from the sign-in page.'
+      }
+    }
   })
 
   useAuth.setState({ user: USER, ready: true })

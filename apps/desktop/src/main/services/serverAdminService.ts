@@ -1,4 +1,9 @@
 import type {
+  EmailLogEntry,
+  EmailLogQuery,
+  EmailOverview,
+  EmailSuppression,
+  EmailSuppressionQuery,
   InsightsSection,
   InsightsSections,
   InsightsWindow,
@@ -104,6 +109,32 @@ export async function createInvite(email?: string): Promise<AdminInvite> {
 
 export async function revokeInvite(id: string): Promise<AdminActionResult> {
   return serverApi().admin.revokeInvite(id)
+}
+
+/** Emails an invite's link to its address, when the invite says it can be. */
+export async function emailInvite(id: string): Promise<AdminActionResult> {
+  return serverApi().admin.emailInvite(id)
+}
+
+/** Where the server's mail stands. Head admins only; null from a server older than mail. */
+export async function getEmailOverview(): Promise<EmailOverview | null> {
+  return serverApi().admin.emailOverview()
+}
+
+export async function listEmailLog(query?: EmailLogQuery): Promise<Page<EmailLogEntry> | null> {
+  return serverApi().admin.emailLog(query)
+}
+
+export async function listEmailSuppressions(query?: EmailSuppressionQuery): Promise<Page<EmailSuppression> | null> {
+  return serverApi().admin.emailSuppressions(query)
+}
+
+export async function clearEmailSuppression(id: string): Promise<AdminActionResult> {
+  return serverApi().admin.clearEmailSuppression(id)
+}
+
+export async function sendTestEmail(to: string): Promise<AdminActionResult> {
+  return serverApi().admin.sendTestEmail(to)
 }
 
 export async function getSettings(): Promise<ServerAdminSettings> {

@@ -41,6 +41,13 @@ public static class AdminInsightsEndpoints
         admin.MapGet("/runtime", (string? window, ISender sender, CancellationToken cancellationToken) =>
             sender.SendAsync(new GetInsightsRuntimeRequest(window), cancellationToken));
 
+        // Head admins only, beside the Email page it goes with. The counts say
+        // nothing about anybody, but the page they lead to is a list of
+        // members' addresses, and the two are one subject.
+        admin.MapGet("/email", (string? window, ISender sender, CancellationToken cancellationToken) =>
+                sender.SendAsync(new GetInsightsEmailRequest(window), cancellationToken))
+            .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.HeadAdmin));
+
         admin.MapGet("/logs", (
                 string? level,
                 int? limit,

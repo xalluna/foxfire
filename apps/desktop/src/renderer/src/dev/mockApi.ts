@@ -162,7 +162,11 @@ let serverState: ServerState =
   scenario === 'server-connected' ||
   scenario === 'server-degraded' ||
   scenario === 'server-admin' ||
-  scenario === 'insights-unsupported'
+  scenario === 'insights-unsupported' ||
+  scenario === 'email-off' ||
+  scenario === 'email-held' ||
+  scenario === 'unverified' ||
+  scenario === 'email-change-pending'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
@@ -354,6 +358,7 @@ export const mockApi: Api = {
               recommendedDesktop: null,
               publicSignup: null,
               publicUrl: null,
+              email: null,
               compatibility: 'unknown'
             }
           : {
@@ -367,6 +372,8 @@ export const mockApi: Api = {
               recommendedDesktop: '0.12.0',
               publicSignup: !url.includes('invite-only'),
               publicUrl: url,
+              // "no-mail" is a server with no email provider: no "Forgot password?".
+              email: !url.includes('no-mail'),
               // "too-old" is this build behind the server; "old-server" is the
               // server behind this build.
               compatibility: url.includes('too-old')
@@ -498,6 +505,10 @@ export const mockApi: Api = {
         300,
         false
       ),
+
+    accountEmail: fixture.account.email,
+    resendEmailConfirmation: fixture.account.resendEmailConfirmation,
+    cancelEmailChange: fixture.account.cancelEmailChange,
 
     changeUsername: (username: string): Promise<ServerAuthResult> =>
       delay(

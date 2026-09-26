@@ -1,10 +1,16 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
 import { playerSlug } from '@foxfire/core/routes'
 import { Icon, Logo } from '@foxfire/ui'
-import { PlayerSearchBox, queryKeys, useClient } from '@foxfire/screens'
+import {
+  PlayerSearchBox,
+  queryKeys,
+  useClient,
+  useEmailVerificationNudge,
+  useResendEmailConfirmation
+} from '@foxfire/screens'
 import { CaptureIndicator } from './components/CaptureIndicator'
 import { useRecordingUpdates, useReplayUpdates, useYouTubeUpdates } from './hooks/useDesktopUpdates'
 import { YouTubeUploadDialogHost } from './youtube/YouTubeUploadDialog'
@@ -101,6 +107,64 @@ function Banner({
     <button onClick={onClick} className={className}>
       {body}
     </button>
+  )
+}
+
+/**
+ * Asks the member to confirm their address, on a server that sends mail.
+ *
+ * Nothing is locked behind it — what confirming buys is resetting a forgotten
+ * password without asking an admin — so it can be put away until next launch.
+ * The link itself opens in a browser; this only offers to send another.
+ */
+function EmailConfirmBanner(): JSX.Element | null {
+  const nudge = useEmailVerificationNudge()
+  const resend = useResendEmailConfirmation()
+  const navigate = useNavigate()
+  const [dismissed, setDismissed] = useState(false)
+
+  if (!nudge || dismissed) return null
+
+  const waiting = nudge.canResendAt !== null && Date.parse(nudge.canResendAt) > Date.now()
+  const outcome = resend.data
+
+  return (
+    <Banner
+      tone="warning"
+      icon={<Icon.Mail className="shrink-0" />}
+      action={
+        <span className="flex items-center gap-2">
+          {!nudge.suppressed && (
+            <button
+              disabled={resend.isPending || waiting}
+              onClick={() => resend.mutate()}
+              className="rounded border border-amber/40 px-2 py-0.5 text-xs transition hover:bg-amber/15 disabled:opacity-50"
+            >
+              {resend.isPending ? 'Sending…' : 'Send again'}
+            </button>
+          )}
+          <button onClick={() => setDismissed(true)} aria-label="Not now" className="rounded p-1 transition hover:bg-amber/15">
+            <Icon.Close width={12} height={12} />
+          </button>
+        </span>
+      }
+    >
+      {nudge.kind === 'pending'
+        ? `Open the link emailed to ${nudge.address} to finish moving your account to it.`
+        : nudge.suppressed
+          ? `Mail to ${nudge.address} bounced, so it can't be confirmed. `
+          : `Confirm ${nudge.address} so you can reset your password yourself if you forget it.`}
+      {nudge.suppressed && (
+        <button
+          onClick={() => void navigate({ to: '/settings/{-$category}', params: { category: 'account' } })}
+          className="underline underline-offset-2"
+        >
+          Change it
+        </button>
+      )}
+      {outcome && !outcome.ok && <span className="ml-2 text-red">{outcome.error}</span>}
+      {outcome?.ok && <span className="ml-2">Sent — check your inbox.</span>}
+    </Banner>
   )
 }
 
@@ -325,6 +389,8 @@ export function AppShell(): JSX.Element {
               : `Foxfire ${updates.target} is ready — it will install once this game has finished.`}
         </Banner>
       )}
+
+      {connected && <EmailConfirmBanner />}
 
       {updates?.justInstalled != null && (
         <Banner tone="info" icon={<Icon.Check className="shrink-0" />} onClick={openWhatsNew}>

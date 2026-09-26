@@ -1,5 +1,7 @@
 import type {
   Account,
+  AccountEmail,
+  AccountEmailResult,
   AdminActionResult,
   AdminInvite,
   AdminPasswordReset,
@@ -13,6 +15,11 @@ import type {
   ChampionStats,
   DashboardData,
   EditableMatch,
+  EmailLogEntry,
+  EmailLogQuery,
+  EmailOverview,
+  EmailSuppression,
+  EmailSuppressionQuery,
   FavoriteOutcome,
   FavoritePlayer,
   InsightsSection,
@@ -276,6 +283,20 @@ export interface FoxfireClient extends FoxfireData {
     get: () => Promise<AssetManifest>
   }
   /**
+   * The signed-in member's own account, beyond who they are.
+   *
+   * Only their address for now: whether it is confirmed, a move to a new one
+   * waiting on its link, and asking for another link. Null answers mean there
+   * is nothing to say — local-only, signed out, or a server older than mail.
+   */
+  account: {
+    email: () => Promise<AccountEmail | null>
+    /** Another link, for the address being moved to or else the one you have. */
+    resendEmailConfirmation: () => Promise<AccountEmailResult>
+    /** Stops a move to a new address that has not been confirmed. */
+    cancelEmailChange: () => Promise<AccountEmailResult>
+  }
+  /**
    * Administering a server. Only offered to somebody the connection says is an
    * admin, and only ever authoritative because the server checks the role
    * itself on every request. Reads throw; writes answer with a result, because
@@ -300,6 +321,12 @@ export interface FoxfireClient extends FoxfireData {
      */
     createInvite: (email?: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
+    /**
+     * Emails an invite's link to its address: again after it failed or
+     * bounced, or for the first time for an invite made before the server sent
+     * mail. Only when the invite says `canEmail`.
+     */
+    emailInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
     storage: () => Promise<ServerStorageUsage>
@@ -325,6 +352,19 @@ export interface FoxfireClient extends FoxfireData {
     ) => Promise<InsightsSections[S] | null>
     /** A page of the server's recent log lines, newest first. Null from a server too old to keep them. */
     serverLogs: (query?: ServerLogQuery) => Promise<Page<ServerLogEntry> | null>
+    /**
+     * Where the server's mail stands — the quota, the queue. Head admins only.
+     * Null from a server too old to send mail.
+     */
+    emailOverview: () => Promise<EmailOverview | null>
+    /** A page of every email the server sent or meant to, newest first. Head admins only. */
+    emailLog: (query?: EmailLogQuery) => Promise<Page<EmailLogEntry> | null>
+    /** A page of the addresses mail is no longer sent to. Head admins only. */
+    emailSuppressions: (query?: EmailSuppressionQuery) => Promise<Page<EmailSuppression> | null>
+    /** Lets mail go to an address again. */
+    clearEmailSuppression: (id: string) => Promise<AdminActionResult>
+    /** A test email to any address — counted, logged and held like the rest. */
+    sendTestEmail: (to: string) => Promise<AdminActionResult>
   }
   /** What changed underneath the screens, from wherever the change happened. */
   events: {

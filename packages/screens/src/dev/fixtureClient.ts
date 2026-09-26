@@ -63,6 +63,18 @@ import {
 } from './fixtures'
 import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
 import { fixtureInsights, fixtureServerLogs } from './insightsFixtures'
+import {
+  MAIL_ON,
+  delivery,
+  fixtureAccountEmail,
+  fixtureCancelEmailChange,
+  fixtureClearSuppression,
+  fixtureEmailLog,
+  fixtureEmailOverview,
+  fixtureEmailSuppressions,
+  fixtureResendConfirmation,
+  fixtureSendTestEmail
+} from './emailFixtures'
 import { KEY_EXPIRED, MOCK_SERVER_URL, delay, fail, scenario } from './scenario'
 
 /**
@@ -218,7 +230,13 @@ function runFakeSync(accountId: string): void {
  * has been upgraded past this client.
  */
 const connection: ConnectionState =
-  scenario === 'server-connected' || scenario === 'server-degraded' || scenario === 'insights-unsupported'
+  scenario === 'server-connected' ||
+  scenario === 'server-degraded' ||
+  scenario === 'insights-unsupported' ||
+  scenario === 'email-off' ||
+  scenario === 'email-held' ||
+  scenario === 'unverified' ||
+  scenario === 'email-change-pending'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
@@ -344,7 +362,8 @@ let mockUsers: AdminUser[] = [
     createdAt: '2026-06-01T10:00:00.000Z',
     linkedRiotAccounts: 2,
     activeSessions: 1,
-    passwordReset: null
+    passwordReset: null,
+    emailConfirmed: true
   },
   {
     id: 'u-4',
@@ -357,7 +376,16 @@ let mockUsers: AdminUser[] = [
     createdAt: '2026-06-20T17:45:00.000Z',
     linkedRiotAccounts: 1,
     activeSessions: 1,
-    passwordReset: null
+    passwordReset: null,
+    emailConfirmed: true,
+    // Asked for a reset from the sign-in page: an admin sees that it went, never the link.
+    requestedReset: MAIL_ON
+      ? {
+          createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+          expiresAt: new Date(Date.now() + 22 * 3_600_000).toISOString(),
+          mail: delivery('delivered', 2)
+        }
+      : null
   },
   {
     id: 'u-5',
@@ -376,8 +404,11 @@ let mockUsers: AdminUser[] = [
       userId: 'u-5',
       link: 'https://foxfire.example.com/reset-password/Q2hvdnlSZXNldExpbmtGb3JIYXJuZXNz.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU',
       createdAt: '2026-09-21T20:00:00.000Z',
-      expiresAt: '2026-09-22T20:00:00.000Z'
-    }
+      expiresAt: '2026-09-22T20:00:00.000Z',
+      mail: MAIL_ON ? delivery('sent', 5) : null,
+      notEmailed: MAIL_ON ? null : 'email_off'
+    },
+    emailConfirmed: true
   },
   {
     id: 'u-2',
@@ -397,8 +428,12 @@ let mockUsers: AdminUser[] = [
       userId: 'u-2',
       link: 'https://foxfire.example.com/reset-password/SGVsbG9SZXNldExpbmtGb3JIYXJuZXNz.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU',
       createdAt: '2026-09-21T20:00:00.000Z',
-      expiresAt: '2026-09-22T20:00:00.000Z'
-    }
+      expiresAt: '2026-09-22T20:00:00.000Z',
+      mail: null,
+      notEmailed: MAIL_ON ? 'unverified' : 'email_off'
+    },
+    // Never confirmed, which is why that link was not emailed.
+    emailConfirmed: false
   },
   {
     id: 'u-3',
@@ -411,7 +446,9 @@ let mockUsers: AdminUser[] = [
     createdAt: '2026-08-02T09:15:00.000Z',
     linkedRiotAccounts: 0,
     activeSessions: 0,
-    passwordReset: null
+    passwordReset: null,
+    emailConfirmed: true,
+    emailSuppressed: MAIL_ON
   },
   // Enough more that the page has pages: 120 people, in three of them.
   ...Array.from({ length: 117 }, (_, i): AdminUser => {
@@ -427,7 +464,8 @@ let mockUsers: AdminUser[] = [
       createdAt: new Date(Date.UTC(2026, 5, 1) + i * 3_600_000 * 11).toISOString(),
       linkedRiotAccounts: i % 3,
       activeSessions: i % 4 === 0 ? 0 : 1,
-      passwordReset: null
+      passwordReset: null,
+      emailConfirmed: i % 5 !== 0
     }
   })
 ]
@@ -444,7 +482,9 @@ let mockInvites: AdminInvite[] = [
     expiresAt: '2026-09-24T12:00:00.000Z',
     redeemedAt: null,
     redeemedBy: null,
-    isOpen: true
+    isOpen: true,
+    mail: MAIL_ON ? delivery('delivered', 30) : null,
+    canEmail: false
   },
   {
     id: 'i-2',
@@ -464,7 +504,10 @@ let mockInvites: AdminInvite[] = [
     expiresAt: '2026-10-02T09:00:00.000Z',
     redeemedAt: null,
     redeemedBy: null,
-    isOpen: true
+    isOpen: true,
+    // Bounced hard, so the address is suppressed and there is nothing to retry.
+    mail: MAIL_ON ? delivery('bounced', 30, 'hard_bounce') : null,
+    canEmail: false
   },
   {
     id: 'i-4',
@@ -474,7 +517,14 @@ let mockInvites: AdminInvite[] = [
     expiresAt: '2026-10-04T15:30:00.000Z',
     redeemedAt: null,
     redeemedBy: null,
-    isOpen: true
+    isOpen: true,
+    // Waiting on the day, or failed and ready to try again.
+    mail: MAIL_ON
+      ? scenario === 'email-held'
+        ? delivery('held', 1, 'standard_share')
+        : delivery('failed', 6, 'validation_error')
+      : null,
+    canEmail: MAIL_ON && scenario !== 'email-held'
   },
   // Links made without an address, the usual kind: one waiting to be opened,
   // and one somebody already joined with.
@@ -723,6 +773,15 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       // Real Data Dragon metadata, so champion, item, spell and rune art all load
       // from the CDN exactly as it does in the app.
       get: (): Promise<AssetManifest> => delay(DDRAGON_MANIFEST, 60, false)
+    },
+
+    account: {
+      // Whoever mounts this decides whether anybody is signed in — the web
+      // harness replaces the connection — and the screens only ask when
+      // somebody is, so this always answers.
+      email: fixtureAccountEmail,
+      resendEmailConfirmation: fixtureResendConfirmation,
+      cancelEmailChange: fixtureCancelEmailChange
     },
 
     champions: {
@@ -1074,7 +1133,15 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           expiresAt: new Date(Date.now() + 14 * 24 * 3600_000).toISOString(),
           redeemedAt: null,
           redeemedBy: null,
-          isOpen: true
+          isOpen: true,
+          // Emailed on a server that sends mail, held when the day is spent.
+          mail:
+            address !== null && MAIL_ON
+              ? scenario === 'email-held'
+                ? delivery('held', 0, 'standard_share')
+                : delivery('queued', 0)
+              : null,
+          canEmail: false
         }
 
         mockInvites = [invite, ...mockInvites]
@@ -1085,6 +1152,22 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         mockInvites = mockInvites.filter((i) => i.id !== id)
         return delay({ ok: true, error: null }, 200, false)
       },
+
+      emailInvite: (id: string): Promise<AdminActionResult> => {
+        const invite = mockInvites.find((i) => i.id === id)
+        if (!invite?.canEmail) {
+          return delay({ ok: false, error: 'The email for that invite is already on its way, or has arrived.' }, 200, false)
+        }
+
+        mockInvites = mockInvites.map((i) => (i.id === id ? { ...i, mail: delivery('queued', 0), canEmail: false } : i))
+        return delay({ ok: true, error: null }, 250, false)
+      },
+
+      emailOverview: fixtureEmailOverview,
+      emailLog: fixtureEmailLog,
+      emailSuppressions: fixtureEmailSuppressions,
+      clearEmailSuppression: fixtureClearSuppression,
+      sendTestEmail: fixtureSendTestEmail,
 
       getSettings: (): Promise<ServerAdminSettings> => delay(mockServerSettings, 180, false),
 

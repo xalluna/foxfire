@@ -5,7 +5,12 @@ import {
   SettingsCard,
   SettingsPage
 } from '@foxfire/ui'
-import { useConnection } from '@foxfire/screens'
+import {
+  useAccountEmail,
+  useCancelEmailChange,
+  useConnection,
+  useResendEmailConfirmation
+} from '@foxfire/screens'
 import { LinkAccountRow } from './LinkAccountRow'
 import { LinkedAccountRows } from './LinkedAccountRows'
 
@@ -23,6 +28,9 @@ import { LinkedAccountRows } from './LinkedAccountRows'
 export function AccountSettings(): JSX.Element {
   const connection = useConnection()
   const session = connection?.mode === 'server' ? connection.session : null
+  const email = useAccountEmail()
+  const resend = useResendEmailConfirmation()
+  const cancel = useCancelEmailChange()
 
   if (!session) {
     return <SettingsPage title="Account">{null}</SettingsPage>
@@ -43,7 +51,17 @@ export function AccountSettings(): JSX.Element {
         onSave={(username) => window.api.server.changeUsername(username)}
       />
 
-      <ChangeEmailCard email={session.email} onSave={(change) => window.api.server.changeEmail(change)} />
+      <ChangeEmailCard
+        email={session.email}
+        status={email.data}
+        onSave={async (change) => {
+          const result = await window.api.server.changeEmail(change)
+          void email.refetch()
+          return result
+        }}
+        onResend={() => resend.mutateAsync()}
+        onCancelPending={() => cancel.mutateAsync()}
+      />
 
       <ChangePasswordCard onSave={(change) => window.api.server.changePassword(change)} />
 
