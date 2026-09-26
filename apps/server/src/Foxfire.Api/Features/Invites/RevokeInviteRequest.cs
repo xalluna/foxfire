@@ -1,5 +1,7 @@
 using Foxfire.Api.Common;
+using Foxfire.Api.Email;
 using Foxfire.Data;
+using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Features.Invites;
@@ -15,6 +17,7 @@ public sealed record RevokeInviteRequest(Guid Id) : IEmptyDomainRequest;
 
 internal sealed class RevokeInviteRequestHandler(
     FoxfireDbContext db,
+    EmailOutbox outbox,
     TimeProvider time,
     ILogger<RevokeInviteRequestHandler> logger)
     : IDomainRequestHandler<RevokeInviteRequest>
@@ -36,6 +39,7 @@ internal sealed class RevokeInviteRequestHandler(
         {
             invite.RevokedAt = time.GetUtcNow();
             await db.SaveChangesAsync(cancellationToken);
+            await outbox.WithdrawAsync(EmailKinds.Invite, invite.Id, "revoked", cancellationToken);
             logger.LogInformation("Withdrew invite {InviteId}", invite.Id);
         }
 

@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,7 @@ public sealed record ListUsedInvitesRequest(int? Limit = null, int? Offset = nul
 
 internal sealed class ListUsedInvitesRequestHandler(
     FoxfireDbContext db,
+    EmailOutbox outbox,
     IOptions<ServerOptions> server,
     IOptions<AuthOptions> auth,
     TimeProvider time)
@@ -42,7 +44,9 @@ internal sealed class ListUsedInvitesRequestHandler(
             .ThenBy(i => i.Id)
             .ToPageAsync(PageRequest.Of(request.Limit, request.Offset), cancellationToken);
 
-        return Response<Page<InviteResponse>>.Success(
-            invites.Map(i => InviteLookup.Describe(i, server.Value, auth.Value, now)));
+        var described = await InviteLookup.DescribeWithMailAsync(
+            invites.Items, db, outbox.IsEnabled, server.Value, auth.Value, now, cancellationToken);
+
+        return Response<Page<InviteResponse>>.Success(new Page<InviteResponse>(described, invites.Total));
     }
 }

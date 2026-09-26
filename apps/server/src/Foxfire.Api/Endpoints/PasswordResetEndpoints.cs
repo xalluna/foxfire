@@ -41,6 +41,17 @@ public static class PasswordResetEndpoints
 
         var links = app.MapGroup("/password-resets").WithTags("Password resets");
 
+        // "Forgot password?" Anybody may ask, which is why it answers the same
+        // whatever the address, sends only to a confirmed one, and sends once
+        // per live link — see RequestPasswordResetRequest.
+        links.MapPost("/request", (
+                    [FromBody] RequestPasswordResetRequest request,
+                    ISender sender,
+                    CancellationToken cancellationToken) =>
+                sender.SendAsync(request, cancellationToken))
+            .AllowAnyDesktopVersion()
+            .RequireRateLimiting(RateLimits.Auth);
+
         links.MapGet("/{token}/preview", (string token, ISender sender, CancellationToken cancellationToken) =>
                 sender.SendAsync(new PreviewPasswordResetRequest(token), cancellationToken))
             .AllowAnyDesktopVersion()

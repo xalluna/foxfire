@@ -1,36 +1,47 @@
 using Foxfire.Api.Common;
+using Foxfire.Api.Features.Account;
+using Foxfire.Data;
 using Foxfire.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Features.Auth;
 
 /// <summary>
-/// Who the caller is, read off the token rather than out of the database.
+/// Who the caller is.
 ///
-/// No query, deliberately. Everything on this answer is already in the access
-/// token, which is fifteen minutes old at most, and the desktop calls this on
-/// every reconnect — a round trip to SQL Server to repeat what the token just
-/// said would be work nobody asked for.
+/// The roles come off the token, which is fifteen minutes old at most. The
+/// address and whether it is confirmed come from the database: confirming is
+/// something that happens in another tab — the link in an email — and a banner
+/// asking somebody to confirm an address they confirmed a minute ago would say
+/// the opposite of what is true until the token renewed.
 /// </summary>
 public sealed record GetCurrentUserRequest : IDomainRequest<MeResponse>;
 
-internal sealed class GetCurrentUserRequestHandler(IIdentityContext me)
+internal sealed class GetCurrentUserRequestHandler(IIdentityContext me, FoxfireDbContext db, TimeProvider time)
     : IDomainRequestHandler<GetCurrentUserRequest, MeResponse>
 {
-    public Task<Response<MeResponse>> Handle(GetCurrentUserRequest request, CancellationToken cancellationToken)
+    public async Task<Response<MeResponse>> Handle(GetCurrentUserRequest request, CancellationToken cancellationToken)
     {
-        if (me.UserId is not { } id)
+        var user = me.UserId is { } id
+            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, cancellationToken)
+            : null;
+
+        if (user is null)
         {
-            return Task.FromResult(Response<MeResponse>.Failure(
+            return Response<MeResponse>.Failure(
                 new Error("unauthenticated", "Sign in again."),
-                System.Net.HttpStatusCode.Unauthorized));
+                System.Net.HttpStatusCode.Unauthorized);
         }
 
-        return Task.FromResult<Response<MeResponse>>(new MeResponse(
-            id,
-            me.Username ?? "",
-            me.Email ?? "",
+        var pending = await AccountEmail.PendingChangeAsync(db, user, time.GetUtcNow(), cancellationToken);
+
+        return new MeResponse(
+            user.Id,
+            user.UserName ?? me.Username ?? "",
+            user.Email ?? me.Email ?? "",
             me.IsInRole(FoxfireRoles.Admin),
             me.IsInRole(FoxfireRoles.HeadAdmin),
-            EmailConfirmed: false));
+            user.EmailConfirmed,
+            pending?.Email);
     }
 }

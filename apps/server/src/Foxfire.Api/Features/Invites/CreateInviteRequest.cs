@@ -1,8 +1,10 @@
 using FluentValidation;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
+using Foxfire.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -12,8 +14,8 @@ namespace Foxfire.Api.Features.Invites;
 /// Permission for one person to register while public signup is off.
 ///
 /// The address is optional. Without one the invite is a link for whoever opens
-/// it first — which is how a server with no mail gets somebody in: the admin
-/// pastes it into Discord. With one, registration must use that address.
+/// it first — the admin pastes it into Discord. With one, registration must use
+/// that address, and a server that sends mail emails the link there too.
 /// </summary>
 public sealed record CreateInviteRequest(string? Email) : IValidatedRequest<InviteResponse>;
 
@@ -28,6 +30,7 @@ internal sealed class CreateInviteRequestValidator : AbstractValidator<CreateInv
 
 internal sealed class CreateInviteRequestHandler(
     FoxfireDbContext db,
+    EmailOutbox outbox,
     IIdentityContext me,
     IOptions<ServerOptions> server,
     IOptions<AuthOptions> auth,
@@ -61,7 +64,8 @@ internal sealed class CreateInviteRequestHandler(
 
             if (existing is not null)
             {
-                return InviteLookup.Describe(existing, server.Value, auth.Value, now);
+                return (await InviteLookup.DescribeWithMailAsync(
+                    [existing], db, outbox.IsEnabled, server.Value, auth.Value, now, cancellationToken))[0];
             }
         }
 
@@ -75,6 +79,23 @@ internal sealed class CreateInviteRequestHandler(
         };
 
         db.Invites.Add(invite);
+
+        // Saved with the invite, so the two stand or fall together. Standard
+        // mail: invites are what an admin makes in batches, and they must not
+        // use up what a locked-out member's reset needs.
+        if (email is not null)
+        {
+            await outbox.AddAsync(
+                EmailKinds.Invite,
+                EmailPriority.Standard,
+                email,
+                relatedId: invite.Id,
+                userId: null,
+                triggeredBy: me.UserId,
+                worthlessAfter: invite.ExpiresAt,
+                cancellationToken);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         if (email is null)
@@ -86,6 +107,7 @@ internal sealed class CreateInviteRequestHandler(
             logger.LogInformation("Created invite {InviteId} for {Email}", invite.Id, email);
         }
 
-        return InviteLookup.Describe(invite, server.Value, auth.Value, now);
+        return (await InviteLookup.DescribeWithMailAsync(
+            [invite], db, outbox.IsEnabled, server.Value, auth.Value, now, cancellationToken))[0];
     }
 }

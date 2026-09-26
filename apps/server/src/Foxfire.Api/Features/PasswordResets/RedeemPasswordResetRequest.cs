@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Api.Features.Account;
 using Foxfire.Api.Features.Auth;
 using Foxfire.Data;
@@ -35,6 +36,7 @@ internal sealed class RedeemPasswordResetRequestHandler(
     FoxfireDbContext db,
     UserManager<FoxfireUser> users,
     TokenService tokens,
+    EmailOutbox outbox,
     IOptions<AuthOptions> auth,
     TimeProvider time,
     ILogger<RedeemPasswordResetRequestHandler> logger)
@@ -120,6 +122,8 @@ internal sealed class RedeemPasswordResetRequestHandler(
         logger.LogWarning(
             "{Username} set a new password with a reset link; every session on the account was ended",
             user.UserName);
+
+        await outbox.NotifyPasswordChangedAsync(user, cancellationToken);
 
         return Sessions.Describe(pair, user, roles);
     }

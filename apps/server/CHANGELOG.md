@@ -20,8 +20,12 @@ figure somebody else had typed wrong. Now there is a head admin above the rest:
 the account in `ADMIN_EMAIL` always is one, and it can make others. Head admins
 import, can type LP on anybody's games, and are the only ones who can act against
 another admin. And an invite is a link now, with no email address needed to
-make one — Foxfire sends no mail, so the address was only ever in the way of
-pasting a link into Discord. The server can also tell whoever runs it what it
+make one — the link is how an invite travels, pasted into Discord. And the
+server can send email, through Resend: invites with an address and reset links
+are emailed as well as shown, members can reset a forgotten password themselves
+and confirm their address, and it never sends more than the plan allows — a
+head admin sees the allowance, every message and what became of it on a new
+Email page. The server can also tell whoever runs it what it
 has been doing: an admin opens Insights and sees the requests it answered and
 how quickly, what it asked of Riot and how close it came to the key's limits,
 every sync it ran, the process underneath, and who is connected — live over the
@@ -64,6 +68,41 @@ other number, too.
   history the server writes down a minute at a time, so a restart or an update
   costs the seconds it took and nothing more. A gap in a chart is the server
   being down, not a quiet hour.
+- **Email, through Resend.** Optional: set `EMAIL_PROVIDER=resend`, an address
+  on a domain you verified with Resend, and a sending-only API key. Without it
+  nothing changes — every link is still yours to copy. With it:
+  - **An invite with an address is emailed there**, and the invite row says
+    whether it was sent, delivered or bounced. One that failed or bounced can
+    be emailed again from the row.
+  - **A reset link an admin makes is emailed to the member** — when they have
+    confirmed their address, and only then: a link that hands over the account
+    does not go to an address nobody has shown they read. The admin still gets
+    the link either way, and is told why when it was not emailed.
+  - **Forgot password.** The sign-in page offers it, and a link to set a new
+    password is emailed to a confirmed address. The answer is the same whatever
+    address is typed, so nobody can use it to find out who is on the server,
+    and asking again while the first link still works sends nothing more.
+  - **Confirming your address.** A new account is sent a link that confirms it,
+    and the web client asks until it is opened. Registering through an invite
+    that was emailed to you confirms it at once.
+  - **Your password was changed** — an email to a confirmed address whenever it
+    is, so somebody whose account was taken over finds out.
+- **It never sends more than your Resend plan allows.** 100 a day and 3,000 a
+  month by default — the free plan — or whatever you set. The count is the
+  larger of what the server sent and what Resend says has gone, so mail sent
+  from anything else on the account counts too. Past a limit, mail waits for the
+  day or the month to reset rather than being refused, and a link that expires
+  while it waits is not sent. Password resets and confirmations always go
+  first: invites, sign-ups and tests stop at 80% of the day, keeping the rest
+  for somebody locked out.
+- **The Email page**, for head admins only — it lists members' addresses.
+  Today's and this month's allowance, what is waiting and until when, every
+  message and what became of it, the addresses mail is no longer sent to, and a
+  test send. With a webhook set up, delivery, bounces and spam complaints are
+  tracked; an address that bounces for good, or reports spam, is not sent to
+  again until a head admin clears it.
+- **An Email tab on Insights**, for head admins: sends, deliveries and bounces
+  over time, what was held, and the allowance used.
 
 ### Changed
 
@@ -83,6 +122,13 @@ other number, too.
   password.
 - **Only a head admin can move onto the `ADMIN_EMAIL` address**, since holding it
   makes a head admin at the next restart.
+- **Changing your address waits for the new one to confirm**, on a server that
+  sends mail. The old address stays the one you sign in with until the link
+  sent to the new one is opened, so a typo cannot lock you out. It can be sent
+  again or cancelled while it waits. Without mail it changes at once, as before.
+- **Existing members start with their address unconfirmed.** Nothing is blocked
+  by it; they are asked to confirm, and until they do, a forgotten password is
+  still an admin's reset link.
 - **An invite no longer needs an email address.** *Create invite link* gives you
   a link to paste into Discord or anywhere else, and it signs up whoever opens it
   first. You can still add an address: their sign-up form fills it in, and only
@@ -93,8 +139,43 @@ other number, too.
   typeface as every other number, rather than the one used for headings. That typeface's numerals
   made "11W" read as "llW", and made the block look like it came from somewhere else.
 
+### Removed
+
+- **The `SMTP_*` settings**, which never sent anything. Email is `EMAIL_*` and
+  `RESEND_*` now; see `.env.example`.
+
 ### Under the hood
 
+- **Request log lines no longer carry a link's token.** The path of an invite
+  or reset link — `/api/password-resets/{token}/redeem` and the rest — used to
+  be logged whole, and Insights › Logs shows those lines to every admin. The
+  token segment is written as `{token}` now; new routes carry tokens in the
+  body instead.
+- Mail is provider-agnostic: an `IEmailProvider` in a new `Foxfire.Email`
+  library, registered keyed by name and chosen by `Email__Provider`. Resend is
+  the only one, written against its HTTP API rather than its SDK so its quota
+  and rate-limit headers are read; its webhooks are checked against their Svix
+  signature.
+- Four tables, migrated on boot (`Email`): `EmailMessages`, the outbox that is
+  also the log — never a body or a link, which are rebuilt from the invite or
+  reset at send time — `EmailSuppressions`, `EmailVerifications`, and
+  `EmailQuotaObservations`, what the provider last said about its quota.
+- A background dispatcher sends what is due, one process at a time under a SQL
+  Server application lock, with a lease on each message so one a process died
+  holding goes again — under the same idempotency key. Outages are retried with
+  backoff for up to eight attempts; a key or domain Resend refuses holds
+  everything and says so on the Email page.
+- New routes: `POST /api/password-resets/request`,
+  `POST /api/email-verifications/confirm`, `GET|POST|DELETE /api/account/email`,
+  `POST /api/admin/invites/{id}/email`, `/api/admin/email/*` (head admins),
+  `GET /api/admin/insights/email` (head admins) and
+  `POST /api/email/webhooks/resend`. `/version` says whether the server sends
+  mail, sessions carry `emailConfirmed` for real and `pendingEmail`, invites and
+  resets carry their mail status, and members `emailConfirmed`. Added fields, so
+  the API version stays 3. The email log and the suppressions are pages.
+- Metrics `email.sends`, `email.events`, `email.queue_depth` and
+  `email.quota_used`. Warnings at 80% of a limit and at the limit, when an
+  address is suppressed, and when a webhook's signature does not check out.
 - `HeadAdmin` is a second Identity role, created on boot like the first, and
   always held alongside `Admin`; there is no migration. Sessions and the member
   list carry `isHeadAdmin`, and the member list `isConfiguredAdmin` — added

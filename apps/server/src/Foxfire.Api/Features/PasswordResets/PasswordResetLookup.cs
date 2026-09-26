@@ -1,4 +1,5 @@
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -8,22 +9,31 @@ namespace Foxfire.Api.Features.PasswordResets;
 
 /// <summary>A reset link as the admin who made it sees it.</summary>
 /// <param name="Link">
-/// The whole point of the shape. This server sends no mail, so the link is
-/// readable and copyable — it goes wherever the community actually talks.
+/// The whole point of the shape. The link is readable and copyable whether or
+/// not the server emailed it — it goes wherever the community actually talks.
+/// </param>
+/// <param name="Mail">What became of the email carrying it, when one was sent.</param>
+/// <param name="NotEmailed">
+/// Why it was not emailed, when it was not: <c>email_off</c> (this server sends
+/// no mail), <c>unverified</c> (the member has never confirmed their address, and
+/// a link that takes an account over is not sent to an address nobody has
+/// shown they read) or <c>suppressed</c> (mail to the address bounced).
 /// </param>
 public sealed record PasswordResetResponse(
     Guid Id,
     Guid UserId,
     string Link,
     DateTimeOffset CreatedAt,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    EmailDeliveryResponse? Mail = null,
+    string? NotEmailed = null);
 
 /// <summary>
 /// Turning a token back into the reset it names, and a reset into the shape an
 /// admin reads.
 ///
-/// Shared by four handlers and the user list, which is why it is here rather
-/// than private to one of them.
+/// Shared by the reset handlers, the user list and the email renderer, which is
+/// why it is here rather than private to one of them.
 /// </summary>
 internal static class PasswordResetLookup
 {
@@ -88,15 +98,32 @@ internal static class PasswordResetLookup
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(auth);
 
-        var token = ResetToken.Issue(reset.Id, reset.ExpiresAt, auth.InviteSigningKeyBytes);
-
         return new PasswordResetResponse(
             reset.Id,
             reset.UserId,
-            Link: $"{server.PublicUrl.TrimEnd('/')}/reset-password/{token}",
+            Link: LinkFor(reset, server, auth),
             reset.CreatedAt,
             reset.ExpiresAt);
     }
+
+    /// <summary>The link a reset travels as — the same one every time, so the emailed one is the one an admin copies.</summary>
+    public static string LinkFor(PasswordReset reset, ServerOptions server, AuthOptions auth)
+    {
+        ArgumentNullException.ThrowIfNull(reset);
+        ArgumentNullException.ThrowIfNull(server);
+        ArgumentNullException.ThrowIfNull(auth);
+
+        var token = ResetToken.Issue(reset.Id, reset.ExpiresAt, auth.InviteSigningKeyBytes);
+        return $"{server.PublicUrl.TrimEnd('/')}/reset-password/{token}";
+    }
+
+    /// <summary>
+    /// Whether a member made this link for themselves, by asking for it on the
+    /// sign-in page, rather than an admin making it for them. Nobody but the
+    /// member ever sees such a link: it went to their address.
+    /// </summary>
+    public static bool IsSelfService(PasswordReset reset) =>
+        reset.CreatedByUserId is { } by && by == reset.UserId;
 
     /// <summary>
     /// Disabled by an admin, which is a lockout with no end date — what

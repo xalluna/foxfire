@@ -5,7 +5,8 @@ using Foxfire.Api.Common;
 namespace Foxfire.Api.Tests;
 
 /// <summary>
-/// Reset links: the way back into an account on a server that cannot send mail.
+/// Reset links: the way back into an account when nobody can email one — on a
+/// server with no mail, or for a member who never confirmed their address.
 ///
 /// An admin makes one, copies it, and sends it however their community talks.
 /// The link is short-lived and single use, there is never more than one live per

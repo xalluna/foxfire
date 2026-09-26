@@ -217,7 +217,9 @@ public class WireShapeTests(FoxfireServerFixture server)
             "/api/admin/users/",
             "/api/admin/invites/used",
             "/api/admin/storage/replays",
-            "/api/admin/insights/logs"
+            "/api/admin/insights/logs",
+            "/api/admin/email/messages",
+            "/api/admin/email/suppressions"
         ];
 
         foreach (var route in paged)
