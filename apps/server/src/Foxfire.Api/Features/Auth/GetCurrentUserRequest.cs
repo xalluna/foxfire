@@ -30,6 +30,7 @@ internal sealed class GetCurrentUserRequestHandler(IIdentityContext me)
             me.Username ?? "",
             me.Email ?? "",
             me.IsInRole(FoxfireRoles.Admin),
+            me.IsInRole(FoxfireRoles.HeadAdmin),
             EmailConfirmed: false));
     }
 }

@@ -239,8 +239,14 @@ export interface ConnectionState {
    */
   publicUrl: string | null
   serverName: string | null
-  /** Who is signed in. Null in local-only mode, and while signed out. */
-  session: { username: string; email: string; isAdmin: boolean } | null
+  /**
+   * Who is signed in. Null in local-only mode, and while signed out.
+   *
+   * A head admin is an admin too, so `isAdmin` is true whenever `isHeadAdmin`
+   * is; the second is what offers the import, LP on anybody's games, and the
+   * buttons that act against another admin.
+   */
+  session: { username: string; email: string; isAdmin: boolean; isHeadAdmin: boolean } | null
   /** The server's own Riot key has been refused — the host's to fix, not the reader's. */
   riotKeyRejected: boolean
   /** Set when the server refused this client outright, with the version it wants. */

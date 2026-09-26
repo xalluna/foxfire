@@ -4,7 +4,17 @@ using Foxfire.Data.Entities;
 namespace Foxfire.Api.Features.Auth;
 
 /// <summary>Who somebody is, as every screen that greets them reads it.</summary>
-public sealed record MeResponse(Guid Id, string Username, string Email, bool IsAdmin, bool EmailConfirmed);
+/// <param name="IsHeadAdmin">
+/// An admin who may also import, type anybody's LP, and act against other
+/// admins. Always an admin as well, so IsAdmin is true whenever this is.
+/// </param>
+public sealed record MeResponse(
+    Guid Id,
+    string Username,
+    string Email,
+    bool IsAdmin,
+    bool IsHeadAdmin,
+    bool EmailConfirmed);
 
 /// <summary>A signed-in session, and the two tokens that keep it.</summary>
 public sealed record SessionResponse(
@@ -33,5 +43,6 @@ internal static class Sessions
                 user.UserName ?? "",
                 user.Email ?? "",
                 roles.Contains(FoxfireRoles.Admin),
+                roles.Contains(FoxfireRoles.HeadAdmin),
                 user.EmailConfirmed));
 }

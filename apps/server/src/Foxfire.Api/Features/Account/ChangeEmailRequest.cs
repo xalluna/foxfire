@@ -20,11 +20,12 @@ namespace Foxfire.Api.Features.Account;
 /// a renewal.
 ///
 /// Admin__Email is the exception, both ways round. Registering with that
-/// address grants the Admin role even on a server with signup shut, and the
+/// address makes a head admin even on a server with signup shut, and the
 /// configured address is re-granted it on every boot, so it is a claim on the
 /// server rather than an ordinary address. The account holding it cannot move
 /// off it here, because that would leave the claim unheld for anybody to take,
-/// and nobody who is not already an admin can move onto it.
+/// and nobody who is not already a head admin can move onto it — for a plain
+/// admin, the next restart would be a promotion nobody gave them.
 /// </summary>
 public sealed record ChangeEmailRequest(string Email, string CurrentPassword) : IValidatedRequest<MeResponse>;
 
@@ -73,7 +74,7 @@ internal sealed class ChangeEmailRequestHandler(
                 + "rather than here. Change Admin__Email and restart the server to move it.");
         }
 
-        if (Accounts.IsConfiguredAdmin(email, configured) && !me.IsInRole(FoxfireRoles.Admin))
+        if (Accounts.IsConfiguredAdmin(email, configured) && !me.IsInRole(FoxfireRoles.HeadAdmin))
         {
             return new Error("admin_email_reserved", "That address is reserved for this server's administrator.");
         }
@@ -101,6 +102,7 @@ internal sealed class ChangeEmailRequestHandler(
             user.UserName ?? "",
             user.Email ?? "",
             roles.Contains(FoxfireRoles.Admin),
+            roles.Contains(FoxfireRoles.HeadAdmin),
             user.EmailConfirmed);
     }
 }

@@ -64,6 +64,7 @@ internal sealed class ChangeUsernameRequestHandler(
             user.UserName ?? "",
             user.Email ?? "",
             roles.Contains(FoxfireRoles.Admin),
+            roles.Contains(FoxfireRoles.HeadAdmin),
             user.EmailConfirmed);
     }
 }

@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Features.Users;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,12 @@ namespace Foxfire.Api.Features.PasswordResets;
 /// Making one changes nothing about the account. The old password keeps working
 /// until somebody actually uses the link, which is what keeps this from being a
 /// way to lock a member out by accident.
+///
+/// A link for another admin is a head admin's to make. Whoever holds it can
+/// become that admin, so from a plain admin it would be a way round every rule
+/// that keeps admins from acting against each other. The head admin in
+/// Admin__Email can still be sent one — by another head admin — since that is
+/// how they get back in when they forget their password.
 /// </summary>
 public sealed record CreatePasswordResetRequest(Guid UserId) : IDomainRequest<PasswordResetResponse>;
 
@@ -39,6 +46,13 @@ internal sealed class CreatePasswordResetRequestHandler(
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
         if (user is null) return Response<PasswordResetResponse>.NotFound();
+
+        if (user.Id != me.UserId && !me.IsInRole(FoxfireRoles.HeadAdmin) && await IsAdminAsync(user.Id, cancellationToken))
+        {
+            return Response<PasswordResetResponse>.Failure(
+                Administrators.HeadAdminOnly("make a reset link for another admin"),
+                Administrators.HeadAdminOnlyStatus);
+        }
 
         var now = time.GetUtcNow();
 
@@ -73,4 +87,9 @@ internal sealed class CreatePasswordResetRequestHandler(
 
         return PasswordResetLookup.Describe(reset, server.Value, auth.Value);
     }
+
+    private Task<bool> IsAdminAsync(Guid userId, CancellationToken cancellationToken) =>
+        db.UserRoles.AnyAsync(
+            ur => ur.UserId == userId && db.Roles.Any(r => r.Id == ur.RoleId && r.Name == FoxfireRoles.Admin),
+            cancellationToken);
 }

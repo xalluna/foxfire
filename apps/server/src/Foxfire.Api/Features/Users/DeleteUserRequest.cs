@@ -1,8 +1,11 @@
 using Foxfire.Api.Common;
+using Foxfire.Api.Configuration;
+using Foxfire.Api.Features.Account;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Foxfire.Api.Features.Users;
 
@@ -20,6 +23,8 @@ public sealed record DeleteUserRequest(Guid Id) : IEmptyDomainRequest;
 internal sealed class DeleteUserRequestHandler(
     UserManager<FoxfireUser> users,
     FoxfireDbContext db,
+    IIdentityContext me,
+    IOptions<AdminOptions> adminOptions,
     ILogger<DeleteUserRequestHandler> logger)
     : IDomainRequestHandler<DeleteUserRequest>
 {
@@ -30,10 +35,24 @@ internal sealed class DeleteUserRequestHandler(
         var user = await users.FindByIdAsync(request.Id.ToString());
         if (user is null) return Response.NotFound();
 
-        if (await Administrators.IsLastAsync(db, request.Id, cancellationToken))
+        if (Accounts.IsConfiguredAdmin(user.Email, adminOptions.Value.Email))
         {
-            return Response.Failure(Administrators.Last("delete"), Administrators.LastStatus);
+            return Response.Failure(
+                Administrators.Configured(user.UserName ?? "", "removed"), Administrators.ConfiguredStatus);
         }
+
+        var roles = await users.GetRolesAsync(user);
+        var isAdmin = roles.Contains(FoxfireRoles.Admin);
+
+        if (isAdmin && me.UserId != user.Id && !me.IsInRole(FoxfireRoles.HeadAdmin))
+        {
+            return Response.Failure(
+                Administrators.HeadAdminOnly("remove another admin"), Administrators.HeadAdminOnlyStatus);
+        }
+
+        var last = await Administrators.LastHolderAsync(
+            db, user.Id, "delete", isAdmin, roles.Contains(FoxfireRoles.HeadAdmin), cancellationToken);
+        if (last is not null) return Response.Failure(last, Administrators.LastStatus);
 
         // By hand, because the foreign key from an invite to who redeemed it is
         // NO ACTION at the database level — SQL Server refuses two cascading
@@ -55,7 +74,7 @@ internal sealed class DeleteUserRequestHandler(
             return new Error("delete_failed", string.Join(" ", deleted.Errors.Select(e => e.Description)));
         }
 
-        logger.LogWarning("Deleted the account {Username}", user.UserName);
+        logger.LogWarning("{Actor} deleted the account {Username}", me.Username, user.UserName);
         return Response.Success();
     }
 }

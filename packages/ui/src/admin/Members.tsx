@@ -24,6 +24,13 @@ export interface MembersPageProps {
   onShowMore: () => void
   /** The address the person reading this signed in with, so their own row says so. */
   signedInAs?: string | null
+  /**
+   * Whether the person reading this is a head admin: whether they may demote,
+   * disable, remove or make a reset link for another admin, and make somebody
+   * a head admin. A plain admin's page offers none of those on another admin's
+   * row rather than buttons the server refuses.
+   */
+  canManageAdmins: boolean
 
   onUpdateUser: (id: string, patch: AdminUserPatch) => Promise<AdminActionResult>
   onDeleteUser: (id: string) => Promise<AdminActionResult>
@@ -55,6 +62,7 @@ export function MembersPage({
   loadingMore,
   onShowMore,
   signedInAs,
+  canManageAdmins,
   onUpdateUser,
   onDeleteUser,
   onCreatePasswordReset,
@@ -79,7 +87,7 @@ export function MembersPage({
   return (
     <SettingsPage
       title="Members"
-      intro="Everybody with an account on this server. Promoting, demoting or disabling somebody signs them out, so the change takes effect now rather than whenever their session happens to renew."
+      intro="Everybody with an account on this server. Any admin can make somebody an admin or let them back in; demoting, disabling or removing another admin is a head admin's, and so is making anybody a head admin. Changing somebody's role or disabling them signs them out, so the change takes effect now rather than whenever their session happens to renew."
     >
       {error !== null && (
         <SettingsCard>
@@ -128,6 +136,7 @@ export function MembersPage({
             key={user.id}
             user={user}
             isYou={signedInAs !== null && signedInAs !== undefined && signedInAs === user.email}
+            canManageAdmins={canManageAdmins}
             expanded={open === user.id}
             busy={busy}
             onToggle={() => setOpen(open === user.id ? null : user.id)}
@@ -155,6 +164,7 @@ export function MembersPage({
 function Member({
   user,
   isYou,
+  canManageAdmins,
   expanded,
   busy,
   onToggle,
@@ -166,6 +176,7 @@ function Member({
 }: {
   user: AdminUser
   isYou: boolean
+  canManageAdmins: boolean
   expanded: boolean
   busy: boolean
   onToggle: () => void
@@ -176,6 +187,12 @@ function Member({
   onCopy: (text: string) => void
 }): JSX.Element {
   const [confirming, setConfirming] = useState(false)
+
+  // The two rows whose actions are not all open. The configured admin's are
+  // nobody's; another admin's are a head admin's. Both say why, once, rather
+  // than leaving buttons the server would refuse.
+  const pinned = user.isConfiguredAdmin
+  const guarded = !pinned && user.isAdmin && !isYou && !canManageAdmins
 
   return (
     <div>
@@ -188,7 +205,11 @@ function Member({
         <div className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-sm text-text">
             <span className="truncate">{user.username}</span>
-            {user.isAdmin && <Badge tone="accent">Admin</Badge>}
+            {user.isHeadAdmin ? (
+              <Badge tone="accent">Head admin</Badge>
+            ) : (
+              user.isAdmin && <Badge tone="accent">Admin</Badge>
+            )}
             {user.isDisabled && <Badge tone="red">Disabled</Badge>}
             {isYou && <Badge tone="mute">You</Badge>}
           </span>
@@ -237,36 +258,65 @@ function Member({
             </div>
           )}
 
-          {user.isDisabled && (
+          {user.isDisabled && !guarded && (
             <p className="text-2xs leading-relaxed text-text-mute">
               Disabled accounts cannot sign in, so there is no reset link to send. Enable them first.
             </p>
           )}
 
+          {pinned && (
+            <p className="text-2xs leading-relaxed text-text-mute">
+              This server&apos;s configuration names them as its head admin, so nobody can demote,
+              disable or remove them from here. Handing the server over means changing ADMIN_EMAIL
+              and restarting it.
+            </p>
+          )}
+
+          {guarded && (
+            <p className="text-2xs leading-relaxed text-text-mute">
+              Only a head admin can demote, disable or remove another admin, or make them a reset
+              link.
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              className={ghostButtonClass}
-              onClick={() => onUpdate({ isAdmin: !user.isAdmin })}
-            >
-              {user.isAdmin ? 'Demote' : 'Make admin'}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              className={ghostButtonClass}
-              onClick={() => onUpdate({ isDisabled: !user.isDisabled })}
-            >
-              {user.isDisabled ? 'Enable' : 'Disable'}
-            </button>
-            {!user.isDisabled && (
+            {!pinned && !guarded && (
+              <button
+                type="button"
+                disabled={busy}
+                className={ghostButtonClass}
+                onClick={() => onUpdate({ isAdmin: !user.isAdmin })}
+              >
+                {user.isAdmin ? 'Demote' : 'Make admin'}
+              </button>
+            )}
+            {!pinned && canManageAdmins && (
+              <button
+                type="button"
+                disabled={busy}
+                className={ghostButtonClass}
+                onClick={() => onUpdate({ isHeadAdmin: !user.isHeadAdmin })}
+              >
+                {user.isHeadAdmin ? 'Remove head admin' : 'Make head admin'}
+              </button>
+            )}
+            {!pinned && (!guarded || user.isDisabled) && (
+              <button
+                type="button"
+                disabled={busy}
+                className={ghostButtonClass}
+                onClick={() => onUpdate({ isDisabled: !user.isDisabled })}
+              >
+                {user.isDisabled ? 'Enable' : 'Disable'}
+              </button>
+            )}
+            {!user.isDisabled && !guarded && (
               <button type="button" disabled={busy} className={ghostButtonClass} onClick={onCreateReset}>
                 {user.passwordReset === null ? 'Reset link' : 'New reset link'}
               </button>
             )}
 
-            {confirming ? (
+            {pinned || guarded ? null : confirming ? (
               <>
                 <span className="self-center text-2xs text-red">Remove {user.username}?</span>
                 <button

@@ -137,7 +137,7 @@ internal sealed class RegisterRequestHandler(
 
                 if (isSeededAdmin)
                 {
-                    await users.AddToRoleAsync(candidate, FoxfireRoles.Admin);
+                    await users.AddToRolesAsync(candidate, [FoxfireRoles.Admin, FoxfireRoles.HeadAdmin]);
                 }
 
                 if (invite is not null)
@@ -177,7 +177,7 @@ internal sealed class RegisterRequestHandler(
 
         logger.LogInformation(
             "Registered {Username} ({Email}){Admin}",
-            username, email, isSeededAdmin ? " as this server's admin" : "");
+            username, email, isSeededAdmin ? " as this server's head admin" : "");
 
         var roles = await users.GetRolesAsync(user);
         var pair = await tokens.IssueAsync(user, roles, request.DeviceLabel, cancellationToken);

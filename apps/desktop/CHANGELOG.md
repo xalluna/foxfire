@@ -7,6 +7,36 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.16.0] — 2026-09-26
+
+Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
+who imports; an admin who is not one sees why rather than buttons the server would refuse. Needs
+Foxfire Server 0.5.0.
+
+### Added
+
+- **Edit LP on anybody's games, as a head admin.** Edit LP gain and Clear LP edit are offered on
+  every profile's matches to a head admin, claimed or not. Everybody else still types only their
+  own.
+- **Head admins on the Members page.** A head admin can make somebody a head admin or stop them
+  being one, and every row says who is an admin and who is a head admin. Settings › Server says
+  which you are.
+
+### Changed
+
+- **Admins no longer act against other admins.** On another admin's row a plain admin is offered
+  only Enable, with a line saying demoting, disabling, removing or a reset link is a head admin's.
+  The server's configured head admin offers nobody those buttons, and says why.
+- **Importing a database is a head admin's.** A plain admin sees the Import card with the reason
+  in place of the button.
+
+### Under the hood
+
+- The server session this PC keeps remembers whether you are a head admin, refreshed with every
+  token renewal like the admin flag; a server remembered before this reads as a plain admin until
+  then.
+- The harnesses have a `server-admin` scenario, signed in as a plain admin.
+
 ## [0.15.0] — 2026-09-24
 
 On a server, the account rail is a way between your own accounts rather than a list of everybody's,
@@ -1243,6 +1273,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0

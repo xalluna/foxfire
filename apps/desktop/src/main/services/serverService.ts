@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import type { SessionUser } from '@foxfire/core'
 import {
   ServerError,
   createServerApi,
@@ -35,6 +36,9 @@ import type {
 
 const log = createLogger('server')
 
+/** Who a sign-in or an account change says you are, as far as this install keeps it. */
+type SignedInUser = Pick<SessionUser, 'username' | 'email' | 'isAdmin' | 'isHeadAdmin'>
+
 const ACTIVE_SETTING = 'server.active'
 const KNOWN_SETTING = 'server.known'
 
@@ -67,10 +71,11 @@ interface StoredServer {
    * promotion or a demotion arrives: the server revokes the sessions of anybody
    * whose role changes, so the next renewal carries the new answer.
    *
-   * Optional because a server remembered by an older build has neither.
+   * Optional because a server remembered by an older build has none of them.
    */
   email?: string
   isAdmin?: boolean
+  isHeadAdmin?: boolean
 
   /**
    * Where the server's web client is reached from outside — what "Copy link"
@@ -189,10 +194,16 @@ function sessionFor(url: string): ServerSession {
     // state event per renewal would invalidate caches all evening for nothing.
     onUserRefreshed: (user) => {
       const stored = readKnown().find((s) => s.url === url)
-      if (stored && (stored.isAdmin !== user.isAdmin || stored.email !== user.email)) {
+      const isHeadAdmin = user.isHeadAdmin ?? false
+      if (
+        stored &&
+        (stored.isAdmin !== user.isAdmin ||
+          (stored.isHeadAdmin ?? false) !== isHeadAdmin ||
+          stored.email !== user.email)
+      ) {
         writeKnown(
           readKnown().map((s) =>
-            s.url === url ? { ...s, email: user.email, isAdmin: user.isAdmin } : s
+            s.url === url ? { ...s, email: user.email, isAdmin: user.isAdmin, isHeadAdmin } : s
           )
         )
         announce()
@@ -284,7 +295,8 @@ export function getServerState(): ServerState {
           // Defaulting to false is the safe direction: a stored row from before
           // this was kept shows no admin pages until the next token renewal
           // fills it in, rather than offering pages whose every call 403s.
-          isAdmin: activeServer.isAdmin ?? false
+          isAdmin: activeServer.isAdmin ?? false,
+          isHeadAdmin: activeServer.isHeadAdmin ?? false
         }
       : null
 
@@ -511,7 +523,7 @@ export async function login(
  */
 async function authenticate(
   rawUrl: string,
-  signIn: (session: ServerSession) => Promise<{ username: string; email: string; isAdmin: boolean }>
+  signIn: (session: ServerSession) => Promise<SignedInUser>
 ): Promise<ServerAuthResult> {
   const normalised = normaliseServerUrl(rawUrl)
   if ('error' in normalised) {
@@ -534,6 +546,7 @@ async function authenticate(
       username: user.username,
       email: user.email,
       isAdmin: user.isAdmin,
+      isHeadAdmin: user.isHeadAdmin ?? false,
       publicUrl: probed.publicUrl
     })
 
@@ -566,7 +579,7 @@ async function authenticate(
  * being asked.
  */
 async function changeAccount(
-  apply: (session: ServerSession) => Promise<{ username: string; email: string; isAdmin: boolean }>
+  apply: (session: ServerSession) => Promise<SignedInUser>
 ): Promise<ServerAuthResult> {
   const url = readActive()
   if (!url) {
@@ -579,7 +592,13 @@ async function changeAccount(
     writeKnown(
       readKnown().map((s) =>
         s.url === url
-          ? { ...s, username: user.username, email: user.email, isAdmin: user.isAdmin }
+          ? {
+              ...s,
+              username: user.username,
+              email: user.email,
+              isAdmin: user.isAdmin,
+              isHeadAdmin: user.isHeadAdmin ?? false
+            }
           : s
       )
     )

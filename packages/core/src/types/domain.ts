@@ -45,7 +45,7 @@ export interface Account {
    *
    * Absent in local-only mode, where the question does not arise: every account
    * in the file is yours. On a server it decides what is writable — you can see
-   * everybody's history and edit only your own LP.
+   * everybody's history and edit only your own LP, unless you are a head admin.
    */
   isMine?: boolean
 
