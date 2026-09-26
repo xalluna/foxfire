@@ -128,6 +128,41 @@ public sealed class RiotRateLimiter : IDisposable
         EnsurePumping();
     }
 
+    /// <summary>
+    /// Where the queue stands right now, read in one go: how much of each window
+    /// is spent, how much is waiting in each class, and whether it is held.
+    ///
+    /// Counted against the clock rather than read off the dispatch log's length.
+    /// The log is only trimmed while the pump is working out its next slot, so a
+    /// queue that went quiet a minute ago still holds every timestamp from its
+    /// last burst — and a count of those would show a full window over a server
+    /// that has not called Riot since.
+    /// </summary>
+    public RiotLimiterSnapshot Snapshot()
+    {
+        lock (_gate)
+        {
+            var now = _time.GetUtcNow();
+            var burst = 0;
+            var sustained = 0;
+
+            foreach (var at in _dispatched)
+            {
+                var age = now - at;
+                if (age < _limits.SustainedWindow) sustained++;
+                if (age < _limits.BurstWindow) burst++;
+            }
+
+            return new RiotLimiterSnapshot(
+                _limits,
+                burst,
+                sustained,
+                [.. _queues.Select(q => q.Count)],
+                _pausedUntil is { } until && until > now ? until : null,
+                _rejection is not null);
+        }
+    }
+
     /// <summary>Swaps the allowance. Takes effect on the next slot calculation.</summary>
     public void UpdateLimits(RiotRateLimits limits)
     {

@@ -54,6 +54,38 @@ describe('createServerApi', () => {
     ])
   })
 
+  it('asks each insights tab by its own route, with the window', async () => {
+    const { calls, request } = recorder(() => ({}))
+    const api = createServerApi(request)
+
+    await api.admin.insights('riot', '24h')
+    await api.admin.serverLogs({ level: 'warning', limit: 20, offset: 20, before: 812 })
+    await api.admin.serverLogs()
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /admin/insights/riot?window=24h',
+      'GET /admin/insights/logs?level=warning&limit=20&offset=20&before=812',
+      'GET /admin/insights/logs'
+    ])
+  })
+
+  it('reads a server too old for insights as having none, rather than failing', async () => {
+    const { request } = recorder(
+      () => new ServerError('There is no such route on this server.', 404, 'not_found')
+    )
+    const api = createServerApi(request)
+
+    await expect(api.admin.insights('overview', '1h')).resolves.toBeNull()
+    await expect(api.admin.serverLogs()).resolves.toBeNull()
+  })
+
+  it('still throws when insights fail for any other reason', async () => {
+    const { request } = recorder(() => new ServerError('Administrators only.', 403, 'forbidden'))
+    const api = createServerApi(request)
+
+    await expect(api.admin.insights('overview', '1h')).rejects.toBeInstanceOf(ServerError)
+  })
+
   it('answers a refused admin write with the server\'s own message', async () => {
     const { request } = recorder(
       () => new ServerError('There has to be at least one administrator.', 409, 'last_admin')

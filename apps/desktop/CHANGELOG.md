@@ -11,8 +11,11 @@ changes you would never notice while using the app.
 
 Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
 who imports; an admin who is not one sees why rather than buttons the server would refuse. And an
-invite is a link now, with no email address needed to make one. Needs Foxfire Server 0.5.0. A
-profile's "Last games" figures are set like every other number, too.
+invite is a link now, with no email address needed to make one. An admin can also see what their
+server has been doing, from Settings: the requests it answered, what it asked of Riot, the syncs it
+ran and the process underneath, live and for the last month. Needs Foxfire Server 0.5.0. A
+profile's "Last games" figures are set like every other number, and Foxfire stops holding
+Ctrl+Shift+T for itself.
 
 ### Added
 
@@ -22,6 +25,13 @@ profile's "Last games" figures are set like every other number, too.
 - **Head admins on the Members page.** A head admin can make somebody a head admin or stop them
   being one, and every row says who is an admin and who is a head admin. Settings › Server says
   which you are.
+- **Server insights.** Settings › Server insights, for an admin of the server Foxfire is signed in
+  to — the same page the web client's admin tabs have. Requests and how quickly they were answered,
+  the busiest routes, Riot calls and how close the key came to its limits, every sync and how it
+  ended, CPU and memory, who is connected on which version, and the server's recent warnings and
+  errors, over fifteen minutes to thirty days. It is the server measuring itself, so it covers
+  everybody on it rather than what this PC saw. Connected to a server older than 0.5.0, the page
+  says the server needs updating.
 
 ### Changed
 
@@ -39,12 +49,23 @@ profile's "Last games" figures are set like every other number, too.
   every other number in the app, rather than the one used for headings. That typeface's numerals
   made "11W" read as "llW", and made the block look like it came from somewhere else.
 
+### Removed
+
+- **Ctrl+Shift+T no longer opens the telemetry panel.** It was a shortcut for the whole PC rather
+  than for Foxfire's window, so while Foxfire ran — in the tray included — it took Ctrl+Shift+T away
+  from every other app, reopening a closed browser tab among them. The panel is still in Settings ›
+  Developer telemetry, and in the tray menu.
+
 ### Under the hood
 
 - The server session this PC keeps remembers whether you are a head admin, refreshed with every
   token renewal like the admin flag; a server remembered before this reads as a plain admin until
   then.
-- The harnesses have a `server-admin` scenario, signed in as a plain admin.
+- The harnesses have a `server-admin` scenario, signed in as a plain admin, and an
+  `insights-unsupported` one, signed in to a server too old to report insights.
+- The developer telemetry panel's chart moved into the shared UI package, where the server insights
+  page draws with it too. It now fills each stretch of a line on its own, so a gap in a filled chart
+  is drawn as a gap rather than bridged, and durations over a minute read as minutes and seconds.
 
 ## [0.15.0] — 2026-09-24
 

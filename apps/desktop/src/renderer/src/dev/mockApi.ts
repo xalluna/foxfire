@@ -159,7 +159,10 @@ let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000
  * the head admin, or as a plain admin under ?scenario=server-admin.
  */
 let serverState: ServerState =
-  scenario === 'server-connected' || scenario === 'server-degraded' || scenario === 'server-admin'
+  scenario === 'server-connected' ||
+  scenario === 'server-degraded' ||
+  scenario === 'server-admin' ||
+  scenario === 'insights-unsupported'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,

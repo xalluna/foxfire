@@ -233,6 +233,37 @@ public sealed class LogOptions
 }
 
 /// <summary>
+/// What the server keeps about itself for the insights page.
+///
+/// The measurements are always taken — the last hour lives in memory either way
+/// — and these settings are about writing them down. See Telemetry/TelemetryCollector.cs.
+/// </summary>
+public sealed class TelemetryOptions
+{
+    public const string Section = "Telemetry";
+
+    /// <summary>
+    /// Whether finished minutes are written to the database, so the page can
+    /// show more than the last hour and a restart does not empty it.
+    ///
+    /// On for every real server. Off is for the test suite, which starts dozens
+    /// of servers on one database and would otherwise have each of them writing
+    /// its minutes and pruning everybody else's.
+    /// </summary>
+    public bool Persist { get; set; } = true;
+
+    /// <summary>
+    /// How many days of hourly history are kept. Minutes are kept for two days
+    /// whatever this says. Zero keeps the hours for good.
+    ///
+    /// Thirty, the same as the logs: long enough to look back at last month's
+    /// busy evening, and at a few dozen rows an hour, small next to one day of
+    /// match history.
+    /// </summary>
+    public int RetentionDays { get; set; } = 30;
+}
+
+/// <summary>
 /// Checks the whole configuration at once, before anything starts.
 ///
 /// All of it, in one message, rather than failing on the first missing value and
@@ -253,11 +284,13 @@ public static class ConfigurationCheck
         AuthOptions auth,
         AdminOptions admin,
         RateLimitOptions rateLimits,
-        LogOptions logs)
+        LogOptions logs,
+        TelemetryOptions? telemetry = null)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(rateLimits);
         ArgumentNullException.ThrowIfNull(logs);
+        telemetry ??= new TelemetryOptions();
 
         List<string> problems = [];
 
@@ -348,6 +381,13 @@ public static class ConfigurationCheck
         {
             problems.Add(
                 $"Logs__RetentionDays is {logs.RetentionDays}. Use a number of days, or 0 to keep logs for good.");
+        }
+
+        if (telemetry.RetentionDays < 0)
+        {
+            problems.Add(
+                $"Telemetry__RetentionDays is {telemetry.RetentionDays}. Use a number of days, or 0 to keep "
+                + "the insights history for good.");
         }
 
         return problems;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -39,6 +40,7 @@ public sealed class RiotClient
     private readonly RiotRateLimiter _limiter;
     private readonly string _apiKey;
     private readonly ILogger _log;
+    private readonly RiotMetrics? _metrics;
 
     /// <summary>The named HttpClient this reaches Riot through.</summary>
     public const string HttpClientName = "riot";
@@ -47,7 +49,8 @@ public sealed class RiotClient
         IHttpClientFactory httpFactory,
         RiotRateLimiter limiter,
         string apiKey,
-        ILogger<RiotClient>? logger = null)
+        ILogger<RiotClient>? logger = null,
+        RiotMetrics? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(httpFactory);
         ArgumentNullException.ThrowIfNull(limiter);
@@ -57,6 +60,7 @@ public sealed class RiotClient
         _limiter = limiter;
         _apiKey = apiKey;
         _log = logger ?? NullLogger<RiotClient>.Instance;
+        _metrics = metrics;
     }
 
     /// <summary>Whether Riot has refused the configured key. Reads keep working when it has.</summary>
@@ -274,7 +278,14 @@ public sealed class RiotClient
         return parsed;
     }
 
-    /// <summary>The request itself, answering with the response text unparsed.</summary>
+    /// <summary>
+    /// The request itself, answering with the response text unparsed.
+    ///
+    /// Measured inside the scheduled call, because that is the part that is
+    /// Riot's: the wait before it is the queue's, and is measured separately.
+    /// The limiter runs the call again after a 429 or a 5xx, so every attempt is
+    /// its own measurement and the wait is counted once, before the first.
+    /// </summary>
     private async Task<string> SendRawAsync(
         string endpoint,
         Uri baseUrl,
@@ -282,24 +293,45 @@ public sealed class RiotClient
         RiotRequestPriority priority,
         CancellationToken cancellationToken)
     {
+        var queued = Stopwatch.GetTimestamp();
+        var attempts = 0;
+
         return await _limiter.ScheduleAsync(
             async ct =>
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUrl, path));
-                request.Headers.Add("X-Riot-Token", _apiKey);
+                if (attempts++ == 0) _metrics?.Waited(priority, Stopwatch.GetElapsedTime(queued));
 
-                // A client per call rather than one held for the life of the
-                // process: the factory pools and rotates handlers, and a
-                // singleton clutching one would pin its DNS forever.
-                var http = _httpFactory.CreateClient(HttpClientName);
-                using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+                var started = Stopwatch.GetTimestamp();
+                var outcome = "network";
 
-                if (!response.IsSuccessStatusCode)
+                try
                 {
-                    throw await DescribeFailureAsync(response, endpoint, ct).ConfigureAwait(false);
-                }
+                    using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUrl, path));
+                    request.Headers.Add("X-Riot-Token", _apiKey);
 
-                return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    // A client per call rather than one held for the life of the
+                    // process: the factory pools and rotates handlers, and a
+                    // singleton clutching one would pin its DNS forever.
+                    var http = _httpFactory.CreateClient(HttpClientName);
+                    using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+                    outcome = RiotMetrics.Outcome((int)response.StatusCode);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw await DescribeFailureAsync(response, endpoint, ct).ConfigureAwait(false);
+                    }
+
+                    return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    outcome = "canceled";
+                    throw;
+                }
+                finally
+                {
+                    _metrics?.Request(endpoint, priority, outcome, Stopwatch.GetElapsedTime(started));
+                }
             },
             priority,
             cancellationToken).ConfigureAwait(false);

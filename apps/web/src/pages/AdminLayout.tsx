@@ -6,21 +6,31 @@ import { useAuth } from '../session/session'
 function Tab({
   to,
   exact,
+  short,
   children
 }: {
-  to: '/admin' | '/admin/invites' | '/admin/accounts' | '/admin/data'
+  to: '/admin' | '/admin/invites' | '/admin/accounts' | '/admin/data' | '/admin/insights'
   exact?: boolean
+  /** What the tab says on a phone, where five full labels do not fit across. */
+  short?: string
   children: ReactNode
 }): JSX.Element {
   return (
     <Link
       to={to}
       activeOptions={{ exact }}
-      className="-mb-px shrink-0 border-b-2 px-3 py-2 text-sm transition"
+      className="-mb-px shrink-0 border-b-2 px-3 py-2 text-sm transition max-sm:px-2"
       activeProps={{ className: 'border-accent text-accent' }}
       inactiveProps={{ className: 'border-transparent text-text-dim hover:text-text' }}
     >
-      {children}
+      {short === undefined ? (
+        children
+      ) : (
+        <>
+          <span className="max-sm:hidden">{children}</span>
+          <span className="sm:hidden">{short}</span>
+        </>
+      )}
     </Link>
   )
 }
@@ -54,8 +64,13 @@ export function AdminLayout(): JSX.Element {
           Members
         </Tab>
         <Tab to="/admin/invites">Invites</Tab>
-        <Tab to="/admin/accounts">League accounts</Tab>
-        <Tab to="/admin/data">Data &amp; storage</Tab>
+        <Tab to="/admin/accounts" short="Accounts">
+          League accounts
+        </Tab>
+        <Tab to="/admin/data" short="Data">
+          Data &amp; storage
+        </Tab>
+        <Tab to="/admin/insights">Insights</Tab>
       </nav>
       <Outlet />
     </div>

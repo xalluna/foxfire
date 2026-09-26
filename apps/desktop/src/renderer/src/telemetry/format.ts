@@ -1,20 +1,11 @@
 import type { TelemetryOutcome } from '@shared/telemetry'
 
-/** Shared formatting for the telemetry panel, where everything is a duration, a size, or a status. */
+/**
+ * Shared formatting for the telemetry panel, where everything is a duration, a size, or a status.
+ * Durations and sizes are @foxfire/ui's, which a server's insights page writes them with too.
+ */
 
-export function formatMs(ms: number | null): string {
-  if (ms === null) return '—'
-  if (ms < 1) return '<1ms'
-  if (ms < 1_000) return `${Math.round(ms)}ms`
-  return `${(ms / 1_000).toFixed(ms < 10_000 ? 2 : 1)}s`
-}
-
-export function formatBytes(bytes: number | null): string {
-  if (bytes === null) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+export { formatBytes, formatMs } from '@foxfire/ui'
 
 export function formatClock(at: number): string {
   const d = new Date(at)

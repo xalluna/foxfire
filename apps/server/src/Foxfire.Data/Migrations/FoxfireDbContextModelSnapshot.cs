@@ -762,6 +762,63 @@ namespace Foxfire.Data.Migrations
                     b.ToTable("SyncStates");
                 });
 
+            modelBuilder.Entity("Foxfire.Data.Entities.TelemetryRollup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("BucketStart")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Buckets")
+                        .HasMaxLength(512)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Dimensions")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid?>("Instance")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<double>("Max")
+                        .HasColumnType("float");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<double>("Min")
+                        .HasColumnType("float");
+
+                    b.Property<byte>("Resolution")
+                        .HasColumnType("tinyint");
+
+                    b.Property<double>("Sum")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Resolution", "Metric", "BucketStart");
+
+                    b.HasIndex("Resolution", "BucketStart", "Metric", "Dimensions")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TelemetryRollups_Hour")
+                        .HasFilter("[Resolution] = 2");
+
+                    b.ToTable("TelemetryRollups");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
                 {
                     b.Property<Guid>("Id")

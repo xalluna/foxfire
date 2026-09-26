@@ -23,6 +23,7 @@ import {
   LeagueAccountsScreen,
   MembersScreen,
   ServerDataScreen,
+  ServerInsightsScreen,
   useIsServerAdmin
 } from '@foxfire/screens'
 import { AccountSettings } from '../components/AccountSettings'
@@ -52,6 +53,7 @@ export type SettingsCategory =
   | 'server-invites'
   | 'server-accounts'
   | 'server-data'
+  | 'server-insights'
   | 'riot-key'
   | 'rank'
   | 'capture'
@@ -107,6 +109,9 @@ const GROUPS: NavItem[][] = [
     { id: 'server-invites', label: 'Invites', icon: <Icon.Link />, adminOnly: true },
     { id: 'server-accounts', label: 'League accounts', icon: <Icon.Server />, adminOnly: true },
     { id: 'server-data', label: 'Data & storage', icon: <Icon.Inbox />, adminOnly: true },
+    // The server's own measurements. Not to be confused with Developer
+    // telemetry below, which is this PC's.
+    { id: 'server-insights', label: 'Server insights', icon: <Icon.Activity />, adminOnly: true },
     { id: 'riot-key', label: 'Riot API key', icon: <Icon.Key />, localOnly: true },
     { id: 'rank', label: 'Rank tracking', icon: <Icon.TrendingUp /> }
   ],
@@ -190,6 +195,7 @@ export function Settings({ category }: { category?: string }): JSX.Element {
         {active === 'server-invites' && <InvitesScreen />}
         {active === 'server-accounts' && <LeagueAccountsScreen />}
         {active === 'server-data' && <ServerDataScreen />}
+        {active === 'server-insights' && <ServerInsightsScreen />}
         {active === 'riot-key' && <RiotKeySettings />}
         {active === 'rank' && <RankTrackingSettings />}
         {active === 'capture' && <CaptureSettings />}

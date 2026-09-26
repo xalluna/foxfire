@@ -1,8 +1,13 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Azure.Storage.Blobs;
+using Foxfire.Api.Common;
 using Foxfire.Api.Logging;
+using Foxfire.Api.Telemetry;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Debugging;
 
@@ -73,6 +78,36 @@ public sealed class LoggingTests(FoxfireServerFixture server)
         Assert.False(line.TryGetProperty("@l", out _));
 
         Assert.DoesNotContain(lines, l => l.GetRawText().Contains(secret, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The sink the insights page reads, wired in code rather than chosen by a
+    /// host: a warning the server writes is on the page, rendered, with where it
+    /// came from.
+    /// </summary>
+    [Fact]
+    public async Task A_warning_is_kept_in_memory_for_the_insights_page()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        await using var host = server.Factory.WithWebHostBuilder(_ => { });
+
+        host.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Foxfire.Api.Tests.Insights")
+            .LogWarning("Something to look at: {Marker}", marker);
+
+        var (fixtureClient, session) = await server.AdminAsync();
+        fixtureClient.Dispose();
+
+        using var admin = FoxfireServerFixture.Authenticated(host.CreateClient(), session);
+        admin.DefaultRequestHeaders.Add("X-Foxfire-Client", FoxfireServerFixture.CurrentDesktop);
+
+        var page = await admin.GetFromJsonAsync<Page<ServerLogEntry>>(
+            new Uri("/api/admin/insights/logs?level=warning", UriKind.Relative));
+
+        var entry = Assert.Single(page!.Items, e => e.Message.Contains(marker, StringComparison.Ordinal));
+        Assert.Equal("warning", entry.Level);
+        Assert.Equal("Insights", entry.Source);
+        Assert.Equal($"Something to look at: \"{marker}\"", entry.Message);
     }
 
     [Fact]

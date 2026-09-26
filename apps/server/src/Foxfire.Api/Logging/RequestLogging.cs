@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Claims;
 using Foxfire.Api.Common;
+using Foxfire.Api.Telemetry;
 using Foxfire.Api.Versioning;
 using Serilog;
 using Serilog.Context;
@@ -38,6 +39,8 @@ public static class RequestLogging
 
         app.Use(static (context, next) =>
         {
+            RequestMetricTags.Tag(context);
+
             // On starting rather than now: the exception handler clears the
             // headers before it writes an error, and an error is the response
             // this is most wanted on.

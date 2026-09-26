@@ -12,6 +12,9 @@ import type {
   ChampionStats,
   DashboardData,
   EditableMatch,
+  InsightsSection,
+  InsightsSections,
+  InsightsWindow,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
@@ -29,6 +32,8 @@ import type {
   Season,
   SeasonInput,
   ServerAdminSettings,
+  ServerLogEntry,
+  ServerLogQuery,
   ServerStorageUsage,
   SyncState
 } from '../types'
@@ -117,6 +122,16 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         ok: false,
         error: err instanceof Error ? err.message : String(err)
       }
+    }
+  }
+
+  /** A read of a route an older server may not have: its 404 is null, anything else still throws. */
+  async function orNullIfMissing<T>(read: () => Promise<T>): Promise<T | null> {
+    try {
+      return await read()
+    } catch (err) {
+      if (err instanceof ServerError && err.status === 404) return null
+      throw err
     }
   }
 
@@ -452,7 +467,34 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       getSettings: () => request<ServerAdminSettings>('/admin/settings/'),
 
       setSettings: (patch: Partial<ServerAdminSettings>) =>
-        request<ServerAdminSettings>('/admin/settings/', { method: 'PATCH', body: patch })
+        request<ServerAdminSettings>('/admin/settings/', { method: 'PATCH', body: patch }),
+
+      /**
+       * One tab of the insights page, over a window.
+       *
+       * Null from a server too old to have insights, which answers the route
+       * with its JSON 404. A desktop can be newer than the server it is signed
+       * in to, and the page should say to update the server rather than fail.
+       * Only a desktop can meet one: the web client is always served by the
+       * server it talks to.
+       */
+      insights: <S extends InsightsSection>(section: S, window: InsightsWindow) =>
+        orNullIfMissing(() =>
+          request<InsightsSections[S]>(withQuery(`/admin/insights/${section}`, { window }))
+        ),
+
+      /** A page of the server's recent log lines, newest first. Null from a server too old to keep them. */
+      serverLogs: (query: ServerLogQuery = {}) =>
+        orNullIfMissing(() =>
+          request<Page<ServerLogEntry>>(
+            withQuery('/admin/insights/logs', {
+              level: query.level,
+              limit: query.limit,
+              offset: query.offset,
+              before: query.before
+            })
+          )
+        )
     },
 
     /** The endpoints an old stats.db is pushed through. See import/statsDbImporter. */
