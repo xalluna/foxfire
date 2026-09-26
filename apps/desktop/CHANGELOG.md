@@ -9,7 +9,19 @@ changes you would never notice while using the app.
 
 ## [0.16.0] — 2026-09-26
 
-Foxfire stops holding Ctrl+Shift+T for itself.
+An admin can see what their server has been doing, from Settings: the requests it answered, what it
+asked of Riot, the syncs it ran and the process underneath, live and for the last month. And Foxfire
+stops holding Ctrl+Shift+T for itself. Server insights need Foxfire Server 0.5.0.
+
+### Added
+
+- **Server insights.** Settings › Server insights, for an admin of the server Foxfire is signed in
+  to — the same page the web client's admin tabs have. Requests and how quickly they were answered,
+  the busiest routes, Riot calls and how close the key came to its limits, every sync and how it
+  ended, CPU and memory, who is connected on which version, and the server's recent warnings and
+  errors, over fifteen minutes to thirty days. It is the server measuring itself, so it covers
+  everybody on it rather than what this PC saw. Connected to a server older than 0.5.0, the page
+  says the server needs updating.
 
 ### Removed
 
@@ -17,6 +29,12 @@ Foxfire stops holding Ctrl+Shift+T for itself.
   than for Foxfire's window, so while Foxfire ran — in the tray included — it took Ctrl+Shift+T away
   from every other app, reopening a closed browser tab among them. The panel is still in Settings ›
   Developer telemetry, and in the tray menu.
+
+### Under the hood
+
+- The developer telemetry panel's chart moved into the shared UI package, where the server insights
+  page draws with it too. It now fills each stretch of a line on its own, so a gap in a filled chart
+  is drawn as a gap rather than bridged, and durations over a minute read as minutes and seconds.
 
 ## [0.15.0] — 2026-09-24
 

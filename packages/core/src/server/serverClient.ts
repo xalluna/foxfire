@@ -161,7 +161,9 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       storedReplays: api.admin.storedReplays,
       removeReplay: api.admin.removeReplay,
       forceUnlink: api.admin.forceUnlink,
-      addRiotAccount: api.admin.addRiotAccount
+      addRiotAccount: api.admin.addRiotAccount,
+      insights: api.admin.insights,
+      serverLogs: api.admin.serverLogs
     },
 
     events: {

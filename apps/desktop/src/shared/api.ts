@@ -1,4 +1,11 @@
-import type { FoxfireData } from '@foxfire/core'
+import type {
+  FoxfireData,
+  InsightsSection,
+  InsightsSections,
+  InsightsWindow,
+  ServerLogEntry,
+  ServerLogQuery
+} from '@foxfire/core'
 import type {
   AdminReplay,
   ImportProgress,
@@ -174,7 +181,6 @@ export interface Api {
     revokeInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
-    /** Opens a file picker. Resolves with null when it was dismissed. */
     /** What the server is holding, for the Data & storage page. */
     storage: () => Promise<ServerStorageUsage>
     /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
@@ -190,6 +196,17 @@ export interface Api {
      */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
     addRiotAccount: (input: RiotIdInput) => Promise<Account>
+    /**
+     * One tab of the server's insights page, over a window. Null from a server
+     * too old to report any — this desktop can be newer than its server.
+     */
+    insights: <S extends InsightsSection>(
+      section: S,
+      window: InsightsWindow
+    ) => Promise<InsightsSections[S] | null>
+    /** A page of the server's recent log lines, newest first. Null from a server too old to keep them. */
+    serverLogs: (query?: ServerLogQuery) => Promise<Page<ServerLogEntry> | null>
+    /** Opens a file picker. Resolves with null when it was dismissed. */
     chooseDatabase: () => Promise<string | null>
     /**
      * Reads an old stats.db and pushes it at the active server.

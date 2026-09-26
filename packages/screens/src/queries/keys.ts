@@ -1,4 +1,10 @@
-import type { QueueType, RankRange, RiotIdInput } from '@foxfire/core'
+import type {
+  InsightsSection,
+  InsightsWindow,
+  QueueType,
+  RankRange,
+  RiotIdInput
+} from '@foxfire/core'
 
 /**
  * Every query key the screens use, in one place.
@@ -109,6 +115,11 @@ export const queryKeys = {
     usedInvites: () => ['admin', 'invites', 'used'] as const,
     settings: () => ['admin', 'settings'] as const,
     storage: () => ['admin', 'storage'] as const,
-    replays: () => ['admin', 'replays'] as const
+    replays: () => ['admin', 'replays'] as const,
+    /** One tab of the insights page over one window. Polled while open, never invalidated. */
+    insights: (section: InsightsSection, window: InsightsWindow) =>
+      ['admin', 'insights', section, window] as const,
+    /** The server's recent log lines at or above one level, every page fetched. */
+    serverLogs: (level: string) => ['admin', 'serverLogs', level] as const
   }
 }

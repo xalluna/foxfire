@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { ChartCard, TimeSeriesChart, type Series } from '@foxfire/ui'
 import type { RateLimitWindowSeries } from '@shared/telemetry'
-import { ChartCard, TimeSeriesChart, type Series } from './TimeSeriesChart'
 
 /**
  * Headroom against Riot's own counters.

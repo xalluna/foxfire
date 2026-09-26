@@ -45,6 +45,9 @@ export type Scenario =
   | 'youtube-unconfigured'
   | 'youtube-disconnected'
   | 'recording-private'
+  // Signed in as an admin to a server too old to report insights, which
+  // answers the page's routes with a 404.
+  | 'insights-unsupported'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

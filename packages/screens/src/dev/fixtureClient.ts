@@ -62,6 +62,7 @@ import {
   championStatsFor
 } from './fixtures'
 import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
+import { fixtureInsights, fixtureServerLogs } from './insightsFixtures'
 import { KEY_EXPIRED, MOCK_SERVER_URL, delay, fail, scenario } from './scenario'
 
 /**
@@ -217,7 +218,7 @@ function runFakeSync(accountId: string): void {
  * this client.
  */
 const connection: ConnectionState =
-  scenario === 'server-connected' || scenario === 'server-degraded'
+  scenario === 'server-connected' || scenario === 'server-degraded' || scenario === 'insights-unsupported'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
@@ -750,6 +751,9 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     favorites,
 
     admin: {
+      insights: fixtureInsights,
+      serverLogs: fixtureServerLogs,
+
       users: (query: AdminUserQuery = {}): Promise<Page<AdminUser>> => {
         const needle = (query.q ?? '').trim().toLowerCase()
         const matching = mockUsers

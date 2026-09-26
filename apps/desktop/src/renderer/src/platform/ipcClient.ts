@@ -72,8 +72,8 @@ export function createIpcClient(api: Api): FoxfireClient {
       users: api.serverAdmin.users,
       updateUser: api.serverAdmin.updateUser,
       deleteUser: api.serverAdmin.deleteUser,
-    createPasswordReset: api.serverAdmin.createPasswordReset,
-    revokePasswordReset: api.serverAdmin.revokePasswordReset,
+      createPasswordReset: api.serverAdmin.createPasswordReset,
+      revokePasswordReset: api.serverAdmin.revokePasswordReset,
       openInvites: api.serverAdmin.openInvites,
       usedInvites: api.serverAdmin.usedInvites,
       createInvite: api.serverAdmin.createInvite,
@@ -84,7 +84,9 @@ export function createIpcClient(api: Api): FoxfireClient {
       storedReplays: api.serverAdmin.storedReplays,
       removeReplay: api.serverAdmin.removeReplay,
       forceUnlink: api.serverAdmin.forceUnlink,
-      addRiotAccount: api.serverAdmin.addRiotAccount
+      addRiotAccount: api.serverAdmin.addRiotAccount,
+      insights: api.serverAdmin.insights,
+      serverLogs: api.serverAdmin.serverLogs
     },
 
     events: {

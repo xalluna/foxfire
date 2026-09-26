@@ -158,7 +158,7 @@ let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000
  * the Server settings page is reviewed without standing a .NET server up.
  */
 let serverState: ServerState =
-  scenario === 'server-connected' || scenario === 'server-degraded'
+  scenario === 'server-connected' || scenario === 'server-degraded' || scenario === 'insights-unsupported'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,

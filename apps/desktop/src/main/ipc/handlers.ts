@@ -21,7 +21,9 @@ import {
   deleteUser,
   addRiotAccount,
   forceUnlink,
+  getInsights,
   getStorageUsage,
+  listServerLogs,
   listStoredReplays,
   removeStoredReplay,
   getSettings as getServerAdminSettings,
@@ -131,6 +133,7 @@ import type {
   SeasonInput
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
+import { isInsightsSection, isInsightsWindow, type ServerLogQuery } from '@foxfire/core'
 
 /**
  * Wires every channel to something that answers it.
@@ -193,6 +196,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
   ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
   ipcMain.handle(CH.serverAdmin.addRiotAccount, (_e, input: RiotIdInput) => addRiotAccount(input))
+  // Checked here rather than trusted, because the section becomes part of a
+  // URL on the server: only the five tabs, only the seven windows.
+  ipcMain.handle(CH.serverAdmin.insights, (_e, section: unknown, window: unknown) => {
+    if (!isInsightsSection(section) || !isInsightsWindow(window)) {
+      throw new Error(`No insights for ${String(section)} over ${String(window)}`)
+    }
+    return getInsights(section, window)
+  })
+  ipcMain.handle(CH.serverAdmin.serverLogs, (_e, query?: ServerLogQuery) => listServerLogs(query))
   ipcMain.handle(CH.serverAdmin.chooseDatabase, () => chooseImportDatabase())
   ipcMain.handle(CH.serverAdmin.importDatabase, (_e, filePath: string) => importDatabase(filePath))
   ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>

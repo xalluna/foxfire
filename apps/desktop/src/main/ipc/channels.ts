@@ -53,6 +53,8 @@ export const CH = {
     removeReplay: 'serverAdmin:removeReplay',
     forceUnlink: 'serverAdmin:forceUnlink',
     addRiotAccount: 'serverAdmin:addRiotAccount',
+    insights: 'serverAdmin:insights',
+    serverLogs: 'serverAdmin:serverLogs',
     chooseDatabase: 'serverAdmin:chooseDatabase',
     importDatabase: 'serverAdmin:importDatabase',
     importProgress: 'serverAdmin:importProgress'

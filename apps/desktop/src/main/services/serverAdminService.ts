@@ -1,3 +1,10 @@
+import type {
+  InsightsSection,
+  InsightsSections,
+  InsightsWindow,
+  ServerLogEntry,
+  ServerLogQuery
+} from '@foxfire/core'
 import { serverApi } from './serverService'
 import type {
   Account,
@@ -47,6 +54,19 @@ export async function forceUnlink(riotAccountId: string): Promise<AdminActionRes
 /** Starts tracking an account nobody on the server has claimed, and backfills it. */
 export async function addRiotAccount(input: RiotIdInput): Promise<Account> {
   return serverApi().admin.addRiotAccount(input)
+}
+
+/** One tab of the server's insights page. Null from a server too old to report any. */
+export async function getInsights<S extends InsightsSection>(
+  section: S,
+  window: InsightsWindow
+): Promise<InsightsSections[S] | null> {
+  return serverApi().admin.insights(section, window)
+}
+
+/** A page of the server's recent log lines. Null from a server too old to keep them. */
+export async function listServerLogs(query?: ServerLogQuery): Promise<Page<ServerLogEntry> | null> {
+  return serverApi().admin.serverLogs(query)
 }
 
 export async function listUsers(query?: AdminUserQuery): Promise<Page<AdminUser>> {

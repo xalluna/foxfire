@@ -15,6 +15,9 @@ import type {
   EditableMatch,
   FavoriteOutcome,
   FavoritePlayer,
+  InsightsSection,
+  InsightsSections,
+  InsightsWindow,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
@@ -32,6 +35,8 @@ import type {
   Season,
   SeasonInput,
   ServerAdminSettings,
+  ServerLogEntry,
+  ServerLogQuery,
   ServerStorageUsage,
   SyncProgressEvent,
   SyncState
@@ -301,6 +306,16 @@ export interface FoxfireClient extends FoxfireData {
      * with no owner, the state an imported one already has.
      */
     addRiotAccount: (input: RiotIdInput) => Promise<Account>
+    /**
+     * One tab of the insights page — what the server has been doing — over a
+     * window. Null from a server too old to report any.
+     */
+    insights: <S extends InsightsSection>(
+      section: S,
+      window: InsightsWindow
+    ) => Promise<InsightsSections[S] | null>
+    /** A page of the server's recent log lines, newest first. Null from a server too old to keep them. */
+    serverLogs: (query?: ServerLogQuery) => Promise<Page<ServerLogEntry> | null>
   }
   /** What changed underneath the screens, from wherever the change happened. */
   events: {

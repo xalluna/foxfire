@@ -66,6 +66,7 @@ export { ServerDataScreen } from './screens/ServerDataScreen'
 export { InvitesScreen } from './screens/InvitesScreen'
 export { LeagueAccountsScreen } from './screens/LeagueAccountsScreen'
 export { MembersScreen } from './screens/MembersScreen'
+export { ServerInsightsScreen } from './screens/ServerInsightsScreen'
 
 export {
   createPlayerRoutes,

@@ -12,6 +12,7 @@ import {
   LeagueAccountsScreen,
   MembersScreen,
   ServerDataScreen,
+  ServerInsightsScreen,
   createMatchRoute,
   createPlayerRoutes,
   parseSearch,
@@ -131,6 +132,11 @@ const adminAccounts = createRoute({
   component: LeagueAccountsScreen
 })
 const adminData = createRoute({ getParentRoute: () => admin, path: 'data', component: ServerDataScreen })
+const adminInsights = createRoute({
+  getParentRoute: () => admin,
+  path: 'insights',
+  component: ServerInsightsScreen
+})
 
 const routeTree = root.addChildren([
   signIn,
@@ -150,7 +156,7 @@ const routeTree = root.addChildren([
     ]),
     match,
     account,
-    admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData])
+    admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData, adminInsights])
   ])
 ])
 
