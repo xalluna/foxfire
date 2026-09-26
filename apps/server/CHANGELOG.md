@@ -11,6 +11,78 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.5.0] — 2026-09-26
+
+A server that can tell whoever runs it what it has been doing. Until now the
+only way to know whether the evening's slowness was the server, the database or
+Riot was to read the logs; now an admin opens Insights and sees the requests it
+answered and how quickly, what it asked of Riot and how close it came to the
+key's limits, every sync it ran, the process underneath, and who is connected —
+live over the last fifteen minutes and kept for a month. All of it stays on the
+server.
+
+### Added
+
+- **Insights.** A new tab in the admin pages, beside Data & storage, and in the
+  desktop app's Settings for an admin. Six views of the server over any of seven
+  windows, from fifteen minutes to thirty days:
+  - **Overview**: requests and server errors, response time, Riot calls and
+    throttling, syncs, who is connected, CPU, memory and problems logged, at a
+    glance.
+  - **Requests**: every answer by status, response times, the busiest routes
+    and how slow each is, requests turned away by the rate limits, and which
+    clients asked.
+  - **Riot API**: calls by outcome with a mark at every 429, how much of the
+    key's windows is in use right now and over time, the queue by class, and
+    each endpoint's calls, errors and speed.
+  - **Syncs**: runs by how they ended, how long they take, matches stored and
+    missed, and the last ten runs with what went wrong in any that failed.
+  - **Runtime**: CPU, memory, garbage collection, database commands, exceptions,
+    and who is connected by client and version — including any desktop on a
+    version this server no longer serves.
+  - **Logs**: the server's recent log lines, warnings and errors kept apart so a
+    busy afternoon does not push them out, each with the trace id that finds the
+    rest of its request in the stored logs.
+
+  The last fifteen minutes are drawn every ten seconds; longer windows come from
+  history the server writes down a minute at a time, so a restart or an update
+  costs the seconds it took and nothing more. A gap in a chart is the server
+  being down, not a quiet hour.
+
+### Under the hood
+
+- The server measures itself with `System.Diagnostics.Metrics`: ASP.NET Core's
+  own request timings and rate limiter, tagged with which kind of client asked;
+  every Riot attempt by endpoint template, outcome and priority, with its queue
+  wait apart from its time on the wire; every sync run; every database command.
+  Levels — the Riot queue and windows, syncs running, clients on the hub, CPU,
+  memory, lines logged — are sampled every ten seconds. Nothing is exported; an
+  OpenTelemetry exporter would be a package and a line.
+- A new table, `TelemetryRollups`, migrated on boot: a row per series per
+  minute, kept for two days, folded into a row per hour, kept for
+  `Telemetry__RetentionDays` (30; 0 keeps them for good). Minute rows name the
+  process that wrote them, so a minute split across a restart is added up; hour
+  rows are unique. Durations keep their spread over fixed bounds, so percentiles
+  can be merged across rows.
+- `GET /api/admin/insights/{overview,requests,riot,sync,runtime}?window=` and
+  `GET /api/admin/insights/logs?level=&limit=&offset=&before=`, admin only. The
+  logs are a page like every list that grows, pinned to where the first page
+  began so new lines do not shift the ones already shown. The charts are bounded
+  by their window — at most 360 points — rather than paged. New routes, so the
+  API version stays 3; a desktop connected to an older server is told to update
+  it.
+- The last two thousand log lines, and the last five hundred warnings and
+  errors, are held in memory for the Logs tab, by a sink wired in code beside
+  the configured ones.
+- The hub and the insights routes themselves are left out of the request
+  measurements: one is a connection that lasts all evening, the other is the
+  page polling itself.
+- The chart is the desktop's own telemetry chart, moved into the shared UI
+  package, which now fills each stretch of a line on its own so a gap is drawn
+  as one.
+- The web client's admin tabs take shorter names on a phone, where five full
+  ones do not fit across.
+
 ## [0.4.0] — 2026-09-24
 
 A server that answers what a screen asks rather than handing over every account
@@ -680,6 +752,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0
 [0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1
 [0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0

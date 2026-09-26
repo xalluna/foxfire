@@ -96,6 +96,11 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("RateLimit__AuthPerMinute", "100000");
         Environment.SetEnvironmentVariable("RateLimit__SearchPerMinute", "100000");
 
+        // Dozens of hosts share this database, and each would write its own
+        // minutes of insights and prune everybody else's. The insights tests
+        // drive the store themselves; the last hour is in memory either way.
+        Environment.SetEnvironmentVariable("Telemetry__Persist", "false");
+
         _factory = new WebApplicationFactory<Program>();
 
         // Force the host to build now rather than on first request, so a

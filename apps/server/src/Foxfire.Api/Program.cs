@@ -9,6 +9,7 @@ using Foxfire.Api.Reads;
 using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
 using Foxfire.Api.Sync;
+using Foxfire.Api.Telemetry;
 using Foxfire.Api.Versioning;
 using Foxfire.Api.Web;
 using Foxfire.Core;
@@ -42,6 +43,7 @@ var adminOptions = builder.Configuration.GetSection(AdminOptions.Section).Get<Ad
 var smtpOptions = builder.Configuration.GetSection(SmtpOptions.Section).Get<SmtpOptions>() ?? new();
 var rateLimitOptions = builder.Configuration.GetSection(RateLimitOptions.Section).Get<RateLimitOptions>() ?? new();
 var logOptions = builder.Configuration.GetSection(LogOptions.Section).Get<LogOptions>() ?? new();
+var telemetryOptions = builder.Configuration.GetSection(TelemetryOptions.Section).Get<TelemetryOptions>() ?? new();
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
 // Everything wrong with the configuration, in one message, before anything
@@ -49,7 +51,8 @@ var connectionString = builder.Configuration.GetConnectionString("Default");
 // missing settings, and a server that started degraded would be worse than one
 // that refused — half of these produce failures that look like something else.
 var problems = ConfigurationCheck.Validate(
-    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions, logOptions);
+    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions, logOptions,
+    telemetryOptions);
 if (problems.Count > 0)
 {
     var message = new StringBuilder()
@@ -68,8 +71,13 @@ builder.AddFoxfireLogging();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(DesktopCompatibility.AllowList);
 
-builder.Services.AddDbContext<FoxfireDbContext>(options =>
-    options.UseSqlServer(connectionString, sql =>
+// What the insights page is built from. Before the database, whose commands
+// it times — see Telemetry/DbCommandTimer.cs.
+builder.Services.AddFoxfireTelemetry(builder.Configuration);
+
+builder.Services.AddDbContext<FoxfireDbContext>((services, options) => options
+    .AddInterceptors(services.GetRequiredService<DbCommandTimer>())
+    .UseSqlServer(connectionString, sql =>
     {
         sql.MigrationsAssembly(typeof(FoxfireDbContext).Assembly.FullName);
 
@@ -223,7 +231,8 @@ builder.Services.AddSingleton(sp => new RiotClient(
     sp.GetRequiredService<IHttpClientFactory>(),
     sp.GetRequiredService<RiotRateLimiter>(),
     riotOptions.ApiKey,
-    sp.GetRequiredService<ILogger<RiotClient>>()));
+    sp.GetRequiredService<ILogger<RiotClient>>(),
+    sp.GetRequiredService<RiotMetrics>()));
 
 // Optional, and the server says so rather than refusing to start: a
 // community that never uploads a replay needs no blob store, and everything
@@ -291,6 +300,7 @@ api.MapPasswordResetEndpoints();
 api.MapAdminSettingsEndpoints();
 api.MapAdminUserEndpoints();
 api.MapAdminStorageEndpoints();
+api.MapAdminInsightsEndpoints();
 api.MapRiotLinkEndpoints();
 api.MapSyncEndpoints();
 api.MapDashboardEndpoints();
@@ -307,7 +317,11 @@ if (BuildFeatures.YouTubeRecordings)
 }
 
 api.MapImportEndpoints();
-app.MapHub<FoxfireHub>(FoxfireHub.Path);
+
+// Out of the request measurements: a hub connection is one request that lasts
+// as long as somebody has Foxfire open, and would drown every latency chart.
+// The hub counts who is connected itself.
+app.MapHub<FoxfireHub>(FoxfireHub.Path).DisableHttpMetrics();
 
 // An API route that does not exist is a JSON 404, from any client. Without
 // this it would fall through to the web client's fallback and come back as a

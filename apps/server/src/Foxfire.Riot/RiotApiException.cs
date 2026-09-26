@@ -34,6 +34,19 @@ public enum RiotRequestPriority
     Backfill = 2
 }
 
+/// <summary>The Riot queue at one moment, as an admin's page draws it.</summary>
+/// <param name="BurstUsed">Requests sent inside the last <see cref="RiotRateLimits.BurstWindow"/>.</param>
+/// <param name="SustainedUsed">Requests sent inside the last <see cref="RiotRateLimits.SustainedWindow"/>.</param>
+/// <param name="Depths">How many are waiting in each class, indexed by <see cref="RiotRequestPriority"/>.</param>
+/// <param name="PausedUntil">When a 429 or a 5xx has the queue held, until when. Null while it is not.</param>
+public sealed record RiotLimiterSnapshot(
+    RiotRateLimits Limits,
+    int BurstUsed,
+    int SustainedUsed,
+    IReadOnlyList<int> Depths,
+    DateTimeOffset? PausedUntil,
+    bool KeyRejected);
+
 /// <summary>Riot said no.</summary>
 public sealed class RiotApiException : Exception
 {

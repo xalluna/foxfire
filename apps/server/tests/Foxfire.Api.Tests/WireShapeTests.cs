@@ -216,7 +216,8 @@ public class WireShapeTests(FoxfireServerFixture server)
             $"/api/riot-accounts/{accountId}/matches",
             "/api/admin/users/",
             "/api/admin/invites/used",
-            "/api/admin/storage/replays"
+            "/api/admin/storage/replays",
+            "/api/admin/insights/logs"
         ];
 
         foreach (var route in paged)

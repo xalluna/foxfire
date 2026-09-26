@@ -53,6 +53,10 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     public DbSet<SharedReplay> SharedReplays => Set<SharedReplay>();
     public DbSet<MatchRecording> MatchRecordings => Set<MatchRecording>();
 
+    // The server's own measurements, for the insights page. Nothing to do with
+    // anybody's games; see TelemetryRollup.
+    public DbSet<TelemetryRollup> TelemetryRollups => Set<TelemetryRollup>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

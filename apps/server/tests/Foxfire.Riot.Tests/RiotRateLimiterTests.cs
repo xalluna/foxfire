@@ -472,4 +472,61 @@ public class RiotRateLimiterTests
 
         gate.SetResult();
     }
+
+    [Fact]
+    public async Task A_snapshot_counts_what_is_inside_each_window_now()
+    {
+        var clock = Clock();
+        using var limiter = new RiotRateLimiter(Roomy, clock);
+
+        for (var i = 0; i < 3; i++) await limiter.ScheduleAsync(_ => Task.FromResult(0));
+
+        var busy = limiter.Snapshot();
+        Assert.Equal(3, busy.BurstUsed);
+        Assert.Equal(3, busy.SustainedUsed);
+        Assert.Equal(Roomy, busy.Limits);
+
+        // Past the burst window but inside the sustained one.
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var settling = limiter.Snapshot();
+        Assert.Equal(0, settling.BurstUsed);
+        Assert.Equal(3, settling.SustainedUsed);
+    }
+
+    [Fact]
+    public async Task A_quiet_queue_reads_as_quiet_even_before_the_pump_trims_its_log()
+    {
+        var clock = Clock();
+        using var limiter = new RiotRateLimiter(Roomy, clock);
+
+        for (var i = 0; i < 4; i++) await limiter.ScheduleAsync(_ => Task.FromResult(0));
+
+        // Nothing has gone out since, so the pump has not run and the dispatch
+        // log still holds all four. They are all older than either window.
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var quiet = limiter.Snapshot();
+
+        Assert.Equal(0, quiet.BurstUsed);
+        Assert.Equal(0, quiet.SustainedUsed);
+        Assert.Null(quiet.PausedUntil);
+        Assert.False(quiet.KeyRejected);
+    }
+
+    [Fact]
+    public void A_snapshot_carries_the_depth_of_every_class()
+    {
+        using var limiter = new RiotRateLimiter(Roomy, Clock());
+
+        var gate = new TaskCompletionSource();
+        _ = limiter.ScheduleAsync(async _ => { await gate.Task; return 0; }, RiotRequestPriority.Interactive);
+        _ = limiter.ScheduleAsync(async _ => { await gate.Task; return 0; }, RiotRequestPriority.PostGame);
+
+        var snapshot = limiter.Snapshot();
+
+        Assert.Equal(3, snapshot.Depths.Count);
+        Assert.Equal(1, snapshot.Depths[(int)RiotRequestPriority.PostGame]);
+        Assert.Equal(0, snapshot.Depths[(int)RiotRequestPriority.Backfill]);
+
+        gate.SetResult();
+    }
 }

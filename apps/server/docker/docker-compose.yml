@@ -98,6 +98,10 @@ services:
       # Serilog__WriteTo__appinsights__Name: "ApplicationInsights"
       # Serilog__WriteTo__appinsights__Args__connectionString: "InstrumentationKey=...;IngestionEndpoint=..."
       # Serilog__WriteTo__appinsights__Args__telemetryConverter: "Serilog.Sinks.ApplicationInsights.TelemetryConverters.TraceTelemetryConverter, Serilog.Sinks.ApplicationInsights"
+
+      # What the server measures about itself, for the Insights page an admin
+      # sees in the app. Kept in the database; see .env.example.
+      Telemetry__RetentionDays: "${INSIGHTS_RETENTION_DAYS:-30}"
     ports:
       # Localhost only. Point your reverse proxy here; do not forward this port.
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"

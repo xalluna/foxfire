@@ -1,4 +1,5 @@
 using Foxfire.Api.Services;
+using Foxfire.Api.Telemetry;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -41,6 +42,9 @@ public sealed record SyncResult(int Stored, int Failed);
 public sealed class SyncService(
     IServiceScopeFactory scopes,
     IServerEvents events,
+    ServerMetrics metrics,
+    RecentSyncs recent,
+    TimeProvider time,
     ILogger<SyncService> log)
 {
     private readonly Lock _gate = new();
@@ -50,6 +54,12 @@ public sealed class SyncService(
     public bool IsSyncing(Guid riotAccountId)
     {
         lock (_gate) return _inFlight.ContainsKey(riotAccountId);
+    }
+
+    /// <summary>How many runs are under way, for the insights page.</summary>
+    public int InFlightCount
+    {
+        get { lock (_gate) return _inFlight.Count; }
     }
 
     /// <summary>
@@ -103,19 +113,54 @@ public sealed class SyncService(
             ["SyncTrigger"] = trigger
         });
 
+        // Filled in by the run as it learns what it is, and read here whichever
+        // way it ends — so a run that fails halfway is still counted, as far as
+        // it got.
+        var run = new SyncRunProgress();
+        var startedAt = time.GetUtcNow();
+        var started = time.GetTimestamp();
+        var outcome = "failed";
+        string? error = null;
+
         try
         {
-            return await RunAsync(riotAccountId, trigger);
+            var result = await RunAsync(riotAccountId, trigger, run);
+            outcome = result.Failed > 0 ? "partial" : "ok";
+            return result;
         }
         catch (Exception ex)
         {
             log.LogError(ex, "Sync failed for Riot account {RiotAccountId}", riotAccountId);
 
+            error = Describe(ex);
             await events.SyncProgressAsync(new SyncProgressEvent(
-                riotAccountId, SyncPhase.Error, 0, 0, Describe(ex), trigger));
+                riotAccountId, SyncPhase.Error, 0, 0, error, trigger));
 
             throw;
         }
+        finally
+        {
+            var elapsed = time.GetElapsedTime(started);
+            var triggerName = trigger == SyncTrigger.Manual ? "manual" : "auto";
+
+            metrics.SyncFinished(triggerName, run.Kind, outcome, elapsed, run.Stored, run.Failed);
+            recent.Add(new SyncRunRecord(
+                riotAccountId, run.RiotId, triggerName, run.Kind, startedAt, elapsed,
+                run.Stored, run.Failed, outcome, error));
+        }
+    }
+
+    /// <summary>What a run has learnt about itself so far, for the insights page.</summary>
+    private sealed class SyncRunProgress
+    {
+        /// <summary>backfill or delta, once the run has read the account's state.</summary>
+        public string Kind { get; set; } = "unknown";
+
+        public string? RiotId { get; set; }
+
+        public int Stored { get; set; }
+
+        public int Failed { get; set; }
     }
 
     /// <summary>
@@ -137,7 +182,7 @@ public sealed class SyncService(
         _ => "Sync failed."
     };
 
-    private async Task<SyncResult> RunAsync(Guid riotAccountId, SyncTrigger trigger)
+    private async Task<SyncResult> RunAsync(Guid riotAccountId, SyncTrigger trigger, SyncRunProgress run)
     {
         using var scope = scopes.CreateScope();
         var services = scope.ServiceProvider;
@@ -157,6 +202,9 @@ public sealed class SyncService(
         var state = await EnsureSyncStateAsync(db, settings, riotAccountId);
         var isBackfill = !state.BackfillComplete;
         var phase = isBackfill ? SyncPhase.Backfill : SyncPhase.Delta;
+
+        run.Kind = isBackfill ? "backfill" : "delta";
+        run.RiotId = account.RiotId;
 
         // A backfill is background work however it was triggered: two hundred
         // requests out of a hundred every two minutes is the whole server's
@@ -193,6 +241,9 @@ public sealed class SyncService(
         }
 
         var stored = idsToFetch.Count - failed;
+
+        run.Stored = stored;
+        run.Failed = failed;
 
         // Deliberately after the matches are stored. Attribution looks for games
         // falling between two readings, so a reading taken first would find an

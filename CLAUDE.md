@@ -83,7 +83,8 @@ A list whose length depends on time or on the size of the community is read a pa
 never whole — the accounts rule above is one case of it. That is the finder (`/api/search`), match
 history (`/api/riot-accounts/{id}/matches`), the members (`/api/admin/users`, searched on the
 server by `q`), used invites (`/api/admin/invites/used`), the replay library
-(`/api/admin/storage/replays`), and on the desktop the Captures tabs' recordings and replays.
+(`/api/admin/storage/replays`), the server's recent log lines (`/api/admin/insights/logs`), and on
+the desktop the Captures tabs' recordings and replays.
 
 - **The answer** is `{ items, total }` — `Page<T>` in `Foxfire.Api/Common` and in `@foxfire/core`.
   `total` counts the list under the same filters, so a screen says "120 members" rather than "50+"
@@ -122,6 +123,9 @@ Two lists that grow are whole on purpose, and say so where they are read:
   "Select all" on the Recordings tab has to mean all of them, and the batch dialog reads each one's
   size and game. It is bounded by what is on one PC's disk.
 
+The insights charts (`/api/admin/insights/{section}`) are not lists at all: a window is at most 360
+points whatever it spans, and its tables are capped — the fifty busiest routes, the last ten syncs.
+
 **Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`) grows
 with a player's history and is still read whole, with a query per game for the rank before it. It
 should be paged; what makes that more than a page size is that saving one game's rank can settle
@@ -142,6 +146,9 @@ Serilog's own `Serilog` section: levels, and sinks under `Serilog__WriteTo__<lab
 docker-compose.yml has a commented block for each sink the server ships. Serilog cannot discover sinks
 in the single-file release build, so they are listed in `FoxfireLogging.ReaderOptions` — **a new sink
 is a package, a line there, and a case in `LoggingTests`**, or it is skipped without a word.
+One sink is wired in code instead: `Telemetry/RecentLogs`, the last few thousand lines held in
+memory for the insights page's Logs tab. Whatever a line may carry is shown to an admin there, which
+is one more reason for the rules below.
 
 Every request gets one line, and every line written during it carries its trace id, the client, the
 member and their address; the response carries the trace id as `X-Trace-Id`. A sync puts the account
@@ -157,6 +164,44 @@ When you add a log line:
   have. **Information** is a thing that happened, **Debug** is how it happened.
 - Record who did something to whom — an admin's action, a sign-in — at the point it is decided,
   not only as the request line that carried it.
+
+## Server insights
+
+An admin sees what the server is doing on the Insights page — Settings › Server insights on the
+desktop, `/admin/insights` in the web client, one shared screen (`ServerInsightsScreen`). It is
+in-app only: nothing leaves the server for it, and there is no OpenTelemetry exporter, though the
+measurements are `System.Diagnostics.Metrics` instruments so one would be a package and a line.
+
+How a measurement gets to a chart, in `apps/server/src/Foxfire.Api/Telemetry`:
+
+- **Measured** on meters built from the host's `IMeterFactory` — ASP.NET Core's own request
+  timings (tagged `foxfire.client` in `RequestMetricTags`) and rate limiter, `RiotMetrics` in
+  Foxfire.Riot, `ServerMetrics` for syncs and database commands — or **sampled** every ten seconds
+  by `TelemetryCollector`: the Riot queue (`RiotRateLimiter.Snapshot`), syncs running, clients on
+  the hub (`ConnectedClients`), CPU, memory, lines logged. Never a static `Meter`: the test suite
+  builds dozens of hosts in one process, and the collector only listens to its own host's factory.
+- **Held** in `TelemetryBuffer`: ten-second buckets, the last hour, in memory. The 15-minute view
+  reads nothing else.
+- **Written** to `TelemetryRollups` a finished minute at a time, marked with the process that wrote
+  it — a minute two processes shared is added up, not overwritten — and folded into hour rows once
+  the hour is two minutes over. Minutes are kept 48 hours, hours `Telemetry__RetentionDays` (30).
+  `InsightsReader` stitches hours, unfolded minutes and memory at `FlushedThrough`, so nothing is
+  counted twice.
+
+Every kind of measurement is stored as the same four numbers plus, for a duration, its spread over
+the fixed bounds in `Foxfire.Core.InsightAggregate`. **Never change those bounds**: every stored row
+is merged by position against them. Metric names in `InsightMetrics` are stored too, so renaming one
+orphans its history.
+
+Adding a measurement is a name and kind in `InsightMetrics`, then either an instrument the collector
+maps in `MappingFor` or a line in its `Sample`, then a series in the section handler that shows it
+(`Features/Insights`). Dimensions are capped at 200 series a metric, the rest counted as `other` —
+never tag by something unbounded like a path or a user id. `Telemetry__Persist=false` is the test
+fixture's: the store's tests drive `TelemetryStore` themselves, with times of their own.
+
+The desktop's **Developer telemetry** is a different thing: this PC's own Riot calls, processes and
+League client, in `telemetry.db`, never sent anywhere. The two share only the chart
+(`TimeSeriesChart` in `@foxfire/ui`).
 
 ## How the desktop updates itself
 
