@@ -11,6 +11,16 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.5.0] — 2026-09-26
+
+Polish on the web client's profile.
+
+### Changed
+
+- The win rate and the win–loss record in a profile's "Last games" summary are set in the same
+  typeface as every other number, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
+
 ## [0.4.0] — 2026-09-24
 
 A server that answers what a screen asks rather than handing over every account
@@ -680,6 +690,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0
 [0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1
 [0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0
