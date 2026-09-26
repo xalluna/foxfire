@@ -180,6 +180,36 @@ describe('LP editing and whose account it is', () => {
 
     expect(labelled(items, 'Clear LP edit')?.disabledReason).toBeUndefined()
   })
+
+  it('offers a head admin the edit and the clear on somebody else account', () => {
+    // The server lets a head admin write anybody's LP, so greying it out here
+    // would be the menu refusing what the server allows.
+    const edit = matchContextItems(RANKED_UNATTRIBUTED, NOTHING, { isMine: false, isHeadAdmin: true })
+    const clear = matchContextItems({ ...MATCH, hasManualRank: true }, NOTHING, {
+      isMine: false,
+      isHeadAdmin: true
+    })
+
+    expect(labelled(edit, 'Edit LP gain')?.disabledReason).toBeUndefined()
+    expect(labelled(clear, 'Clear LP edit')?.disabledReason).toBeUndefined()
+  })
+
+  it('still gives a head admin the reasons that are about the game', () => {
+    const items = matchContextItems({ ...RANKED_UNATTRIBUTED, isRemake: true }, NOTHING, {
+      isMine: false,
+      isHeadAdmin: true
+    })
+
+    expect(labelled(items, 'Edit LP gain')?.disabledReason).toBe('Remakes move no LP')
+  })
+
+  it('does not let a plain admin write somebody else LP', () => {
+    const items = matchContextItems(RANKED_UNATTRIBUTED, NOTHING, { isMine: false, isAdmin: true })
+
+    expect(labelled(items, 'Edit LP gain')?.disabledReason).toBe(
+      'Only whoever claimed this account can type its LP'
+    )
+  })
 })
 
 /**

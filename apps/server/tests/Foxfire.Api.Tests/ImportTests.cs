@@ -622,21 +622,37 @@ public class ImportTests(FoxfireServerFixture server)
     }
 
     [Fact]
-    public async Task Only_an_admin_can_import()
+    public async Task Only_a_head_admin_can_import()
     {
-        // The import writes everybody's history, and a member who mis-clicked a
-        // year-old stats.db would be rewriting the community's.
+        // The import writes everybody's history, and anybody but the few
+        // trusted with all of it who mis-clicked a year-old stats.db would be
+        // rewriting the community's. A plain admin is refused as a member is,
+        // on every route of it.
         using var member = server.Client();
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var session = await server.RegisterAsync(member, $"Member{suffix}", $"member-{suffix}@example.com");
         FoxfireServerFixture.Authenticated(member, session);
 
-        var response = await member.PostAsJsonAsync(
-            new Uri("/api/admin/import/accounts", UriKind.Relative),
-            Array.Empty<object>());
+        var (plainAdmin, _) = await server.PlainAdminAsync("Importer");
+        using var _ = plainAdmin;
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        string[] routes = ["accounts", "unstored-matches", "matches", "rank-readings", "seasons"];
+
+        foreach (var client in new[] { member, plainAdmin })
+        {
+            foreach (var route in routes)
+            {
+                var response = await client.PostAsJsonAsync(
+                    new Uri($"/api/admin/import/{route}", UriKind.Relative),
+                    Array.Empty<object>());
+
+                Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            }
+
+            var finish = await client.PostAsync(new Uri("/api/admin/import/finish", UriKind.Relative), null);
+            Assert.Equal(HttpStatusCode.Forbidden, finish.StatusCode);
+        }
     }
 
     /// <summary>A batch of accounts, in the shape a stats.db sends them.</summary>

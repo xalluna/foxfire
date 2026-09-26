@@ -18,6 +18,7 @@ import {
   type MatchFocus
 } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useIsHeadAdmin } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
 import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
@@ -101,6 +102,7 @@ export function DashboardScreen({
   }, [focus])
 
   const recordings = useRecordingActions(account)
+  const isHeadAdmin = useIsHeadAdmin()
 
   const progress = useSyncProgress(account.id)
   const syncing = isSyncing(progress)
@@ -223,8 +225,9 @@ export function DashboardScreen({
             : undefined
         },
         // On a server the history is everybody's and the writes are not, so the
-        // menu has to know whose account this is.
-        { isMine: account.isMine, ...recordings.menuContext }
+        // menu has to know whose account this is — and whether a head admin,
+        // who may type LP on it anyway, is the one asking.
+        { isMine: account.isMine, isHeadAdmin, ...recordings.menuContext }
       )
     })
   }

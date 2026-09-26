@@ -13,12 +13,46 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.5.0] — 2026-09-26
 
-An invite is a link now, with no email address needed to make one — Foxfire sends
-no mail, so the address was only ever in the way of pasting a link into Discord.
-And some polish on the web client's profile.
+Head admins. Every admin used to be able to do everything an admin could — import
+a whole stats.db over the community's history, or demote, disable or remove any
+other admin, including whoever owns the server — and nobody at all could fix a
+figure somebody else had typed wrong. Now there is a head admin above the rest:
+the account in `ADMIN_EMAIL` always is one, and it can make others. Head admins
+import, can type LP on anybody's games, and are the only ones who can act against
+another admin. And an invite is a link now, with no email address needed to
+make one — Foxfire sends no mail, so the address was only ever in the way of
+pasting a link into Discord. Serves Foxfire 0.15 and newer. A profile's "Last
+games" figures are set like every other number, too.
+
+### Added
+
+- **Head admins.** The account in `ADMIN_EMAIL` becomes one the next time the
+  server starts, and a head admin can make any member a head admin from the
+  Members page — or stop them being one. The page and the Account page say who
+  is which.
+- **A head admin can type LP on anybody's games.** Edit LP gain and Clear LP edit
+  work on every profile for a head admin, claimed or not — for the figure
+  somebody typed wrong, or never came back to type. Everybody else still types
+  only their own.
 
 ### Changed
 
+- **Only a head admin can import a stats.db.** An import writes everybody's
+  history at once and cannot be taken back out. A plain admin sees the Import
+  card with the reason instead of the button.
+- **Admins cannot act against other admins.** Demoting, disabling or removing an
+  admin, or making them a reset link — which hands over the account — takes a
+  head admin, and a plain admin no longer sees another admin's outstanding reset
+  link either. Any admin can still make somebody an admin, enable an account,
+  and step down themselves.
+- **The `ADMIN_EMAIL` account cannot be demoted, disabled or removed from the
+  app**, by anybody, itself included — the configuration is the final say on who
+  owns the server, as it already was for that account's address. Handing the
+  server over is still changing `ADMIN_EMAIL` and restarting. Another head admin
+  can still make it a reset link, which is how it gets back in after a forgotten
+  password.
+- **Only a head admin can move onto the `ADMIN_EMAIL` address**, since holding it
+  makes a head admin at the next restart.
 - **An invite no longer needs an email address.** *Create invite link* gives you
   a link to paste into Discord or anywhere else, and it signs up whoever opens it
   first. You can still add an address: their sign-up form fills it in, and only
@@ -31,6 +65,13 @@ And some polish on the web client's profile.
 
 ### Under the hood
 
+- `HeadAdmin` is a second Identity role, created on boot like the first, and
+  always held alongside `Admin`; there is no migration. Sessions and the member
+  list carry `isHeadAdmin`, and the member list `isConfiguredAdmin` — added
+  fields, so no API version moves.
+- The log names who acted on the lines that did not: an import, removing a
+  member, and a head admin typing or clearing LP on somebody else's account.
+  Role changes read "made … an admin / a head admin / a member".
 - `Invites.Email` is nullable (migration `InviteEmailOptional`), and
   `POST /api/admin/invites` takes `{ email: null }` or no email at all. An invite
   with an address still hands back the one already outstanding for it; invites

@@ -8,7 +8,7 @@ import type {
 } from '@foxfire/core'
 import { paths, rankQueueParam } from '@foxfire/core/routes'
 import type { Platform, RecordingTarget } from '@foxfire/screens'
-import { createFakeYouTubeMount, createFixtureClient, runFixtureImport } from '@foxfire/screens/dev'
+import { createFakeYouTubeMount, createFixtureClient, runFixtureImport, scenario } from '@foxfire/screens/dev'
 import { YOUTUBE_ENABLED } from '../features'
 import { createWebYouTubeMount } from '../platform/youtubePlayer'
 import { replaceServerInfoSource } from '../serverInfo'
@@ -31,7 +31,12 @@ import { useAuth } from '../session/session'
 
 const SERVER_NAME = 'The Fox Den'
 
-const USER: SessionUser = { id: 'u-faker', username: 'Faker', email: 'faker@example.com', isAdmin: true }
+// Faker is the configured head admin; ?scenario=server-admin signs in as Sova,
+// a plain one, to see the pages the way they do.
+const USER: SessionUser =
+  scenario === 'server-admin'
+    ? { id: 'u-sova', username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
+    : { id: 'u-faker', username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
 
 const VERSION: VersionInfo = {
   serverName: SERVER_NAME,
@@ -54,7 +59,9 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
       mode: 'server',
       publicUrl: window.location.origin,
       serverName: SERVER_NAME,
-      session: user ? { username: user.username, email: user.email, isAdmin: user.isAdmin } : null,
+      session: user
+        ? { username: user.username, email: user.email, isAdmin: user.isAdmin, isHeadAdmin: user.isHeadAdmin ?? false }
+        : null,
       riotKeyRejected: false,
       upgradeRequired: null
     }

@@ -94,16 +94,17 @@ public class AuthTests(FoxfireServerFixture server)
     private static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
 
     [Fact]
-    public async Task The_configured_admin_email_is_an_admin()
+    public async Task The_configured_admin_email_is_a_head_admin()
     {
-        // However it got there. Registration grants the role, and startup
-        // re-grants it to whatever Admin__Email currently names — which is what
+        // However it got there. Registration grants both roles, and startup
+        // re-grants them to whatever Admin__Email currently names — which is what
         // makes the config file the final say on who owns a server, and what
         // lets a host recover one whose last admin deleted themselves.
         var (client, session) = await server.AdminAsync();
         using var _ = client;
 
         Assert.True(session.User.IsAdmin);
+        Assert.True(session.User.IsHeadAdmin);
         Assert.Equal(FoxfireServerFixture.AdminEmail, session.User.Email);
     }
 
@@ -115,6 +116,17 @@ public class AuthTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Ordinary", $"{Unique("ordinary")}@example.com");
 
         Assert.False(session.User.IsAdmin);
+        Assert.False(session.User.IsHeadAdmin);
+    }
+
+    [Fact]
+    public async Task A_promoted_admin_is_not_a_head_admin()
+    {
+        var (client, session) = await server.PlainAdminAsync("Promotee");
+        using var _ = client;
+
+        Assert.True(session.User.IsAdmin);
+        Assert.False(session.User.IsHeadAdmin);
     }
 
     [Fact]
