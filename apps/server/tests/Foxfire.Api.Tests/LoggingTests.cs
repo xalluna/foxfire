@@ -65,9 +65,9 @@ public sealed class LoggingTests(FoxfireServerFixture server)
             await host.DisposeAsync();
         }
 
-        var lines = await LogLinesAsync();
+        var lines = await LogLinesAsync(until: all => all.Any(l => HasPath(l, path)));
 
-        var line = Assert.Single(lines, l => l.TryGetProperty("RequestPath", out var p) && p.GetString() == path);
+        var line = Assert.Single(lines, l => HasPath(l, path));
         Assert.Equal(traceId, line.GetProperty("@tr").GetString());
         Assert.Equal(404, line.GetProperty("StatusCode").GetInt32());
         Assert.Equal("desktop", line.GetProperty("ClientKind").GetString());
@@ -103,11 +103,11 @@ public sealed class LoggingTests(FoxfireServerFixture server)
             await host.DisposeAsync();
         }
 
-        var lines = await LogLinesAsync();
+        const string Redacted = "/api/password-resets/{token}/preview";
+        var lines = await LogLinesAsync(until: all => all.Any(l => HasPath(l, Redacted)) && all.Any(l => HasPath(l, "/api/invites/{token}/preview")));
 
         Assert.DoesNotContain(lines, l => l.GetRawText().Contains(token, StringComparison.Ordinal));
-        Assert.Contains(lines, l =>
-            l.TryGetProperty("RequestPath", out var p) && p.GetString() == "/api/password-resets/{token}/preview");
+        Assert.Contains(lines, l => HasPath(l, Redacted));
     }
 
     /// <summary>
@@ -274,8 +274,32 @@ public sealed class LoggingTests(FoxfireServerFixture server)
         lock (complaints) return [.. complaints];
     }
 
+    private static bool HasPath(JsonElement line, string path) =>
+        line.TryGetProperty("RequestPath", out var p) && p.GetString() == path;
+
+    /// <summary>
+    /// Every line in the server's log container, parsed — once <paramref name="until"/>
+    /// says the lines a test is waiting for have landed, or after ten seconds.
+    ///
+    /// Disposing a host is what starts its last batch on its way, not what
+    /// waits for it to arrive: a read straight afterwards can beat the sink's
+    /// final append to the store, and on a busy runner it usually does.
+    /// </summary>
+    private async Task<List<JsonElement>> LogLinesAsync(Func<List<JsonElement>, bool> until)
+    {
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (true)
+        {
+            var lines = await ReadLogLinesAsync();
+            if (until(lines) || DateTimeOffset.UtcNow >= deadline) return lines;
+
+            await Task.Delay(200);
+        }
+    }
+
     /// <summary>Every line in the server's log container, parsed.</summary>
-    private async Task<List<JsonElement>> LogLinesAsync()
+    private async Task<List<JsonElement>> ReadLogLinesAsync()
     {
         var container = Store.GetBlobContainerClient(FoxfireLogging.ContainerName);
         List<JsonElement> lines = [];
