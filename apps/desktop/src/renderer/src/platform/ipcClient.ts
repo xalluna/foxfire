@@ -68,6 +68,12 @@ export function createIpcClient(api: Api): FoxfireClient {
       : {}),
     assets: api.assets,
 
+    account: {
+      email: api.server.accountEmail,
+      resendEmailConfirmation: api.server.resendEmailConfirmation,
+      cancelEmailChange: api.server.cancelEmailChange
+    },
+
     admin: {
       users: api.serverAdmin.users,
       updateUser: api.serverAdmin.updateUser,
@@ -78,6 +84,7 @@ export function createIpcClient(api: Api): FoxfireClient {
       usedInvites: api.serverAdmin.usedInvites,
       createInvite: api.serverAdmin.createInvite,
       revokeInvite: api.serverAdmin.revokeInvite,
+      emailInvite: api.serverAdmin.emailInvite,
       getSettings: api.serverAdmin.getSettings,
       setSettings: api.serverAdmin.setSettings,
       storage: api.serverAdmin.storage,
@@ -86,7 +93,12 @@ export function createIpcClient(api: Api): FoxfireClient {
       forceUnlink: api.serverAdmin.forceUnlink,
       addRiotAccount: api.serverAdmin.addRiotAccount,
       insights: api.serverAdmin.insights,
-      serverLogs: api.serverAdmin.serverLogs
+      serverLogs: api.serverAdmin.serverLogs,
+      emailOverview: api.serverAdmin.emailOverview,
+      emailLog: api.serverAdmin.emailLog,
+      emailSuppressions: api.serverAdmin.emailSuppressions,
+      clearEmailSuppression: api.serverAdmin.clearEmailSuppression,
+      sendTestEmail: api.serverAdmin.sendTestEmail
     },
 
     events: {

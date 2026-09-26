@@ -36,6 +36,9 @@ export const queryKeys = {
   connection: () => ['connection'] as const,
   assets: () => ['assets'] as const,
 
+  /** The signed-in member's own address: confirmed or not, and any move waiting on its link. */
+  accountEmail: () => ['accountEmail'] as const,
+
   /** Every finder query, so one invalidation clears them all. */
   playerSearches: () => ['playerSearch'] as const,
   /**
@@ -120,6 +123,13 @@ export const queryKeys = {
     insights: (section: InsightsSection, window: InsightsWindow) =>
       ['admin', 'insights', section, window] as const,
     /** The server's recent log lines at or above one level, every page fetched. */
-    serverLogs: (level: string) => ['admin', 'serverLogs', level] as const
+    serverLogs: (level: string) => ['admin', 'serverLogs', level] as const,
+    /** Everything on the Email page, so one invalidation refreshes the quota, the log and the suppressions. */
+    email: () => ['admin', 'email'] as const,
+    emailOverview: () => ['admin', 'email', 'overview'] as const,
+    /** Every page of the log, under one set of filters. */
+    emailLog: (filters: { kind?: string; status?: string; q?: string }) =>
+      ['admin', 'email', 'log', filters.kind ?? '', filters.status ?? '', filters.q ?? ''] as const,
+    emailSuppressions: (q: string) => ['admin', 'email', 'suppressions', q] as const
   }
 }

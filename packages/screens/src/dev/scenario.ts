@@ -51,6 +51,13 @@ export type Scenario =
   // Signed in as an admin to a server too old to report insights, which
   // answers the page's routes with a 404.
   | 'insights-unsupported'
+  // A server's mail: one with no provider at all; one whose day is spent and
+  // whose mail is waiting; a member who never confirmed their address; and
+  // one moving to a new address that has not been confirmed yet.
+  | 'email-off'
+  | 'email-held'
+  | 'unverified'
+  | 'email-change-pending'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

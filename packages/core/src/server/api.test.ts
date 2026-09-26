@@ -86,6 +86,54 @@ describe('createServerApi', () => {
     await expect(api.admin.insights('overview', '1h')).rejects.toBeInstanceOf(ServerError)
   })
 
+  it('asks the email page its own routes, a page at a time, filters and all', async () => {
+    const { calls, request } = recorder(() => ({ items: [], total: 0 }))
+    const api = createServerApi(request)
+
+    await api.admin.emailOverview()
+    await api.admin.emailLog({ kind: 'invite', status: 'pending', q: ' gon ', limit: 50, offset: 50 })
+    await api.admin.emailLog()
+    await api.admin.emailSuppressions({ q: 'bounce' })
+    await api.admin.clearEmailSuppression('s-1')
+    await api.admin.sendTestEmail(' me@example.com ')
+    await api.admin.emailInvite('i-1')
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /admin/email/',
+      'GET /admin/email/messages?kind=invite&status=pending&q=gon&limit=50&offset=50',
+      'GET /admin/email/messages',
+      'GET /admin/email/suppressions?q=bounce',
+      'DELETE /admin/email/suppressions/s-1',
+      'POST /admin/email/test',
+      'POST /admin/invites/i-1/email'
+    ])
+    expect(calls[5].body).toEqual({ to: 'me@example.com' })
+  })
+
+  it('reads a server too old to send mail as having none, rather than failing', async () => {
+    const { request } = recorder(() => new ServerError('There is no such route on this server.', 404))
+    const api = createServerApi(request)
+
+    await expect(api.admin.emailOverview()).resolves.toBeNull()
+    await expect(api.admin.emailLog()).resolves.toBeNull()
+    await expect(api.account.email()).resolves.toBeNull()
+  })
+
+  it('answers a resend with the address as it now stands, or the reason it was refused', async () => {
+    const address = { email: 'me@example.com', emailConfirmed: false, pendingEmail: null }
+    const ok = createServerApi(recorder(() => address).request)
+    const refused = createServerApi(
+      recorder(() => new ServerError('A link was sent a moment ago.', 429, 'confirmation_throttled')).request
+    )
+
+    await expect(ok.account.resendEmailConfirmation()).resolves.toEqual({ ok: true, error: null, email: address })
+    await expect(refused.account.resendEmailConfirmation()).resolves.toEqual({
+      ok: false,
+      error: 'A link was sent a moment ago.',
+      email: null
+    })
+  })
+
   it('answers a refused admin write with the server\'s own message', async () => {
     const { request } = recorder(
       () => new ServerError('There has to be at least one administrator.', 409, 'last_admin')

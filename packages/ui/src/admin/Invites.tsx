@@ -7,6 +7,7 @@ import { ghostButtonClass, inputClass, primaryButtonClass } from '../components/
 import { EmptyState } from '../components/EmptyState'
 import { ShowMoreButton } from '../components/ShowMore'
 import * as Icon from '../components/icons'
+import { MailStatus } from './mailStatus'
 
 export interface InvitesPageProps {
   /** Every invite that can still be used. They expire, so this is never long. */
@@ -29,6 +30,13 @@ export interface InvitesPageProps {
   onCreateInvite: (email?: string) => Promise<AdminInvite>
   onRevokeInvite: (id: string) => Promise<AdminActionResult>
   onCopy: (text: string) => void
+  /**
+   * Whether this server sends mail. With it, an invite with an address is
+   * emailed there as well as shown here. Undefined while it is not yet known.
+   */
+  mailEnabled?: boolean
+  /** Emails an invite's link to its address — offered only where the invite says `canEmail`. */
+  onEmailInvite?: (id: string) => Promise<AdminActionResult>
 }
 
 /**
@@ -52,7 +60,9 @@ export function InvitesPage({
   onSetPublicSignup,
   onCreateInvite,
   onRevokeInvite,
-  onCopy
+  onCopy,
+  mailEnabled = false,
+  onEmailInvite
 }: InvitesPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -69,7 +79,11 @@ export function InvitesPage({
   return (
     <SettingsPage
       title="Invites"
-      intro="Who can make an account here, and the links that let them in. Foxfire doesn't send mail, so an invite is a link you pass on yourself — in Discord, or wherever your community talks."
+      intro={
+        mailEnabled
+          ? 'Who can make an account here, and the links that let them in. Give an address and the link is emailed there; either way it is yours to copy and pass on — in Discord, or wherever your community talks.'
+          : "Who can make an account here, and the links that let them in. This server doesn't send mail, so an invite is a link you pass on yourself — in Discord, or wherever your community talks."
+      }
     >
       {error !== null && (
         <SettingsCard>
@@ -113,8 +127,10 @@ export function InvitesPage({
         publicSignup={publicSignup}
         onCreate={onCreateInvite}
         onRevoke={(id) => act(() => onRevokeInvite(id))}
+        onEmail={onEmailInvite ? (id) => act(() => onEmailInvite(id)) : undefined}
         onCopy={onCopy}
         onError={setError}
+        mailEnabled={mailEnabled}
       />
     </SettingsPage>
   )
@@ -132,8 +148,10 @@ function Invites({
   publicSignup,
   onCreate,
   onRevoke,
+  onEmail,
   onCopy,
-  onError
+  onError,
+  mailEnabled
 }: {
   outstanding: AdminInvite[]
   used: AdminInvite[]
@@ -144,8 +162,10 @@ function Invites({
   publicSignup: boolean
   onCreate: (email?: string) => Promise<AdminInvite>
   onRevoke: (id: string) => void
+  onEmail?: (id: string) => void
   onCopy: (text: string) => void
   onError: (message: string | null) => void
+  mailEnabled: boolean
 }): JSX.Element {
   const [email, setEmail] = useState('')
   const [created, setCreated] = useState<AdminInvite | null>(null)
@@ -176,7 +196,11 @@ function Invites({
     >
       <SettingsBlock
         label="Invite somebody"
-        description="A link that signs up one person: it works once, and runs out on its own. Add their email if you like, and it's filled in for them."
+        description={
+          mailEnabled
+            ? "A link that signs up one person: it works once, and runs out on its own. Add their email and it's sent to them, and filled in when they sign up."
+            : "A link that signs up one person: it works once, and runs out on its own. Add their email if you like, and it's filled in for them."
+        }
       >
         <div className="flex gap-2">
           <input
@@ -208,6 +232,7 @@ function Invites({
               )}{' '}
               Works for one account until {formatDate(created.expiresAt)}, and can be opened as many times as you
               like until then.
+              {created.mail && ' It is being emailed to them too.'}
             </p>
             <div className="mt-2 flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate text-2xs text-text-dim">{created.link}</code>
@@ -242,9 +267,19 @@ function Invites({
         <SettingsRow
           key={invite.id}
           label={invite.email ?? 'Invite link'}
-          description={`Created ${formatDate(invite.createdAt)} · Expires ${formatDate(invite.expiresAt)}`}
+          description={
+            <>
+              Created {formatDate(invite.createdAt)} · Expires {formatDate(invite.expiresAt)}
+              {invite.mail && <MailStatus mail={invite.mail} className="mt-1 flex" />}
+            </>
+          }
           control={
             <>
+              {invite.canEmail && onEmail && (
+                <button type="button" className={ghostButtonClass} onClick={() => onEmail(invite.id)}>
+                  {invite.mail ? 'Email again' : 'Email it'}
+                </button>
+              )}
               <button type="button" className={ghostButtonClass} onClick={() => onCopy(invite.link)}>
                 Copy link
               </button>

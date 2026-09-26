@@ -3,6 +3,7 @@ import { Link, Outlet, useRouter } from '@tanstack/react-router'
 import { Icon, Logo } from '@foxfire/ui'
 import { PlayerSearchBox, useConnection } from '@foxfire/screens'
 import { signOut, useAuth } from '../session/session'
+import { EmailBanner } from './EmailBanner'
 
 function NavLink({ to, children }: { to: '/admin'; children: ReactNode }): JSX.Element {
   return (
@@ -99,6 +100,8 @@ export function WebShell(): JSX.Element {
           </span>
         </div>
       )}
+
+      <EmailBanner />
 
       <main className="min-w-0">
         <Outlet />

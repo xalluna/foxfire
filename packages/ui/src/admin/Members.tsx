@@ -8,6 +8,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ShowMoreButton } from '../components/ShowMore'
 import { memberCountLabel } from '../lib/members'
 import * as Icon from '../components/icons'
+import { MailStatus } from './mailStatus'
 
 export interface MembersPageProps {
   /** The pages of members fetched so far, matching `query`. */
@@ -215,7 +216,12 @@ function Member({
           </span>
           <span className="mt-0.5 flex items-center gap-2 text-2xs leading-relaxed text-text-mute">
             <span className="truncate">{user.email}</span>
-            {user.passwordReset !== null && <Badge tone="mute">Reset link active</Badge>}
+            {user.emailSuppressed ? (
+              <Badge tone="red">Email bounces</Badge>
+            ) : (
+              user.emailConfirmed === false && <Badge tone="mute">Unconfirmed</Badge>
+            )}
+            {(user.passwordReset !== null || user.requestedReset) && <Badge tone="mute">Reset link active</Badge>}
           </span>
         </div>
         <Icon.ChevronDown
@@ -241,6 +247,11 @@ function Member({
                 </span>
                 . Using it sets a new password and signs them out everywhere.
               </p>
+              {user.passwordReset.mail ? (
+                <MailStatus mail={user.passwordReset.mail} className="mt-1.5 flex" />
+              ) : (
+                <ResetNotEmailed reason={user.passwordReset.notEmailed ?? null} />
+              )}
               <div className="mt-2 flex items-center gap-2">
                 <code className="min-w-0 flex-1 truncate text-2xs text-text-dim">
                   {user.passwordReset.link}
@@ -255,6 +266,19 @@ function Member({
                   Withdraw
                 </button>
               </div>
+            </div>
+          )}
+
+          {user.requestedReset && (
+            <div className="rounded-md border border-hairline bg-surface-2 p-3">
+              <p className="text-2xs leading-relaxed text-text-mute">
+                They asked for a reset link from the sign-in page, and it went to their email — good until{' '}
+                <span className="text-text-dim">{new Date(user.requestedReset.expiresAt).toLocaleString()}</span>.
+                Only they have it; making a new one here replaces it.
+              </p>
+              {user.requestedReset.mail && (
+                <MailStatus mail={user.requestedReset.mail} className="mt-1.5 flex" />
+              )}
             </div>
           )}
 
@@ -372,6 +396,18 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
       {copied ? 'Copied' : 'Copy link'}
     </button>
   )
+}
+
+/** Why a reset link was not emailed — so the admin knows it is theirs to pass on. */
+function ResetNotEmailed({ reason }: { reason: string | null }): JSX.Element | null {
+  const text =
+    reason === 'unverified'
+      ? 'Not emailed: they have never confirmed their address, and a link that takes an account over only goes to one they have. Pass it on yourself.'
+      : reason === 'suppressed'
+        ? 'Not emailed: mail to their address bounced. Pass it on yourself.'
+        : null
+
+  return text === null ? null : <p className="mt-1.5 text-2xs leading-relaxed text-amber">{text}</p>
 }
 
 function Badge({ tone, children }: { tone: 'accent' | 'red' | 'mute'; children: string }): JSX.Element {

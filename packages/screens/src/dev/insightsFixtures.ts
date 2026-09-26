@@ -401,12 +401,75 @@ function runtime(frame: InsightsFrame): InsightsSections['runtime'] {
   }
 }
 
+/**
+ * A server's mail over an evening: invites and confirmations as people join,
+ * the odd reset, most delivered, now and then a bounce — and, under
+ * `email-held`, a day that ran out, with mail piling up behind it.
+ */
+function email(frame: InsightsFrame): InsightsSections['email'] {
+  const held = scenario === 'email-held'
+  const sent = values(frame, (at, m) => Math.round(0.9 * activity(at) * m * (0.5 + wobble(at, 50))))
+  const delivered = sent.map((v) => (v === null ? null : Math.max(0, v - (v > 3 ? 1 : 0))))
+  const bounced = values(frame, (at) => (sometimes(at, 51, 180) ? 1 : 0))
+  const retried = values(frame, (at) => (sometimes(at, 52, 240) ? 1 : 0))
+  const heldSeries = values(frame, (at) => (held && at > frame.now - 50 * MINUTE && sometimes(at, 53, 6) ? 1 : 0))
+  const quota = values(frame, (at) => {
+    const midnight = new Date(at)
+    midnight.setUTCHours(0, 0, 0, 0)
+    return Math.min(100, Math.round(((at - midnight.getTime()) / DAY) * (held ? 130 : 45)))
+  })
+
+  return {
+    frame,
+    totals: {
+      sent: sum(sent),
+      held: sum(heldSeries),
+      retried: sum(retried),
+      failed: 1,
+      dropped: 2,
+      delivered: sum(delivered),
+      bounced: sum(bounced),
+      complained: 0
+    },
+    now: {
+      configured: scenario !== 'email-off',
+      queued: 0,
+      held: held ? 6 : 0,
+      dailyUsed: held ? 100 : (last(quota) ?? 23),
+      dailyLimit: 100,
+      monthlyUsed: held ? 2_140 : 1_218,
+      monthlyLimit: 3_000
+    },
+    sends: [
+      series('sent', sent),
+      series('held', heldSeries),
+      series('retry', retried),
+      series('failed', values(frame, () => 0)),
+      series('dropped', values(frame, () => 0))
+    ],
+    events: [
+      series('delivered', delivered),
+      series('bounced', bounced),
+      series('complained', values(frame, () => 0))
+    ],
+    queue: [
+      series('queued', values(frame, () => 0)),
+      series('held', values(frame, (at) => (held && at > frame.now - 50 * MINUTE ? 6 : 0)))
+    ],
+    quota: [
+      series('daily', quota),
+      series('monthly', values(frame, () => (held ? 2_140 : 1_218)))
+    ]
+  }
+}
+
 const BUILDERS: { [S in InsightsSection]: (frame: InsightsFrame) => InsightsSections[S] } = {
   overview,
   requests,
   riot,
   sync,
-  runtime
+  runtime,
+  email
 }
 
 export function fixtureInsights<S extends InsightsSection>(

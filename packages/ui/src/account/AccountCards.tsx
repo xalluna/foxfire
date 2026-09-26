@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import type { EmailChange, PasswordChange } from '@foxfire/core'
+import type { AccountEmail, EmailChange, PasswordChange } from '@foxfire/core'
 import { passwordProblem, MINIMUM_PASSWORD } from '@foxfire/core/server'
 import { SettingsCard } from '../components/settings/SettingsCard'
 import { SettingsBlock, StatusRow } from '../components/settings/SettingsRow'
-import { inputClass, primaryButtonClass } from '../components/settings/controls'
+import { ghostButtonClass, inputClass, primaryButtonClass } from '../components/settings/controls'
 
 /**
  * What a save answered with.
@@ -78,20 +78,91 @@ export function ChangeUsernameCard({
  * its administrator, and that refusal comes from the server: Admin__Email is
  * configuration, so no client can see it, and a card that guessed would either
  * be wrong or need the server to publish it.
+ *
+ * On a server that sends mail, saving does not move you yet: a link goes to the
+ * new address, and the move happens when it is opened — so a typo cannot leave
+ * you signing in with an address nobody reads. The card says where you are
+ * moving to while it waits, and offers the link again or a change of mind.
  */
 export function ChangeEmailCard({
   email,
-  onSave
+  onSave,
+  status,
+  onResend,
+  onCancelPending
 }: {
   email: string
   onSave: (change: EmailChange) => Promise<AccountSaveResult>
+  /** Your address as the server sees it — confirmed or not, and any move waiting. Absent without mail. */
+  status?: AccountEmail | null
+  /** Another confirmation link. */
+  onResend?: () => Promise<AccountSaveResult>
+  /** Stops a move that has not been confirmed. */
+  onCancelPending?: () => Promise<AccountSaveResult>
 }): JSX.Element {
   const [value, setValue] = useState(email)
   const [password, setPassword] = useState('')
   const save = useSave()
+  const other = useSave()
+
+  const mail = status?.mailEnabled ?? false
+  const pending = status?.pendingEmail ?? null
 
   return (
     <SettingsCard title="Email">
+      {mail && status && !pending && (
+        <StatusRow tone={status.emailConfirmed ? 'good' : 'warn'}>
+          {status.emailConfirmed
+            ? 'Confirmed. If you forget your password, you can reset it yourself from the sign-in page.'
+            : status.suppressed
+              ? 'Mail to this address bounced, so it cannot be confirmed. Change it to one that works.'
+              : "Not confirmed yet — open the link we emailed you. Until you do, a forgotten password means asking an admin."}
+        </StatusRow>
+      )}
+
+      {pending && (
+        <SettingsBlock label="Moving to" description="Open the link sent there to finish. Until you do, you sign in with the address you have now.">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm text-text">{pending}</span>
+            {onResend && (
+              <button
+                type="button"
+                disabled={other.busy}
+                className={ghostButtonClass}
+                onClick={() => void other.run(onResend, `Sent another link to ${pending}.`)}
+              >
+                Send again
+              </button>
+            )}
+            {onCancelPending && (
+              <button
+                type="button"
+                disabled={other.busy}
+                className={ghostButtonClass}
+                onClick={() => void other.run(onCancelPending, 'Cancelled. Your address stays as it is.')}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </SettingsBlock>
+      )}
+
+      {mail && status && !status.emailConfirmed && !pending && !status.suppressed && onResend && (
+        <SettingsBlock>
+          <button
+            type="button"
+            disabled={other.busy}
+            className={ghostButtonClass}
+            onClick={() => void other.run(onResend, `Sent a new link to ${email}.`)}
+          >
+            Send the confirmation link again
+          </button>
+        </SettingsBlock>
+      )}
+
+      <Outcome outcome={other.outcome} />
+
       <SettingsBlock label="Email" description="What you sign in with.">
         <input
           type="email"
@@ -125,7 +196,9 @@ export function ChangeEmailCard({
             onClick={() =>
               void save.run(
                 () => onSave({ email: value.trim(), currentPassword: password }),
-                'Saved. Sign in with the new address from now on.',
+                mail
+                  ? `We've emailed a link to ${value.trim()}. Your address changes when you open it.`
+                  : 'Saved. Sign in with the new address from now on.',
                 () => setPassword('')
               )
             }

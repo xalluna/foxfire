@@ -1,4 +1,11 @@
 import type {
+  AccountEmail,
+  AccountEmailResult,
+  EmailLogEntry,
+  EmailLogQuery,
+  EmailOverview,
+  EmailSuppression,
+  EmailSuppressionQuery,
   FoxfireData,
   InsightsSection,
   InsightsSections,
@@ -150,6 +157,12 @@ export interface Api {
     changeEmail: (change: EmailChange) => Promise<ServerAuthResult>
     /** Changes the name shown beside your games. */
     changeUsername: (username: string) => Promise<ServerAuthResult>
+    /** Your own address: confirmed or not, and any move waiting. Null in local-only mode. */
+    accountEmail: () => Promise<AccountEmail | null>
+    /** Another confirmation link. */
+    resendEmailConfirmation: () => Promise<AccountEmailResult>
+    /** Stops a move to a new address that has not been confirmed. */
+    cancelEmailChange: () => Promise<AccountEmailResult>
     /** Null is local-only mode. Not the same as signing out: the credential stays. */
     setActive: (url: string | null) => Promise<ServerState>
     forget: (url: string) => Promise<ServerState>
@@ -182,6 +195,14 @@ export interface Api {
      */
     createInvite: (email?: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
+    /** Emails an invite's link to its address, when the invite says it can be. */
+    emailInvite: (id: string) => Promise<AdminActionResult>
+    /** Where the server's mail stands. Head admins only; null from a server older than mail. */
+    emailOverview: () => Promise<EmailOverview | null>
+    emailLog: (query?: EmailLogQuery) => Promise<Page<EmailLogEntry> | null>
+    emailSuppressions: (query?: EmailSuppressionQuery) => Promise<Page<EmailSuppression> | null>
+    clearEmailSuppression: (id: string) => Promise<AdminActionResult>
+    sendTestEmail: (to: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
     /** What the server is holding, for the Data & storage page. */

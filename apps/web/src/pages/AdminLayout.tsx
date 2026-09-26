@@ -9,7 +9,7 @@ function Tab({
   short,
   children
 }: {
-  to: '/admin' | '/admin/invites' | '/admin/accounts' | '/admin/data' | '/admin/insights'
+  to: '/admin' | '/admin/invites' | '/admin/accounts' | '/admin/data' | '/admin/insights' | '/admin/email'
   exact?: boolean
   /** What the tab says on a phone, where five full labels do not fit across. */
   short?: string
@@ -45,6 +45,7 @@ function Tab({
  */
 export function AdminLayout(): JSX.Element {
   const isAdmin = useAuth((s) => s.user?.isAdmin ?? false)
+  const isHeadAdmin = useAuth((s) => s.user?.isHeadAdmin ?? false)
 
   if (!isAdmin) {
     return (
@@ -71,6 +72,8 @@ export function AdminLayout(): JSX.Element {
           Data &amp; storage
         </Tab>
         <Tab to="/admin/insights">Insights</Tab>
+        {/* A head admin's: the log is members' addresses. */}
+        {isHeadAdmin && <Tab to="/admin/email">Email</Tab>}
       </nav>
       <Outlet />
     </div>
