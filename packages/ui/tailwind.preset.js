@@ -35,7 +35,9 @@ export default {
       },
       fontFamily: {
         sans: ['Inter Variable', 'Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
-        // Display only: app title, view headings, rank tiers, large summary figures.
+        // Display only: app title, view headings, rank tiers, match results. Words,
+        // never figures — its old-style numerals read "11" as "ll", and every other
+        // number in the app is Inter, so a figure in it looks borrowed.
         display: ['Marcellus', 'Georgia', 'serif']
       },
       fontSize: {
