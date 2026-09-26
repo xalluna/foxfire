@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import type { ImportProgress, ImportResult } from '@foxfire/core'
 import { ServerDataPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useIsHeadAdmin } from '../client/useConnection'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 
@@ -17,6 +18,7 @@ export function ServerDataScreen(): JSX.Element {
   const client = useClient()
   const platform = usePlatform()
   const queryClient = useQueryClient()
+  const isHeadAdmin = useIsHeadAdmin()
 
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
@@ -39,7 +41,7 @@ export function ServerDataScreen(): JSX.Element {
   const importer = platform.statsDbImport
 
   async function runImport(): Promise<void> {
-    if (!importer) return
+    if (!importer || !isHeadAdmin) return
 
     const picked = await importer.pick()
     if (picked === null) return
@@ -73,7 +75,10 @@ export function ServerDataScreen(): JSX.Element {
               progress,
               result,
               onStart: () => void runImport(),
-              inBrowser: platform.kind === 'web'
+              inBrowser: platform.kind === 'web',
+              // The card stays for a plain admin, since the page around it is
+              // about importing; the server refuses them on every batch.
+              blockedReason: isHeadAdmin ? undefined : 'Only a head admin can import into this server.'
             }
           : undefined
       }

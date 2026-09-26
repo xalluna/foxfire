@@ -36,3 +36,11 @@ export function useConnection(): ConnectionState | undefined {
 export function useIsServerAdmin(): boolean {
   return useConnection()?.session?.isAdmin ?? false
 }
+
+/**
+ * Whether they are a head admin there: the import, LP on anybody's games, and
+ * acting against another admin. What is allowed is still the server's to say.
+ */
+export function useIsHeadAdmin(): boolean {
+  return useConnection()?.session?.isHeadAdmin ?? false
+}
