@@ -431,6 +431,9 @@ let mockUsers: AdminUser[] = [
   })
 ]
 
+/** Numbers the invites the harness makes, so a withdrawn one never frees its id for the next. */
+let nextInvite = 1
+
 let mockInvites: AdminInvite[] = [
   {
     id: 'i-1',
@@ -471,6 +474,28 @@ let mockInvites: AdminInvite[] = [
     redeemedAt: null,
     redeemedBy: null,
     isOpen: true
+  },
+  // Links made without an address, the usual kind: one waiting to be opened,
+  // and one somebody already joined with.
+  {
+    id: 'i-6',
+    email: null,
+    link: 'https://foxfire.example.com/invite/open-link-for-the-harness-only-fffffffffffffffffffffffffff',
+    createdAt: '2026-09-22T20:15:00.000Z',
+    expiresAt: '2026-10-06T20:15:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  {
+    id: 'i-7',
+    email: null,
+    link: 'https://foxfire.example.com/invite/spent-link-for-the-harness-only-gggggggggggggggggggggggggg',
+    createdAt: '2026-09-12T19:00:00.000Z',
+    expiresAt: '2026-09-26T19:00:00.000Z',
+    redeemedAt: '2026-09-12T21:40:00.000Z',
+    redeemedBy: 'leorio',
+    isOpen: false
   },
   // Lapsed without being used. The server keeps it and sends it nowhere, so
   // neither list should show it.
@@ -1029,14 +1054,18 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           false
         ),
 
-      createInvite: (email: string): Promise<AdminInvite> => {
-        const existing = mockInvites.find((i) => i.email === email && i.isOpen)
+      createInvite: (email?: string): Promise<AdminInvite> => {
+        const address = email?.trim() || null
+        // Only an address is deduplicated, as on the server: each link without
+        // one is for a different somebody.
+        const existing = address === null ? undefined : mockInvites.find((i) => i.email === address && i.isOpen)
         if (existing) return delay(existing, 300, false)
 
+        const id = `i-new-${nextInvite++}`
         const invite: AdminInvite = {
-          id: `i-${mockInvites.length + 1}`,
-          email,
-          link: `https://foxfire.example.com/invite/${btoa(email).replace(/=/g, '')}-harness-token-aaaaaaaaaaaa`,
+          id,
+          email: address,
+          link: `https://foxfire.example.com/invite/${id}-harness-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaa`,
           createdAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + 14 * 24 * 3600_000).toISOString(),
           redeemedAt: null,

@@ -298,11 +298,15 @@ export interface AdminUserPatch {
 /** An invite, with the link an admin can copy. */
 export interface AdminInvite {
   id: string
-  email: string
   /**
-   * The whole point of the admin-facing shape. SMTP is optional, so every link
-   * the server would have emailed is also copyable — paste it wherever your
-   * community actually talks.
+   * Who it was made for, when the admin gave an address. Null for a link that
+   * registers whoever opens it first — the usual kind, since Foxfire sends no
+   * mail.
+   */
+  email: string | null
+  /**
+   * The whole point of the admin-facing shape. Foxfire sends no mail, so this is
+   * how an invite travels — paste it wherever your community actually talks.
    */
   link: string
   createdAt: string

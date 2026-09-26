@@ -13,7 +13,10 @@ namespace Foxfire.Api.Features.Invites;
 /// </summary>
 public sealed record RevokeInviteRequest(Guid Id) : IEmptyDomainRequest;
 
-internal sealed class RevokeInviteRequestHandler(FoxfireDbContext db, TimeProvider time)
+internal sealed class RevokeInviteRequestHandler(
+    FoxfireDbContext db,
+    TimeProvider time,
+    ILogger<RevokeInviteRequestHandler> logger)
     : IDomainRequestHandler<RevokeInviteRequest>
 {
     public async Task<Response> Handle(RevokeInviteRequest request, CancellationToken cancellationToken)
@@ -29,8 +32,12 @@ internal sealed class RevokeInviteRequestHandler(FoxfireDbContext db, TimeProvid
                 "invite_already_used", "That invite has already been used, so there is nothing to withdraw.");
         }
 
-        invite.RevokedAt ??= time.GetUtcNow();
-        await db.SaveChangesAsync(cancellationToken);
+        if (invite.RevokedAt is null)
+        {
+            invite.RevokedAt = time.GetUtcNow();
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Withdrew invite {InviteId}", invite.Id);
+        }
 
         return Response.Success();
     }
