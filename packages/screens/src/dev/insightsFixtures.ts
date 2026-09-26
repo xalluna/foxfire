@@ -391,7 +391,7 @@ function runtime(frame: InsightsFrame): InsightsSections['runtime'] {
     connected: [
       { kind: 'desktop', version: '0.16.0', count: 5, supported: true },
       { kind: 'web', version: 'api 3', count: 2, supported: true },
-      { kind: 'desktop', version: '0.15.0', count: 1, supported: false }
+      { kind: 'desktop', version: '0.14.0', count: 1, supported: false }
     ],
     topExceptions: [
       { type: 'OperationCanceledException', count: 214 },
