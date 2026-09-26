@@ -3,7 +3,7 @@ import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/re
 import type { AdminActionResult } from '@foxfire/core'
 import { MembersPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
-import { useConnection } from '../client/useConnection'
+import { useConnection, useIsHeadAdmin } from '../client/useConnection'
 import { useDebounced } from '../hooks/useDebounced'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems, pageTotal } from '../queries/paging'
@@ -22,6 +22,7 @@ export function MembersScreen(): JSX.Element {
   const platform = usePlatform()
   const queryClient = useQueryClient()
   const connection = useConnection()
+  const isHeadAdmin = useIsHeadAdmin()
 
   const [query, setQuery] = useState('')
   const asked = useDebounced(query.trim())
@@ -66,6 +67,7 @@ export function MembersScreen(): JSX.Element {
       loadingMore={users.isFetchingNextPage}
       onShowMore={() => void users.fetchNextPage()}
       signedInAs={connection?.session?.email ?? null}
+      canManageAdmins={isHeadAdmin}
       onUpdateUser={(id, patch): Promise<AdminActionResult> =>
         thenRefresh(client.admin.updateUser(id, patch))
       }

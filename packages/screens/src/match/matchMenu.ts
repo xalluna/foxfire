@@ -9,8 +9,12 @@ import type { ContextMenuItem } from '@foxfire/ui'
  * answer, and two rows offering different menus with no explanation only makes
  * it harder to work out.
  */
-export function lpEditBlockedReason(match: MatchSummary, isMine?: boolean): string | null {
-  const notYours = lpWriteBlockedReason(isMine)
+export function lpEditBlockedReason(
+  match: MatchSummary,
+  isMine?: boolean,
+  isHeadAdmin = false
+): string | null {
+  const notYours = lpWriteBlockedReason(isMine, isHeadAdmin)
   if (notYours) return notYours
 
   if (queueTypeForQueueId(match.queueId) === null) return 'Only ranked games move LP'
@@ -30,10 +34,11 @@ export function lpEditBlockedReason(match: MatchSummary, isMine?: boolean): stri
  * Undefined means local-only, where every account in the file is yours and the
  * question does not arise. False is a server saying somebody else claimed it —
  * and the server refuses the write with not_your_account, so offering it here
- * only produces a 403 somebody has to interpret.
+ * only produces a 403 somebody has to interpret. Unless they are a head admin,
+ * who may type LP on anybody's account.
  */
-export function lpWriteBlockedReason(isMine?: boolean): string | null {
-  return isMine === false ? 'Only whoever claimed this account can type its LP' : null
+export function lpWriteBlockedReason(isMine?: boolean, isHeadAdmin = false): string | null {
+  return isMine === false && !isHeadAdmin ? 'Only whoever claimed this account can type its LP' : null
 }
 
 /**
@@ -146,6 +151,8 @@ export interface MatchMenuContext {
   isMine?: boolean
   /** An admin may take a recording off anybody's game, though never put one on. */
   isAdmin?: boolean
+  /** A head admin may also type and clear LP on anybody's account. */
+  isHeadAdmin?: boolean
   /** Connected to a server, where a link can be attached with nothing on this disk behind it. */
   serverMode?: boolean
 }
@@ -153,10 +160,10 @@ export interface MatchMenuContext {
 export function matchContextItems(
   match: MatchSummary,
   actions: MatchMenuActions,
-  { expandable = true, isMine, isAdmin = false, serverMode = false }: MatchMenuContext = {}
+  { expandable = true, isMine, isAdmin = false, isHeadAdmin = false, serverMode = false }: MatchMenuContext = {}
 ): ContextMenuItem[] {
-  const blocked = lpEditBlockedReason(match, isMine)
-  const notYours = lpWriteBlockedReason(isMine)
+  const blocked = lpEditBlockedReason(match, isMine, isHeadAdmin)
+  const notYours = lpWriteBlockedReason(isMine, isHeadAdmin)
   const noRecording = recordingBlockedReason(match)
   const noReplay = replayBlockedReason(match)
   const noDownload = downloadBlockedReason(match)

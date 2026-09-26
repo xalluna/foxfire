@@ -155,21 +155,35 @@ let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000
  * thing: connect, and the page rearranges; sign out, and it comes back.
  *
  * Reachable by ?scenario=server-connected, which is how the connected shape of
- * the Server settings page is reviewed without standing a .NET server up.
+ * the Server settings page is reviewed without standing a .NET server up — as
+ * the head admin, or as a plain admin under ?scenario=server-admin.
  */
 let serverState: ServerState =
-  scenario === 'server-connected' || scenario === 'server-degraded'
+  scenario === 'server-connected' ||
+  scenario === 'server-degraded' ||
+  scenario === 'server-admin' ||
+  scenario === 'insights-unsupported' ||
+  scenario === 'email-off' ||
+  scenario === 'email-held' ||
+  scenario === 'unverified' ||
+  scenario === 'email-change-pending'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
         servers: [
-          { url: MOCK_SERVER_URL, name: 'The Fox Den', username: 'Faker', isActive: true }
+          {
+            url: MOCK_SERVER_URL,
+            name: 'The Fox Den',
+            username: scenario === 'server-admin' ? 'Sova' : 'Faker',
+            isActive: true
+          }
         ],
         session: {
           url: MOCK_SERVER_URL,
-          username: 'Faker',
-          email: 'faker@example.com',
-          isAdmin: true
+          username: scenario === 'server-admin' ? 'Sova' : 'Faker',
+          email: scenario === 'server-admin' ? 'sova@example.com' : 'faker@example.com',
+          isAdmin: true,
+          isHeadAdmin: scenario !== 'server-admin'
         },
         upgradeRequired: null,
         serverOutdated: false,
@@ -190,7 +204,8 @@ let serverState: ServerState =
             url: MOCK_SERVER_URL,
             username: 'Faker',
             email: 'faker@example.com',
-            isAdmin: false
+            isAdmin: false,
+            isHeadAdmin: false
           },
           upgradeRequired: scenario === 'server-outdated' ? '0.14.0' : null,
           serverOutdated: scenario === 'server-behind',
@@ -343,6 +358,7 @@ export const mockApi: Api = {
               recommendedDesktop: null,
               publicSignup: null,
               publicUrl: null,
+              email: null,
               compatibility: 'unknown'
             }
           : {
@@ -356,6 +372,8 @@ export const mockApi: Api = {
               recommendedDesktop: '0.12.0',
               publicSignup: !url.includes('invite-only'),
               publicUrl: url,
+              // "no-mail" is a server with no email provider: no "Forgot password?".
+              email: !url.includes('no-mail'),
               // "too-old" is this build behind the server; "old-server" is the
               // server behind this build.
               compatibility: url.includes('too-old')
@@ -401,7 +419,8 @@ export const mockApi: Api = {
               url,
               username: registration.username,
               email: registration.email,
-              isAdmin: false
+              isAdmin: false,
+              isHeadAdmin: false
             },
             publicUrl: url,
             upgradeRequired: null,
@@ -431,7 +450,8 @@ export const mockApi: Api = {
                   url,
                   username: 'Faker',
                   email: credentials.email,
-                  isAdmin: true
+                  isAdmin: true,
+                  isHeadAdmin: true
                 },
                 publicUrl: url,
                 upgradeRequired: null,
@@ -485,6 +505,10 @@ export const mockApi: Api = {
         300,
         false
       ),
+
+    accountEmail: fixture.account.email,
+    resendEmailConfirmation: fixture.account.resendEmailConfirmation,
+    cancelEmailChange: fixture.account.cancelEmailChange,
 
     changeUsername: (username: string): Promise<ServerAuthResult> =>
       delay(

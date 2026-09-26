@@ -2,13 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { fieldLabelClass, inputClass, primaryButtonClass } from '@foxfire/ui'
 import { safeRedirect } from '../../routes/redirect'
-import { describeError } from '../../serverInfo'
+import { describeError, useServerInfo } from '../../serverInfo'
 import { signIn } from '../../session/session'
 import { AuthLayout, FormError } from './AuthLayout'
 
 export function SignInPage(): JSX.Element {
   const { redirect } = useSearch({ from: '/sign-in' })
   const navigate = useNavigate()
+  const server = useServerInfo()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,11 +44,19 @@ export function SignInPage(): JSX.Element {
               Make an account
             </Link>
           </p>
-          {/* No self-service reset: this server sends no mail, so there is
-              nowhere to send a link except through whoever runs it. */}
-          <p className="mt-1 text-2xs text-text-mute">
-            Forgotten your password? Ask this server&rsquo;s administrator for a reset link.
-          </p>
+          {/* Self-service only on a server that sends mail; without it there
+              is nowhere to send a link except through whoever runs it. */}
+          {server.data?.email ? (
+            <p className="mt-1">
+              <Link to="/forgot-password" className="text-accent underline-offset-2 hover:underline">
+                Forgot your password?
+              </Link>
+            </p>
+          ) : (
+            <p className="mt-1 text-2xs text-text-mute">
+              Forgotten your password? Ask this server&rsquo;s administrator for a reset link.
+            </p>
+          )}
         </>
       }
     >

@@ -1,5 +1,7 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
+using Foxfire.Api.Features.Account;
 using Foxfire.Api.Features.PasswordResets;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -9,6 +11,12 @@ using Microsoft.Extensions.Options;
 namespace Foxfire.Api.Features.Users;
 
 /// <summary>Somebody on this server, as an admin sees them.</summary>
+/// <param name="IsHeadAdmin">An admin who may also act against other admins. Always an admin too.</param>
+/// <param name="IsConfiguredAdmin">
+/// The account in Admin__Email. Nobody can demote, disable or remove it from
+/// the app, so the page offers none of those rather than a button that is
+/// always refused.
+/// </param>
 /// <param name="IsDisabled">Locked out with no end date. They cannot sign in; nothing of theirs is gone.</param>
 /// <param name="LinkedRiotAccounts">How many League accounts they have claimed.</param>
 /// <param name="ActiveSessions">Live refresh tokens — roughly, machines signed in.</param>
@@ -16,18 +24,37 @@ namespace Foxfire.Api.Features.Users;
 /// The reset link outstanding for them, or null. It is here rather than behind
 /// a route of its own so that the list can say who is waiting on one, and so
 /// that the admin who made a link an hour ago can copy it again without having
-/// to make a new one.
+/// to make a new one. Null on another admin's row unless a head admin is
+/// asking: the link hands the account to whoever holds it, and making one for
+/// an admin is a head admin's for exactly that reason.
+///
+/// Never one the member asked for themselves from the sign-in page: that link
+/// went to their inbox, and is theirs alone — see <paramref name="RequestedReset"/>.
+/// </param>
+/// <param name="EmailConfirmed">Whether they have shown they read mail sent to their address.</param>
+/// <param name="EmailSuppressed">Mail to their address bounced or was reported, and is no longer sent.</param>
+/// <param name="RequestedReset">
+/// A reset link they asked for themselves, still live — when, until when, and
+/// what became of the email. Without the link.
 /// </param>
 public sealed record AdminUserResponse(
     Guid Id,
     string Username,
     string Email,
     bool IsAdmin,
+    bool IsHeadAdmin,
+    bool IsConfiguredAdmin,
     bool IsDisabled,
     DateTimeOffset CreatedAt,
     int LinkedRiotAccounts,
     int ActiveSessions,
-    PasswordResetResponse? PasswordReset);
+    PasswordResetResponse? PasswordReset,
+    bool EmailConfirmed,
+    bool EmailSuppressed,
+    RequestedResetResponse? RequestedReset);
+
+/// <summary>A reset a member asked for by email, as an admin may see it: that it exists, and whether it arrived.</summary>
+public sealed record RequestedResetResponse(DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, EmailDeliveryResponse? Mail);
 
 /// <summary>
 /// The people on the server, by name, a page at a time.
@@ -47,6 +74,8 @@ internal sealed class ListUsersRequestHandler(
     FoxfireDbContext db,
     IOptions<ServerOptions> server,
     IOptions<AuthOptions> auth,
+    IOptions<AdminOptions> admin,
+    IIdentityContext me,
     TimeProvider time)
     : IDomainRequestHandler<ListUsersRequest, Page<AdminUserResponse>>
 {
@@ -59,10 +88,12 @@ internal sealed class ListUsersRequestHandler(
         var now = time.GetUtcNow();
         var needle = (request.Q ?? "").Trim().ToLowerInvariant();
 
-        var adminRoleId = await db.Roles
-            .Where(r => r.Name == FoxfireRoles.Admin)
-            .Select(r => r.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        var roleIds = await db.Roles
+            .Where(r => r.Name == FoxfireRoles.Admin || r.Name == FoxfireRoles.HeadAdmin)
+            .ToDictionaryAsync(r => r.Name!, r => r.Id, cancellationToken);
+
+        var adminRoleId = roleIds.GetValueOrDefault(FoxfireRoles.Admin);
+        var headAdminRoleId = roleIds.GetValueOrDefault(FoxfireRoles.HeadAdmin);
 
         var matching = db.Users.AsQueryable();
 
@@ -77,7 +108,7 @@ internal sealed class ListUsersRequestHandler(
 
         // The id breaks ties so a page boundary cannot fall between two rows
         // the database would order differently next time. EF counts the filter
-        // alone; the three subqueries per row run for the page and no further.
+        // alone; the subqueries per row run for the page and no further.
         var users = await matching
             .OrderBy(u => u.UserName)
             .ThenBy(u => u.Id)
@@ -86,10 +117,15 @@ internal sealed class ListUsersRequestHandler(
                 u.UserName ?? "",
                 u.Email ?? "",
                 db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == adminRoleId),
+                db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == headAdminRoleId),
+                false,
                 u.LockoutEnd != null && u.LockoutEnd > now,
                 u.CreatedAt,
                 db.RiotAccounts.Count(a => a.OwnerId == u.Id),
                 db.RefreshTokens.Count(t => t.UserId == u.Id && t.RevokedAt == null && t.ExpiresAt > now),
+                null,
+                u.EmailConfirmed,
+                false,
                 null))
             .ToPageAsync(PageRequest.Of(request.Limit, request.Offset), cancellationToken);
 
@@ -110,9 +146,41 @@ internal sealed class ListUsersRequestHandler(
             .GroupBy(r => r.UserId)
             .ToDictionary(group => group.Key, group => group.First());
 
-        var described = users.Map(user => links.TryGetValue(user.Id, out var reset)
-            ? user with { PasswordReset = PasswordResetLookup.Describe(reset, server.Value, auth.Value) }
-            : user);
+        var mail = await EmailDeliveries.LatestAsync(
+            db, EmailKinds.PasswordReset, [.. links.Values.Select(r => r.Id)], cancellationToken);
+
+        var suppressed = await EmailDeliveries.SuppressedAsync(db, users.Items.Select(u => u.Email), cancellationToken);
+
+        // Which one is the configured admin is a comparison with configuration,
+        // not a column, so it is made here as well.
+        var seesEveryLink = me.IsInRole(FoxfireRoles.HeadAdmin);
+
+        var described = users.Map(user =>
+        {
+            var marked = user with
+            {
+                IsConfiguredAdmin = Accounts.IsConfiguredAdmin(user.Email, admin.Value.Email),
+                EmailSuppressed = suppressed.Contains(EmailSuppression.Normalize(user.Email))
+            };
+
+            if (!links.TryGetValue(user.Id, out var reset)) return marked;
+
+            var delivery = mail.TryGetValue(reset.Id, out var message) ? EmailDeliveries.Describe(message) : null;
+
+            // Asked for by the member, and emailed to them: nobody else sees the
+            // link, a head admin included. That it exists, and whether it
+            // arrived, is what an admin helping them needs.
+            if (PasswordResetLookup.IsSelfService(reset))
+            {
+                return marked with { RequestedReset = new RequestedResetResponse(reset.CreatedAt, reset.ExpiresAt, delivery) };
+            }
+
+            var shown = seesEveryLink || !user.IsAdmin || user.Id == me.UserId;
+
+            return shown
+                ? marked with { PasswordReset = PasswordResetLookup.Describe(reset, server.Value, auth.Value) with { Mail = delivery } }
+                : marked;
+        });
 
         return Response<Page<AdminUserResponse>>.Success(described);
     }

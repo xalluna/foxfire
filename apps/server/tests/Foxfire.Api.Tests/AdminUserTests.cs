@@ -61,9 +61,11 @@ public class AdminUserTests(FoxfireServerFixture server)
         Assert.False(listed.IsDisabled);
         // They registered a moment ago, which is one live session.
         Assert.Equal(1, listed.ActiveSessions);
+        Assert.False(listed.IsHeadAdmin);
+        Assert.False(listed.IsConfiguredAdmin);
         Assert.Contains(
             await ListAsync(admin, FoxfireServerFixture.AdminEmail),
-            u => u.Email == FoxfireServerFixture.AdminEmail && u.IsAdmin);
+            u => u.Email == FoxfireServerFixture.AdminEmail && u.IsAdmin && u.IsHeadAdmin && u.IsConfiguredAdmin);
     }
 
     [Fact]
@@ -183,11 +185,13 @@ public class AdminUserTests(FoxfireServerFixture server)
     }
 
     [Fact]
-    public async Task The_last_admin_cannot_be_demoted_disabled_or_deleted()
+    public async Task The_configured_admin_cannot_demote_disable_or_delete_themselves()
     {
         // There is no way back from a server with no administrator except
         // editing configuration and restarting, and a host who has to find that
-        // out has already had a bad evening.
+        // out has already had a bad evening. The configured admin is the one
+        // who is always there, so nobody can take them away from inside the
+        // app — themselves included.
         var (admin, session) = await server.AdminAsync();
         using var _ = admin;
 
@@ -201,7 +205,7 @@ public class AdminUserTests(FoxfireServerFixture server)
         foreach (var response in new[] { demote, disable, delete })
         {
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal("last_admin", (await response.Content.ReadFromJsonAsync<ApiError>())?.Error);
+            Assert.Equal("configured_admin", (await response.Content.ReadFromJsonAsync<ApiError>())?.Error);
         }
     }
 
@@ -274,6 +278,8 @@ public class AdminUserTests(FoxfireServerFixture server)
         string Username,
         string Email,
         bool IsAdmin,
+        bool IsHeadAdmin,
+        bool IsConfiguredAdmin,
         bool IsDisabled,
         DateTimeOffset CreatedAt,
         int LinkedRiotAccounts,

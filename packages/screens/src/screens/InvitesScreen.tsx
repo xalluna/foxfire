@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import type { AdminActionResult } from '@foxfire/core'
 import { InvitesPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useAccountEmail } from '../queries/accountEmail'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 
@@ -33,6 +34,9 @@ export function InvitesScreen(): JSX.Element {
     queryFn: () => client.admin.getSettings()
   })
 
+  // Whether the server sends mail is on every member's own address answer.
+  const mail = useAccountEmail()
+
   /** Under one key, because taking an invite adds a member and spends the invite. */
   const refresh = (): void => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.admin.all() })
@@ -62,6 +66,8 @@ export function InvitesScreen(): JSX.Element {
       onCreateInvite={(email) => thenRefresh(client.admin.createInvite(email))}
       onRevokeInvite={(id): Promise<AdminActionResult> => thenRefresh(client.admin.revokeInvite(id))}
       onCopy={(text) => void platform.copyText(text)}
+      mailEnabled={mail.data?.mailEnabled ?? false}
+      onEmailInvite={(id) => thenRefresh(client.admin.emailInvite(id))}
     />
   )
 }

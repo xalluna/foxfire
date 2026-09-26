@@ -66,6 +66,7 @@ internal sealed class ImportAccountsRequestHandler(
     FoxfireDbContext db,
     RiotClient riot,
     TimeProvider time,
+    IIdentityContext me,
     ILogger<ImportAccountsRequestHandler> logger)
     : IValidatedRequestHandler<ImportAccountsRequest, IReadOnlyList<ImportAccountResult>>
 {
@@ -183,7 +184,8 @@ internal sealed class ImportAccountsRequestHandler(
         }
 
         logger.LogInformation(
-            "Imported {Resolved} of {Total} account(s) from a stats.db",
+            "{Actor} imported {Resolved} of {Total} account(s) from a stats.db",
+            me.Username,
             results.Count(r => r.Resolved),
             results.Count);
 

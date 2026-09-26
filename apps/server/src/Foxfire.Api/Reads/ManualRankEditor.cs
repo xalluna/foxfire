@@ -81,8 +81,8 @@ public sealed record EditableMatchResponse(
 ///
 /// Ported from the desktop's manualRankService. The one difference is who may
 /// do it: there, the person running the app owns every account in it; here, only
-/// the Foxfire account that has claimed the Riot account may type its LP, and
-/// the endpoint enforces that before any of this runs.
+/// the Foxfire account that has claimed the Riot account may type its LP, or a
+/// head admin, and the endpoint enforces that before any of this runs.
 /// </summary>
 public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attribution)
 {

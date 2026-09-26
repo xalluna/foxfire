@@ -1,8 +1,11 @@
 using FluentValidation;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Api.Features.Auth;
+using Foxfire.Data;
 using Foxfire.Data.Entities;
+using Foxfire.Email;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 
@@ -19,12 +22,19 @@ namespace Foxfire.Api.Features.Account;
 /// — the password did not change — and their tokens carry the new address after
 /// a renewal.
 ///
+/// On a server that sends mail, asking is not moving. The old address stays the
+/// login and a link goes to the new one; the move happens when that link is
+/// opened (ConfirmEmailRequest). The email is the login, so an address nobody
+/// can read — a typo — would otherwise strand the account on it. A server with
+/// no mail has nothing to confirm with, and moves at once, as it always did.
+///
 /// Admin__Email is the exception, both ways round. Registering with that
-/// address grants the Admin role even on a server with signup shut, and the
+/// address makes a head admin even on a server with signup shut, and the
 /// configured address is re-granted it on every boot, so it is a claim on the
 /// server rather than an ordinary address. The account holding it cannot move
 /// off it here, because that would leave the claim unheld for anybody to take,
-/// and nobody who is not already an admin can move onto it.
+/// and nobody who is not already a head admin can move onto it — for a plain
+/// admin, the next restart would be a promotion nobody gave them.
 /// </summary>
 public sealed record ChangeEmailRequest(string Email, string CurrentPassword) : IValidatedRequest<MeResponse>;
 
@@ -45,8 +55,11 @@ internal sealed class ChangeEmailRequestValidator : AbstractValidator<ChangeEmai
 
 internal sealed class ChangeEmailRequestHandler(
     UserManager<FoxfireUser> users,
+    FoxfireDbContext db,
+    EmailOutbox outbox,
     IIdentityContext me,
     IOptions<AdminOptions> adminOptions,
+    TimeProvider time,
     ILogger<ChangeEmailRequestHandler> logger)
     : IValidatedRequestHandler<ChangeEmailRequest, MeResponse>
 {
@@ -73,10 +86,12 @@ internal sealed class ChangeEmailRequestHandler(
                 + "rather than here. Change Admin__Email and restart the server to move it.");
         }
 
-        if (Accounts.IsConfiguredAdmin(email, configured) && !me.IsInRole(FoxfireRoles.Admin))
+        if (Accounts.IsConfiguredAdmin(email, configured) && !me.IsInRole(FoxfireRoles.HeadAdmin))
         {
             return new Error("admin_email_reserved", "That address is reserved for this server's administrator.");
         }
+
+        if (outbox.IsEnabled) return await AskToMoveAsync(user, email, cancellationToken);
 
         var previous = user.Email;
 
@@ -101,6 +116,66 @@ internal sealed class ChangeEmailRequestHandler(
             user.UserName ?? "",
             user.Email ?? "",
             roles.Contains(FoxfireRoles.Admin),
+            roles.Contains(FoxfireRoles.HeadAdmin),
             user.EmailConfirmed);
+    }
+
+    /// <summary>
+    /// Sends a link to the new address and changes nothing else. The same
+    /// checks a move would meet are made now, so somebody hears "that address
+    /// is taken" before they go looking for an email, and again when the link
+    /// is opened, since the address may have been taken in between.
+    /// </summary>
+    private async Task<Response<MeResponse>> AskToMoveAsync(
+        FoxfireUser user,
+        string email,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
+        {
+            return new Error("email_unchanged", "That is already your address.");
+        }
+
+        if (await users.FindByEmailAsync(email) is not null)
+        {
+            return new Error("email_taken", "Somebody on this server already signs in with that address.");
+        }
+
+        if (await outbox.IsSuppressedAsync(email, cancellationToken))
+        {
+            return new Error(
+                "email_suppressed",
+                "Mail to that address has bounced before, so this server no longer sends to it. Use a different address.");
+        }
+
+        var now = time.GetUtcNow();
+
+        if (await AccountEmail.NextAllowedAsync(db, user.Id, now, gap: false, cancellationToken) is { } next)
+        {
+            return Response<MeResponse>.Failure(
+                new Error(
+                    "confirmation_throttled",
+                    $"That is as many confirmation emails as one account gets in a day. Try again after {next:HH:mm} UTC."),
+                System.Net.HttpStatusCode.TooManyRequests);
+        }
+
+        await AccountEmail.IssueAsync(
+            db, outbox, user, EmailVerificationPurposes.Change, email, EmailPriority.Security, now, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "{Username} asked to move their email from {Previous} to {Email}; waiting for the new address to confirm",
+            user.UserName, user.Email, email);
+
+        var roles = await users.GetRolesAsync(user);
+
+        return new MeResponse(
+            user.Id,
+            user.UserName ?? "",
+            user.Email ?? "",
+            roles.Contains(FoxfireRoles.Admin),
+            roles.Contains(FoxfireRoles.HeadAdmin),
+            user.EmailConfirmed,
+            PendingEmail: email);
     }
 }

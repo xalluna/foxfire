@@ -83,7 +83,9 @@ A list whose length depends on time or on the size of the community is read a pa
 never whole — the accounts rule above is one case of it. That is the finder (`/api/search`), match
 history (`/api/riot-accounts/{id}/matches`), the members (`/api/admin/users`, searched on the
 server by `q`), used invites (`/api/admin/invites/used`), the replay library
-(`/api/admin/storage/replays`), and on the desktop the Captures tabs' recordings and replays.
+(`/api/admin/storage/replays`), the server's recent log lines (`/api/admin/insights/logs`), the
+email log and suppressions (`/api/admin/email/messages`, `/api/admin/email/suppressions`), and on
+the desktop the Captures tabs' recordings and replays.
 
 - **The answer** is `{ items, total }` — `Page<T>` in `Foxfire.Api/Common` and in `@foxfire/core`.
   `total` counts the list under the same filters, so a screen says "120 members" rather than "50+"
@@ -122,6 +124,9 @@ Two lists that grow are whole on purpose, and say so where they are read:
   "Select all" on the Recordings tab has to mean all of them, and the batch dialog reads each one's
   size and game. It is bounded by what is on one PC's disk.
 
+The insights charts (`/api/admin/insights/{section}`) are not lists at all: a window is at most 360
+points whatever it spans, and its tables are capped — the fifty busiest routes, the last ten syncs.
+
 **Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`) grows
 with a player's history and is still read whole, with a query per game for the rank before it. It
 should be paged; what makes that more than a page size is that saving one game's rank can settle
@@ -142,6 +147,9 @@ Serilog's own `Serilog` section: levels, and sinks under `Serilog__WriteTo__<lab
 docker-compose.yml has a commented block for each sink the server ships. Serilog cannot discover sinks
 in the single-file release build, so they are listed in `FoxfireLogging.ReaderOptions` — **a new sink
 is a package, a line there, and a case in `LoggingTests`**, or it is skipped without a word.
+One sink is wired in code instead: `Telemetry/RecentLogs`, the last few thousand lines held in
+memory for the insights page's Logs tab. Whatever a line may carry is shown to an admin there, which
+is one more reason for the rules below.
 
 Every request gets one line, and every line written during it carries its trace id, the client, the
 member and their address; the response carries the trace id as `X-Trace-Id`. A sync puts the account
@@ -152,11 +160,110 @@ When you add a log line:
 - A message template, never interpolation — `"Linked {RiotId} to {UserId}"`. The properties are what
   make the line searchable.
 - Never a token, password, API key, signed URL or request body. Emails and usernames are fine; the
-  audit lines rely on them.
+  audit lines rely on them. That includes the request line itself: a route that takes a token puts
+  it in the body, never the path. The link pages that already carry one in their path —
+  `/invite/`, `/reset-password/`, `/verify-email/` and the API routes behind them — are redacted to
+  `{token}` by `Logging/SensitivePaths`, and a new one of those goes on its list.
 - **Warning** is something a host should look at. **Error** is something that failed and should not
   have. **Information** is a thing that happened, **Debug** is how it happened.
 - Record who did something to whom — an admin's action, a sign-in — at the point it is decided,
   not only as the request line that carried it.
+
+## Server insights
+
+An admin sees what the server is doing on the Insights page — Settings › Server insights on the
+desktop, `/admin/insights` in the web client, one shared screen (`ServerInsightsScreen`). It is
+in-app only: nothing leaves the server for it, and there is no OpenTelemetry exporter, though the
+measurements are `System.Diagnostics.Metrics` instruments so one would be a package and a line.
+
+How a measurement gets to a chart, in `apps/server/src/Foxfire.Api/Telemetry`:
+
+- **Measured** on meters built from the host's `IMeterFactory` — ASP.NET Core's own request
+  timings (tagged `foxfire.client` in `RequestMetricTags`) and rate limiter, `RiotMetrics` in
+  Foxfire.Riot, `ServerMetrics` for syncs and database commands — or **sampled** every ten seconds
+  by `TelemetryCollector`: the Riot queue (`RiotRateLimiter.Snapshot`), syncs running, clients on
+  the hub (`ConnectedClients`), CPU, memory, lines logged. Never a static `Meter`: the test suite
+  builds dozens of hosts in one process, and the collector only listens to its own host's factory.
+- **Held** in `TelemetryBuffer`: ten-second buckets, the last hour, in memory. The 15-minute view
+  reads nothing else.
+- **Written** to `TelemetryRollups` a finished minute at a time, marked with the process that wrote
+  it — a minute two processes shared is added up, not overwritten — and folded into hour rows once
+  the hour is two minutes over. Minutes are kept 48 hours, hours `Telemetry__RetentionDays` (30).
+  `InsightsReader` stitches hours, unfolded minutes and memory at `FlushedThrough`, so nothing is
+  counted twice.
+
+Every kind of measurement is stored as the same four numbers plus, for a duration, its spread over
+the fixed bounds in `Foxfire.Core.InsightAggregate`. **Never change those bounds**: every stored row
+is merged by position against them. Metric names in `InsightMetrics` are stored too, so renaming one
+orphans its history.
+
+Adding a measurement is a name and kind in `InsightMetrics`, then either an instrument the collector
+maps in `MappingFor` or a line in its `Sample`, then a series in the section handler that shows it
+(`Features/Insights`). Dimensions are capped at 200 series a metric, the rest counted as `other` —
+never tag by something unbounded like a path or a user id. `Telemetry__Persist=false` is the test
+fixture's: the store's tests drive `TelemetryStore` themselves, with times of their own.
+
+One tab is a head admin's rather than every admin's: **Email**, beside the Email page it goes with.
+Its route adds `RequireRole(HeadAdmin)` to the group's, and the screen offers the tab only through
+`useIsHeadAdmin`.
+
+The desktop's **Developer telemetry** is a different thing: this PC's own Riot calls, processes and
+League client, in `telemetry.db`, never sent anywhere. The two share only the chart
+(`TimeSeriesChart` in `@foxfire/ui`).
+
+## Server email
+
+Optional, and off unless `Email__Provider` names a provider. Off, the server behaves as it always
+did: invite and reset links are for an admin to copy, an email change happens at once, and nothing
+is queued. On, invites with an address and admin-made resets are emailed as well as shown, members
+can ask for a reset from the sign-in page, new accounts are sent a confirmation link, an email
+change waits for the new address to confirm, and a password change is announced. There is no build
+switch; it is runtime configuration, read through `IOptions` so a test host can turn it on.
+
+The pieces, in `apps/server/src/Foxfire.Email` (no ASP.NET, unit-tested without containers) and
+`Foxfire.Api/Email`:
+
+- **One provider, keyed.** `IEmailProvider` sends one message and says exactly how it went —
+  accepted, rate limited, quota spent, transient, permanent, or the key refused — and declares its
+  own limits, because they are that account's plan. Every provider is registered keyed by name in
+  `AddFoxfireEmail`; `ActiveEmailProvider` picks the configured one. Resend is the only one: its HTTP
+  API rather than its SDK, because the quota headers (`x-resend-daily-quota`, `-monthly-quota`, both
+  *used*) are what the limits reconcile against. A provider with webhooks also implements
+  `IEmailWebhookReceiver`; Resend's are Svix-signed (`SvixSignature`). A new provider is those
+  interfaces, a name in `EmailProviders`, its options under `Email`, its checks in
+  `ConfigurationCheck`, a keyed registration, and its settings in docker-compose and `.env.example`.
+- **The outbox is the log.** A feature calls `EmailOutbox.AddAsync` on its own DbContext, so the mail
+  commits with the invite or reset it is about. `EmailMessages` never holds a body or a link — a link
+  is a bearer credential — only what it is about (`Kind`, `RelatedId`). `EmailRenderer` rebuilds the
+  message from that row at send time, and drops it if the row says the link is no longer good. It
+  must stay **deterministic**: a retry goes under the same idempotency key, and Resend refuses a key
+  reused with a different body — so no clock, no "in 23 hours", nothing that can change between
+  attempts that the row does not pin.
+- **One process sends.** `EmailDispatcher` takes a session-owned `sp_getapplock` for each round, so
+  two processes overlapping in a deploy cannot both think there is room for the last message. Each
+  message is claimed with a lease; one a dead process was holding goes back in the queue when it
+  lapses.
+- **The limits are the server's own, kept under the provider's.** A window's count is the larger of
+  this server's sends (by `SentAt`) and the provider's last reported figure (`EmailQuotaObservations`),
+  so other mail on the account counts too. The day is the UTC day; the month starts on
+  `MonthlyResetDay`. Security mail (resets, a member's own confirmation resend, email changes,
+  password-changed) goes first; standard mail (invites, tests, the confirmation sent at registration)
+  also stops at `InviteShare` of the day. Over a limit, mail is **held** until the window resets, and
+  dropped if its link lapses first. `EmailBudget` is the rule, and is pure.
+- **Webhooks only move a message forward** (`EmailStatuses.Rank`). A hard bounce, a complaint or the
+  provider's own suppression puts the **address** in `EmailSuppressions`; nothing is sent to it
+  until a head admin clears it. A hard bounce also un-confirms any account using the address.
+- **Confirming an address** is an `EmailVerification` row plus a signed token
+  (`EmailVerificationToken`, its key derived from the invite key like a reset's). `verify` confirms
+  the account's current address; `change` is a pending move, pinned to the security stamp. Resets go
+  only to a confirmed address, forgot-password or admin-made; forgot-password answers the same
+  whatever the address, and sends nothing while a live reset's email is waiting, sent or delivered.
+- **Head admins only** see the log (`/api/admin/email/*`, Settings › Email, `/admin/email`) — it is
+  members' addresses.
+
+Tests: `Foxfire.Email.Tests` for the provider, Svix, the windows and the budget; `FakeResend` in the
+API tests stubs the named client's handler, as `FakeRiot` does. The database is shared, so a test
+finds its mail by its own recipient, and the quota tests clear the outbox before and after.
 
 ## How the desktop updates itself
 

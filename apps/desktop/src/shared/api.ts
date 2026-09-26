@@ -1,4 +1,18 @@
-import type { FoxfireData } from '@foxfire/core'
+import type {
+  AccountEmail,
+  AccountEmailResult,
+  EmailLogEntry,
+  EmailLogQuery,
+  EmailOverview,
+  EmailSuppression,
+  EmailSuppressionQuery,
+  FoxfireData,
+  InsightsSection,
+  InsightsSections,
+  InsightsWindow,
+  ServerLogEntry,
+  ServerLogQuery
+} from '@foxfire/core'
 import type {
   AdminReplay,
   ImportProgress,
@@ -143,6 +157,12 @@ export interface Api {
     changeEmail: (change: EmailChange) => Promise<ServerAuthResult>
     /** Changes the name shown beside your games. */
     changeUsername: (username: string) => Promise<ServerAuthResult>
+    /** Your own address: confirmed or not, and any move waiting. Null in local-only mode. */
+    accountEmail: () => Promise<AccountEmail | null>
+    /** Another confirmation link. */
+    resendEmailConfirmation: () => Promise<AccountEmailResult>
+    /** Stops a move to a new address that has not been confirmed. */
+    cancelEmailChange: () => Promise<AccountEmailResult>
     /** Null is local-only mode. Not the same as signing out: the credential stays. */
     setActive: (url: string | null) => Promise<ServerState>
     forget: (url: string) => Promise<ServerState>
@@ -169,12 +189,22 @@ export interface Api {
     openInvites: () => Promise<AdminInvite[]>
     /** A page of the invites somebody registered with, most recently used first. */
     usedInvites: (page?: PageOptions) => Promise<Page<AdminInvite>>
-    /** Returns the outstanding invite for that address if there already is one. */
-    createInvite: (email: string) => Promise<AdminInvite>
+    /**
+     * A new link for whoever opens it first — or, given an address, one only it
+     * can register with, reusing the invite already outstanding for it.
+     */
+    createInvite: (email?: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
+    /** Emails an invite's link to its address, when the invite says it can be. */
+    emailInvite: (id: string) => Promise<AdminActionResult>
+    /** Where the server's mail stands. Head admins only; null from a server older than mail. */
+    emailOverview: () => Promise<EmailOverview | null>
+    emailLog: (query?: EmailLogQuery) => Promise<Page<EmailLogEntry> | null>
+    emailSuppressions: (query?: EmailSuppressionQuery) => Promise<Page<EmailSuppression> | null>
+    clearEmailSuppression: (id: string) => Promise<AdminActionResult>
+    sendTestEmail: (to: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
-    /** Opens a file picker. Resolves with null when it was dismissed. */
     /** What the server is holding, for the Data & storage page. */
     storage: () => Promise<ServerStorageUsage>
     /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
@@ -190,6 +220,17 @@ export interface Api {
      */
     forceUnlink: (riotAccountId: string) => Promise<AdminActionResult>
     addRiotAccount: (input: RiotIdInput) => Promise<Account>
+    /**
+     * One tab of the server's insights page, over a window. Null from a server
+     * too old to report any — this desktop can be newer than its server.
+     */
+    insights: <S extends InsightsSection>(
+      section: S,
+      window: InsightsWindow
+    ) => Promise<InsightsSections[S] | null>
+    /** A page of the server's recent log lines, newest first. Null from a server too old to keep them. */
+    serverLogs: (query?: ServerLogQuery) => Promise<Page<ServerLogEntry> | null>
+    /** Opens a file picker. Resolves with null when it was dismissed. */
     chooseDatabase: () => Promise<string | null>
     /**
      * Reads an old stats.db and pushes it at the active server.

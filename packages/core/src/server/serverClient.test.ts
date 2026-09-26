@@ -4,7 +4,7 @@ import { createServerClient } from './serverClient'
 import { createServerSession } from './session'
 
 const WEB = { kind: 'web', apiVersion: 1 } as const
-const USER = { id: 'u1', username: 'Faker', email: 'faker@example.com', isAdmin: true }
+const USER = { id: 'u1', username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
 
 const VERSION = {
   serverName: 'The Fox Den',
@@ -87,7 +87,7 @@ describe('createServerClient', () => {
       mode: 'server',
       publicUrl: 'https://fox.example',
       serverName: 'The Fox Den',
-      session: { username: 'Faker', email: 'faker@example.com', isAdmin: true },
+      session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
       riotKeyRejected: false,
       upgradeRequired: null
     })

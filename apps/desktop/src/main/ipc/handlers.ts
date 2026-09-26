@@ -3,9 +3,12 @@ import { CH } from './channels'
 import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
 import { getAssetManifest } from '../services/ddragonService'
 import {
+  accountEmail,
+  cancelEmailChange,
   changeEmail,
   changePassword,
   changeUsername,
+  resendEmailConfirmation,
   forgetServer,
   getServerState,
   login as serverLogin,
@@ -16,12 +19,20 @@ import {
   setActiveServer
 } from '../services/serverService'
 import {
+  clearEmailSuppression,
   createInvite,
   createPasswordReset,
   deleteUser,
+  emailInvite,
+  getEmailOverview,
+  listEmailLog,
+  listEmailSuppressions,
+  sendTestEmail,
   addRiotAccount,
   forceUnlink,
+  getInsights,
   getStorageUsage,
+  listServerLogs,
   listStoredReplays,
   removeStoredReplay,
   getSettings as getServerAdminSettings,
@@ -131,6 +142,13 @@ import type {
   SeasonInput
 } from '@shared/types'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
+import {
+  isInsightsSection,
+  isInsightsWindow,
+  type EmailLogQuery,
+  type EmailSuppressionQuery,
+  type ServerLogQuery
+} from '@foxfire/core'
 
 /**
  * Wires every channel to something that answers it.
@@ -169,6 +187,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.server.changePassword, (_e, change: PasswordChange) => changePassword(change))
   ipcMain.handle(CH.server.changeEmail, (_e, change: EmailChange) => changeEmail(change))
   ipcMain.handle(CH.server.changeUsername, (_e, username: string) => changeUsername(username))
+  ipcMain.handle(CH.server.accountEmail, () => accountEmail())
+  ipcMain.handle(CH.server.resendEmailConfirmation, () => resendEmailConfirmation())
+  ipcMain.handle(CH.server.cancelEmailChange, () => cancelEmailChange())
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
@@ -185,14 +206,31 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.serverAdmin.openInvites, () => listOpenInvites())
   ipcMain.handle(CH.serverAdmin.usedInvites, (_e, page?: PageOptions) => listUsedInvites(page))
-  ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
+  ipcMain.handle(CH.serverAdmin.createInvite, (_e, email?: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
+  ipcMain.handle(CH.serverAdmin.emailInvite, (_e, id: string) => emailInvite(id))
+  ipcMain.handle(CH.serverAdmin.emailOverview, () => getEmailOverview())
+  ipcMain.handle(CH.serverAdmin.emailLog, (_e, query?: EmailLogQuery) => listEmailLog(query))
+  ipcMain.handle(CH.serverAdmin.emailSuppressions, (_e, query?: EmailSuppressionQuery) =>
+    listEmailSuppressions(query)
+  )
+  ipcMain.handle(CH.serverAdmin.clearEmailSuppression, (_e, id: string) => clearEmailSuppression(id))
+  ipcMain.handle(CH.serverAdmin.sendTestEmail, (_e, to: string) => sendTestEmail(to))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
   ipcMain.handle(CH.serverAdmin.storage, () => getStorageUsage())
   ipcMain.handle(CH.serverAdmin.storedReplays, (_e, page?: PageOptions) => listStoredReplays(page))
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))
   ipcMain.handle(CH.serverAdmin.forceUnlink, (_e, id: string) => forceUnlink(id))
   ipcMain.handle(CH.serverAdmin.addRiotAccount, (_e, input: RiotIdInput) => addRiotAccount(input))
+  // Checked here rather than trusted, because the section becomes part of a
+  // URL on the server: only the known tabs, only the seven windows.
+  ipcMain.handle(CH.serverAdmin.insights, (_e, section: unknown, window: unknown) => {
+    if (!isInsightsSection(section) || !isInsightsWindow(window)) {
+      throw new Error(`No insights for ${String(section)} over ${String(window)}`)
+    }
+    return getInsights(section, window)
+  })
+  ipcMain.handle(CH.serverAdmin.serverLogs, (_e, query?: ServerLogQuery) => listServerLogs(query))
   ipcMain.handle(CH.serverAdmin.chooseDatabase, () => chooseImportDatabase())
   ipcMain.handle(CH.serverAdmin.importDatabase, (_e, filePath: string) => importDatabase(filePath))
   ipcMain.handle(CH.serverAdmin.setSettings, (_e, patch: Partial<ServerAdminSettings>) =>

@@ -7,6 +7,85 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.16.0] — 2026-09-26
+
+Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
+who imports; an admin who is not one sees why rather than buttons the server would refuse. And an
+invite is a link now, with no email address needed to make one. An admin can also see what their
+server has been doing, from Settings: the requests it answered, what it asked of Riot, the syncs it
+ran and the process underneath, live and for the last month. On a server that sends email, invites
+and reset links go by email too, you can reset a forgotten password yourself, and a head admin sees
+the server's mail in Settings › Email. Needs Foxfire Server 0.5.0. A profile's "Last games"
+figures are set like every other number, and Foxfire stops holding Ctrl+Shift+T for itself.
+
+### Added
+
+- **Edit LP on anybody's games, as a head admin.** Edit LP gain and Clear LP edit are offered on
+  every profile's matches to a head admin, claimed or not. Everybody else still types only their
+  own.
+- **Head admins on the Members page.** A head admin can make somebody a head admin or stop them
+  being one, and every row says who is an admin and who is a head admin. Settings › Server says
+  which you are.
+- **Server insights.** Settings › Server insights, for an admin of the server Foxfire is signed in
+  to — the same page the web client's admin tabs have. Requests and how quickly they were answered,
+  the busiest routes, Riot calls and how close the key came to its limits, every sync and how it
+  ended, CPU and memory, who is connected on which version, and the server's recent warnings and
+  errors, over fifteen minutes to thirty days. It is the server measuring itself, so it covers
+  everybody on it rather than what this PC saw. Connected to a server older than 0.5.0, the page
+  says the server needs updating.
+- **Forgot your password?** On a server that sends email, signing in offers it, and opens the
+  server's page in your browser, where a link to set a new one is emailed to you.
+- **Confirm your email.** On a server that sends email, a strip across the top asks you to confirm
+  your address until you do — it is what lets you reset a forgotten password yourself — with a
+  button to send the link again.
+- **Settings › Email**, for a head admin: how much of the server's email allowance is gone today and
+  this month, what is waiting and why, every email it sent and what became of it, the addresses it
+  no longer sends to, and a test send. Server insights gains an Email tab beside it.
+- **Invites and reset links say whether they were emailed.** Each outstanding invite with an address
+  shows whether it was sent, delivered or bounced, with *Email again* when it did not arrive. A reset
+  link says so too, or why it was not emailed, and a reset somebody asked for themselves shows on
+  their row without the link. Members who have not confirmed their address are marked.
+
+### Changed
+
+- **Admins no longer act against other admins.** On another admin's row a plain admin is offered
+  only Enable, with a line saying demoting, disabling, removing or a reset link is a head admin's.
+  The server's configured head admin offers nobody those buttons, and says why.
+- **Importing a database is a head admin's.** A plain admin sees the Import card with the reason
+  in place of the button.
+- **Changing your email waits for the new address to confirm**, on a server that sends mail. Until
+  you open the link sent there you still sign in with the old one, and Settings › Account says where
+  you are moving to, with *Send again* and *Cancel*.
+- **An invite no longer needs an email address.** In Settings › Invites, *Create invite link* gives
+  you a link to paste into Discord or anywhere else, and it signs up whoever opens it first. You can
+  still add an address: their sign-up form fills it in, and only that address can register with the
+  link. Links without one are labelled by when they were made, and every outstanding invite now says
+  when it was created as well as when it expires.
+- The win rate and the win–loss record in the "Last games" summary are set in the same typeface as
+  every other number in the app, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
+
+### Removed
+
+- **Ctrl+Shift+T no longer opens the telemetry panel.** It was a shortcut for the whole PC rather
+  than for Foxfire's window, so while Foxfire ran — in the tray included — it took Ctrl+Shift+T away
+  from every other app, reopening a closed browser tab among them. The panel is still in Settings ›
+  Developer telemetry, and in the tray menu.
+
+### Under the hood
+
+- The server session this PC keeps remembers whether you are a head admin, refreshed with every
+  token renewal like the admin flag; a server remembered before this reads as a plain admin until
+  then.
+- The harnesses have a `server-admin` scenario, signed in as a plain admin, and an
+  `insights-unsupported` one, signed in to a server too old to report insights. Email adds
+  `email-off`, `email-held`, `unverified` and `email-change-pending`.
+- Your address's state is read from the server's new `/api/account/email` over IPC, and the Email
+  page's calls go through the same admin channels as the rest; local-only, both answer nothing.
+- The developer telemetry panel's chart moved into the shared UI package, where the server insights
+  page draws with it too. It now fills each stretch of a line on its own, so a gap in a filled chart
+  is drawn as a gap rather than bridged, and durations over a minute read as minutes and seconds.
+
 ## [0.15.0] — 2026-09-24
 
 On a server, the account rail is a way between your own accounts rather than a list of everybody's,
@@ -1243,6 +1322,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0

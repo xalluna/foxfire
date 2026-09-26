@@ -1,6 +1,8 @@
 using System.Net;
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
+using Foxfire.Api.Features.Account;
+using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Identity;
 
@@ -13,6 +15,8 @@ public sealed record LoginRequest(string Email, string Password, string? DeviceL
 internal sealed class LoginRequestHandler(
     UserManager<FoxfireUser> users,
     TokenService tokens,
+    FoxfireDbContext db,
+    TimeProvider time,
     ILogger<LoginRequestHandler> logger)
     : IDomainRequestHandler<LoginRequest, SessionResponse>
 {
@@ -76,6 +80,7 @@ internal sealed class LoginRequestHandler(
 
         logger.LogInformation("{Username} signed in on {Device}", user.UserName, request.DeviceLabel ?? "an unnamed device");
 
-        return Sessions.Describe(pair, user, roles);
+        var pending = await AccountEmail.PendingChangeAsync(db, user, time.GetUtcNow(), cancellationToken);
+        return Sessions.Describe(pair, user, roles, pending?.Email);
     }
 }

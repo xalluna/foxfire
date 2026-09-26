@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { InvitePreview, PasswordResetPreview, VersionInfo } from '@foxfire/core'
+import type { EmailConfirmation, InvitePreview, PasswordResetPreview, VersionInfo } from '@foxfire/core'
 import { getVersionInfo } from '@foxfire/core/server'
 import { session } from './session/session'
 
@@ -11,6 +11,10 @@ export interface ServerInfoSource {
   version(): Promise<VersionInfo>
   previewInvite(token: string): Promise<InvitePreview>
   previewPasswordReset(token: string): Promise<PasswordResetPreview>
+  /** "Forgot password?" — the same answer whatever the address, by design. */
+  requestPasswordReset(email: string): Promise<{ message: string }>
+  /** Opens a confirmation link. The token goes in the body, never the path. */
+  confirmEmail(token: string): Promise<EmailConfirmation>
 }
 
 let source: ServerInfoSource = {
@@ -20,7 +24,17 @@ let source: ServerInfoSource = {
   previewPasswordReset: (token) =>
     session.transport.request<PasswordResetPreview>(
       `/api/password-resets/${encodeURIComponent(token)}/preview`
-    )
+    ),
+  requestPasswordReset: (email) =>
+    session.transport.request<{ message: string }>('/api/password-resets/request', {
+      method: 'POST',
+      body: { email }
+    }),
+  confirmEmail: (token) =>
+    session.transport.request<EmailConfirmation>('/api/email-verifications/confirm', {
+      method: 'POST',
+      body: { token }
+    })
 }
 
 /** For the design harness only. */
@@ -53,6 +67,16 @@ export function usePasswordResetPreview(token: string) {
     queryFn: () => source.previewPasswordReset(token),
     retry: false
   })
+}
+
+/** Asks for a reset link by email. */
+export function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return source.requestPasswordReset(email)
+}
+
+/** Opens a confirmation link — once, which is why this is not a query. */
+export function confirmEmail(token: string): Promise<EmailConfirmation> {
+  return source.confirmEmail(token)
 }
 
 /** A failure, in words a person can read — the server's own, wherever it wrote some. */

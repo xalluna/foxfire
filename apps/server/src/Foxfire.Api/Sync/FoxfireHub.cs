@@ -1,3 +1,5 @@
+using Foxfire.Api.Telemetry;
+using Foxfire.Api.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -56,10 +58,28 @@ public static class HubEvents
 /// anything.
 /// </summary>
 [Authorize]
-public sealed class FoxfireHub : Hub
+public sealed class FoxfireHub(ConnectedClients clients) : Hub
 {
     /// <summary>Where clients connect. Under the API, like every other route.</summary>
     public const string Path = "/api/hub";
+
+    /// <summary>
+    /// Counted in, by kind and version, for the insights page. Every desktop
+    /// and every open tab holds one of these, so this is who is here.
+    /// </summary>
+    public override Task OnConnectedAsync()
+    {
+        var request = Context.GetHttpContext()?.Request;
+        clients.Connected(Context.ConnectionId, request is null ? new ClientIdentity.Unnamed() : ClientIdentity.Read(request));
+
+        return base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        clients.Disconnected(Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
+    }
 }
 
 /// <summary>

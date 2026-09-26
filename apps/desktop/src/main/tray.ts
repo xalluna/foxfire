@@ -104,7 +104,7 @@ function buildMenu(): Menu {
     { label: 'Open Foxfire', click: showWindow },
     // Reachable while the main window is hidden, which is exactly when a
     // background-mode app misbehaves unobserved.
-    { label: 'Telemetry', accelerator: 'Ctrl+Shift+T', click: openTelemetryWindow }
+    { label: 'Telemetry', click: openTelemetryWindow }
   ]
 
   if (update.status === 'ready' && update.target !== null) {

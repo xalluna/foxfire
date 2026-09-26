@@ -11,6 +11,216 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.5.0] — 2026-09-26
+
+Head admins. Every admin used to be able to do everything an admin could — import
+a whole stats.db over the community's history, or demote, disable or remove any
+other admin, including whoever owns the server — and nobody at all could fix a
+figure somebody else had typed wrong. Now there is a head admin above the rest:
+the account in `ADMIN_EMAIL` always is one, and it can make others. Head admins
+import, can type LP on anybody's games, and are the only ones who can act against
+another admin. And an invite is a link now, with no email address needed to
+make one — the link is how an invite travels, pasted into Discord. And the
+server can send email, through Resend: invites with an address and reset links
+are emailed as well as shown, members can reset a forgotten password themselves
+and confirm their address, and it never sends more than the plan allows — a
+head admin sees the allowance, every message and what became of it on a new
+Email page. The server can also tell whoever runs it what it
+has been doing: an admin opens Insights and sees the requests it answered and
+how quickly, what it asked of Riot and how close it came to the key's limits,
+every sync it ran, the process underneath, and who is connected — live over the
+last fifteen minutes and kept for a month, all of it on the server. Serves
+Foxfire 0.15 and newer. A profile's "Last games" figures are set like every
+other number, too.
+
+### Added
+
+- **Head admins.** The account in `ADMIN_EMAIL` becomes one the next time the
+  server starts, and a head admin can make any member a head admin from the
+  Members page — or stop them being one. The page and the Account page say who
+  is which.
+- **A head admin can type LP on anybody's games.** Edit LP gain and Clear LP edit
+  work on every profile for a head admin, claimed or not — for the figure
+  somebody typed wrong, or never came back to type. Everybody else still types
+  only their own.
+- **Insights.** A new tab in the admin pages, beside Data & storage, and in the
+  desktop app's Settings for an admin. Six views of the server over any of seven
+  windows, from fifteen minutes to thirty days:
+  - **Overview**: requests and server errors, response time, Riot calls and
+    throttling, syncs, who is connected, CPU, memory and problems logged, at a
+    glance.
+  - **Requests**: every answer by status, response times, the busiest routes
+    and how slow each is, requests turned away by the rate limits, and which
+    clients asked.
+  - **Riot API**: calls by outcome with a mark at every 429, how much of the
+    key's windows is in use right now and over time, the queue by class, and
+    each endpoint's calls, errors and speed.
+  - **Syncs**: runs by how they ended, how long they take, matches stored and
+    missed, and the last ten runs with what went wrong in any that failed.
+  - **Runtime**: CPU, memory, garbage collection, database commands, exceptions,
+    and who is connected by client and version — including any desktop on a
+    version this server no longer serves.
+  - **Logs**: the server's recent log lines, warnings and errors kept apart so a
+    busy afternoon does not push them out, each with the trace id that finds the
+    rest of its request in the stored logs.
+
+  The last fifteen minutes are drawn every ten seconds; longer windows come from
+  history the server writes down a minute at a time, so a restart or an update
+  costs the seconds it took and nothing more. A gap in a chart is the server
+  being down, not a quiet hour.
+- **Email, through Resend.** Optional: set `EMAIL_PROVIDER=resend`, an address
+  on a domain you verified with Resend, and a sending-only API key. Without it
+  nothing changes — every link is still yours to copy. With it:
+  - **An invite with an address is emailed there**, and the invite row says
+    whether it was sent, delivered or bounced. One that failed or bounced can
+    be emailed again from the row.
+  - **A reset link an admin makes is emailed to the member** — when they have
+    confirmed their address, and only then: a link that hands over the account
+    does not go to an address nobody has shown they read. The admin still gets
+    the link either way, and is told why when it was not emailed.
+  - **Forgot password.** The sign-in page offers it, and a link to set a new
+    password is emailed to a confirmed address. The answer is the same whatever
+    address is typed, so nobody can use it to find out who is on the server,
+    and asking again while the first link still works sends nothing more.
+  - **Confirming your address.** A new account is sent a link that confirms it,
+    and the web client asks until it is opened. Registering through an invite
+    that was emailed to you confirms it at once.
+  - **Your password was changed** — an email to a confirmed address whenever it
+    is, so somebody whose account was taken over finds out.
+- **It never sends more than your Resend plan allows.** 100 a day and 3,000 a
+  month by default — the free plan — or whatever you set. The count is the
+  larger of what the server sent and what Resend says has gone, so mail sent
+  from anything else on the account counts too. Past a limit, mail waits for the
+  day or the month to reset rather than being refused, and a link that expires
+  while it waits is not sent. Password resets and confirmations always go
+  first: invites, sign-ups and tests stop at 80% of the day, keeping the rest
+  for somebody locked out.
+- **The Email page**, for head admins only — it lists members' addresses.
+  Today's and this month's allowance, what is waiting and until when, every
+  message and what became of it, the addresses mail is no longer sent to, and a
+  test send. With a webhook set up, delivery, bounces and spam complaints are
+  tracked; an address that bounces for good, or reports spam, is not sent to
+  again until a head admin clears it.
+- **An Email tab on Insights**, for head admins: sends, deliveries and bounces
+  over time, what was held, and the allowance used.
+
+### Changed
+
+- **Only a head admin can import a stats.db.** An import writes everybody's
+  history at once and cannot be taken back out. A plain admin sees the Import
+  card with the reason instead of the button.
+- **Admins cannot act against other admins.** Demoting, disabling or removing an
+  admin, or making them a reset link — which hands over the account — takes a
+  head admin, and a plain admin no longer sees another admin's outstanding reset
+  link either. Any admin can still make somebody an admin, enable an account,
+  and step down themselves.
+- **The `ADMIN_EMAIL` account cannot be demoted, disabled or removed from the
+  app**, by anybody, itself included — the configuration is the final say on who
+  owns the server, as it already was for that account's address. Handing the
+  server over is still changing `ADMIN_EMAIL` and restarting. Another head admin
+  can still make it a reset link, which is how it gets back in after a forgotten
+  password.
+- **Only a head admin can move onto the `ADMIN_EMAIL` address**, since holding it
+  makes a head admin at the next restart.
+- **Changing your address waits for the new one to confirm**, on a server that
+  sends mail. The old address stays the one you sign in with until the link
+  sent to the new one is opened, so a typo cannot lock you out. It can be sent
+  again or cancelled while it waits. Without mail it changes at once, as before.
+- **Existing members start with their address unconfirmed.** Nothing is blocked
+  by it; they are asked to confirm, and until they do, a forgotten password is
+  still an admin's reset link.
+- **An invite no longer needs an email address.** *Create invite link* gives you
+  a link to paste into Discord or anywhere else, and it signs up whoever opens it
+  first. You can still add an address: their sign-up form fills it in, and only
+  that address can register with the link. Links without one are labelled by when
+  they were made, and every outstanding invite now says when it was created as
+  well as when it expires.
+- The win rate and the win–loss record in a profile's "Last games" summary are set in the same
+  typeface as every other number, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
+
+### Removed
+
+- **The `SMTP_*` settings**, which never sent anything. Email is `EMAIL_*` and
+  `RESEND_*` now; see `.env.example`.
+
+### Under the hood
+
+- **Request log lines no longer carry a link's token.** The path of an invite
+  or reset link — `/api/password-resets/{token}/redeem` and the rest — used to
+  be logged whole, and Insights › Logs shows those lines to every admin. The
+  token segment is written as `{token}` now; new routes carry tokens in the
+  body instead.
+- Mail is provider-agnostic: an `IEmailProvider` in a new `Foxfire.Email`
+  library, registered keyed by name and chosen by `Email__Provider`. Resend is
+  the only one, written against its HTTP API rather than its SDK so its quota
+  and rate-limit headers are read; its webhooks are checked against their Svix
+  signature.
+- Four tables, migrated on boot (`Email`): `EmailMessages`, the outbox that is
+  also the log — never a body or a link, which are rebuilt from the invite or
+  reset at send time — `EmailSuppressions`, `EmailVerifications`, and
+  `EmailQuotaObservations`, what the provider last said about its quota.
+- A background dispatcher sends what is due, one process at a time under a SQL
+  Server application lock, with a lease on each message so one a process died
+  holding goes again — under the same idempotency key. Outages are retried with
+  backoff for up to eight attempts; a key or domain Resend refuses holds
+  everything and says so on the Email page.
+- New routes: `POST /api/password-resets/request`,
+  `POST /api/email-verifications/confirm`, `GET|POST|DELETE /api/account/email`,
+  `POST /api/admin/invites/{id}/email`, `/api/admin/email/*` (head admins),
+  `GET /api/admin/insights/email` (head admins) and
+  `POST /api/email/webhooks/resend`. `/version` says whether the server sends
+  mail, sessions carry `emailConfirmed` for real and `pendingEmail`, invites and
+  resets carry their mail status, and members `emailConfirmed`. Added fields, so
+  the API version stays 3. The email log and the suppressions are pages.
+- Metrics `email.sends`, `email.events`, `email.queue_depth` and
+  `email.quota_used`. Warnings at 80% of a limit and at the limit, when an
+  address is suppressed, and when a webhook's signature does not check out.
+- `HeadAdmin` is a second Identity role, created on boot like the first, and
+  always held alongside `Admin`; there is no migration. Sessions and the member
+  list carry `isHeadAdmin`, and the member list `isConfiguredAdmin` — added
+  fields, so no API version moves.
+- The log names who acted on the lines that did not: an import, removing a
+  member, and a head admin typing or clearing LP on somebody else's account.
+  Role changes read "made … an admin / a head admin / a member".
+- `Invites.Email` is nullable (migration `InviteEmailOptional`), and
+  `POST /api/admin/invites` takes `{ email: null }` or no email at all. An invite
+  with an address still hands back the one already outstanding for it; invites
+  without one are never merged. The response's `email` is null for them, which a
+  0.15 desktop shows as a row with no title.
+- Creating and withdrawing an invite are logged, by whom and which invite.
+- The server measures itself with `System.Diagnostics.Metrics`: ASP.NET Core's
+  own request timings and rate limiter, tagged with which kind of client asked;
+  every Riot attempt by endpoint template, outcome and priority, with its queue
+  wait apart from its time on the wire; every sync run; every database command.
+  Levels — the Riot queue and windows, syncs running, clients on the hub, CPU,
+  memory, lines logged — are sampled every ten seconds. Nothing is exported; an
+  OpenTelemetry exporter would be a package and a line.
+- A new table, `TelemetryRollups`, migrated on boot: a row per series per
+  minute, kept for two days, folded into a row per hour, kept for
+  `Telemetry__RetentionDays` (30; 0 keeps them for good). Minute rows name the
+  process that wrote them, so a minute split across a restart is added up; hour
+  rows are unique. Durations keep their spread over fixed bounds, so percentiles
+  can be merged across rows.
+- `GET /api/admin/insights/{overview,requests,riot,sync,runtime}?window=` and
+  `GET /api/admin/insights/logs?level=&limit=&offset=&before=`, admin only. The
+  logs are a page like every list that grows, pinned to where the first page
+  began so new lines do not shift the ones already shown. The charts are bounded
+  by their window — at most 360 points — rather than paged. New routes, so the
+  API version stays 3; a desktop connected to an older server is told to update
+  it.
+- The last two thousand log lines, and the last five hundred warnings and
+  errors, are held in memory for the Logs tab, by a sink wired in code beside
+  the configured ones.
+- The hub and the insights routes themselves are left out of the request
+  measurements: one is a connection that lasts all evening, the other is the
+  page polling itself.
+- The chart is the desktop's own telemetry chart, moved into the shared UI
+  package, which now fills each stretch of a line on its own so a gap is drawn
+  as one.
+- The web client's admin tabs take shorter names on a phone, where five full
+  ones do not fit across.
+
 ## [0.4.0] — 2026-09-24
 
 A server that answers what a screen asks rather than handing over every account
@@ -680,6 +890,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0
 [0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1
 [0.3.0]: https://github.com/xalluna/foxfire/compare/server-v0.2.0...server-v0.3.0

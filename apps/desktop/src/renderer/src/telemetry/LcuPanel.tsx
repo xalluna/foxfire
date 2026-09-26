@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ChartCard, TimeSeriesChart, type Series } from '@foxfire/ui'
 import clsx from 'clsx'
-import { ChartCard, TimeSeriesChart, type Series } from './TimeSeriesChart'
 import { formatClock, formatMs } from './format'
 
 /**

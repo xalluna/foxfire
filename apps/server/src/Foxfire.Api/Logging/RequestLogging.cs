@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Claims;
 using Foxfire.Api.Common;
+using Foxfire.Api.Telemetry;
 using Foxfire.Api.Versioning;
 using Serilog;
 using Serilog.Context;
@@ -20,7 +21,8 @@ namespace Foxfire.Api.Logging;
 /// so the person something went wrong for can hand it to whoever reads the logs.
 ///
 /// Never the query string. The hub carries an access token in it, because a
-/// WebSocket handshake cannot carry a header.
+/// WebSocket handshake cannot carry a header. Nor a link's token, where a path
+/// carries one: see <see cref="SensitivePaths"/>.
 /// </summary>
 public static class RequestLogging
 {
@@ -38,6 +40,8 @@ public static class RequestLogging
 
         app.Use(static (context, next) =>
         {
+            RequestMetricTags.Tag(context);
+
             // On starting rather than now: the exception handler clears the
             // headers before it writes an error, and an error is the response
             // this is most wanted on.
@@ -60,6 +64,16 @@ public static class RequestLogging
             // that the test suite's several hosts cannot trip over each other.
             options.Logger = app.ApplicationServices.GetRequiredService<Serilog.ILogger>();
             options.GetLevel = (context, _, exception) => LevelFor(context, exception);
+
+            // The middleware's own four, with the path's token redacted. See
+            // SensitivePaths for which paths carry one and why that matters.
+            options.GetMessageTemplateProperties = (context, path, elapsed, status) =>
+            [
+                new LogEventProperty("RequestMethod", new ScalarValue(context.Request.Method)),
+                new LogEventProperty("RequestPath", new ScalarValue(SensitivePaths.Redact(path))),
+                new LogEventProperty("StatusCode", new ScalarValue(status)),
+                new LogEventProperty("Elapsed", new ScalarValue(elapsed))
+            ];
 
             // At the end of the request, by which point the forwarded headers
             // have put the real client address on the connection and

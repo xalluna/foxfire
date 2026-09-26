@@ -96,6 +96,11 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("RateLimit__AuthPerMinute", "100000");
         Environment.SetEnvironmentVariable("RateLimit__SearchPerMinute", "100000");
 
+        // Dozens of hosts share this database, and each would write its own
+        // minutes of insights and prune everybody else's. The insights tests
+        // drive the store themselves; the last hour is in memory either way.
+        Environment.SetEnvironmentVariable("Telemetry__Persist", "false");
+
         _factory = new WebApplicationFactory<Program>();
 
         // Force the host to build now rather than on first request, so a
@@ -217,6 +222,34 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         return (Authenticated(client, session), session);
     }
 
+    /// <summary>
+    /// A client signed in as a new admin who is not a head admin: registered,
+    /// promoted by the configured head admin, then signed in again — the
+    /// promotion ended the session it registered with.
+    /// </summary>
+    public async Task<(HttpClient Client, Session Session)> PlainAdminAsync(string name = "Plain")
+    {
+        var (head, _) = await AdminAsync();
+        using var _ = head;
+
+        var client = Client();
+        var username = $"{name}{Guid.NewGuid():N}"[..Math.Min(32, name.Length + 12)];
+        var email = $"{username.ToLowerInvariant()}@example.com";
+        var registered = await RegisterAsync(client, username, email);
+
+        var promoted = await head.PatchAsJsonAsync(
+            new Uri($"/api/admin/users/{registered.User.Id}", UriKind.Relative), new { isAdmin = true });
+        promoted.EnsureSuccessStatusCode();
+
+        var login = await client.PostAsJsonAsync(
+            new Uri("/api/auth/login", UriKind.Relative),
+            new { email, password = GoodPassword });
+        login.EnsureSuccessStatusCode();
+
+        var session = (await login.Content.ReadFromJsonAsync<Session>())!;
+        return (Authenticated(client, session), session);
+    }
+
     /// <summary>Puts a bearer token on a client for the rest of its life.</summary>
     public static HttpClient Authenticated(HttpClient client, Session session)
     {
@@ -233,7 +266,13 @@ public sealed record Session(
     DateTimeOffset RefreshTokenExpiresAt,
     SessionUser User);
 
-public sealed record SessionUser(Guid Id, string Username, string Email, bool IsAdmin, bool EmailConfirmed);
+public sealed record SessionUser(
+    Guid Id,
+    string Username,
+    string Email,
+    bool IsAdmin,
+    bool IsHeadAdmin,
+    bool EmailConfirmed);
 
 /// <summary>An error as every endpoint reports one.</summary>
 public sealed record ApiError(string Error, string Message);
@@ -259,7 +298,7 @@ public sealed record VersionInfo(
 /// <summary>An invite, as an admin sees it.</summary>
 public sealed record InviteInfo(
     Guid Id,
-    string Email,
+    string? Email,
     string Link,
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt,

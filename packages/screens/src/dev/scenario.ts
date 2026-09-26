@@ -23,6 +23,9 @@ export type Scenario =
   | 'server-connected'
   | 'server-outdated'
   | 'server-degraded'
+  // Signed in as an admin who is not the head admin: the Members page with
+  // other admins' rows closed to them, and the import card saying why not.
+  | 'server-admin'
   // Signed in to a server older than this build, which refuses it — the case
   // where the remedy is the host's, not anybody's download.
   | 'server-behind'
@@ -45,6 +48,16 @@ export type Scenario =
   | 'youtube-unconfigured'
   | 'youtube-disconnected'
   | 'recording-private'
+  // Signed in as an admin to a server too old to report insights, which
+  // answers the page's routes with a 404.
+  | 'insights-unsupported'
+  // A server's mail: one with no provider at all; one whose day is spent and
+  // whose mail is waiting; a member who never confirmed their address; and
+  // one moving to a new address that has not been confirmed yet.
+  | 'email-off'
+  | 'email-held'
+  | 'unverified'
+  | 'email-change-pending'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

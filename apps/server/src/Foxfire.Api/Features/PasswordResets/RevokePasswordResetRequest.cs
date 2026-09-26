@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Data;
+using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Foxfire.Api.Features.PasswordResets;
@@ -37,6 +38,13 @@ internal sealed class RevokePasswordResetRequestHandler(
         var withdrawn = await db.PasswordResets
             .Where(r => r.UserId == user.Id && r.RedeemedAt == null && r.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, (DateTimeOffset?)now), cancellationToken);
+
+        await db.EmailMessages
+            .Where(m => m.Kind == EmailKinds.PasswordReset && m.UserId == user.Id)
+            .Where(m => m.Status == EmailStatuses.Queued || m.Status == EmailStatuses.Held)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(m => m.Status, EmailStatuses.Dropped)
+                .SetProperty(m => m.Reason, "revoked"), cancellationToken);
 
         if (withdrawn > 0)
         {

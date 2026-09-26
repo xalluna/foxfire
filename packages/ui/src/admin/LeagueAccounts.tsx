@@ -64,7 +64,7 @@ export function LeagueAccountsPage({
   return (
     <SettingsPage
       title="League accounts"
-      intro="Everybody this server keeps match history for. Anybody signed in can find a tracked account and read its games; only whoever claimed one can type its LP."
+      intro="Everybody this server keeps match history for. Anybody signed in can find a tracked account and read its games; only whoever claimed one, or a head admin, can type its LP."
     >
       <TrackedAccountsCard tracked={tracked} onAdd={onAddAccount} />
       <LinkedAccountsCard

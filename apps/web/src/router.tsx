@@ -8,10 +8,12 @@ import {
 } from '@tanstack/react-router'
 import { EmptyState, Icon } from '@foxfire/ui'
 import {
+  EmailAdminScreen,
   InvitesScreen,
   LeagueAccountsScreen,
   MembersScreen,
   ServerDataScreen,
+  ServerInsightsScreen,
   createMatchRoute,
   createPlayerRoutes,
   parseSearch,
@@ -23,10 +25,12 @@ import { HomePage } from './pages/HomePage'
 import { UpgradeOverlay } from './pages/UpgradeOverlay'
 import { WebPlayerLayout } from './pages/WebPlayerLayout'
 import { WebShell } from './pages/WebShell'
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RegisterPage } from './pages/auth/RegisterPage'
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { SignInPage } from './pages/auth/SignInPage'
+import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
 import { YOUTUBE_ENABLED } from './features'
 import { safeRedirect } from './routes/redirect'
 import { useAuth } from './session/session'
@@ -90,6 +94,20 @@ const resetPassword = createRoute({
   component: ResetPasswordPage
 })
 
+const forgotPassword = createRoute({
+  getParentRoute: () => root,
+  path: 'forgot-password',
+  component: ForgotPasswordPage
+})
+
+// Unguarded too: a confirmation link is opened wherever the mail was read,
+// often a phone that has never signed in.
+const verifyEmail = createRoute({
+  getParentRoute: () => root,
+  path: 'verify-email/$token',
+  component: VerifyEmailPage
+})
+
 const authed = createRoute({
   getParentRoute: () => root,
   id: '_authed',
@@ -131,12 +149,20 @@ const adminAccounts = createRoute({
   component: LeagueAccountsScreen
 })
 const adminData = createRoute({ getParentRoute: () => admin, path: 'data', component: ServerDataScreen })
+const adminInsights = createRoute({
+  getParentRoute: () => admin,
+  path: 'insights',
+  component: ServerInsightsScreen
+})
+const adminEmail = createRoute({ getParentRoute: () => admin, path: 'email', component: EmailAdminScreen })
 
 const routeTree = root.addChildren([
   signIn,
   register,
   invite,
   resetPassword,
+  forgotPassword,
+  verifyEmail,
   authed.addChildren([
     home,
     players,
@@ -150,7 +176,7 @@ const routeTree = root.addChildren([
     ]),
     match,
     account,
-    admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData])
+    admin.addChildren([adminMembers, adminInvites, adminAccounts, adminData, adminInsights, adminEmail])
   ])
 ])
 

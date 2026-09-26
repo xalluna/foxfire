@@ -15,6 +15,7 @@ import {
   Icon
 } from '@foxfire/ui'
 import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
+import { absoluteUrl, paths } from '@foxfire/core/routes'
 
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'
@@ -98,7 +99,7 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           control={
             session.isAdmin ? (
               <span className="rounded border border-accent-dim/40 bg-accent/10 px-2 py-0.5 text-2xs text-accent">
-                Administrator
+                {session.isHeadAdmin ? 'Head admin' : 'Administrator'}
               </span>
             ) : undefined
           }
@@ -192,9 +193,9 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
     const preview = await window.api.server.previewInvite(probe.url, value)
     setInvitePreview(preview)
-    // The invite names the address it was sent to, and registering with any
-    // other one is refused. Filling it in is the difference between working
-    // and a rejection nobody can explain.
+    // An invite made for an address registers only that address. Filling it in
+    // is the difference between working and a rejection nobody can explain.
+    // Most invites name nobody, and then the field is left for them to fill.
     if (preview.usable && preview.email) setEmail(preview.email)
   }
 
@@ -451,12 +452,28 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
           {mode === 'login' && (
             <SettingsBlock>
-              {/* No self-service reset: a Foxfire server sends no mail, so
-                  there is nowhere to send a link except through its admin. */}
-              <p className="text-2xs leading-relaxed text-text-mute">
-                Forgotten your password? Ask whoever runs this server for a reset link, and open it
-                in a browser.
-              </p>
+              {/* Self-service only on a server that sends mail, and in the
+                  browser: the link the email carries opens the web client, so
+                  the whole errand happens there. Without mail there is nowhere
+                  to send a link except through its admin. */}
+              {probe?.email && probe.publicUrl ? (
+                <p className="text-2xs leading-relaxed text-text-mute">
+                  <a
+                    href={absoluteUrl(probe.publicUrl, paths.forgotPassword())}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent hover:underline"
+                  >
+                    Forgot your password?
+                  </a>{' '}
+                  It opens in your browser, and the link to set a new one is emailed to you.
+                </p>
+              ) : (
+                <p className="text-2xs leading-relaxed text-text-mute">
+                  Forgotten your password? Ask whoever runs this server for a reset link, and open it
+                  in a browser.
+                </p>
+              )}
             </SettingsBlock>
           )}
 

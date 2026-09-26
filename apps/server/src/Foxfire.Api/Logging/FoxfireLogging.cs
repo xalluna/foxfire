@@ -2,9 +2,11 @@ using System.Globalization;
 using Azure.Storage.Blobs;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Telemetry;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Debugging;
+using Serilog.Events;
 using Serilog.Formatting.Compact;
 using Serilog.Settings.Configuration;
 using Serilog.Templates;
@@ -132,6 +134,11 @@ public static class FoxfireLogging
         {
             logger.WriteTo.Console(outputTemplate: ConsoleTemplate, formatProvider: CultureInfo.InvariantCulture);
         }
+
+        // The last few thousand lines, in memory, for the insights page. In code
+        // rather than through ReaderOptions: it is not a sink a host chooses,
+        // and it is the same singleton the page reads from.
+        logger.WriteTo.Sink(services.GetRequiredService<RecentLogs>(), LogEventLevel.Information);
 
         if (destinations.Blob is { } blob)
         {

@@ -21,6 +21,7 @@ public sealed record FinishImportRequest : IDomainRequest<ImportSummary>;
 internal sealed class FinishImportRequestHandler(
     FoxfireDbContext db,
     AttributionRunner attribution,
+    IIdentityContext me,
     ILogger<FinishImportRequestHandler> logger)
     : IDomainRequestHandler<FinishImportRequest, ImportSummary>
 {
@@ -40,7 +41,8 @@ internal sealed class FinishImportRequestHandler(
         }
 
         logger.LogInformation(
-            "Import finished: {Accounts} account(s), LP worked out for {Attributed} game(s)",
+            "{Actor}'s import finished: {Accounts} account(s), LP worked out for {Attributed} game(s)",
+            me.Username,
             accounts.Count,
             attributed);
 

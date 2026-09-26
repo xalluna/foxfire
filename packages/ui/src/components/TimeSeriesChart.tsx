@@ -1,7 +1,6 @@
-import { useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { roundedPath, type Point } from '@foxfire/ui'
-import { formatClock } from './format'
+import { roundedPath, type Point } from '../lib/curve'
 
 const WIDTH = 720
 const HEIGHT = 200
@@ -29,8 +28,10 @@ export interface Series {
  * nine, and the shapes needed here — a ceiling line, threshold shading, event
  * markers — are the ones general-purpose chart APIs make awkward anyway.
  *
- * Shared by the rate-limit, resource and event-loop charts, which is what makes
- * hand-rolling cheap: the scale, hover and axis code is written once.
+ * Shared by the desktop's own telemetry panel and a server's insights page,
+ * which is what makes hand-rolling cheap: the scale, hover and axis code is
+ * written once. The time span is every point handed in, measured or not, so a
+ * window the server was down for part of still reads as the whole window.
  */
 export function TimeSeriesChart({
   series,
@@ -38,6 +39,9 @@ export function TimeSeriesChart({
   threshold,
   markers,
   formatValue,
+  formatAt = formatClockMs,
+  timeAxis = false,
+  emptyText = 'Nothing recorded yet.',
   ariaLabel
 }: {
   series: Series[]
@@ -48,17 +52,24 @@ export function TimeSeriesChart({
   /** Vertical event markers, e.g. every 429. */
   markers?: number[]
   formatValue: (value: number) => string
+  /** How a moment is written under the hover and on the time axis. Milliseconds by default. */
+  formatAt?: (at: number) => string
+  /** Labels the start and end of the span under the plot. */
+  timeAxis?: boolean
+  emptyText?: string
   ariaLabel: string
 }): JSX.Element {
   const [hover, setHover] = useState<number | null>(null)
+
+  // Per chart, so two filled charts on one page each find their own gradient
+  // rather than both drawing the first one's.
+  const gradientId = `ts${useId().replace(/[^a-zA-Z0-9]/g, '')}`
 
   const all = series.flatMap((s) => s.points)
   const values = all.map((p) => p.value).filter((v): v is number => v !== null)
 
   if (values.length === 0) {
-    return (
-      <p className="px-4 py-10 text-center text-sm text-text-mute">Nothing recorded yet.</p>
-    )
+    return <p className="px-4 py-10 text-center text-sm text-text-mute">{emptyText}</p>
   }
 
   const tMin = Math.min(...all.map((p) => p.at))
@@ -91,7 +102,7 @@ export function TimeSeriesChart({
       >
         <defs>
           {series.map((s, i) => (
-            <linearGradient key={s.label} id={`ts-fill-${i}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient key={s.label} id={`${gradientId}-${i}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={s.colour} stopOpacity="0.25" />
               <stop offset="100%" stopColor={s.colour} stopOpacity="0" />
             </linearGradient>
@@ -156,17 +167,20 @@ export function TimeSeriesChart({
         )}
 
         {series.map((s, i) => {
-          const path = buildPath(s, x, y)
-          if (!path) return null
+          const runs = buildRuns(s, x, y)
+          if (runs.length === 0) return null
+          const floor = PAD.top + PLOT_H
           return (
             <g key={s.label}>
               {s.fill && (
+                // Each run closed down to the floor on its own, so a gap stays
+                // a gap rather than being bridged by one fill across it.
                 <path
-                  d={`${path} L${x(tMax)} ${PAD.top + PLOT_H} L${x(tMin)} ${PAD.top + PLOT_H} Z`}
-                  fill={`url(#ts-fill-${i})`}
+                  d={runs.map((run) => `${run.path} L${run.lastX} ${floor} L${run.firstX} ${floor} Z`).join(' ')}
+                  fill={`url(#${gradientId}-${i})`}
                 />
               )}
-              <path d={path} fill="none" stroke={s.colour} strokeWidth="1.5" />
+              <path d={runs.map((run) => run.path).join(' ')} fill="none" stroke={s.colour} strokeWidth="1.5" />
             </g>
           )
         })}
@@ -184,6 +198,22 @@ export function TimeSeriesChart({
             onMouseEnter={() => setHover(i)}
           />
         ))}
+
+        {timeAxis && (
+          <>
+            <text x={PAD.left} y={HEIGHT - 6} className="fill-[rgb(var(--text-mute))] text-[9px]">
+              {formatAt(tMin)}
+            </text>
+            <text
+              x={WIDTH - PAD.right}
+              y={HEIGHT - 6}
+              textAnchor="end"
+              className="fill-[rgb(var(--text-mute))] text-[9px]"
+            >
+              {formatAt(tMax)}
+            </text>
+          </>
+        )}
 
         {hoverAt !== null && (
           <line
@@ -209,32 +239,34 @@ export function TimeSeriesChart({
           </span>
         ))}
         {hoverAt !== null && (
-          <span className="ml-auto font-mono text-2xs text-text-mute">{formatClock(hoverAt)}</span>
+          <span className="ml-auto font-mono text-2xs text-text-mute">{formatAt(hoverAt)}</span>
         )}
       </div>
     </div>
   )
 }
 
-function buildPath(
+/** Each stretch of measured points as its own subpath, with where it starts and ends across. */
+function buildRuns(
   series: Series,
   x: (t: number) => number,
   y: (v: number) => number
-): string | null {
-  const subpaths = measuredRuns(series).map((run) => {
+): Array<{ path: string; firstX: number; lastX: number }> {
+  return measuredRuns(series).map((run) => {
     const scaled: Point[] = run.map((p) => [x(p.at), y(p.value)])
-
-    // A counter holds its value between samples, so the staircase *is* the
-    // reading — rounding those corners would draw a ramp that never happened.
-    // Gauges are sampled from something continuous, so they get the curve.
-    if (!series.step) return roundedPath(scaled)
-
-    return scaled
-      .map(([px, py], i) => (i === 0 ? `M${px} ${py}` : ` L${px} ${scaled[i - 1][1]} L${px} ${py}`))
-      .join('')
+    return { path: runPath(scaled, series.step), firstX: scaled[0][0], lastX: scaled[scaled.length - 1][0] }
   })
+}
 
-  return subpaths.join(' ') || null
+function runPath(scaled: Point[], step: boolean | undefined): string {
+  // A counter holds its value between samples, so the staircase *is* the
+  // reading — rounding those corners would draw a ramp that never happened.
+  // Gauges are sampled from something continuous, so they get the curve.
+  if (!step) return roundedPath(scaled)
+
+  return scaled
+    .map(([px, py], i) => (i === 0 ? `M${px} ${py}` : ` L${px} ${scaled[i - 1][1]} L${px} ${py}`))
+    .join('')
 }
 
 /**
@@ -265,6 +297,14 @@ function readAt(series: Series, at: number, formatValue: (value: number) => stri
   return point?.value === null || point === undefined ? '—' : formatValue(point.value)
 }
 
+/** A moment to the millisecond, for a panel whose points are that close together. */
+function formatClockMs(at: number): string {
+  const d = new Date(at)
+  const pad = (n: number, width = 2): string => String(n).padStart(width, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
+}
+
+/** A chart with a title, and a hint beside it saying how to read it. */
 export function ChartCard({
   title,
   hint,
@@ -272,7 +312,7 @@ export function ChartCard({
 }: {
   title: string
   hint?: string
-  children: React.ReactNode
+  children: ReactNode
 }): JSX.Element {
   return (
     <section className={clsx('rounded-lg border border-hairline bg-surface p-4')}>

@@ -1,8 +1,13 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Azure.Storage.Blobs;
+using Foxfire.Api.Common;
 using Foxfire.Api.Logging;
+using Foxfire.Api.Telemetry;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Debugging;
 
@@ -60,9 +65,9 @@ public sealed class LoggingTests(FoxfireServerFixture server)
             await host.DisposeAsync();
         }
 
-        var lines = await LogLinesAsync();
+        var lines = await LogLinesAsync(until: all => all.Any(l => HasPath(l, path)));
 
-        var line = Assert.Single(lines, l => l.TryGetProperty("RequestPath", out var p) && p.GetString() == path);
+        var line = Assert.Single(lines, l => HasPath(l, path));
         Assert.Equal(traceId, line.GetProperty("@tr").GetString());
         Assert.Equal(404, line.GetProperty("StatusCode").GetInt32());
         Assert.Equal("desktop", line.GetProperty("ClientKind").GetString());
@@ -73,6 +78,66 @@ public sealed class LoggingTests(FoxfireServerFixture server)
         Assert.False(line.TryGetProperty("@l", out _));
 
         Assert.DoesNotContain(lines, l => l.GetRawText().Contains(secret, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A link's token never reaches a request line. Whoever holds a reset link
+    /// can set that password, and the lines are shown to every admin.
+    /// </summary>
+    [Fact]
+    public async Task A_token_in_a_path_is_redacted_from_the_request_line()
+    {
+        var token = $"tok{Guid.NewGuid():N}.sig{Guid.NewGuid():N}";
+        var host = server.Factory.WithWebHostBuilder(_ => { });
+
+        try
+        {
+            using var client = host.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Foxfire-Client", FoxfireServerFixture.CurrentDesktop);
+
+            await client.GetAsync(new Uri($"/api/password-resets/{token}/preview", UriKind.Relative));
+            await client.GetAsync(new Uri($"/api/invites/{token}/preview", UriKind.Relative));
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
+
+        const string Redacted = "/api/password-resets/{token}/preview";
+        var lines = await LogLinesAsync(until: all => all.Any(l => HasPath(l, Redacted)) && all.Any(l => HasPath(l, "/api/invites/{token}/preview")));
+
+        Assert.DoesNotContain(lines, l => l.GetRawText().Contains(token, StringComparison.Ordinal));
+        Assert.Contains(lines, l => HasPath(l, Redacted));
+    }
+
+    /// <summary>
+    /// The sink the insights page reads, wired in code rather than chosen by a
+    /// host: a warning the server writes is on the page, rendered, with where it
+    /// came from.
+    /// </summary>
+    [Fact]
+    public async Task A_warning_is_kept_in_memory_for_the_insights_page()
+    {
+        var marker = Guid.NewGuid().ToString("N");
+        await using var host = server.Factory.WithWebHostBuilder(_ => { });
+
+        host.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Foxfire.Api.Tests.Insights")
+            .LogWarning("Something to look at: {Marker}", marker);
+
+        var (fixtureClient, session) = await server.AdminAsync();
+        fixtureClient.Dispose();
+
+        using var admin = FoxfireServerFixture.Authenticated(host.CreateClient(), session);
+        admin.DefaultRequestHeaders.Add("X-Foxfire-Client", FoxfireServerFixture.CurrentDesktop);
+
+        var page = await admin.GetFromJsonAsync<Page<ServerLogEntry>>(
+            new Uri("/api/admin/insights/logs?level=warning", UriKind.Relative));
+
+        var entry = Assert.Single(page!.Items, e => e.Message.Contains(marker, StringComparison.Ordinal));
+        Assert.Equal("warning", entry.Level);
+        Assert.Equal("Insights", entry.Source);
+        Assert.Equal($"Something to look at: \"{marker}\"", entry.Message);
     }
 
     [Fact]
@@ -209,8 +274,32 @@ public sealed class LoggingTests(FoxfireServerFixture server)
         lock (complaints) return [.. complaints];
     }
 
+    private static bool HasPath(JsonElement line, string path) =>
+        line.TryGetProperty("RequestPath", out var p) && p.GetString() == path;
+
+    /// <summary>
+    /// Every line in the server's log container, parsed — once <paramref name="until"/>
+    /// says the lines a test is waiting for have landed, or after ten seconds.
+    ///
+    /// Disposing a host is what starts its last batch on its way, not what
+    /// waits for it to arrive: a read straight afterwards can beat the sink's
+    /// final append to the store, and on a busy runner it usually does.
+    /// </summary>
+    private async Task<List<JsonElement>> LogLinesAsync(Func<List<JsonElement>, bool> until)
+    {
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (true)
+        {
+            var lines = await ReadLogLinesAsync();
+            if (until(lines) || DateTimeOffset.UtcNow >= deadline) return lines;
+
+            await Task.Delay(200);
+        }
+    }
+
     /// <summary>Every line in the server's log container, parsed.</summary>
-    private async Task<List<JsonElement>> LogLinesAsync()
+    private async Task<List<JsonElement>> ReadLogLinesAsync()
     {
         var container = Store.GetBlobContainerClient(FoxfireLogging.ContainerName);
         List<JsonElement> lines = [];

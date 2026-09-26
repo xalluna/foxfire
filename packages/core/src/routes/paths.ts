@@ -131,6 +131,12 @@ export const paths = {
    */
   resetPassword: (token: string) => `/reset-password/${segment(token)}`,
 
+  /** Where "Forgot password?" goes: the web client's page that asks for an address. */
+  forgotPassword: () => '/forgot-password',
+
+  /** Where a confirmation link lands. The server builds these itself when it emails one. */
+  verifyEmail: (token: string) => `/verify-email/${segment(token)}`,
+
   signIn: (redirect?: string) => withQuery('/sign-in', { redirect })
 }
 

@@ -22,12 +22,19 @@ export {
   type Platform,
   type RecordingTarget
 } from './client/context'
-export { useConnection, useIsServerAdmin } from './client/useConnection'
+export { useConnection, useIsHeadAdmin, useIsServerAdmin } from './client/useConnection'
 export { useShareLink, type ShareLink } from './client/useShareLink'
 export { useDataEvents } from './client/useDataEvents'
 
 export { queryKeys } from './queries/keys'
 export { useAccount, useAccountByRiotId, useHomeAccount, useMyAccounts } from './queries/accounts'
+export {
+  useAccountEmail,
+  useCancelEmailChange,
+  useEmailVerificationNudge,
+  useResendEmailConfirmation,
+  type EmailNudge
+} from './queries/accountEmail'
 export {
   FAVORITES_FULL,
   useFavorites,
@@ -66,6 +73,8 @@ export { ServerDataScreen } from './screens/ServerDataScreen'
 export { InvitesScreen } from './screens/InvitesScreen'
 export { LeagueAccountsScreen } from './screens/LeagueAccountsScreen'
 export { MembersScreen } from './screens/MembersScreen'
+export { ServerInsightsScreen } from './screens/ServerInsightsScreen'
+export { EmailAdminScreen } from './screens/EmailAdminScreen'
 
 export {
   createPlayerRoutes,

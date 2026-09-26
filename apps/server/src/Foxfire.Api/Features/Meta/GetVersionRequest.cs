@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Api.Services;
 using Foxfire.Core;
 using Microsoft.Extensions.Options;
@@ -22,6 +23,10 @@ namespace Foxfire.Api.Features.Meta;
 /// builds "Copy link" from this rather than from the address it connected with,
 /// which may be one only that machine can use.
 /// </param>
+/// <param name="Email">
+/// Whether this server sends mail — and so whether its sign-in page can offer
+/// "Forgot password?". Missing from a server from before it could.
+/// </param>
 public sealed record VersionResponse(
     string ServerName,
     string ServerVersion,
@@ -30,7 +35,8 @@ public sealed record VersionResponse(
     string RecommendedDesktop,
     bool PublicSignup,
     string ApiBase,
-    string PublicUrl);
+    string PublicUrl,
+    bool Email);
 
 /// <summary>
 /// The handshake.
@@ -48,7 +54,10 @@ public sealed record VersionResponse(
 /// </summary>
 public sealed record GetVersionRequest : IDomainRequest<VersionResponse>;
 
-internal sealed class GetVersionRequestHandler(IOptions<ServerOptions> server, ServerSettingsService settings)
+internal sealed class GetVersionRequestHandler(
+    IOptions<ServerOptions> server,
+    ServerSettingsService settings,
+    ActiveEmailProvider email)
     : IDomainRequestHandler<GetVersionRequest, VersionResponse>
 {
     public async Task<Response<VersionResponse>> Handle(
@@ -62,7 +71,8 @@ internal sealed class GetVersionRequestHandler(IOptions<ServerOptions> server, S
             RecommendedDesktop: DesktopCompatibility.AllowList.Recommended,
             PublicSignup: await settings.IsPublicSignupEnabledAsync(cancellationToken),
             ApiBase: ApiPaths.Base,
-            PublicUrl: server.Value.PublicUrl.TrimEnd('/'));
+            PublicUrl: server.Value.PublicUrl.TrimEnd('/'),
+            Email: email.IsEnabled);
 }
 
 /// <summary>Whether the server can currently reach Riot, and how busy the queue is.</summary>

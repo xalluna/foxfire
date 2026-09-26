@@ -3,12 +3,14 @@ using FluentValidation;
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Logging;
 using Foxfire.Api.Reads;
 using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
 using Foxfire.Api.Sync;
+using Foxfire.Api.Telemetry;
 using Foxfire.Api.Versioning;
 using Foxfire.Api.Web;
 using Foxfire.Core;
@@ -31,7 +33,6 @@ builder.Services.Configure<ServerOptions>(builder.Configuration.GetSection(Serve
 builder.Services.Configure<RiotOptions>(builder.Configuration.GetSection(RiotOptions.Section));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.Section));
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
-builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.Section));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
 builder.Services.Configure<LogOptions>(builder.Configuration.GetSection(LogOptions.Section));
 
@@ -39,9 +40,10 @@ var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<
 var riotOptions = builder.Configuration.GetSection(RiotOptions.Section).Get<RiotOptions>() ?? new();
 var authOptions = builder.Configuration.GetSection(AuthOptions.Section).Get<AuthOptions>() ?? new();
 var adminOptions = builder.Configuration.GetSection(AdminOptions.Section).Get<AdminOptions>() ?? new();
-var smtpOptions = builder.Configuration.GetSection(SmtpOptions.Section).Get<SmtpOptions>() ?? new();
 var rateLimitOptions = builder.Configuration.GetSection(RateLimitOptions.Section).Get<RateLimitOptions>() ?? new();
 var logOptions = builder.Configuration.GetSection(LogOptions.Section).Get<LogOptions>() ?? new();
+var telemetryOptions = builder.Configuration.GetSection(TelemetryOptions.Section).Get<TelemetryOptions>() ?? new();
+var emailOptions = builder.Configuration.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new();
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
 // Everything wrong with the configuration, in one message, before anything
@@ -49,7 +51,8 @@ var connectionString = builder.Configuration.GetConnectionString("Default");
 // missing settings, and a server that started degraded would be worse than one
 // that refused — half of these produce failures that look like something else.
 var problems = ConfigurationCheck.Validate(
-    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions, logOptions);
+    connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions, logOptions,
+    telemetryOptions, emailOptions);
 if (problems.Count > 0)
 {
     var message = new StringBuilder()
@@ -68,8 +71,17 @@ builder.AddFoxfireLogging();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(DesktopCompatibility.AllowList);
 
-builder.Services.AddDbContext<FoxfireDbContext>(options =>
-    options.UseSqlServer(connectionString, sql =>
+// What the insights page is built from. Before the database, whose commands
+// it times — see Telemetry/DbCommandTimer.cs.
+builder.Services.AddFoxfireTelemetry(builder.Configuration);
+
+// Mail, when a provider is configured: the outbox features queue into, and the
+// dispatcher that sends it within the provider's limits. See Email/.
+builder.Services.AddFoxfireEmail(builder.Configuration);
+
+builder.Services.AddDbContext<FoxfireDbContext>((services, options) => options
+    .AddInterceptors(services.GetRequiredService<DbCommandTimer>())
+    .UseSqlServer(connectionString, sql =>
     {
         sql.MigrationsAssembly(typeof(FoxfireDbContext).Assembly.FullName);
 
@@ -223,7 +235,8 @@ builder.Services.AddSingleton(sp => new RiotClient(
     sp.GetRequiredService<IHttpClientFactory>(),
     sp.GetRequiredService<RiotRateLimiter>(),
     riotOptions.ApiKey,
-    sp.GetRequiredService<ILogger<RiotClient>>()));
+    sp.GetRequiredService<ILogger<RiotClient>>(),
+    sp.GetRequiredService<RiotMetrics>()));
 
 // Optional, and the server says so rather than refusing to start: a
 // community that never uploads a replay needs no blob store, and everything
@@ -286,11 +299,14 @@ app.MapVersionEndpoints();
 var api = app.MapGroup(ApiPaths.Base);
 api.MapVersionEndpoints();
 api.MapAuthEndpoints();
+api.MapAccountEmailEndpoints();
 api.MapInviteEndpoints();
 api.MapPasswordResetEndpoints();
 api.MapAdminSettingsEndpoints();
 api.MapAdminUserEndpoints();
 api.MapAdminStorageEndpoints();
+api.MapAdminInsightsEndpoints();
+api.MapAdminEmailEndpoints();
 api.MapRiotLinkEndpoints();
 api.MapSyncEndpoints();
 api.MapDashboardEndpoints();
@@ -307,7 +323,11 @@ if (BuildFeatures.YouTubeRecordings)
 }
 
 api.MapImportEndpoints();
-app.MapHub<FoxfireHub>(FoxfireHub.Path);
+
+// Out of the request measurements: a hub connection is one request that lasts
+// as long as somebody has Foxfire open, and would drown every latency chart.
+// The hub counts who is connected itself.
+app.MapHub<FoxfireHub>(FoxfireHub.Path).DisableHttpMetrics();
 
 // An API route that does not exist is a JSON 404, from any client. Without
 // this it would fall through to the web client's fallback and come back as a
@@ -394,11 +414,33 @@ _ = Task.Run(async () =>
     }
 });
 
-if (!smtpOptions.IsConfigured)
+// Read through the running host rather than the snapshot above, so the line
+// says what the server will actually do.
+var email = app.Services.GetRequiredService<ActiveEmailProvider>();
+if (email.Provider is { } mailer)
 {
-    startup.LogWarning(
-        "No SMTP configured, so nothing will be emailed. Invite links are still readable from the admin "
-        + "pages, in the desktop app or the web client — copy them to your community wherever it actually talks.");
+    var limits = mailer.Limits;
+    startup.LogInformation(
+        "Email goes out through {Provider} from {From}, at most {Daily} a day and {Monthly} a month",
+        mailer.Name,
+        email.Options.FromAddress,
+        limits.DailyLimit == 0 ? "no limit" : limits.DailyLimit,
+        limits.MonthlyLimit == 0 ? "no limit" : limits.MonthlyLimit);
+
+    if (!email.TracksDelivery)
+    {
+        startup.LogWarning(
+            "No webhook secret for {Provider}, so email is tracked as far as sent and no further — a bounce goes "
+            + "unnoticed. Point a webhook at {Url} and set its secret; see apps/server/docker/.env.example.",
+            mailer.Name,
+            $"{serverOptions.PublicUrl.TrimEnd('/')}/api/email/webhooks/{mailer.Name}");
+    }
+}
+else
+{
+    startup.LogInformation(
+        "No email provider configured, so nothing is emailed. Invite and reset links are readable from the admin "
+        + "pages — copy them to your community wherever it actually talks. Set Email__Provider to send them.");
 }
 
 // The one place a key rejection becomes news. The limiter latches the moment

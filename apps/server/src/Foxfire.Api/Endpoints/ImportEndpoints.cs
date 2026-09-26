@@ -38,6 +38,11 @@ namespace Foxfire.Api.Endpoints;
 ///
 /// Each batch arrives as a bare JSON array, which is why every route here wraps
 /// its body in a request rather than binding one directly.
+///
+/// A head admin's rather than any admin's. An import writes the community's
+/// shared history — accounts, games, readings, season boundaries — and ends by
+/// working LP out again for every account on the server; nothing it adds can be
+/// taken back out, so it belongs with the few people trusted with all of it.
 /// </summary>
 public static class ImportEndpoints
 {
@@ -45,7 +50,7 @@ public static class ImportEndpoints
     {
         var group = app.MapGroup("/admin/import")
             .WithTags("Import")
-            .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.Admin));
+            .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.HeadAdmin));
 
         group.MapPost("/accounts", (
                 [FromBody] IReadOnlyList<ImportAccount> accounts,

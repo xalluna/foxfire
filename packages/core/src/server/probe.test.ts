@@ -58,4 +58,14 @@ describe('probeServer', () => {
 
     expect(probe.publicUrl).toBeNull()
   })
+
+  it('says whether the server sends mail, which is what offers "Forgot password?"', async () => {
+    const mailing = await probeServer('https://fox.example', DESKTOP, { fetch: version({ email: true }) })
+    const silent = await probeServer('https://fox.example', DESKTOP, { fetch: version({ email: false }) })
+    const older = await probeServer('https://fox.example', DESKTOP, { fetch: version() })
+
+    expect(mailing.email).toBe(true)
+    expect(silent.email).toBe(false)
+    expect(older.email).toBeNull()
+  })
 })

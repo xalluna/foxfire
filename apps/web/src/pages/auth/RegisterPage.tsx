@@ -20,7 +20,7 @@ export function RegisterPage(): JSX.Element {
       title="Make an account"
       subtitle={
         inviteOnly
-          ? 'This server is invite-only. If you were sent an invite, open its link instead — it fills this in.'
+          ? 'This server is invite-only. If you were sent an invite, open its link instead.'
           : 'Everybody on this server can see everybody’s match history. What you can change is your own.'
       }
       footer={

@@ -64,6 +64,24 @@ describe('getServerState', () => {
     remember({ username: 'Chovy', email: 'chovy@example.com', isAdmin: false })
 
     expect(getServerState().session?.isAdmin).toBe(false)
+    expect(getServerState().session?.isHeadAdmin).toBe(false)
+  })
+
+  it('reports the head admin flag the server gave us', () => {
+    // What offers the import and LP on anybody's games. Thrown away here, a
+    // head admin would see a plain admin's pages and never know why.
+    remember({ username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true })
+
+    expect(getServerState().session?.isHeadAdmin).toBe(true)
+  })
+
+  it('treats an admin remembered before head admins as a plain one', () => {
+    remember({ username: 'Faker', email: 'faker@example.com', isAdmin: true })
+
+    const { session } = getServerState()
+
+    expect(session?.isAdmin).toBe(true)
+    expect(session?.isHeadAdmin).toBe(false)
   })
 
   it('treats a server remembered before this was stored as not an admin', () => {

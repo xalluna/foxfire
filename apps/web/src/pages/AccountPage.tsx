@@ -6,7 +6,12 @@ import {
   SettingsPage,
   SettingsRow
 } from '@foxfire/ui'
-import { useConnection } from '@foxfire/screens'
+import {
+  useAccountEmail,
+  useCancelEmailChange,
+  useConnection,
+  useResendEmailConfirmation
+} from '@foxfire/screens'
 import { changeEmail, changePassword, changeUsername, useAuth } from '../session/session'
 
 /**
@@ -23,6 +28,9 @@ import { changeEmail, changePassword, changeUsername, useAuth } from '../session
 export function AccountPage(): JSX.Element {
   const user = useAuth((s) => s.user)
   const connection = useConnection()
+  const email = useAccountEmail()
+  const resend = useResendEmailConfirmation()
+  const cancel = useCancelEmailChange()
 
   if (!user) return <></>
 
@@ -38,7 +46,7 @@ export function AccountPage(): JSX.Element {
           control={
             user.isAdmin ? (
               <span className="rounded border border-accent-dim/40 bg-accent/10 px-2 py-0.5 text-2xs text-accent">
-                Administrator
+                {user.isHeadAdmin ? 'Head admin' : 'Administrator'}
               </span>
             ) : undefined
           }
@@ -55,10 +63,14 @@ export function AccountPage(): JSX.Element {
 
       <ChangeEmailCard
         email={user.email}
+        status={email.data}
         onSave={async (change) => {
           await changeEmail(change)
+          void email.refetch()
           return { ok: true, error: null }
         }}
+        onResend={() => resend.mutateAsync()}
+        onCancelPending={() => cancel.mutateAsync()}
       />
 
       <ChangePasswordCard

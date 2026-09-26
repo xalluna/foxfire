@@ -17,9 +17,10 @@ public sealed record SaveManualRanksBody(string QueueType, IReadOnlyList<ManualR
 /// Reading is open to every member, like everything else here. Writing splits
 /// two ways, and the split is the interesting part.
 ///
-/// Typing LP for a game requires owning the account it was played on. It is an
-/// assertion about what happened to somebody, and nobody else is in a position
-/// to make it.
+/// Typing LP for a game requires owning the account it was played on, or being
+/// a head admin. It is an assertion about what happened to somebody, and the
+/// owner is the one in a position to make it; a head admin is who fixes it when
+/// they got it wrong, or never came back to it.
 ///
 /// Editing a season is admin-only, because one wrong ResetsRank silently
 /// rewrites every member's LP history.

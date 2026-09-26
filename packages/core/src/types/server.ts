@@ -35,6 +35,12 @@ export interface ServerProbe {
    */
   publicUrl: string | null
   /**
+   * Whether the server sends email — and so whether "Forgot password?" can be
+   * offered. Null from a server older than mail, and when it could not be
+   * reached.
+   */
+  email: boolean | null
+  /**
    * How this build stands against that server's stated range. Advisory only:
    * the server's allow list is a set rather than a range, so a version between
    * the minimum and the newest can still be absent from it. This decides what
@@ -65,6 +71,8 @@ export interface VersionInfo {
   apiBase?: string
   /** The address the server is reached at from outside, which is what share links are built on. */
   publicUrl?: string
+  /** Whether the server sends email. Absent from a server older than mail. */
+  email?: boolean
 }
 
 /** Who you are on a server, as the server says it. */
@@ -73,6 +81,19 @@ export interface SessionUser {
   username: string
   email: string
   isAdmin: boolean
+  /**
+   * An admin who may also import, type LP on anybody's account, and demote,
+   * disable, remove or make a reset link for another admin. Always an admin as
+   * well. Optional only because a session kept from an older server lacks it.
+   */
+  isHeadAdmin?: boolean
+  /** Whether they have shown they read mail sent to `email`. */
+  emailConfirmed?: boolean
+  /**
+   * The address they asked to move to, while the link sent there waits to be
+   * opened. `email` stays the one they sign in with until it is.
+   */
+  pendingEmail?: string | null
 }
 
 /**
@@ -230,6 +251,14 @@ export interface AdminUser {
   username: string
   email: string
   isAdmin: boolean
+  /** Also an admin; may act against other admins. */
+  isHeadAdmin: boolean
+  /**
+   * The account the server's configuration names as its admin. Nobody can
+   * demote, disable or remove it from the app — the server refuses — so the
+   * page offers none of those for it.
+   */
+  isConfiguredAdmin: boolean
   /** Cannot sign in. Nothing of theirs is deleted. */
   isDisabled: boolean
   createdAt: string
@@ -241,19 +270,37 @@ export interface AdminUser {
    *
    * On the member rather than behind a call of its own, so the list can say who
    * is waiting on one — and so the admin who made a link an hour ago can copy
-   * it again instead of replacing it.
+   * it again instead of replacing it. Never one the member asked for by email:
+   * see `requestedReset`.
    */
   passwordReset: AdminPasswordReset | null
+  /** Whether they have confirmed their address. Absent from a server older than mail. */
+  emailConfirmed?: boolean
+  /** Mail to their address bounced or was reported, and is no longer sent. */
+  emailSuppressed?: boolean
+  /**
+   * A reset they asked for themselves from the sign-in page, still live. Without
+   * the link, which went to their inbox and is theirs alone — only when it was
+   * made and whether it arrived.
+   */
+  requestedReset?: AdminRequestedReset | null
+}
+
+/** A reset a member asked for by email, as an admin may see it. */
+export interface AdminRequestedReset {
+  createdAt: string
+  expiresAt: string
+  mail: EmailDelivery | null
 }
 
 /**
  * A password reset link, as the admin who made it sees it.
  *
- * The same arrangement as an invite, and for the same reason: this server sends
- * no mail, so the link is readable and copyable and goes wherever the community
- * actually talks. What differs is what it is worth — an invite makes an
- * account, this hands one over — so it lasts hours rather than a fortnight, and
- * there is never more than one outstanding per member.
+ * The same arrangement as an invite: the link is readable and copyable and goes
+ * wherever the community actually talks — and on a server that sends mail, to
+ * the member's confirmed address as well. What differs is what it is worth —
+ * an invite makes an account, this hands one over — so it lasts hours rather
+ * than a fortnight, and there is never more than one outstanding per member.
  */
 export interface AdminPasswordReset {
   id: string
@@ -261,6 +308,13 @@ export interface AdminPasswordReset {
   link: string
   createdAt: string
   expiresAt: string
+  /** What became of the email carrying it, when one was sent. */
+  mail?: EmailDelivery | null
+  /**
+   * Why it was not emailed, when it was not: the server sends no mail, the
+   * member never confirmed their address, or mail to it bounced.
+   */
+  notEmailed?: 'email_off' | 'unverified' | 'suppressed' | null
 }
 
 /** Which page of the members, and whose name or address to look for. */
@@ -269,20 +323,30 @@ export interface AdminUserQuery extends PageOptions {
   q?: string
 }
 
-/** What to change about somebody. Undefined leaves a field alone. */
+/**
+ * What to change about somebody. Undefined leaves a field alone.
+ *
+ * The roles nest: `isHeadAdmin: true` makes an admin too, and `isAdmin: false`
+ * takes head admin with it. Both are a head admin's to change on another admin.
+ */
 export interface AdminUserPatch {
   isAdmin?: boolean
+  isHeadAdmin?: boolean
   isDisabled?: boolean
 }
 
 /** An invite, with the link an admin can copy. */
 export interface AdminInvite {
   id: string
-  email: string
   /**
-   * The whole point of the admin-facing shape. SMTP is optional, so every link
-   * the server would have emailed is also copyable — paste it wherever your
-   * community actually talks.
+   * Who it was made for, when the admin gave an address. Null for a link that
+   * registers whoever opens it first.
+   */
+  email: string | null
+  /**
+   * The whole point of the admin-facing shape: how an invite travels — pasted
+   * wherever your community actually talks, and emailed to its address on a
+   * server that sends mail.
    */
   link: string
   createdAt: string
@@ -290,6 +354,14 @@ export interface AdminInvite {
   redeemedAt: string | null
   redeemedBy: string | null
   isOpen: boolean
+  /** What became of the email carrying it, when one was sent. */
+  mail?: EmailDelivery | null
+  /**
+   * Whether it can be emailed now: the server sends mail, the invite is open
+   * with an address that has not bounced, and nothing for it is on its way or
+   * arrived.
+   */
+  canEmail?: boolean
 }
 
 /** The switches an admin can change while the server runs. */
@@ -321,4 +393,167 @@ export interface ServerAdminSettings {
 export interface AdminActionResult {
   ok: boolean
   error: string | null
+}
+
+/* -------------------------------------------------------------------------- */
+/* Email                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** What an email the server sends is for. */
+export type EmailKind =
+  | 'invite'
+  | 'password_reset'
+  | 'verification'
+  | 'email_change'
+  | 'password_changed'
+  | 'test'
+
+/**
+ * Where an email has got to.
+ *
+ * `held` is waiting on a limit — the day or the month — or on the provider
+ * taking this server's mail again. `dropped` was never sent: its link lapsed or
+ * was withdrawn first, or the address is one mail is no longer sent to.
+ */
+export type EmailStatus =
+  | 'queued'
+  | 'sending'
+  | 'held'
+  | 'sent'
+  | 'delivered'
+  | 'bounced'
+  | 'complained'
+  | 'failed'
+  | 'dropped'
+
+/** What became of the email that carried an invite or a reset. */
+export interface EmailDelivery {
+  status: EmailStatus
+  /** Why, where the status alone does not say: `daily_limit` on a held one, `hard_bounce` on a bounce. */
+  reason: string | null
+  queuedAt: string
+  /** For a held one, when it will be tried again. */
+  notBefore: string | null
+  sentAt: string | null
+  deliveredAt: string | null
+}
+
+/** Your own address, as your account settings show it. */
+export interface AccountEmail {
+  email: string
+  emailConfirmed: boolean
+  /** The address you asked to move to, while its link waits to be opened. */
+  pendingEmail: string | null
+  pendingExpiresAt: string | null
+  /** When the newest confirmation link was made. */
+  lastSentAt: string | null
+  /** When another link may be asked for; null when one may be now. */
+  canResendAt: string | null
+  /** Whether the server sends mail at all. Nothing can be confirmed without it. */
+  mailEnabled: boolean
+  /** Mail to your address bounced or was reported, and is no longer sent. */
+  suppressed: boolean
+}
+
+/**
+ * What asking for a confirmation link, or cancelling a move, came to — the
+ * address as it now stands, or why not.
+ */
+export interface AccountEmailResult {
+  ok: boolean
+  error: string | null
+  email: AccountEmail | null
+}
+
+/** What opening a confirmation link did. */
+export interface EmailConfirmation {
+  serverName: string
+  /** The address now confirmed — for a move, the new one. */
+  email: string
+  /** `verify` for the address the account had, `change` for a move to a new one. */
+  purpose: 'verify' | 'change'
+  message: string
+}
+
+/** One quota window, as the Email page draws its meter. */
+export interface EmailQuotaWindow {
+  /** What the limit is checked against: the larger of `ours` and `reported`. */
+  used: number
+  /** What this server sent in the window. */
+  ours: number
+  /** What the provider last said had gone — counting mail anything else on the account sent. */
+  reported: number | null
+  reportedAt: string | null
+  /** Zero is no cap. */
+  limit: number
+  /** How much of the day invites and other standard mail may use. The day only. */
+  standardAllowance: number | null
+  startsAt: string
+  resetsAt: string
+  /** When the provider itself said the window is spent. Nothing goes before this. */
+  latchedUntil: string | null
+}
+
+/** Where a server's mail stands, for its head admins. */
+export interface EmailOverview {
+  /** Whether the server sends mail at all. Everything else is empty when it does not. */
+  configured: boolean
+  provider: string | null
+  from: string | null
+  /** Whether a webhook secret is set, so deliveries and bounces are known. */
+  tracksDelivery: boolean
+  inviteShare: number
+  retentionDays: number
+  today: EmailQuotaWindow | null
+  month: EmailQuotaWindow | null
+  queue: { queued: number; held: number; nextAttemptAt: string | null }
+  /** How many addresses mail is no longer sent to. */
+  suppressed: number
+  /** The provider's reason, while it is refusing this server's mail. */
+  refused: string | null
+}
+
+/** One email in the log. Never its body, which carried a link. */
+export interface EmailLogEntry {
+  id: string
+  kind: EmailKind
+  recipient: string
+  subject: string
+  status: EmailStatus
+  reason: string | null
+  /** What the provider said about a bounce or failure. */
+  detail: string | null
+  attempts: number
+  createdAt: string
+  /** For one still waiting, when it will next be tried. */
+  notBefore: string | null
+  sentAt: string | null
+  deliveredAt: string | null
+  lastEventAt: string | null
+  /** Who caused it to be sent, when it was somebody. */
+  triggeredBy: string | null
+}
+
+/** Which page of the email log, and what to narrow it to. */
+export interface EmailLogQuery extends PageOptions {
+  kind?: EmailKind
+  /** One status, or `pending` for everything still to go. */
+  status?: EmailStatus | 'pending'
+  /** Part of a recipient's address. */
+  q?: string
+}
+
+/** An address mail is no longer sent to. */
+export interface EmailSuppression {
+  id: string
+  address: string
+  reason: 'hard_bounce' | 'complaint' | 'provider_suppressed'
+  detail: string | null
+  createdAt: string
+  /** Who signs in with the address now, if anybody does. */
+  member: string | null
+}
+
+export interface EmailSuppressionQuery extends PageOptions {
+  q?: string
 }

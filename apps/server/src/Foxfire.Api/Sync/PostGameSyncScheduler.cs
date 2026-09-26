@@ -54,6 +54,12 @@ public sealed class PostGameSyncScheduler(
         lock (_gate) return _pending.ContainsKey(riotAccountId);
     }
 
+    /// <summary>How many accounts have a ladder waiting, for the insights page.</summary>
+    public int PendingCount
+    {
+        get { lock (_gate) return _pending.Count; }
+    }
+
     /// <summary>
     /// Starts looking for a newly finished game.
     ///

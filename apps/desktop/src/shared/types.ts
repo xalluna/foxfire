@@ -566,6 +566,8 @@ export interface ServerSession {
   username: string
   email: string
   isAdmin: boolean
+  /** An admin who may also import, type anybody's LP, and act against other admins. */
+  isHeadAdmin: boolean
 }
 
 /** A server this desktop has joined, whether or not it is the active one. */

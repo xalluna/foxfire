@@ -3,10 +3,13 @@ using FluentValidation;
 using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
+using Foxfire.Api.Features.Account;
 using Foxfire.Api.Services;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
+using Foxfire.Email;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -55,6 +58,7 @@ internal sealed class RegisterRequestHandler(
     FoxfireDbContext db,
     TokenService tokens,
     ServerSettingsService settings,
+    EmailOutbox outbox,
     IOptions<AuthOptions> authOptions,
     IOptions<AdminOptions> adminOptions,
     TimeProvider time,
@@ -93,6 +97,26 @@ internal sealed class RegisterRequestHandler(
 
         var now = time.GetUtcNow();
 
+        // Registering through an invite that was emailed to this very address is
+        // proof enough that the address is theirs — they read the mail it came
+        // in. Only when the mail actually went: an invite with an address that
+        // an admin copied into a chat proves nothing about the mailbox.
+        //
+        // Looked at whenever a token comes with the registration, even on a
+        // server with public signup, which needs no invite and so never
+        // resolved it above.
+        var offered = invite ?? (string.IsNullOrWhiteSpace(request.InviteToken)
+            ? null
+            : await ResolveInviteAsync(request.InviteToken, email, cancellationToken));
+
+        var confirmedByInvite = offered?.Email is { } invited
+            && string.Equals(invited, email, StringComparison.OrdinalIgnoreCase)
+            && await db.EmailMessages.AnyAsync(
+                m => m.Kind == EmailKinds.Invite
+                     && m.RelatedId == offered.Id
+                     && (m.Status == EmailStatuses.Sent || m.Status == EmailStatuses.Delivered),
+                cancellationToken);
+
         // The retrying execution strategy — which is there because a homelab's
         // SQL Server may still be starting when this process is — refuses to sit
         // inside a transaction it did not open. So the transaction goes inside it
@@ -110,6 +134,7 @@ internal sealed class RegisterRequestHandler(
                     Id = Guid.CreateVersion7(now),
                     UserName = username,
                     Email = email,
+                    EmailConfirmed = confirmedByInvite,
                     CreatedAt = now
                 };
 
@@ -137,7 +162,7 @@ internal sealed class RegisterRequestHandler(
 
                 if (isSeededAdmin)
                 {
-                    await users.AddToRoleAsync(candidate, FoxfireRoles.Admin);
+                    await users.AddToRolesAsync(candidate, [FoxfireRoles.Admin, FoxfireRoles.HeadAdmin]);
                 }
 
                 if (invite is not null)
@@ -177,7 +202,19 @@ internal sealed class RegisterRequestHandler(
 
         logger.LogInformation(
             "Registered {Username} ({Email}){Admin}",
-            username, email, isSeededAdmin ? " as this server's admin" : "");
+            username, email, isSeededAdmin ? " as this server's head admin" : "");
+
+        // After the account is committed rather than inside its transaction: a
+        // link sent for an account that then rolled back would confirm nothing.
+        // Standard mail, not security — twenty sign-ups a minute from one
+        // address is what the rate limit allows, and that must not spend the
+        // allowance a locked-out member's reset needs.
+        if (!user.EmailConfirmed && outbox.IsEnabled)
+        {
+            await AccountEmail.IssueAsync(
+                db, outbox, user, EmailVerificationPurposes.Verify, email, EmailPriority.Standard, now, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         var roles = await users.GetRolesAsync(user);
         var pair = await tokens.IssueAsync(user, roles, request.DeviceLabel, cancellationToken);
@@ -197,8 +234,10 @@ internal sealed class RegisterRequestHandler(
         var invite = await db.Invites.FirstOrDefaultAsync(i => i.Id == verified.InviteId, cancellationToken);
         if (invite is null || !invite.IsOpen(time.GetUtcNow())) return null;
 
-        // The invite is for one address. A link forwarded to somebody else opens
-        // nothing, which is what keeps a leaked link from being an open door.
-        return string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase) ? invite : null;
+        // An invite without an address is for whoever opens it first. One with an
+        // address registers only that address.
+        return invite.Email is null || string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase)
+            ? invite
+            : null;
     }
 }

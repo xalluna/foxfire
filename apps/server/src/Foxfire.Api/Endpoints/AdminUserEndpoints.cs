@@ -14,6 +14,9 @@ namespace Foxfire.Api.Endpoints;
 /// to leave the server without an administrator, because there is no way back
 /// from that through the app — only by editing configuration and restarting,
 /// and a host who has to discover that has already had a bad evening.
+///
+/// The group admits any admin; which of them may act against another admin is
+/// the handlers' to say — see Administrators.
 /// </summary>
 public static class AdminUserEndpoints
 {

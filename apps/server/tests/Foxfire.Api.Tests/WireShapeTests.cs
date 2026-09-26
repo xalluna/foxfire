@@ -216,7 +216,10 @@ public class WireShapeTests(FoxfireServerFixture server)
             $"/api/riot-accounts/{accountId}/matches",
             "/api/admin/users/",
             "/api/admin/invites/used",
-            "/api/admin/storage/replays"
+            "/api/admin/storage/replays",
+            "/api/admin/insights/logs",
+            "/api/admin/email/messages",
+            "/api/admin/email/suppressions"
         ];
 
         foreach (var route in paged)
@@ -232,6 +235,40 @@ public class WireShapeTests(FoxfireServerFixture server)
         // The open invites cannot grow — they expire — so they stay a list.
         var open = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/admin/invites/", UriKind.Relative));
         Assert.Equal(JsonValueKind.Array, open.ValueKind);
+    }
+
+    [Fact]
+    public async Task Who_you_are_and_who_everybody_else_is_carry_the_roles_the_screens_gate_on()
+    {
+        // @foxfire/core SessionUser and AdminUser. A head admin whose flag
+        // arrived as undefined would be shown a plain admin's screens — no
+        // import, no LP on anybody else's games — with nothing to say why.
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var login = await client.PostAsJsonAsync(
+            new Uri("/api/auth/login", UriKind.Relative),
+            new { email = FoxfireServerFixture.AdminEmail, password = FoxfireServerFixture.GoodPassword });
+        var session = await login.Content.ReadFromJsonAsync<JsonElement>();
+
+        AssertHasAll(session.GetProperty("user"), "id", "username", "email", "isAdmin", "isHeadAdmin");
+
+        var members = await client.GetFromJsonAsync<JsonElement>(
+            new Uri($"/api/admin/users/?q={Uri.EscapeDataString(FoxfireServerFixture.AdminEmail)}", UriKind.Relative));
+
+        AssertHasAll(
+            members.GetProperty("items")[0],
+            "id",
+            "username",
+            "email",
+            "isAdmin",
+            "isHeadAdmin",
+            "isConfiguredAdmin",
+            "isDisabled",
+            "createdAt",
+            "linkedRiotAccounts",
+            "activeSessions",
+            "passwordReset");
     }
 
     [Fact]

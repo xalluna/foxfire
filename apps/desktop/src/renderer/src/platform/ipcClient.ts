@@ -68,23 +68,37 @@ export function createIpcClient(api: Api): FoxfireClient {
       : {}),
     assets: api.assets,
 
+    account: {
+      email: api.server.accountEmail,
+      resendEmailConfirmation: api.server.resendEmailConfirmation,
+      cancelEmailChange: api.server.cancelEmailChange
+    },
+
     admin: {
       users: api.serverAdmin.users,
       updateUser: api.serverAdmin.updateUser,
       deleteUser: api.serverAdmin.deleteUser,
-    createPasswordReset: api.serverAdmin.createPasswordReset,
-    revokePasswordReset: api.serverAdmin.revokePasswordReset,
+      createPasswordReset: api.serverAdmin.createPasswordReset,
+      revokePasswordReset: api.serverAdmin.revokePasswordReset,
       openInvites: api.serverAdmin.openInvites,
       usedInvites: api.serverAdmin.usedInvites,
       createInvite: api.serverAdmin.createInvite,
       revokeInvite: api.serverAdmin.revokeInvite,
+      emailInvite: api.serverAdmin.emailInvite,
       getSettings: api.serverAdmin.getSettings,
       setSettings: api.serverAdmin.setSettings,
       storage: api.serverAdmin.storage,
       storedReplays: api.serverAdmin.storedReplays,
       removeReplay: api.serverAdmin.removeReplay,
       forceUnlink: api.serverAdmin.forceUnlink,
-      addRiotAccount: api.serverAdmin.addRiotAccount
+      addRiotAccount: api.serverAdmin.addRiotAccount,
+      insights: api.serverAdmin.insights,
+      serverLogs: api.serverAdmin.serverLogs,
+      emailOverview: api.serverAdmin.emailOverview,
+      emailLog: api.serverAdmin.emailLog,
+      emailSuppressions: api.serverAdmin.emailSuppressions,
+      clearEmailSuppression: api.serverAdmin.clearEmailSuppression,
+      sendTestEmail: api.serverAdmin.sendTestEmail
     },
 
     events: {
@@ -118,7 +132,8 @@ export function connectionFrom(state: ServerState): ConnectionState {
       ? {
           username: state.session.username,
           email: state.session.email,
-          isAdmin: state.session.isAdmin
+          isAdmin: state.session.isAdmin,
+          isHeadAdmin: state.session.isHeadAdmin
         }
       : null,
     riotKeyRejected: state.riotKeyRejected,

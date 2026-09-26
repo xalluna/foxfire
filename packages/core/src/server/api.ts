@@ -1,5 +1,7 @@
 import type {
   Account,
+  AccountEmail,
+  AccountEmailResult,
   AdminActionResult,
   AdminInvite,
   AdminPasswordReset,
@@ -12,6 +14,14 @@ import type {
   ChampionStats,
   DashboardData,
   EditableMatch,
+  EmailLogEntry,
+  EmailLogQuery,
+  EmailOverview,
+  EmailSuppression,
+  EmailSuppressionQuery,
+  InsightsSection,
+  InsightsSections,
+  InsightsWindow,
   ManualRankEdit,
   MasteryData,
   MatchDetail,
@@ -29,6 +39,8 @@ import type {
   Season,
   SeasonInput,
   ServerAdminSettings,
+  ServerLogEntry,
+  ServerLogQuery,
   ServerStorageUsage,
   SyncState
 } from '../types'
@@ -117,6 +129,26 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         ok: false,
         error: err instanceof Error ? err.message : String(err)
       }
+    }
+  }
+
+  /** A read of a route an older server may not have: its 404 is null, anything else still throws. */
+  async function orNullIfMissing<T>(read: () => Promise<T>): Promise<T | null> {
+    try {
+      return await read()
+    } catch (err) {
+      if (err instanceof ServerError && err.status === 404) return null
+      throw err
+    }
+  }
+
+  /** A write about your own address, answered with the address as it now stands or why not. */
+  async function accountEmail(write: () => Promise<AccountEmail>): Promise<AccountEmailResult> {
+    try {
+      return { ok: true, error: null, email: await write() }
+    } catch (err) {
+      if (!(err instanceof ServerError)) log.error('A write to the server failed', err)
+      return { ok: false, error: err instanceof Error ? err.message : String(err), email: null }
     }
   }
 
@@ -435,23 +467,107 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         ),
 
       /**
-       * Creates an invite, or hands back the one already outstanding for that
-       * address.
+       * Creates an invite. Without an address it is a link for whoever opens it
+       * first, and every call makes a new one.
        *
-       * The server does the deduplicating. An admin who cannot remember whether
-       * they already sent one gets the link that is in somebody's inbox rather
-       * than a second one that quietly does nothing.
+       * With an address, the server hands back the invite already outstanding
+       * for it, if there is one. An admin who cannot remember whether they
+       * already made one gets the same link rather than a second one that
+       * quietly does nothing.
        */
-      createInvite: (email: string) =>
-        request<AdminInvite>('/admin/invites/', { method: 'POST', body: { email } }),
+      createInvite: (email?: string) =>
+        request<AdminInvite>('/admin/invites/', { method: 'POST', body: { email: email?.trim() || null } }),
 
       revokeInvite: (id: string) =>
         attempt(() => request<void>(`/admin/invites/${encodeURIComponent(id)}`, { method: 'DELETE' })),
 
+      /** Emails an invite's link to its address, when the invite says it can be. */
+      emailInvite: (id: string) =>
+        attempt(() => request<void>(`/admin/invites/${encodeURIComponent(id)}/email`, { method: 'POST' })),
+
       getSettings: () => request<ServerAdminSettings>('/admin/settings/'),
 
       setSettings: (patch: Partial<ServerAdminSettings>) =>
-        request<ServerAdminSettings>('/admin/settings/', { method: 'PATCH', body: patch })
+        request<ServerAdminSettings>('/admin/settings/', { method: 'PATCH', body: patch }),
+
+      /**
+       * One tab of the insights page, over a window.
+       *
+       * Null from a server too old to have insights, which answers the route
+       * with its JSON 404. A desktop can be newer than the server it is signed
+       * in to, and the page should say to update the server rather than fail.
+       * Only a desktop can meet one: the web client is always served by the
+       * server it talks to.
+       */
+      insights: <S extends InsightsSection>(section: S, window: InsightsWindow) =>
+        orNullIfMissing(() =>
+          request<InsightsSections[S]>(withQuery(`/admin/insights/${section}`, { window }))
+        ),
+
+      /** A page of the server's recent log lines, newest first. Null from a server too old to keep them. */
+      serverLogs: (query: ServerLogQuery = {}) =>
+        orNullIfMissing(() =>
+          request<Page<ServerLogEntry>>(
+            withQuery('/admin/insights/logs', {
+              level: query.level,
+              limit: query.limit,
+              offset: query.offset,
+              before: query.before
+            })
+          )
+        ),
+
+      /**
+       * Where the server's mail stands. Head admins only; null from a server
+       * too old to send mail, whose JSON 404 says so.
+       */
+      emailOverview: () => orNullIfMissing(() => request<EmailOverview>('/admin/email/')),
+
+      emailLog: (query: EmailLogQuery = {}) =>
+        orNullIfMissing(() =>
+          request<Page<EmailLogEntry>>(
+            withQuery('/admin/email/messages', {
+              kind: query.kind,
+              status: query.status,
+              q: query.q?.trim(),
+              limit: query.limit,
+              offset: query.offset
+            })
+          )
+        ),
+
+      emailSuppressions: (query: EmailSuppressionQuery = {}) =>
+        orNullIfMissing(() =>
+          request<Page<EmailSuppression>>(
+            withQuery('/admin/email/suppressions', {
+              q: query.q?.trim(),
+              limit: query.limit,
+              offset: query.offset
+            })
+          )
+        ),
+
+      clearEmailSuppression: (id: string) =>
+        attempt(() =>
+          request<void>(`/admin/email/suppressions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        ),
+
+      sendTestEmail: (to: string) =>
+        attempt(() => request<void>('/admin/email/test', { method: 'POST', body: { to: to.trim() } }))
+    },
+
+    /**
+     * The member's own address. A group of its own on the server, so one older
+     * than mail answers the lot with its JSON 404 — null here, and no banner.
+     */
+    account: {
+      email: () => orNullIfMissing(() => request<AccountEmail>('/account/email/')),
+
+      resendEmailConfirmation: () =>
+        accountEmail(() => request<AccountEmail>('/account/email/confirmation', { method: 'POST' })),
+
+      cancelEmailChange: () =>
+        accountEmail(() => request<AccountEmail>('/account/email/pending', { method: 'DELETE' }))
     },
 
     /** The endpoints an old stats.db is pushed through. See import/statsDbImporter. */

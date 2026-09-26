@@ -60,13 +60,14 @@ public static class DatabasePreparation
     }
 
     /// <summary>
-    /// Makes sure the configured admin email is an admin, if it has registered.
+    /// Makes sure the configured admin email is a head admin, if it has registered.
     ///
-    /// Registration already grants the role, so this is for the cases where that
-    /// is not enough: a host changing Admin__Email to hand the server over, or
-    /// recovering one where somebody removed the last admin. Either way the
-    /// configured address becomes an admin the next time the server starts,
-    /// which makes the config file the final say on who owns the server.
+    /// Registration already grants both roles, so this is for the cases where
+    /// that is not enough: a host changing Admin__Email to hand the server over,
+    /// recovering one where somebody removed the last admin, or a server from
+    /// before there were head admins. Either way the configured address becomes
+    /// a head admin the next time the server starts, which makes the config file
+    /// the final say on who owns the server.
     ///
     /// It deliberately does not create the account. A server cannot invent
     /// somebody's password, and one that pre-created an unclaimed admin would be
@@ -91,10 +92,12 @@ public static class DatabasePreparation
             return;
         }
 
-        if (await users.IsInRoleAsync(user, FoxfireRoles.Admin)) return;
+        var held = await users.GetRolesAsync(user);
+        var missing = FoxfireRoles.All.Where(role => !held.Contains(role)).ToList();
+        if (missing.Count == 0) return;
 
-        await users.AddToRoleAsync(user, FoxfireRoles.Admin);
-        log.LogInformation("Promoted {Email} to admin, per Admin__Email", configured);
+        await users.AddToRolesAsync(user, missing);
+        log.LogInformation("Promoted {Email} to head admin, per Admin__Email", configured);
 
         cancellationToken.ThrowIfCancellationRequested();
     }

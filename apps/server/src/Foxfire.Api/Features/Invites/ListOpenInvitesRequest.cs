@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Email;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,7 @@ public sealed record ListOpenInvitesRequest : IDomainRequest<IReadOnlyList<Invit
 
 internal sealed class ListOpenInvitesRequestHandler(
     FoxfireDbContext db,
+    EmailOutbox outbox,
     IOptions<ServerOptions> server,
     IOptions<AuthOptions> auth,
     TimeProvider time)
@@ -38,7 +40,7 @@ internal sealed class ListOpenInvitesRequestHandler(
             .ThenBy(i => i.Id)
             .ToListAsync(cancellationToken);
 
-        return Response<IReadOnlyList<InviteResponse>>.Success(
-            [.. invites.Select(i => InviteLookup.Describe(i, server.Value, auth.Value, now))]);
+        return Response<IReadOnlyList<InviteResponse>>.Success(await InviteLookup.DescribeWithMailAsync(
+            invites, db, outbox.IsEnabled, server.Value, auth.Value, now, cancellationToken));
     }
 }

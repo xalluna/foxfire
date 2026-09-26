@@ -34,6 +34,11 @@ export interface ServerDataPageProps {
      * running — so the newest games can be missing, and the page says so.
      */
     inBrowser?: boolean
+    /**
+     * Why this person cannot import, when they cannot — a plain admin, where
+     * importing is a head admin's. Shown in place of the button.
+     */
+    blockedReason?: string
   }
 
   storage: ServerStorageUsage | undefined
@@ -112,7 +117,7 @@ export function ServerDataPage({
             + 'imported over itself.'
           }
         >
-          {importer.inBrowser && (
+          {importer.inBrowser && !importer.blockedReason && (
             <StatusRow tone="mute">
               A browser reads only the file you choose, not the changes Foxfire keeps beside it while it
               is running. Close Foxfire on that PC first — or import from the desktop app — or the newest
@@ -120,17 +125,21 @@ export function ServerDataPage({
             </StatusRow>
           )}
 
-          <SettingsBlock>
-            <button
-              type="button"
-              className={primaryButtonClass}
-              onClick={importer.onStart}
-              disabled={importer.running}
-            >
-              <Icon.Inbox width={14} height={14} />
-              {importer.running ? 'Importing…' : 'Choose a database…'}
-            </button>
-          </SettingsBlock>
+          {importer.blockedReason ? (
+            <StatusRow tone="mute">{importer.blockedReason}</StatusRow>
+          ) : (
+            <SettingsBlock>
+              <button
+                type="button"
+                className={primaryButtonClass}
+                onClick={importer.onStart}
+                disabled={importer.running}
+              >
+                <Icon.Inbox width={14} height={14} />
+                {importer.running ? 'Importing…' : 'Choose a database…'}
+              </button>
+            </SettingsBlock>
+          )}
 
           {importer.progress && <ProgressRow progress={importer.progress} />}
           {importer.result && <ResultRows result={importer.result} />}
