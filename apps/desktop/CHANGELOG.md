@@ -11,7 +11,7 @@ changes you would never notice while using the app.
 
 Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
 who imports; an admin who is not one sees why rather than buttons the server would refuse. Needs
-Foxfire Server 0.5.0.
+Foxfire Server 0.5.0. A profile's "Last games" figures are set like every other number, too.
 
 ### Added
 
@@ -29,6 +29,9 @@ Foxfire Server 0.5.0.
   The server's configured head admin offers nobody those buttons, and says why.
 - **Importing a database is a head admin's.** A plain admin sees the Import card with the reason
   in place of the button.
+- The win rate and the win–loss record in the "Last games" summary are set in the same typeface as
+  every other number in the app, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
 
 ### Under the hood
 

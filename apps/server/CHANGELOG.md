@@ -19,7 +19,8 @@ other admin, including whoever owns the server — and nobody at all could fix a
 figure somebody else had typed wrong. Now there is a head admin above the rest:
 the account in `ADMIN_EMAIL` always is one, and it can make others. Head admins
 import, can type LP on anybody's games, and are the only ones who can act against
-another admin. Serves Foxfire 0.15 and newer.
+another admin. Serves Foxfire 0.15 and newer. A profile's "Last games" figures
+are set like every other number, too.
 
 ### Added
 
@@ -50,6 +51,9 @@ another admin. Serves Foxfire 0.15 and newer.
   password.
 - **Only a head admin can move onto the `ADMIN_EMAIL` address**, since holding it
   makes a head admin at the next restart.
+- The win rate and the win–loss record in a profile's "Last games" summary are set in the same
+  typeface as every other number, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
 
 ### Under the hood
 
