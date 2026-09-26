@@ -7,14 +7,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Features.Invites;
 
 /// <summary>An invite as an admin sees it.</summary>
+/// <param name="Email">Who it was made for, when the admin gave an address.</param>
 /// <param name="Link">
-/// The whole point of the admin-facing shape. SMTP is optional here, so every
-/// link the server would have emailed is also readable and copyable — a host
-/// with no working mail pastes it into Discord instead.
+/// The whole point of the admin-facing shape. Foxfire sends no mail, so the link
+/// is how an invite travels: the admin copies it and pastes it into Discord, or
+/// wherever their community talks.
 /// </param>
 public sealed record InviteResponse(
     Guid Id,
-    string Email,
+    string? Email,
     string Link,
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt,

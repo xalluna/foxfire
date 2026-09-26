@@ -293,7 +293,7 @@ public sealed record VersionInfo(
 /// <summary>An invite, as an admin sees it.</summary>
 public sealed record InviteInfo(
     Guid Id,
-    string Email,
+    string? Email,
     string Link,
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt,

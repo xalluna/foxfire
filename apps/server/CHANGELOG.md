@@ -19,8 +19,10 @@ other admin, including whoever owns the server — and nobody at all could fix a
 figure somebody else had typed wrong. Now there is a head admin above the rest:
 the account in `ADMIN_EMAIL` always is one, and it can make others. Head admins
 import, can type LP on anybody's games, and are the only ones who can act against
-another admin. Serves Foxfire 0.15 and newer. A profile's "Last games" figures
-are set like every other number, too.
+another admin. And an invite is a link now, with no email address needed to
+make one — Foxfire sends no mail, so the address was only ever in the way of
+pasting a link into Discord. Serves Foxfire 0.15 and newer. A profile's "Last
+games" figures are set like every other number, too.
 
 ### Added
 
@@ -51,6 +53,12 @@ are set like every other number, too.
   password.
 - **Only a head admin can move onto the `ADMIN_EMAIL` address**, since holding it
   makes a head admin at the next restart.
+- **An invite no longer needs an email address.** *Create invite link* gives you
+  a link to paste into Discord or anywhere else, and it signs up whoever opens it
+  first. You can still add an address: their sign-up form fills it in, and only
+  that address can register with the link. Links without one are labelled by when
+  they were made, and every outstanding invite now says when it was created as
+  well as when it expires.
 - The win rate and the win–loss record in a profile's "Last games" summary are set in the same
   typeface as every other number, rather than the one used for headings. That typeface's numerals
   made "11W" read as "llW", and made the block look like it came from somewhere else.
@@ -64,6 +72,12 @@ are set like every other number, too.
 - The log names who acted on the lines that did not: an import, removing a
   member, and a head admin typing or clearing LP on somebody else's account.
   Role changes read "made … an admin / a head admin / a member".
+- `Invites.Email` is nullable (migration `InviteEmailOptional`), and
+  `POST /api/admin/invites` takes `{ email: null }` or no email at all. An invite
+  with an address still hands back the one already outstanding for it; invites
+  without one are never merged. The response's `email` is null for them, which a
+  0.15 desktop shows as a row with no title.
+- Creating and withdrawing an invite are logged, by whom and which invite.
 
 ## [0.4.0] — 2026-09-24
 

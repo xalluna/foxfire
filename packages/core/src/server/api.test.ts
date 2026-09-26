@@ -152,6 +152,26 @@ describe('createServerApi', () => {
     ])
   })
 
+  it('makes an invite without an address when none is given', async () => {
+    const { calls, request } = recorder()
+    const api = createServerApi(request)
+
+    await api.admin.createInvite()
+    await api.admin.createInvite('   ')
+    await api.admin.createInvite(' sam@example.com ')
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'POST /admin/invites/',
+      'POST /admin/invites/',
+      'POST /admin/invites/'
+    ])
+    expect(calls.map((c) => c.body)).toEqual([
+      { email: null },
+      { email: null },
+      { email: 'sam@example.com' }
+    ])
+  })
+
   it('asks for the replay library a page at a time', async () => {
     const { calls, request } = recorder(() => ({ items: [], total: 0 }))
     const api = createServerApi(request)

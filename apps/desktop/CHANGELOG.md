@@ -10,8 +10,9 @@ changes you would never notice while using the app.
 ## [0.16.0] — 2026-09-26
 
 Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
-who imports; an admin who is not one sees why rather than buttons the server would refuse. Needs
-Foxfire Server 0.5.0. A profile's "Last games" figures are set like every other number, too.
+who imports; an admin who is not one sees why rather than buttons the server would refuse. And an
+invite is a link now, with no email address needed to make one. Needs Foxfire Server 0.5.0. A
+profile's "Last games" figures are set like every other number, too.
 
 ### Added
 
@@ -29,6 +30,11 @@ Foxfire Server 0.5.0. A profile's "Last games" figures are set like every other 
   The server's configured head admin offers nobody those buttons, and says why.
 - **Importing a database is a head admin's.** A plain admin sees the Import card with the reason
   in place of the button.
+- **An invite no longer needs an email address.** In Settings › Invites, *Create invite link* gives
+  you a link to paste into Discord or anywhere else, and it signs up whoever opens it first. You can
+  still add an address: their sign-up form fills it in, and only that address can register with the
+  link. Links without one are labelled by when they were made, and every outstanding invite now says
+  when it was created as well as when it expires.
 - The win rate and the win–loss record in the "Last games" summary are set in the same typeface as
   every other number in the app, rather than the one used for headings. That typeface's numerals
   made "11W" read as "llW", and made the block look like it came from somewhere else.

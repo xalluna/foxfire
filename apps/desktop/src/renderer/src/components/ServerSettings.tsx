@@ -192,9 +192,9 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
     const preview = await window.api.server.previewInvite(probe.url, value)
     setInvitePreview(preview)
-    // The invite names the address it was sent to, and registering with any
-    // other one is refused. Filling it in is the difference between working
-    // and a rejection nobody can explain.
+    // An invite made for an address registers only that address. Filling it in
+    // is the difference between working and a rejection nobody can explain.
+    // Most invites name nobody, and then the field is left for them to fill.
     if (preview.usable && preview.email) setEmail(preview.email)
   }
 

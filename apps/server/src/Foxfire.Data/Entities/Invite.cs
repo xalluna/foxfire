@@ -14,9 +14,9 @@ namespace Foxfire.Data.Entities;
 /// link be clicked any number of times and still complete exactly one
 /// registration — the refusal comes from RedeemedByUserId, not from the token.
 ///
-/// The email is here rather than in the token because tokens travel in URLs, and
-/// URLs end up in browser history, referrer headers, chat previews and access
-/// logs. The server reads it off this row instead.
+/// The email, when there is one, is here rather than in the token because tokens
+/// travel in URLs, and URLs end up in browser history, referrer headers, chat
+/// previews and access logs. The server reads it off this row instead.
 ///
 /// An invite is not deleted when it is spent. The admin list wants to show who
 /// took which invite, and a deleted row would make a used link indistinguishable
@@ -27,10 +27,16 @@ public sealed class Invite
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Who it was meant for. Registration must match it, so a leaked link opens
-    /// nothing for anybody else.
+    /// Who it was meant for, when the admin said. Null is the usual case: Foxfire
+    /// sends no mail, so an invite is a link somebody pastes into Discord, and it
+    /// registers whoever opens it first.
+    ///
+    /// With an address, registration must use it. That is mostly a convenience
+    /// rather than a lock — the preview tells anybody holding the link which
+    /// address it names, so it fills the form in for them — but it does mean the
+    /// account ends up with the address the admin expected.
     /// </summary>
-    public required string Email { get; set; }
+    public string? Email { get; set; }
 
     /// <summary>The admin who created it. Null once that admin is deleted.</summary>
     public Guid? CreatedByUserId { get; set; }
@@ -83,10 +89,10 @@ internal sealed class InviteConfiguration : IEntityTypeConfiguration<Invite>
     public void Configure(EntityTypeBuilder<Invite> builder)
     {
         builder.HasKey(i => i.Id);
-        builder.Property(i => i.Email).HasMaxLength(256).IsRequired();
+        builder.Property(i => i.Email).HasMaxLength(256);
 
-        // The admin list opens on outstanding invites for an address, and
-        // registration looks one up by the email it was offered.
+        // Asking again for an address hands back the invite already
+        // outstanding for it, which looks it up by email.
         builder.HasIndex(i => i.Email);
 
         // Deleting an admin must not take their invites with them, and
