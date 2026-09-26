@@ -137,7 +137,7 @@ internal sealed class RegisterRequestHandler(
 
                 if (isSeededAdmin)
                 {
-                    await users.AddToRoleAsync(candidate, FoxfireRoles.Admin);
+                    await users.AddToRolesAsync(candidate, [FoxfireRoles.Admin, FoxfireRoles.HeadAdmin]);
                 }
 
                 if (invite is not null)
@@ -177,7 +177,7 @@ internal sealed class RegisterRequestHandler(
 
         logger.LogInformation(
             "Registered {Username} ({Email}){Admin}",
-            username, email, isSeededAdmin ? " as this server's admin" : "");
+            username, email, isSeededAdmin ? " as this server's head admin" : "");
 
         var roles = await users.GetRolesAsync(user);
         var pair = await tokens.IssueAsync(user, roles, request.DeviceLabel, cancellationToken);
@@ -197,8 +197,10 @@ internal sealed class RegisterRequestHandler(
         var invite = await db.Invites.FirstOrDefaultAsync(i => i.Id == verified.InviteId, cancellationToken);
         if (invite is null || !invite.IsOpen(time.GetUtcNow())) return null;
 
-        // The invite is for one address. A link forwarded to somebody else opens
-        // nothing, which is what keeps a leaked link from being an open door.
-        return string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase) ? invite : null;
+        // An invite without an address is for whoever opens it first. One with an
+        // address registers only that address.
+        return invite.Email is null || string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase)
+            ? invite
+            : null;
     }
 }

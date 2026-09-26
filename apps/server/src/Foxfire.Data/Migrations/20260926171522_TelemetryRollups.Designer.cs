@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Foxfire.Data.Migrations
 {
     [DbContext(typeof(FoxfireDbContext))]
-    [Migration("20260926163556_TelemetryRollups")]
+    [Migration("20260926171522_TelemetryRollups")]
     partial class TelemetryRollups
     {
         /// <inheritdoc />
@@ -132,7 +132,6 @@ namespace Foxfire.Data.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 

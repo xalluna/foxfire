@@ -450,15 +450,16 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
         ),
 
       /**
-       * Creates an invite, or hands back the one already outstanding for that
-       * address.
+       * Creates an invite. Without an address it is a link for whoever opens it
+       * first, and every call makes a new one.
        *
-       * The server does the deduplicating. An admin who cannot remember whether
-       * they already sent one gets the link that is in somebody's inbox rather
-       * than a second one that quietly does nothing.
+       * With an address, the server hands back the invite already outstanding
+       * for it, if there is one. An admin who cannot remember whether they
+       * already made one gets the same link rather than a second one that
+       * quietly does nothing.
        */
-      createInvite: (email: string) =>
-        request<AdminInvite>('/admin/invites/', { method: 'POST', body: { email } }),
+      createInvite: (email?: string) =>
+        request<AdminInvite>('/admin/invites/', { method: 'POST', body: { email: email?.trim() || null } }),
 
       revokeInvite: (id: string) =>
         attempt(() => request<void>(`/admin/invites/${encodeURIComponent(id)}`, { method: 'DELETE' })),

@@ -79,7 +79,16 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       mode: 'server',
       publicUrl: version?.publicUrl ?? null,
       serverName: version?.serverName ?? null,
-      session: user ? { username: user.username, email: user.email, isAdmin: user.isAdmin } : null,
+      session: user
+        ? {
+            username: user.username,
+            email: user.email,
+            isAdmin: user.isAdmin,
+            // Absent from a session a page kept from before there were head
+            // admins, until its next renewal.
+            isHeadAdmin: user.isHeadAdmin ?? false
+          }
+        : null,
       riotKeyRejected,
       upgradeRequired: upgradeRequired ? 'reload' : null
     }

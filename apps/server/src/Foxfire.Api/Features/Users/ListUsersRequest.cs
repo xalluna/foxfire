@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Features.Account;
 using Foxfire.Api.Features.PasswordResets;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -9,6 +10,12 @@ using Microsoft.Extensions.Options;
 namespace Foxfire.Api.Features.Users;
 
 /// <summary>Somebody on this server, as an admin sees them.</summary>
+/// <param name="IsHeadAdmin">An admin who may also act against other admins. Always an admin too.</param>
+/// <param name="IsConfiguredAdmin">
+/// The account in Admin__Email. Nobody can demote, disable or remove it from
+/// the app, so the page offers none of those rather than a button that is
+/// always refused.
+/// </param>
 /// <param name="IsDisabled">Locked out with no end date. They cannot sign in; nothing of theirs is gone.</param>
 /// <param name="LinkedRiotAccounts">How many League accounts they have claimed.</param>
 /// <param name="ActiveSessions">Live refresh tokens — roughly, machines signed in.</param>
@@ -16,13 +23,17 @@ namespace Foxfire.Api.Features.Users;
 /// The reset link outstanding for them, or null. It is here rather than behind
 /// a route of its own so that the list can say who is waiting on one, and so
 /// that the admin who made a link an hour ago can copy it again without having
-/// to make a new one.
+/// to make a new one. Null on another admin's row unless a head admin is
+/// asking: the link hands the account to whoever holds it, and making one for
+/// an admin is a head admin's for exactly that reason.
 /// </param>
 public sealed record AdminUserResponse(
     Guid Id,
     string Username,
     string Email,
     bool IsAdmin,
+    bool IsHeadAdmin,
+    bool IsConfiguredAdmin,
     bool IsDisabled,
     DateTimeOffset CreatedAt,
     int LinkedRiotAccounts,
@@ -47,6 +58,8 @@ internal sealed class ListUsersRequestHandler(
     FoxfireDbContext db,
     IOptions<ServerOptions> server,
     IOptions<AuthOptions> auth,
+    IOptions<AdminOptions> admin,
+    IIdentityContext me,
     TimeProvider time)
     : IDomainRequestHandler<ListUsersRequest, Page<AdminUserResponse>>
 {
@@ -59,10 +72,12 @@ internal sealed class ListUsersRequestHandler(
         var now = time.GetUtcNow();
         var needle = (request.Q ?? "").Trim().ToLowerInvariant();
 
-        var adminRoleId = await db.Roles
-            .Where(r => r.Name == FoxfireRoles.Admin)
-            .Select(r => r.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        var roleIds = await db.Roles
+            .Where(r => r.Name == FoxfireRoles.Admin || r.Name == FoxfireRoles.HeadAdmin)
+            .ToDictionaryAsync(r => r.Name!, r => r.Id, cancellationToken);
+
+        var adminRoleId = roleIds.GetValueOrDefault(FoxfireRoles.Admin);
+        var headAdminRoleId = roleIds.GetValueOrDefault(FoxfireRoles.HeadAdmin);
 
         var matching = db.Users.AsQueryable();
 
@@ -77,7 +92,7 @@ internal sealed class ListUsersRequestHandler(
 
         // The id breaks ties so a page boundary cannot fall between two rows
         // the database would order differently next time. EF counts the filter
-        // alone; the three subqueries per row run for the page and no further.
+        // alone; the subqueries per row run for the page and no further.
         var users = await matching
             .OrderBy(u => u.UserName)
             .ThenBy(u => u.Id)
@@ -86,6 +101,8 @@ internal sealed class ListUsersRequestHandler(
                 u.UserName ?? "",
                 u.Email ?? "",
                 db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == adminRoleId),
+                db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == headAdminRoleId),
+                false,
                 u.LockoutEnd != null && u.LockoutEnd > now,
                 u.CreatedAt,
                 db.RiotAccounts.Count(a => a.OwnerId == u.Id),
@@ -110,9 +127,19 @@ internal sealed class ListUsersRequestHandler(
             .GroupBy(r => r.UserId)
             .ToDictionary(group => group.Key, group => group.First());
 
-        var described = users.Map(user => links.TryGetValue(user.Id, out var reset)
-            ? user with { PasswordReset = PasswordResetLookup.Describe(reset, server.Value, auth.Value) }
-            : user);
+        // Which one is the configured admin is a comparison with configuration,
+        // not a column, so it is made here as well.
+        var seesEveryLink = me.IsInRole(FoxfireRoles.HeadAdmin);
+
+        var described = users.Map(user =>
+        {
+            var marked = user with { IsConfiguredAdmin = Accounts.IsConfiguredAdmin(user.Email, admin.Value.Email) };
+            var shown = seesEveryLink || !user.IsAdmin || user.Id == me.UserId;
+
+            return shown && links.TryGetValue(user.Id, out var reset)
+                ? marked with { PasswordReset = PasswordResetLookup.Describe(reset, server.Value, auth.Value) }
+                : marked;
+        });
 
         return Response<Page<AdminUserResponse>>.Success(described);
     }

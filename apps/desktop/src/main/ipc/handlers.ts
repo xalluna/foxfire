@@ -188,7 +188,7 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle(CH.serverAdmin.openInvites, () => listOpenInvites())
   ipcMain.handle(CH.serverAdmin.usedInvites, (_e, page?: PageOptions) => listUsedInvites(page))
-  ipcMain.handle(CH.serverAdmin.createInvite, (_e, email: string) => createInvite(email))
+  ipcMain.handle(CH.serverAdmin.createInvite, (_e, email?: string) => createInvite(email))
   ipcMain.handle(CH.serverAdmin.revokeInvite, (_e, id: string) => revokeInvite(id))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
   ipcMain.handle(CH.serverAdmin.storage, () => getStorageUsage())

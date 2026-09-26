@@ -12,10 +12,16 @@ namespace Foxfire.Api.Common;
 /// every member, so a read has nothing to check beyond being signed in. Writes
 /// do, and they all check the same thing.
 ///
-/// Admins are deliberately not special-cased. An admin typing somebody else's
-/// LP or spending the community's Riot budget on their behalf is not a power
-/// anyone asked for; every other admin ability is about people and access
-/// rather than about other people's data.
+/// Admins are deliberately not special-cased. An admin spending the
+/// community's Riot budget on somebody's behalf, or recording a reading for an
+/// account they do not play, is not a power anyone asked for; every other admin
+/// ability is about people and access rather than about other people's data.
+///
+/// Head admins typing LP are the one exception, and RankWritableAsync is the
+/// whole of it. A figure somebody typed wrong, or never typed, sits on their
+/// history until they come back to fix it; the few people trusted with the
+/// import — which writes everybody's history at once — are trusted to correct
+/// one game of it.
 ///
 /// Starting a sync stopped coming through here, and that is the one deliberate
 /// exception. An account an admin added has no owner to refresh it, nothing on
@@ -50,5 +56,27 @@ public sealed class AccountOwnership(FoxfireDbContext db, IIdentityContext me)
 
         return await db.RiotAccounts
             .FirstOrDefaultAsync(a => a.Id == riotAccountId && a.OwnerId == userId, cancellationToken);
+    }
+
+    /// <summary>
+    /// The Riot account, if the caller may type or clear LP on it: its owner,
+    /// or a head admin — on anybody's account, claimed or not. Null covers
+    /// both refusals, as MineAsync's does.
+    /// </summary>
+    public async Task<RiotAccount?> RankWritableAsync(
+        Guid riotAccountId,
+        CancellationToken cancellationToken = default)
+    {
+        if (me.UserId is null) return null;
+        if (!me.IsInRole(FoxfireRoles.HeadAdmin)) return await MineAsync(riotAccountId, cancellationToken);
+
+        return await db.RiotAccounts.FirstOrDefaultAsync(a => a.Id == riotAccountId, cancellationToken);
+    }
+
+    /// <summary>Whether the caller owns this account, rather than writing to it as a head admin.</summary>
+    public bool Owns(RiotAccount account)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        return me.UserId is { } userId && account.OwnerId == userId;
     }
 }

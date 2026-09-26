@@ -73,6 +73,12 @@ export interface SessionUser {
   username: string
   email: string
   isAdmin: boolean
+  /**
+   * An admin who may also import, type LP on anybody's account, and demote,
+   * disable, remove or make a reset link for another admin. Always an admin as
+   * well. Optional only because a session kept from an older server lacks it.
+   */
+  isHeadAdmin?: boolean
 }
 
 /**
@@ -230,6 +236,14 @@ export interface AdminUser {
   username: string
   email: string
   isAdmin: boolean
+  /** Also an admin; may act against other admins. */
+  isHeadAdmin: boolean
+  /**
+   * The account the server's configuration names as its admin. Nobody can
+   * demote, disable or remove it from the app — the server refuses — so the
+   * page offers none of those for it.
+   */
+  isConfiguredAdmin: boolean
   /** Cannot sign in. Nothing of theirs is deleted. */
   isDisabled: boolean
   createdAt: string
@@ -269,20 +283,30 @@ export interface AdminUserQuery extends PageOptions {
   q?: string
 }
 
-/** What to change about somebody. Undefined leaves a field alone. */
+/**
+ * What to change about somebody. Undefined leaves a field alone.
+ *
+ * The roles nest: `isHeadAdmin: true` makes an admin too, and `isAdmin: false`
+ * takes head admin with it. Both are a head admin's to change on another admin.
+ */
 export interface AdminUserPatch {
   isAdmin?: boolean
+  isHeadAdmin?: boolean
   isDisabled?: boolean
 }
 
 /** An invite, with the link an admin can copy. */
 export interface AdminInvite {
   id: string
-  email: string
   /**
-   * The whole point of the admin-facing shape. SMTP is optional, so every link
-   * the server would have emailed is also copyable — paste it wherever your
-   * community actually talks.
+   * Who it was made for, when the admin gave an address. Null for a link that
+   * registers whoever opens it first — the usual kind, since Foxfire sends no
+   * mail.
+   */
+  email: string | null
+  /**
+   * The whole point of the admin-facing shape. Foxfire sends no mail, so this is
+   * how an invite travels — paste it wherever your community actually talks.
    */
   link: string
   createdAt: string

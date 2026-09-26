@@ -98,7 +98,7 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           control={
             session.isAdmin ? (
               <span className="rounded border border-accent-dim/40 bg-accent/10 px-2 py-0.5 text-2xs text-accent">
-                Administrator
+                {session.isHeadAdmin ? 'Head admin' : 'Administrator'}
               </span>
             ) : undefined
           }
@@ -192,9 +192,9 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
 
     const preview = await window.api.server.previewInvite(probe.url, value)
     setInvitePreview(preview)
-    // The invite names the address it was sent to, and registering with any
-    // other one is refused. Filling it in is the difference between working
-    // and a rejection nobody can explain.
+    // An invite made for an address registers only that address. Filling it in
+    // is the difference between working and a rejection nobody can explain.
+    // Most invites name nobody, and then the field is left for them to fill.
     if (preview.usable && preview.email) setEmail(preview.email)
   }
 

@@ -94,16 +94,17 @@ public class AuthTests(FoxfireServerFixture server)
     private static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
 
     [Fact]
-    public async Task The_configured_admin_email_is_an_admin()
+    public async Task The_configured_admin_email_is_a_head_admin()
     {
-        // However it got there. Registration grants the role, and startup
-        // re-grants it to whatever Admin__Email currently names — which is what
+        // However it got there. Registration grants both roles, and startup
+        // re-grants them to whatever Admin__Email currently names — which is what
         // makes the config file the final say on who owns a server, and what
         // lets a host recover one whose last admin deleted themselves.
         var (client, session) = await server.AdminAsync();
         using var _ = client;
 
         Assert.True(session.User.IsAdmin);
+        Assert.True(session.User.IsHeadAdmin);
         Assert.Equal(FoxfireServerFixture.AdminEmail, session.User.Email);
     }
 
@@ -115,6 +116,17 @@ public class AuthTests(FoxfireServerFixture server)
         var session = await server.RegisterAsync(client, "Ordinary", $"{Unique("ordinary")}@example.com");
 
         Assert.False(session.User.IsAdmin);
+        Assert.False(session.User.IsHeadAdmin);
+    }
+
+    [Fact]
+    public async Task A_promoted_admin_is_not_a_head_admin()
+    {
+        var (client, session) = await server.PlainAdminAsync("Promotee");
+        using var _ = client;
+
+        Assert.True(session.User.IsAdmin);
+        Assert.False(session.User.IsHeadAdmin);
     }
 
     [Fact]
@@ -318,7 +330,7 @@ public class InviteTests(FoxfireServerFixture server)
 
     private async Task<HttpClient> AdminAsync() => (await server.AdminAsync()).Client;
 
-    private static async Task<InviteInfo> CreateInviteAsync(HttpClient admin, string email)
+    private static async Task<InviteInfo> CreateInviteAsync(HttpClient admin, string? email)
     {
         var response = await admin.PostAsJsonAsync(new Uri("/api/admin/invites/", UriKind.Relative), new { email });
         response.EnsureSuccessStatusCode();
@@ -346,6 +358,59 @@ public class InviteTests(FoxfireServerFixture server)
         Assert.Contains("/invite/", invite.Link, StringComparison.Ordinal);
         Assert.True(invite.IsOpen);
         Assert.Null(invite.RedeemedAt);
+    }
+
+    [Fact]
+    public async Task An_invite_needs_no_address()
+    {
+        // Foxfire sends no mail, so an address is only ever a label. What an
+        // admin needs is a link to paste into Discord, without making one up.
+        using var admin = await AdminAsync();
+
+        var response = await admin.PostAsJsonAsync(new Uri("/api/admin/invites/", UriKind.Relative), new { });
+        response.EnsureSuccessStatusCode();
+        var invite = (await response.Content.ReadFromJsonAsync<InviteInfo>())!;
+
+        Assert.Null(invite.Email);
+        Assert.Contains("/invite/", invite.Link, StringComparison.Ordinal);
+        Assert.True(invite.IsOpen);
+    }
+
+    [Fact]
+    public async Task A_blank_address_makes_a_link_rather_than_a_refusal()
+    {
+        using var admin = await AdminAsync();
+
+        var invite = await CreateInviteAsync(admin, "   ");
+
+        Assert.Null(invite.Email);
+    }
+
+    [Fact]
+    public async Task Something_that_is_not_an_address_is_still_refused()
+    {
+        using var admin = await AdminAsync();
+
+        var response = await admin.PostAsJsonAsync(
+            new Uri("/api/admin/invites/", UriKind.Relative),
+            new { email = "sam" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("invalid_email", error?.Error);
+    }
+
+    [Fact]
+    public async Task Links_without_an_address_are_never_merged()
+    {
+        // Each one is for a different somebody. Asking twice means two people.
+        using var admin = await AdminAsync();
+
+        var first = await CreateInviteAsync(admin, null);
+        var second = await CreateInviteAsync(admin, null);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.NotEqual(first.Token, second.Token);
     }
 
     [Fact]
@@ -394,6 +459,51 @@ public class InviteTests(FoxfireServerFixture server)
             new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
 
         Assert.Equal(email, preview?.Email);
+    }
+
+    [Fact]
+    public async Task A_link_without_an_address_names_nobody()
+    {
+        using var admin = await AdminAsync();
+        var invite = await CreateInviteAsync(admin, null);
+
+        using var anyone = server.AnonymousClient();
+        var preview = await anyone.GetFromJsonAsync<InvitePreview>(
+            new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
+
+        Assert.True(preview?.Usable);
+        Assert.Null(preview?.Email);
+    }
+
+    [Fact]
+    public async Task A_link_without_an_address_registers_whoever_opens_it_once()
+    {
+        using var admin = await AdminAsync();
+        var invite = await CreateInviteAsync(admin, null);
+        await SetPublicSignupAsync(admin, false);
+
+        try
+        {
+            using var client = server.Client();
+
+            var first = await client.PostAsJsonAsync(
+                new Uri("/api/auth/register", UriKind.Relative),
+                new { username = "Linked", email = $"{Unique("whoever")}@example.com", password = FoxfireServerFixture.GoodPassword, inviteToken = invite.Token });
+
+            Assert.True(first.IsSuccessStatusCode);
+
+            var second = await client.PostAsJsonAsync(
+                new Uri("/api/auth/register", UriKind.Relative),
+                new { username = "SecondLink", email = $"{Unique("also")}@example.com", password = FoxfireServerFixture.GoodPassword, inviteToken = invite.Token });
+
+            Assert.Equal(HttpStatusCode.Forbidden, second.StatusCode);
+            var error = await second.Content.ReadFromJsonAsync<ApiError>();
+            Assert.Equal("invite_required", error?.Error);
+        }
+        finally
+        {
+            await SetPublicSignupAsync(admin, true);
+        }
     }
 
     [Fact]

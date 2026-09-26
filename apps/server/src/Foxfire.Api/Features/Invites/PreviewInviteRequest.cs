@@ -13,9 +13,10 @@ public sealed record InvitePreviewResponse(bool Usable, string ServerName, strin
 ///
 /// The email is given back here, unlike anywhere else, and only on a token that
 /// verified against this server's signing key. Somebody holding a valid invite
-/// already knows the address it was sent to — it is theirs — and the desktop
-/// needs it to prefill the form so nobody registers with the wrong one and is
-/// refused for reasons it cannot explain.
+/// was given the address it names along with it, and the sign-up form needs it
+/// to prefill so nobody registers with the wrong one and is refused for reasons
+/// it cannot explain. Most invites name no address, and then it is null and the
+/// form asks.
 /// </summary>
 public sealed record PreviewInviteRequest(string Token) : IDomainRequest<InvitePreviewResponse>;
 

@@ -213,9 +213,9 @@ function runFakeSync(accountId: string): void {
  * Where the harness says its data comes from.
  *
  * Local-only by default, which is the desktop's ordinary state. The server
- * scenarios are the connected shapes: an admin on a healthy server, a server
- * whose own Riot key has expired, and a server that has been upgraded past
- * this client.
+ * scenarios are the connected shapes: the head admin on a healthy server, a
+ * plain admin on one, a server whose own Riot key has expired, and a server that
+ * has been upgraded past this client.
  */
 const connection: ConnectionState =
   scenario === 'server-connected' || scenario === 'server-degraded' || scenario === 'insights-unsupported'
@@ -223,27 +223,68 @@ const connection: ConnectionState =
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
         serverName: 'The Fox Den',
-        session: { username: 'Faker', email: 'faker@example.com', isAdmin: true },
+        session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
         riotKeyRejected: scenario === 'server-degraded',
         upgradeRequired: null
       }
-    : scenario === 'server-outdated'
+    : scenario === 'server-admin'
       ? {
           mode: 'server',
           publicUrl: MOCK_SERVER_URL,
           serverName: 'The Fox Den',
-          session: { username: 'Faker', email: 'faker@example.com', isAdmin: false },
-          riotKeyRejected: false,
-          upgradeRequired: '0.14.0'
-        }
-      : {
-          mode: 'local',
-          publicUrl: null,
-          serverName: null,
-          session: null,
+          session: { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false },
           riotKeyRejected: false,
           upgradeRequired: null
         }
+      : scenario === 'server-outdated'
+        ? {
+            mode: 'server',
+            publicUrl: MOCK_SERVER_URL,
+            serverName: 'The Fox Den',
+            session: { username: 'Faker', email: 'faker@example.com', isAdmin: false, isHeadAdmin: false },
+            riotKeyRejected: false,
+            upgradeRequired: '0.14.0'
+          }
+        : {
+            mode: 'local',
+            publicUrl: null,
+            serverName: null,
+            session: null,
+            riotKeyRejected: false,
+            upgradeRequired: null
+          }
+
+/**
+ * Why the person signed in may not do this to somebody, as the server words
+ * it, or null when they may. The harness refuses what the server refuses, so
+ * the page shows the message rather than reaching a state the real thing
+ * forbids.
+ */
+function mockRefusal(target: AdminUser | undefined, change: AdminUserPatch | 'delete' | 'reset'): string | null {
+  if (!target) return null
+  const me = connection.session
+  const isYou = me?.email === target.email
+  const patch = typeof change === 'string' ? {} : change
+
+  const demoting = patch.isAdmin === false || patch.isHeadAdmin === false
+  const disabling = patch.isDisabled === true
+
+  if (target.isConfiguredAdmin && (demoting || disabling || change === 'delete')) {
+    const verb = change === 'delete' ? 'removed' : demoting ? 'demoted' : 'disabled'
+    return `${target.username} is the head admin this server's configuration names, so they cannot be ${verb} from here. Change Admin__Email and restart the server to hand it to somebody else.`
+  }
+
+  if (me?.isHeadAdmin) return null
+  if (patch.isHeadAdmin !== undefined) {
+    return 'Only a head admin can make somebody a head admin, or stop them being one.'
+  }
+  if (!target.isAdmin || isYou) return null
+  if (change === 'delete') return 'Only a head admin can remove another admin.'
+  if (change === 'reset') return 'Only a head admin can make a reset link for another admin.'
+  if (demoting) return 'Only a head admin can demote another admin.'
+  if (disabling) return 'Only a head admin can disable another admin.'
+  return null
+}
 
 /**
  * The shared replay library, biggest first — which is the order the panel
@@ -288,7 +329,8 @@ const MOCK_STORED_REPLAYS: AdminReplay[] = [
  *
  * Mutable, so the management page behaves: promote somebody and the badge
  * appears, withdraw an invite and it leaves the list. Reachable under
- * ?scenario=server-connected, whose session is an admin.
+ * ?scenario=server-connected, whose session is Faker, the configured head
+ * admin, and ?scenario=server-admin, whose session is Sova, a plain admin.
  */
 let mockUsers: AdminUser[] = [
   {
@@ -296,6 +338,8 @@ let mockUsers: AdminUser[] = [
     username: 'Faker',
     email: 'faker@example.com',
     isAdmin: true,
+    isHeadAdmin: true,
+    isConfiguredAdmin: true,
     isDisabled: false,
     createdAt: '2026-06-01T10:00:00.000Z',
     linkedRiotAccounts: 2,
@@ -303,10 +347,45 @@ let mockUsers: AdminUser[] = [
     passwordReset: null
   },
   {
+    id: 'u-4',
+    username: 'Sova',
+    email: 'sova@example.com',
+    isAdmin: true,
+    isHeadAdmin: false,
+    isConfiguredAdmin: false,
+    isDisabled: false,
+    createdAt: '2026-06-20T17:45:00.000Z',
+    linkedRiotAccounts: 1,
+    activeSessions: 1,
+    passwordReset: null
+  },
+  {
+    id: 'u-5',
+    username: 'Chovy',
+    email: 'chovy@example.com',
+    isAdmin: true,
+    isHeadAdmin: false,
+    isConfiguredAdmin: false,
+    isDisabled: false,
+    createdAt: '2026-07-03T12:10:00.000Z',
+    linkedRiotAccounts: 1,
+    activeSessions: 0,
+    // Outstanding, so the harness shows that a plain admin is not handed it.
+    passwordReset: {
+      id: 'r-2',
+      userId: 'u-5',
+      link: 'https://foxfire.example.com/reset-password/Q2hvdnlSZXNldExpbmtGb3JIYXJuZXNz.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU',
+      createdAt: '2026-09-21T20:00:00.000Z',
+      expiresAt: '2026-09-22T20:00:00.000Z'
+    }
+  },
+  {
     id: 'u-2',
     username: 'phantomduval',
     email: 'duval@example.com',
     isAdmin: false,
+    isHeadAdmin: false,
+    isConfiguredAdmin: false,
     isDisabled: false,
     createdAt: '2026-07-14T18:30:00.000Z',
     linkedRiotAccounts: 1,
@@ -326,6 +405,8 @@ let mockUsers: AdminUser[] = [
     username: 'ward andersen',
     email: 'ward@example.com',
     isAdmin: false,
+    isHeadAdmin: false,
+    isConfiguredAdmin: false,
     isDisabled: true,
     createdAt: '2026-08-02T09:15:00.000Z',
     linkedRiotAccounts: 0,
@@ -340,6 +421,8 @@ let mockUsers: AdminUser[] = [
       username: `Summoner${n}`,
       email: `summoner${n}@example.net`,
       isAdmin: false,
+      isHeadAdmin: false,
+      isConfiguredAdmin: false,
       isDisabled: i % 23 === 0,
       createdAt: new Date(Date.UTC(2026, 5, 1) + i * 3_600_000 * 11).toISOString(),
       linkedRiotAccounts: i % 3,
@@ -348,6 +431,9 @@ let mockUsers: AdminUser[] = [
     }
   })
 ]
+
+/** Numbers the invites the harness makes, so a withdrawn one never frees its id for the next. */
+let nextInvite = 1
 
 let mockInvites: AdminInvite[] = [
   {
@@ -389,6 +475,28 @@ let mockInvites: AdminInvite[] = [
     redeemedAt: null,
     redeemedBy: null,
     isOpen: true
+  },
+  // Links made without an address, the usual kind: one waiting to be opened,
+  // and one somebody already joined with.
+  {
+    id: 'i-6',
+    email: null,
+    link: 'https://foxfire.example.com/invite/open-link-for-the-harness-only-fffffffffffffffffffffffffff',
+    createdAt: '2026-09-22T20:15:00.000Z',
+    expiresAt: '2026-10-06T20:15:00.000Z',
+    redeemedAt: null,
+    redeemedBy: null,
+    isOpen: true
+  },
+  {
+    id: 'i-7',
+    email: null,
+    link: 'https://foxfire.example.com/invite/spent-link-for-the-harness-only-gggggggggggggggggggggggggg',
+    createdAt: '2026-09-12T19:00:00.000Z',
+    expiresAt: '2026-09-26T19:00:00.000Z',
+    redeemedAt: '2026-09-12T21:40:00.000Z',
+    redeemedBy: 'leorio',
+    isOpen: false
   },
   // Lapsed without being used. The server keeps it and sends it nowhere, so
   // neither list should show it.
@@ -756,9 +864,14 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       users: (query: AdminUserQuery = {}): Promise<Page<AdminUser>> => {
         const needle = (query.q ?? '').trim().toLowerCase()
+        const me = connection.session
         const matching = mockUsers
           .filter((user) => needle.length === 0 || isMemberMatch(user, needle))
           .sort((a, b) => a.username.localeCompare(b.username))
+          // Another admin's reset link is a head admin's to see, as on the server.
+          .map((user) =>
+            user.isAdmin && !me?.isHeadAdmin && me?.email !== user.email ? { ...user, passwordReset: null } : user
+          )
 
         return delay(pageOf(matching, query), 200, false)
       },
@@ -843,6 +956,9 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         const target = mockUsers.find((u) => u.id === id)
         const admins = mockUsers.filter((u) => u.isAdmin)
 
+        const refused = mockRefusal(target, patch)
+        if (refused) return delay({ ok: false, error: refused }, 200, false)
+
         // The same refusal the server makes, so the harness shows the message
         // rather than letting the page reach a state the real thing forbids.
         if (target?.isAdmin && admins.length === 1 && (patch.isAdmin === false || patch.isDisabled)) {
@@ -857,12 +973,23 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           )
         }
 
-        mockUsers = mockUsers.map((u) => (u.id === id ? { ...u, ...patch } : u))
+        // The roles nest, as on the server: head admin brings admin with it,
+        // and losing admin takes head admin too.
+        mockUsers = mockUsers.map((u) => {
+          if (u.id !== id) return u
+          const next = { ...u, ...patch }
+          if (patch.isHeadAdmin === true) next.isAdmin = true
+          if (patch.isAdmin === false) next.isHeadAdmin = false
+          return next
+        })
         return delay({ ok: true, error: null }, 200, false)
       },
 
       deleteUser: (id: string): Promise<AdminActionResult> => {
         const target = mockUsers.find((u) => u.id === id)
+
+        const refused = mockRefusal(target, 'delete')
+        if (refused) return delay({ ok: false, error: refused }, 200, false)
         if (target?.isAdmin && mockUsers.filter((u) => u.isAdmin).length === 1) {
           return delay(
             {
@@ -881,6 +1008,9 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       createPasswordReset: (userId: string): Promise<AdminPasswordReset> => {
         const user = mockUsers.find((u) => u.id === userId)
+
+        const refused = mockRefusal(user, 'reset')
+        if (refused) return Promise.reject(new Error(refused))
 
         if (user?.isDisabled) {
           return Promise.reject(
@@ -928,14 +1058,18 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           false
         ),
 
-      createInvite: (email: string): Promise<AdminInvite> => {
-        const existing = mockInvites.find((i) => i.email === email && i.isOpen)
+      createInvite: (email?: string): Promise<AdminInvite> => {
+        const address = email?.trim() || null
+        // Only an address is deduplicated, as on the server: each link without
+        // one is for a different somebody.
+        const existing = address === null ? undefined : mockInvites.find((i) => i.email === address && i.isOpen)
         if (existing) return delay(existing, 300, false)
 
+        const id = `i-new-${nextInvite++}`
         const invite: AdminInvite = {
-          id: `i-${mockInvites.length + 1}`,
-          email,
-          link: `https://foxfire.example.com/invite/${btoa(email).replace(/=/g, '')}-harness-token-aaaaaaaaaaaa`,
+          id,
+          email: address,
+          link: `https://foxfire.example.com/invite/${id}-harness-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaa`,
           createdAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + 14 * 24 * 3600_000).toISOString(),
           redeemedAt: null,

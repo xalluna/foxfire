@@ -244,8 +244,14 @@ export interface ConnectionState {
    */
   publicUrl: string | null
   serverName: string | null
-  /** Who is signed in. Null in local-only mode, and while signed out. */
-  session: { username: string; email: string; isAdmin: boolean } | null
+  /**
+   * Who is signed in. Null in local-only mode, and while signed out.
+   *
+   * A head admin is an admin too, so `isAdmin` is true whenever `isHeadAdmin`
+   * is; the second is what offers the import, LP on anybody's games, and the
+   * buttons that act against another admin.
+   */
+  session: { username: string; email: string; isAdmin: boolean; isHeadAdmin: boolean } | null
   /** The server's own Riot key has been refused — the host's to fix, not the reader's. */
   riotKeyRejected: boolean
   /** Set when the server refused this client outright, with the version it wants. */
@@ -288,8 +294,11 @@ export interface FoxfireClient extends FoxfireData {
     openInvites: () => Promise<AdminInvite[]>
     /** A page of the invites somebody registered with, most recently used first. */
     usedInvites: (page?: PageOptions) => Promise<Page<AdminInvite>>
-    /** Returns the outstanding invite for that address if there already is one. */
-    createInvite: (email: string) => Promise<AdminInvite>
+    /**
+     * A new link for whoever opens it first — or, given an address, one only it
+     * can register with, reusing the invite already outstanding for it.
+     */
+    createInvite: (email?: string) => Promise<AdminInvite>
     revokeInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>

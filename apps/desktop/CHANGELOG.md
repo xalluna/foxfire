@@ -9,12 +9,22 @@ changes you would never notice while using the app.
 
 ## [0.16.0] — 2026-09-26
 
-An admin can see what their server has been doing, from Settings: the requests it answered, what it
-asked of Riot, the syncs it ran and the process underneath, live and for the last month. And Foxfire
-stops holding Ctrl+Shift+T for itself. Server insights need Foxfire Server 0.5.0.
+Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
+who imports; an admin who is not one sees why rather than buttons the server would refuse. And an
+invite is a link now, with no email address needed to make one. An admin can also see what their
+server has been doing, from Settings: the requests it answered, what it asked of Riot, the syncs it
+ran and the process underneath, live and for the last month. Needs Foxfire Server 0.5.0. A
+profile's "Last games" figures are set like every other number, and Foxfire stops holding
+Ctrl+Shift+T for itself.
 
 ### Added
 
+- **Edit LP on anybody's games, as a head admin.** Edit LP gain and Clear LP edit are offered on
+  every profile's matches to a head admin, claimed or not. Everybody else still types only their
+  own.
+- **Head admins on the Members page.** A head admin can make somebody a head admin or stop them
+  being one, and every row says who is an admin and who is a head admin. Settings › Server says
+  which you are.
 - **Server insights.** Settings › Server insights, for an admin of the server Foxfire is signed in
   to — the same page the web client's admin tabs have. Requests and how quickly they were answered,
   the busiest routes, Riot calls and how close the key came to its limits, every sync and how it
@@ -22,6 +32,22 @@ stops holding Ctrl+Shift+T for itself. Server insights need Foxfire Server 0.5.0
   errors, over fifteen minutes to thirty days. It is the server measuring itself, so it covers
   everybody on it rather than what this PC saw. Connected to a server older than 0.5.0, the page
   says the server needs updating.
+
+### Changed
+
+- **Admins no longer act against other admins.** On another admin's row a plain admin is offered
+  only Enable, with a line saying demoting, disabling, removing or a reset link is a head admin's.
+  The server's configured head admin offers nobody those buttons, and says why.
+- **Importing a database is a head admin's.** A plain admin sees the Import card with the reason
+  in place of the button.
+- **An invite no longer needs an email address.** In Settings › Invites, *Create invite link* gives
+  you a link to paste into Discord or anywhere else, and it signs up whoever opens it first. You can
+  still add an address: their sign-up form fills it in, and only that address can register with the
+  link. Links without one are labelled by when they were made, and every outstanding invite now says
+  when it was created as well as when it expires.
+- The win rate and the win–loss record in the "Last games" summary are set in the same typeface as
+  every other number in the app, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
 
 ### Removed
 
@@ -32,6 +58,11 @@ stops holding Ctrl+Shift+T for itself. Server insights need Foxfire Server 0.5.0
 
 ### Under the hood
 
+- The server session this PC keeps remembers whether you are a head admin, refreshed with every
+  token renewal like the admin flag; a server remembered before this reads as a plain admin until
+  then.
+- The harnesses have a `server-admin` scenario, signed in as a plain admin, and an
+  `insights-unsupported` one, signed in to a server too old to report insights.
 - The developer telemetry panel's chart moved into the shared UI package, where the server insights
   page draws with it too. It now fills each stretch of a line on its own, so a gap in a filled chart
   is drawn as a gap rather than bridged, and durations over a minute read as minutes and seconds.

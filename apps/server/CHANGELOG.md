@@ -13,16 +13,32 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.5.0] — 2026-09-26
 
-A server that can tell whoever runs it what it has been doing. Until now the
-only way to know whether the evening's slowness was the server, the database or
-Riot was to read the logs; now an admin opens Insights and sees the requests it
-answered and how quickly, what it asked of Riot and how close it came to the
-key's limits, every sync it ran, the process underneath, and who is connected —
-live over the last fifteen minutes and kept for a month. All of it stays on the
-server.
+Head admins. Every admin used to be able to do everything an admin could — import
+a whole stats.db over the community's history, or demote, disable or remove any
+other admin, including whoever owns the server — and nobody at all could fix a
+figure somebody else had typed wrong. Now there is a head admin above the rest:
+the account in `ADMIN_EMAIL` always is one, and it can make others. Head admins
+import, can type LP on anybody's games, and are the only ones who can act against
+another admin. And an invite is a link now, with no email address needed to
+make one — Foxfire sends no mail, so the address was only ever in the way of
+pasting a link into Discord. The server can also tell whoever runs it what it
+has been doing: an admin opens Insights and sees the requests it answered and
+how quickly, what it asked of Riot and how close it came to the key's limits,
+every sync it ran, the process underneath, and who is connected — live over the
+last fifteen minutes and kept for a month, all of it on the server. Serves
+Foxfire 0.15 and newer. A profile's "Last games" figures are set like every
+other number, too.
 
 ### Added
 
+- **Head admins.** The account in `ADMIN_EMAIL` becomes one the next time the
+  server starts, and a head admin can make any member a head admin from the
+  Members page — or stop them being one. The page and the Account page say who
+  is which.
+- **A head admin can type LP on anybody's games.** Edit LP gain and Clear LP edit
+  work on every profile for a head admin, claimed or not — for the figure
+  somebody typed wrong, or never came back to type. Everybody else still types
+  only their own.
 - **Insights.** A new tab in the admin pages, beside Data & storage, and in the
   desktop app's Settings for an admin. Six views of the server over any of seven
   windows, from fifteen minutes to thirty days:
@@ -49,8 +65,49 @@ server.
   costs the seconds it took and nothing more. A gap in a chart is the server
   being down, not a quiet hour.
 
+### Changed
+
+- **Only a head admin can import a stats.db.** An import writes everybody's
+  history at once and cannot be taken back out. A plain admin sees the Import
+  card with the reason instead of the button.
+- **Admins cannot act against other admins.** Demoting, disabling or removing an
+  admin, or making them a reset link — which hands over the account — takes a
+  head admin, and a plain admin no longer sees another admin's outstanding reset
+  link either. Any admin can still make somebody an admin, enable an account,
+  and step down themselves.
+- **The `ADMIN_EMAIL` account cannot be demoted, disabled or removed from the
+  app**, by anybody, itself included — the configuration is the final say on who
+  owns the server, as it already was for that account's address. Handing the
+  server over is still changing `ADMIN_EMAIL` and restarting. Another head admin
+  can still make it a reset link, which is how it gets back in after a forgotten
+  password.
+- **Only a head admin can move onto the `ADMIN_EMAIL` address**, since holding it
+  makes a head admin at the next restart.
+- **An invite no longer needs an email address.** *Create invite link* gives you
+  a link to paste into Discord or anywhere else, and it signs up whoever opens it
+  first. You can still add an address: their sign-up form fills it in, and only
+  that address can register with the link. Links without one are labelled by when
+  they were made, and every outstanding invite now says when it was created as
+  well as when it expires.
+- The win rate and the win–loss record in a profile's "Last games" summary are set in the same
+  typeface as every other number, rather than the one used for headings. That typeface's numerals
+  made "11W" read as "llW", and made the block look like it came from somewhere else.
+
 ### Under the hood
 
+- `HeadAdmin` is a second Identity role, created on boot like the first, and
+  always held alongside `Admin`; there is no migration. Sessions and the member
+  list carry `isHeadAdmin`, and the member list `isConfiguredAdmin` — added
+  fields, so no API version moves.
+- The log names who acted on the lines that did not: an import, removing a
+  member, and a head admin typing or clearing LP on somebody else's account.
+  Role changes read "made … an admin / a head admin / a member".
+- `Invites.Email` is nullable (migration `InviteEmailOptional`), and
+  `POST /api/admin/invites` takes `{ email: null }` or no email at all. An invite
+  with an address still hands back the one already outstanding for it; invites
+  without one are never merged. The response's `email` is null for them, which a
+  0.15 desktop shows as a row with no title.
+- Creating and withdrawing an invite are logged, by whom and which invite.
 - The server measures itself with `System.Diagnostics.Metrics`: ASP.NET Core's
   own request timings and rate limiter, tagged with which kind of client asked;
   every Riot attempt by endpoint template, outcome and priority, with its queue
