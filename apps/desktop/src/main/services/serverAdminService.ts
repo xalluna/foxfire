@@ -78,7 +78,7 @@ export async function listUsedInvites(page?: PageOptions): Promise<Page<AdminInv
   return serverApi().admin.usedInvites(page)
 }
 
-export async function createInvite(email: string): Promise<AdminInvite> {
+export async function createInvite(email?: string): Promise<AdminInvite> {
   return serverApi().admin.createInvite(email)
 }
 

@@ -197,8 +197,10 @@ internal sealed class RegisterRequestHandler(
         var invite = await db.Invites.FirstOrDefaultAsync(i => i.Id == verified.InviteId, cancellationToken);
         if (invite is null || !invite.IsOpen(time.GetUtcNow())) return null;
 
-        // The invite is for one address. A link forwarded to somebody else opens
-        // nothing, which is what keeps a leaked link from being an open door.
-        return string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase) ? invite : null;
+        // An invite without an address is for whoever opens it first. One with an
+        // address registers only that address.
+        return invite.Email is null || string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase)
+            ? invite
+            : null;
     }
 }

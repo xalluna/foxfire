@@ -13,13 +13,30 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.5.0] — 2026-09-26
 
-Polish on the web client's profile.
+An invite is a link now, with no email address needed to make one — Foxfire sends
+no mail, so the address was only ever in the way of pasting a link into Discord.
+And some polish on the web client's profile.
 
 ### Changed
 
+- **An invite no longer needs an email address.** *Create invite link* gives you
+  a link to paste into Discord or anywhere else, and it signs up whoever opens it
+  first. You can still add an address: their sign-up form fills it in, and only
+  that address can register with the link. Links without one are labelled by when
+  they were made, and every outstanding invite now says when it was created as
+  well as when it expires.
 - The win rate and the win–loss record in a profile's "Last games" summary are set in the same
   typeface as every other number, rather than the one used for headings. That typeface's numerals
   made "11W" read as "llW", and made the block look like it came from somewhere else.
+
+### Under the hood
+
+- `Invites.Email` is nullable (migration `InviteEmailOptional`), and
+  `POST /api/admin/invites` takes `{ email: null }` or no email at all. An invite
+  with an address still hands back the one already outstanding for it; invites
+  without one are never merged. The response's `email` is null for them, which a
+  0.15 desktop shows as a row with no title.
+- Creating and withdrawing an invite are logged, by whom and which invite.
 
 ## [0.4.0] — 2026-09-24
 

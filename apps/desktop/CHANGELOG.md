@@ -9,10 +9,15 @@ changes you would never notice while using the app.
 
 ## [0.16.0] — 2026-09-26
 
-Polish on the profile.
+An invite is a link now, with no email address needed to make one, and some polish on the profile.
 
 ### Changed
 
+- **An invite no longer needs an email address.** In Settings › Invites, *Create invite link* gives
+  you a link to paste into Discord or anywhere else, and it signs up whoever opens it first. You can
+  still add an address: their sign-up form fills it in, and only that address can register with the
+  link. Links without one are labelled by when they were made, and every outstanding invite now says
+  when it was created as well as when it expires.
 - The win rate and the win–loss record in the "Last games" summary are set in the same typeface as
   every other number in the app, rather than the one used for headings. That typeface's numerals
   made "11W" read as "llW", and made the block look like it came from somewhere else.
