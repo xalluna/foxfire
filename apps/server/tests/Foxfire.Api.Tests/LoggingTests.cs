@@ -81,6 +81,36 @@ public sealed class LoggingTests(FoxfireServerFixture server)
     }
 
     /// <summary>
+    /// A link's token never reaches a request line. Whoever holds a reset link
+    /// can set that password, and the lines are shown to every admin.
+    /// </summary>
+    [Fact]
+    public async Task A_token_in_a_path_is_redacted_from_the_request_line()
+    {
+        var token = $"tok{Guid.NewGuid():N}.sig{Guid.NewGuid():N}";
+        var host = server.Factory.WithWebHostBuilder(_ => { });
+
+        try
+        {
+            using var client = host.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Foxfire-Client", FoxfireServerFixture.CurrentDesktop);
+
+            await client.GetAsync(new Uri($"/api/password-resets/{token}/preview", UriKind.Relative));
+            await client.GetAsync(new Uri($"/api/invites/{token}/preview", UriKind.Relative));
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
+
+        var lines = await LogLinesAsync();
+
+        Assert.DoesNotContain(lines, l => l.GetRawText().Contains(token, StringComparison.Ordinal));
+        Assert.Contains(lines, l =>
+            l.TryGetProperty("RequestPath", out var p) && p.GetString() == "/api/password-resets/{token}/preview");
+    }
+
+    /// <summary>
     /// The sink the insights page reads, wired in code rather than chosen by a
     /// host: a warning the server writes is on the page, rendered, with where it
     /// came from.
