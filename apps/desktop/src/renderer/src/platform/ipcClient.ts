@@ -118,7 +118,8 @@ export function connectionFrom(state: ServerState): ConnectionState {
       ? {
           username: state.session.username,
           email: state.session.email,
-          isAdmin: state.session.isAdmin
+          isAdmin: state.session.isAdmin,
+          isHeadAdmin: state.session.isHeadAdmin
         }
       : null,
     riotKeyRejected: state.riotKeyRejected,

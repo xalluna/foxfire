@@ -98,7 +98,7 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           control={
             session.isAdmin ? (
               <span className="rounded border border-accent-dim/40 bg-accent/10 px-2 py-0.5 text-2xs text-accent">
-                Administrator
+                {session.isHeadAdmin ? 'Head admin' : 'Administrator'}
               </span>
             ) : undefined
           }

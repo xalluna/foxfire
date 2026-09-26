@@ -22,7 +22,7 @@ export {
   type Platform,
   type RecordingTarget
 } from './client/context'
-export { useConnection, useIsServerAdmin } from './client/useConnection'
+export { useConnection, useIsHeadAdmin, useIsServerAdmin } from './client/useConnection'
 export { useShareLink, type ShareLink } from './client/useShareLink'
 export { useDataEvents } from './client/useDataEvents'
 

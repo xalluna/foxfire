@@ -23,6 +23,9 @@ export type Scenario =
   | 'server-connected'
   | 'server-outdated'
   | 'server-degraded'
+  // Signed in as an admin who is not the head admin: the Members page with
+  // other admins' rows closed to them, and the import card saying why not.
+  | 'server-admin'
   // Signed in to a server older than this build, which refuses it — the case
   // where the remedy is the host's, not anybody's download.
   | 'server-behind'

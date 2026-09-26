@@ -52,12 +52,24 @@ internal sealed class FoxfireUserConfiguration : IEntityTypeConfiguration<Foxfir
 public static class FoxfireRoles
 {
     /// <summary>
-    /// May manage users, invites, the public-signup switch, and the data
-    /// import — and may force-unlink a Riot account, which is the escape hatch
-    /// that makes first-claim-wins survivable.
+    /// May manage members, invites and the public-signup switch — and may
+    /// force-unlink a Riot account, which is the escape hatch that makes
+    /// first-claim-wins survivable. Acting against another admin is a head
+    /// admin's.
     /// </summary>
     public const string Admin = "Admin";
 
+    /// <summary>
+    /// An admin who may also do what reaches past people and access: import a
+    /// stats.db, type LP on anybody's account, and demote, disable, remove or
+    /// make a reset link for another admin.
+    ///
+    /// Always held alongside Admin rather than instead of it, so every route
+    /// that asks for an admin lets a head admin through without naming both.
+    /// The account in Admin__Email is always one.
+    /// </summary>
+    public const string HeadAdmin = "HeadAdmin";
+
     /// <summary>Every role this server knows about.</summary>
-    public static readonly IReadOnlyList<string> All = [Admin];
+    public static readonly IReadOnlyList<string> All = [Admin, HeadAdmin];
 }
