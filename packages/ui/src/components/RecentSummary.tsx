@@ -32,7 +32,7 @@ function WinRateRing({ winRate }: { winRate: number | null }): JSX.Element {
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span
           className={clsx(
-            'font-display text-lg leading-none tabular-nums',
+            'text-lg font-semibold leading-none tabular-nums',
             good ? 'text-teal' : 'text-text'
           )}
         >
@@ -70,7 +70,7 @@ export function RecentSummary({ matches }: { matches: MatchSummary[] | undefined
         <div className="flex shrink-0 items-center gap-3">
           <WinRateRing winRate={summary.winRate} />
           <div>
-            <p className="font-display text-xl leading-tight text-text">
+            <p className="text-xl font-semibold leading-tight tabular-nums text-text">
               {summary.wins}W <span className="text-text-mute">·</span> {summary.losses}L
             </p>
             <p className="mt-1 text-sm tabular-nums text-text-dim">
