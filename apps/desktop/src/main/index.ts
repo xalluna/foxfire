@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { app, BrowserWindow, globalShortcut } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './window'
 import { closeDatabase, initDatabase } from './db'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -20,7 +20,6 @@ import { createLogger, flushLogs, installCrashHandlers } from './telemetry/logge
 import { observeRateLimiter } from './telemetry/limiter'
 import { startResourceSampling, stopResourceSampling } from './telemetry/resources'
 import { startRetention, stopRetention } from './telemetry/retention'
-import { openTelemetryWindow } from './telemetryWindow'
 import { registerRecordingProtocol } from './recordingProtocol'
 import { YOUTUBE_ENABLED } from '@shared/features'
 import { registerPrivilegedSchemes } from './schemes'
@@ -36,12 +35,6 @@ import { pinLegacyCaptureFolder } from './services/captureSettings'
 import { quitLaunchedObs } from './obs/launch'
 import { takeCompletedInstall, type PendingInstall } from './updater/pending'
 import { initUpdater } from './updater/updater'
-
-/**
- * Opens the telemetry panel without needing the tray, which only exists when
- * the user has opted into running in the background.
- */
-const TELEMETRY_ACCELERATOR = 'CommandOrControl+Shift+T'
 
 const log = createLogger('app')
 
@@ -136,7 +129,6 @@ function bootstrap(): void {
     installYouTubeReferer()
   }
   registerIpcHandlers()
-  globalShortcut.register(TELEMETRY_ACCELERATOR, openTelemetryWindow)
   // Before the window, because it decides whether there is one to look at: an
   // update installed by the copy that just quit brings the app back the way it
   // was left, and the record naming it is cleared by this read.
@@ -297,7 +289,6 @@ app.on('before-quit', () => {
 // absent timer. window-all-closed is safe for a different reason — the loser
 // never opens a window, so it never fires and never reaches getDb().
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll()
   stopLcuWatcher()
   stopReplayWatcher()
   stopCapture()

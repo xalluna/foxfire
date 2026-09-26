@@ -61,7 +61,7 @@ export function TelemetrySettings(): JSX.Element {
 
         <LinkRow
           label="Open panel"
-          description="or press Ctrl+Shift+T anywhere"
+          description="In a window of its own, so it can stay open beside the app"
           onClick={() => window.api.telemetry.openWindow()}
         />
 

@@ -7,6 +7,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.16.0] — 2026-09-26
+
+Foxfire stops holding Ctrl+Shift+T for itself.
+
+### Removed
+
+- **Ctrl+Shift+T no longer opens the telemetry panel.** It was a shortcut for the whole PC rather
+  than for Foxfire's window, so while Foxfire ran — in the tray included — it took Ctrl+Shift+T away
+  from every other app, reopening a closed browser tab among them. The panel is still in Settings ›
+  Developer telemetry, and in the tray menu.
+
 ## [0.15.0] — 2026-09-24
 
 On a server, the account rail is a way between your own accounts rather than a list of everybody's,
@@ -1243,6 +1254,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0
 [0.13.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.12.0...desktop-v0.13.0
