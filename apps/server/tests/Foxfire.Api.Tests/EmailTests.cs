@@ -98,7 +98,7 @@ public sealed class EmailTests(FoxfireServerFixture server) : IAsyncLifetime
         Assert.Equal(message.Id.ToString(), sent.IdempotencyKey);
         Assert.Equal("Bearer re_test_key_not_real", sent.Authorization);
         Assert.StartsWith("Foxfire-Server", sent.UserAgent, StringComparison.Ordinal);
-        Assert.Contains(FakeResend.FromAddress, sent.From, StringComparison.Ordinal);
+        Assert.Equal($"{FoxfireServerFixture.ServerName} <{FakeResend.FromAddress}>", sent.From);
         Assert.Equal(EmailKinds.Invite, sent.Kind);
         Assert.Equal(sent.ProviderId, message.ProviderMessageId);
 
@@ -466,6 +466,11 @@ public sealed class EmailTests(FoxfireServerFixture server) : IAsyncLifetime
         var test = await admin.PostAsJsonAsync(Api("/api/admin/email/test"), new { to = address });
         test.EnsureSuccessStatusCode();
         await SentAsync(address, EmailKinds.Test);
+
+        // It carries a button like every other message, so a test shows how they look.
+        var sent = Assert.Single(_resend.To(address));
+        Assert.Contains("https://test.example.com/", sent.Text, StringComparison.Ordinal);
+        Assert.Contains($"Open {FoxfireServerFixture.ServerName}", sent.Html, StringComparison.Ordinal);
 
         var log = await admin.GetFromJsonAsync<JsonElement>(Api($"/api/admin/email/messages?q={address}"));
         var entry = Assert.Single(log.GetProperty("items").EnumerateArray());

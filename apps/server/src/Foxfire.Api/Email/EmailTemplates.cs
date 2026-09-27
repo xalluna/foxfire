@@ -24,9 +24,12 @@ public sealed record EmailContent(string Html, string Text);
 /// </summary>
 internal static class EmailTemplates
 {
-    // The brand's navy and ice-blue, from packages/ui's tokens.
+    // The brand's navy and parchment, from packages/ui's tokens. The button is
+    // the app's primary button turned light: the app tints its ice-blue accent
+    // over a dark panel, and here it is washed over white instead, edged with
+    // the accent's dim blue — navy-on-ice read as a dark button on a light page.
     private const string Navy = "#0a1428";
-    private const string Ice = "#9dc8ff";
+    private const string IceWash = "#eaf3ff";
     private const string Parchment = "#f0e6d2";
     private const string Ink = "#1c2433";
     private const string Muted = "#6b7280";
@@ -105,15 +108,16 @@ internal static class EmailTemplates
         ("Reset my password", forgotLink),
         "You're getting this because it's a change to your account's security.");
 
-    public static EmailContent Test(string server, DateTimeOffset at) => Layout(
+    /// <param name="link">The server's own address. The button is there to be looked at: it is the one every other message carries.</param>
+    public static EmailContent Test(string server, DateTimeOffset at, string link) => Layout(
         server,
         Subject(EmailKinds.Test, server),
         "This is a test",
         [
             $"A head admin of {server} sent this at {When(at)} to check that mail from the server arrives.",
-            "It did. There's nothing to do."
+            $"It did, so there's nothing to do. The button opens {server}, and looks the way the one in a real message does."
         ],
-        null,
+        ($"Open {server}", link),
         "You're getting this because a head admin of this Foxfire server entered your address on its Email page.");
 
     /// <summary>Always the same spelling, always UTC: <c>Sat 26 Sep 2026, 14:05 UTC</c>.</summary>
@@ -159,7 +163,7 @@ internal static class EmailTemplates
         {
             html.Append($$"""
                 <tr><td style="padding:8px 24px 20px;">
-                <a href="{{Encode(action.Link)}}" style="display:inline-block;background:{{Navy}};color:{{Ice}};text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:6px;">{{Encode(action.Label)}}</a>
+                <a href="{{Encode(action.Link)}}" style="display:inline-block;background:{{IceWash}};border:1px solid {{LinkBlue}};color:{{Navy}};text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:6px;">{{Encode(action.Label)}}</a>
                 <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:{{Muted}};">Or paste this into your browser:<br><a href="{{Encode(action.Link)}}" style="color:{{LinkBlue}};word-break:break-all;">{{Encode(action.Link)}}</a></p>
                 </td></tr>
 
