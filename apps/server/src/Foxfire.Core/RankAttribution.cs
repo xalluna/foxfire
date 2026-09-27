@@ -10,7 +10,8 @@ namespace Foxfire.Core;
 /// touches both.
 /// </summary>
 /// <param name="CapturedAt">
-/// Epoch milliseconds, so it compares directly against a match's gameCreation.
+/// Epoch milliseconds, so it compares directly against a game's end
+/// (<see cref="RankedMatch.GameEnd"/>).
 /// </param>
 /// <param name="LadderPosition">
 /// Stamped on write from tier, division and LP. Null when the reading was of an
@@ -29,6 +30,7 @@ public sealed record RankReading(
 
 /// <summary>A ranked game, as far as attribution cares.</summary>
 /// <param name="GameCreation">Epoch milliseconds.</param>
+/// <param name="GameDuration">Seconds, as match-v5 reports it.</param>
 /// <param name="QueueId">Which ladder it moved.</param>
 /// <param name="EndedInEarlySurrender">
 /// A remake. It costs no LP, so it must not be counted as the game that explains
@@ -38,8 +40,13 @@ public sealed record RankReading(
 public sealed record RankedMatch(
     string MatchId,
     long GameCreation,
+    int GameDuration,
     int QueueId,
-    bool EndedInEarlySurrender);
+    bool EndedInEarlySurrender)
+{
+    /// <summary>Where attribution places the game. See <see cref="GameTimes"/>.</summary>
+    public long GameEnd => GameTimes.End(GameCreation, GameDuration);
+}
 
 /// <summary>What attribution decided a game was worth.</summary>
 /// <param name="LpDelta">
@@ -74,15 +81,30 @@ public sealed record MatchRankAttribution(
 /// debug. The numbers on every match row come from here.
 ///
 /// One structural difference from the original. There, the interval predicate
-/// lives in SQL — `game_creation &gt; ? AND game_creation &lt;= ?` — and the
-/// function reaches into the database itself. Here the candidate games are
-/// passed in and the predicate is <see cref="InInterval"/>, which makes the
-/// subtle part testable directly: the interval is exclusive below and inclusive
-/// above, and getting that backwards would silently double-count the game on
-/// every boundary.
+/// lives in SQL — the game's end `&gt; ? AND &lt;= ?` — and the function reaches
+/// into the database itself. Here the candidate games are passed in and the
+/// predicate is <see cref="InInterval"/>, which makes the subtle part testable
+/// directly: the interval is exclusive below and inclusive above, and getting
+/// that backwards would silently double-count the game on every boundary.
+///
+/// A game is placed by when it ended rather than when it was created. A reading
+/// taken while it was being played still shows the rank it started from, so it
+/// has to count as before the game — see <see cref="GameTimes"/>.
 /// </summary>
 public static class RankAttribution
 {
+    /// <summary>
+    /// Which rule decided the rows stored in MatchRanks.
+    ///
+    /// 1 placed a game by its creation, up to Server 0.5.0; 2 places it by its
+    /// end. A replay only ever upserts, so a row the old rule wrote and the new
+    /// one cannot prove would outlive the change — the server compares this with
+    /// what it last rebuilt under and works every figure out again when they
+    /// differ. Bump it whenever a change would decide stored intervals
+    /// differently.
+    /// </summary>
+    public const int RuleVersion = 2;
+
     /// <summary>
     /// What an interval says a game was worth, or null when it says nothing.
     ///
@@ -130,7 +152,7 @@ public static class RankAttribution
         {
             if (match.QueueId != queueId) continue;
             if (match.EndedInEarlySurrender) continue;
-            if (!InInterval(match.GameCreation, before.CapturedAt, after.CapturedAt)) continue;
+            if (!InInterval(match.GameEnd, before.CapturedAt, after.CapturedAt)) continue;
 
             // A second game makes the interval ambiguous, and nothing more can
             // change that — no need to keep counting.
@@ -200,12 +222,13 @@ public static class RankAttribution
     /// <summary>
     /// Whether a game falls in the interval between two readings.
     ///
-    /// Exclusive below, inclusive above. That asymmetry is the whole of it: a
-    /// game whose creation is exactly a reading's timestamp belongs to the
-    /// interval ending there and not to the one starting there, and treating
-    /// either bound the other way would count it twice across adjacent pairs and
-    /// make both of them ambiguous.
+    /// By its end, so a reading taken while the game was being played counts as
+    /// the rank going in. Exclusive below, inclusive above: a game that ended
+    /// exactly on a reading's timestamp — which is where a hand-entered "after"
+    /// rank is stored — belongs to the interval ending there and not to the one
+    /// starting there, and treating either bound the other way would count it
+    /// twice across adjacent pairs and make both of them ambiguous.
     /// </summary>
-    public static bool InInterval(long gameCreation, long afterMs, long upToMs) =>
-        gameCreation > afterMs && gameCreation <= upToMs;
+    public static bool InInterval(long gameEnd, long afterMs, long upToMs) =>
+        gameEnd > afterMs && gameEnd <= upToMs;
 }

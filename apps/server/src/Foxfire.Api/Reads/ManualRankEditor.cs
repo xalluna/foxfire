@@ -164,10 +164,16 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
             var after = entered.FirstOrDefault(e => e.MatchId == game.MatchId && e.CapturedAt > game.GameCreation);
             var ownBefore = entered.FirstOrDefault(e => e.MatchId == game.MatchId && e.CapturedAt < game.GameCreation);
 
+            // The reading attribution will pair this game's entry with: the last
+            // one before the game ended. A reading taken while it was being
+            // played is the rank it started from, and counting from any earlier
+            // one would show a figure that match history never does.
+            var end = GameTimes.End(game.GameCreation, game.GameDuration);
+
             var previous = await db.RankSnapshots.AsNoTracking()
                 .Where(r => r.RiotAccountId == riotAccountId
                     && r.QueueType == queueType
-                    && r.CapturedAt < game.GameCreation)
+                    && r.CapturedAt < end)
                 .OrderByDescending(r => r.CapturedAt)
                 .ThenByDescending(r => r.Id)
                 .FirstOrDefaultAsync(cancellationToken);

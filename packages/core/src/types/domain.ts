@@ -353,7 +353,13 @@ export interface EditableMatch {
   kills: number
   deaths: number
   assists: number
-  /** The most recent reading before this game, or null if there is none. */
+  /**
+   * The most recent reading before this game ended, or null if there is none.
+   *
+   * Before its end rather than its start, because that is the reading LP
+   * attribution pairs the game with: one taken while it was being played shows
+   * the rank it started from.
+   */
   before: ManualRank | null
   /**
    * When that reading was taken, or null if there is none.

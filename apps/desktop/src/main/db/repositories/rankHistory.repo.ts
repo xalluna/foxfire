@@ -9,6 +9,15 @@ import type {
 } from '@shared/types'
 import { ladderPosition, rankMovement, resetsBetween, seasonAt } from '@foxfire/core'
 
+/**
+ * Where a game sits among rank readings, as SQL over `matches m`: its end, the
+ * same instant gameEndMs gives and a hand-entered rank is stored at. A reading
+ * taken while the game was being played still shows the rank it started from,
+ * so a game placed by its creation was closed by a reading that knew nothing of
+ * its result. rankHistory.repo.test.ts holds this to gameEndMs.
+ */
+const GAME_END_SQL = '(m.game_creation + m.game_duration * 1000)'
+
 interface SnapshotRow {
   queue_type: string
   tier: string | null
@@ -458,9 +467,10 @@ export function getManualSnapshotQueueType(
  * Drops the user's entries that a live reading has just measured for them.
  *
  * A manual snapshot asserts a ladder position at a moment. A real reading taken
- * later with no ranked game in between measures that same position directly, so
- * it settles the question and the assertion has nothing left to add — if the two
- * disagree, the assertion was simply wrong.
+ * later with no ranked game ending in between measures that same position
+ * directly — one still being played has not moved it yet — so it settles the
+ * question and the assertion has nothing left to add. If the two disagree, the
+ * assertion was simply wrong.
  *
  * The "no game in between" test is what keeps this from eating a legitimate run:
  * with three games hand-fixed and a sync landing after the third, a game sits
@@ -489,8 +499,8 @@ export function deleteSupersededManualSnapshots(
                  WHERE p.puuid = ?
                    AND p.game_ended_in_early_surrender = 0
                    AND m.queue_id = ?
-                   AND m.game_creation > rank_snapshots.captured_at
-                   AND m.game_creation <= ?
+                   AND ${GAME_END_SQL} > rank_snapshots.captured_at
+                   AND ${GAME_END_SQL} <= ?
               )`
     )
     .run(accountId, queueType, atMs, puuid, queueId, atMs)
@@ -596,7 +606,10 @@ export function getEditableRankedMatches(
 }
 
 /**
- * Ranked matches for one account whose game time falls in (after, upTo].
+ * Ranked matches for one account whose game ended in (after, upTo].
+ *
+ * Its end rather than its creation: see GAME_END_SQL. A reading taken mid-game
+ * therefore opens the game's interval rather than closing it.
  *
  * The attribution rule only writes LP when this returns exactly one row, so the
  * caller needs the full list rather than a count to distinguish "one game" from
@@ -621,9 +634,9 @@ export function getRankedMatchesBetween(
         WHERE p.puuid = ?
           AND p.game_ended_in_early_surrender = 0
           AND m.queue_id = ?
-          AND m.game_creation > ?
-          AND m.game_creation <= ?
-        ORDER BY m.game_creation ASC`
+          AND ${GAME_END_SQL} > ?
+          AND ${GAME_END_SQL} <= ?
+        ORDER BY ${GAME_END_SQL} ASC`
     )
     .all(puuid, queueId, afterMs, upToMs) as unknown as Array<{
     match_id: string

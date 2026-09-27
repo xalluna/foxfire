@@ -3,8 +3,8 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { attributeInterval, replayAttribution } from './rankAttribution'
 import { getMatchSummaries, insertMatch } from '../db/repositories/matches.repo'
-import { insertRankSnapshot } from '../db/repositories/rankHistory.repo'
-import { applyAllMigrations } from '../db/testMigrations'
+import { insertRankSnapshot, upsertMatchRank } from '../db/repositories/rankHistory.repo'
+import { applyAllMigrations, migrationNames, migrationSql } from '../db/testMigrations'
 import type { MatchDto } from '../riot/types'
 import type { RankSnapshot, Season } from '@shared/types'
 
@@ -69,12 +69,23 @@ function snapshot(
   }
 }
 
-function match(matchId: string, gameCreation: number, queueId = 420): MatchDto {
+/** The length of every fixture game, in seconds as match-v5 reports it. */
+const GAME_SECONDS = 1669
+
+/** Minutes after T0, for the timelines laid out like a real evening. */
+const min = (minutes: number): number => T0 + Math.round(minutes * 60_000)
+
+/**
+ * A game that ended at `endedAt`, which is where attribution places it — so the
+ * timestamps throughout name ends, and each creation sits a game's length
+ * earlier.
+ */
+function match(matchId: string, endedAt: number, queueId = 420): MatchDto {
   return {
     metadata: { matchId, participants: [ME] },
     info: {
-      gameCreation,
-      gameDuration: 1669,
+      gameCreation: endedAt - GAME_SECONDS * 1000,
+      gameDuration: GAME_SECONDS,
       gameMode: 'CLASSIC',
       gameType: 'MATCHED_GAME',
       queueId,
@@ -395,6 +406,157 @@ describe('replayAttribution', () => {
 
       expect(deltas()).toEqual({ NA1_LOSS: -7, NA1_WIN: 21 })
     })
+  })
+
+  /**
+   * Three games of an evening, each running 27 minutes and ending at 30, 70 and
+   * 110. A sync that runs mid-game reads the rank the player went in with, and
+   * those readings land after the game began — which is what placing a game by
+   * its creation got wrong.
+   */
+  describe('a reading taken while a game was being played', () => {
+    function evening(): void {
+      insertMatch(db, match('NA1_A', min(30)))
+      insertMatch(db, match('NA1_B', min(70)))
+      insertMatch(db, match('NA1_C', min(110)))
+    }
+
+    /** Stored as it came, with its ladder position stamped from the rank. */
+    function reading(tier: string, rank: string, lp: number, capturedAt: number): void {
+      insertRankSnapshot(
+        db,
+        ACCOUNT,
+        { queueType: SOLO, tier, rank, leaguePoints: lp, wins: 10, losses: 8 },
+        'lcu',
+        capturedAt,
+        true
+      )
+    }
+
+    function deltas(): Record<string, number | null | undefined> {
+      return Object.fromEntries(
+        getMatchSummaries(db, ME, 20, 0).map((m) => [m.matchId, m.rank?.lpDelta ?? null])
+      )
+    }
+
+    it('does not close the game it was taken during', () => {
+      // The reported case, from a server's own rows. Silver II 80 and Silver I
+      // 10 were typed in for A and B; a sync read Silver II 80 during B and
+      // Silver I 10 during C. Paired by creation, B and C both read 0 — each met
+      // the reading taken during it, which matched the entry before it — while
+      // the editor showed +30 for each.
+      evening()
+      reading('SILVER', 'II', 90, T0)
+      reading('SILVER', 'II', 80, min(30))
+      reading('SILVER', 'II', 80, min(50))
+      reading('SILVER', 'I', 10, min(70))
+      reading('SILVER', 'I', 10, min(85))
+      reading('SILVER', 'I', 40, min(140))
+
+      replayAttribution(db, ACCOUNT, ME)
+
+      expect(deltas()).toEqual({ NA1_A: -10, NA1_B: 30, NA1_C: 30 })
+    })
+
+    it('does not hand a game the movement of the one before it', () => {
+      // No hand entry at all: only readings from syncs that each happened to run
+      // during the next game. By creation, A and B shared the first interval and
+      // got nothing, and C was handed B's +25.
+      evening()
+      reading('SILVER', 'II', 90, T0)
+      reading('SILVER', 'II', 80, min(50))
+      reading('SILVER', 'I', 5, min(85))
+      reading('SILVER', 'I', 25, min(140))
+
+      replayAttribution(db, ACCOUNT, ME)
+
+      expect(deltas()).toEqual({ NA1_A: -10, NA1_B: 25, NA1_C: 20 })
+    })
+
+    it('is closed by a reading exactly at its end and not one just before', () => {
+      // A hand-entered rank is stored at exactly the game's end, so that instant
+      // has to close the game. A millisecond earlier the game is still being
+      // played, and it shares the next interval with B.
+      insertMatch(db, match('NA1_A', min(30)))
+      insertMatch(db, match('NA1_B', min(70)))
+      reading('GOLD', 'II', 20, T0)
+      reading('GOLD', 'II', 41, min(30))
+      reading('GOLD', 'II', 62, min(100))
+
+      replayAttribution(db, ACCOUNT, ME)
+      expect(deltas()).toEqual({ NA1_A: 21, NA1_B: 21 })
+
+      db.exec('DELETE FROM match_rank')
+      db.prepare('UPDATE rank_snapshots SET captured_at = ? WHERE captured_at = ?').run(
+        min(30) - 1,
+        min(30)
+      )
+
+      replayAttribution(db, ACCOUNT, ME)
+      expect(deltas()).toEqual({ NA1_A: null, NA1_B: null })
+    })
+  })
+})
+
+describe('upgrading to games placed by their end (migration 015)', () => {
+  it('drops a figure the old rule proved and the new one cannot', () => {
+    const db = new DatabaseSync(':memory:')
+    for (const name of migrationNames().filter((n) => n < '015')) db.exec(migrationSql(name))
+    db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
+      ME,
+      'Faker',
+      'NA1'
+    )
+
+    insertMatch(db, match('NA1_A', min(30)))
+    insertMatch(db, match('NA1_B', min(70)))
+    insertMatch(db, match('NA1_C', min(110)))
+    for (const [rank, lp, at] of [
+      ['II', 90, T0],
+      ['II', 80, min(50)],
+      ['I', 25, min(140)]
+    ] as const) {
+      insertRankSnapshot(
+        db,
+        ACCOUNT,
+        { queueType: SOLO, tier: 'SILVER', rank, leaguePoints: lp, wins: 10, losses: 8 },
+        'lcu',
+        at,
+        true
+      )
+    }
+
+    // What placing games by creation wrote: C alone after the reading taken
+    // during B, handed B's movement along with its own.
+    upsertMatchRank(db, {
+      matchId: 'NA1_C',
+      accountId: ACCOUNT,
+      queueType: SOLO,
+      tierBefore: 'SILVER',
+      rankBefore: 'II',
+      lpBefore: 80,
+      tierAfter: 'SILVER',
+      rankAfter: 'I',
+      lpAfter: 25,
+      lpDelta: 45,
+      isPromotion: true,
+      isDemotion: false
+    })
+
+    const deltas = (): Record<string, number | null> =>
+      Object.fromEntries(
+        getMatchSummaries(db, ME, 20, 0).map((m) => [m.matchId, m.rank?.lpDelta ?? null])
+      )
+
+    // A replay only upserts. B and C now share an interval, so it proves
+    // neither — and has no way to take back what it proved last time.
+    replayAttribution(db, ACCOUNT, ME)
+    expect(deltas()).toEqual({ NA1_A: -10, NA1_B: null, NA1_C: 45 })
+
+    db.exec(migrationSql('015_attribution_by_game_end.sql'))
+    replayAttribution(db, ACCOUNT, ME)
+
+    expect(deltas()).toEqual({ NA1_A: -10, NA1_B: null, NA1_C: null })
   })
 })
 

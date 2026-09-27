@@ -208,6 +208,7 @@ builder.Services.AddScoped<MatchIngestion>();
 builder.Services.AddScoped<RankRecorder>();
 builder.Services.AddScoped<AccountProfile>();
 builder.Services.AddScoped<AttributionRunner>();
+builder.Services.AddScoped<CoPlayerRanks>();
 builder.Services.AddScoped<IdentityRepair>();
 
 // The read half. Every screen the desktop draws in server mode comes
@@ -266,6 +267,17 @@ catch (Exception ex)
     startup.LogCritical(ex, "Could not prepare the database, so Foxfire Server is stopping");
     await app.DisposeAsync();
     throw;
+}
+
+try
+{
+    await app.Services.RebuildAttributionIfRuleChangedAsync(app.Lifetime.ApplicationStopping);
+}
+catch (Exception ex) when (ex is not OperationCanceledException)
+{
+    // Not worth the server. What fails here costs LP figures worked out under
+    // the old rule until the next start tries again, not anybody's access.
+    startup.LogError(ex, "Could not work LP out again under the current attribution rule");
 }
 
 var spa = SpaHosting.Locate(app.Configuration, app.Environment);

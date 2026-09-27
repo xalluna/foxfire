@@ -80,16 +80,51 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         RankedQueue queue,
         CancellationToken cancellationToken = default)
     {
-        var queueName = queue.RiotName();
-
-        await db.MatchRanks
-            .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueName)
-            .ExecuteDeleteAsync(cancellationToken);
+        await DeleteAsync(riotAccountId, queue.RiotName(), cancellationToken);
 
         // Unbounded, because the rows just deleted reach as far back as the
         // history does and a windowed replay would leave the older ones gone
         // rather than rebuilt.
         await ReplayAsync(riotAccountId, puuid, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Both ladders at once, for when the rule itself changed rather than one
+    /// ladder's readings — see <see cref="Startup.AttributionRebuild"/>.
+    ///
+    /// Returns how many rows the rebuild wrote.
+    /// </summary>
+    public async Task<int> RebuildAllAsync(
+        Guid riotAccountId,
+        string puuid,
+        CancellationToken cancellationToken = default)
+    {
+        await DeleteAsync(riotAccountId, null, cancellationToken);
+        return await ReplayAsync(riotAccountId, puuid, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes an account's rows — one ladder's, or both — and forgets them here too.
+    ///
+    /// ExecuteDelete goes straight to the database and leaves whatever this
+    /// context already tracks, and a replay tracks every row it wrote, for both
+    /// ladders. The replay after the delete would then add a row with the key of
+    /// a stale instance still held here, and EF refuses it. Saving the season
+    /// table rebuilds one ladder after the other in one scope, which is exactly
+    /// that.
+    /// </summary>
+    private async Task DeleteAsync(Guid riotAccountId, string? queueName, CancellationToken cancellationToken)
+    {
+        await db.MatchRanks
+            .Where(r => r.RiotAccountId == riotAccountId && (queueName == null || r.QueueType == queueName))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var stale = db.ChangeTracker.Entries<MatchRank>()
+            .Where(e => e.Entity.RiotAccountId == riotAccountId
+                && (queueName == null || e.Entity.QueueType == queueName))
+            .ToList();
+
+        foreach (var entry in stale) entry.State = EntityState.Detached;
     }
 
     private async Task<IReadOnlyList<Season>> LoadSeasonsAsync(CancellationToken cancellationToken)
@@ -115,7 +150,12 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         long? sinceMs,
         CancellationToken cancellationToken)
     {
-        var floor = sinceMs ?? long.MinValue;
+        // A day earlier than the readings' window. A game is placed by its end,
+        // so one that began before the window and ended inside it belongs to the
+        // first interval the window holds — and left out, a second game in that
+        // interval would look like the only one and be written the pair's whole
+        // movement, a row no later replay takes back.
+        var floor = sinceMs is { } since ? since - LookBackMs : long.MinValue;
 
         var rows = await db.MatchParticipants
             .AsNoTracking()
@@ -128,6 +168,7 @@ public sealed class AttributionRunner(FoxfireDbContext db)
                 {
                     m.MatchId,
                     m.GameCreation,
+                    m.GameDuration,
                     m.QueueId,
                     p.GameEndedInEarlySurrender
                 })
@@ -139,10 +180,14 @@ public sealed class AttributionRunner(FoxfireDbContext db)
             .. rows.Select(x => new RankedMatch(
                 x.MatchId,
                 x.GameCreation,
+                x.GameDuration,
                 x.QueueId!.Value,
                 x.GameEndedInEarlySurrender))
         ];
     }
+
+    /// <summary>Longer than any game lasts, which is all the candidate floor needs.</summary>
+    private const long LookBackMs = 86_400_000L;
 
     private async Task<IReadOnlyList<RankReading>> LoadReadingsAsync(
         Guid riotAccountId,

@@ -10,7 +10,7 @@ import {
   type SnapshotInput
 } from '../db/repositories/rankHistory.repo'
 import { replayAttribution } from './rankAttribution'
-import { ALL_TIERS, APEX_TIERS, DIVISIONS, queueIdForQueueType } from '@foxfire/core'
+import { ALL_TIERS, APEX_TIERS, DIVISIONS, gameEndMs, queueIdForQueueType } from '@foxfire/core'
 import type { EditableMatch, ManualRank, ManualRankEdit, QueueType } from '@shared/types'
 
 /**
@@ -29,18 +29,21 @@ import type { EditableMatch, ManualRank, ManualRankEdit, QueueType } from '@shar
 /**
  * When the user's assertion is taken to have been true.
  *
- * Game end rather than game start, so it falls inside the
- * `game_creation > after AND <= upTo` window for its own match and clear of the
- * next one. game_duration is seconds, unlike every other time in this schema.
+ * The game's end, which is also where attribution places the game, so the entry
+ * closes its own game's interval and opens the next one.
  */
 export function manualSnapshotTime(gameCreation: number, gameDuration: number): number {
-  return gameCreation + gameDuration * 1000
+  return gameEndMs(gameCreation, gameDuration)
 }
 
 /**
  * A moment just before a game, for the rare entry that must state the rank
- * going in as well as the one coming out. A millisecond is enough: the interval
- * test is a strict `>`, so the game still falls inside it.
+ * going in as well as the one coming out.
+ *
+ * Before the creation rather than merely before the end: getEditableMatches
+ * tells a game's own before from its after by which side of the creation it
+ * falls. A game is placed at its end, so it sits inside the interval this opens
+ * by its whole length.
  */
 function beforeSnapshotTime(gameCreation: number): number {
   return gameCreation - 1
@@ -137,7 +140,16 @@ export function getEditableMatches(
     const ownBefore =
       entries.find((e) => e.matchId === match.matchId && e.capturedAt < match.gameCreation) ?? null
 
-    const previous = getSnapshotBefore(db, accountId, queueType, match.gameCreation)
+    // The reading attribution will pair this game's entry with: the last one
+    // before the game ended. One taken while it was being played is the rank it
+    // started from, and counting from anything earlier would show a figure the
+    // match row never does.
+    const previous = getSnapshotBefore(
+      db,
+      accountId,
+      queueType,
+      gameEndMs(match.gameCreation, match.gameDuration)
+    )
 
     return {
       ...match,

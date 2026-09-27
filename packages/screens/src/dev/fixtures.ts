@@ -27,6 +27,7 @@ import {
   S,
   detailFor,
   perks,
+  resultReadAt,
   type Keystone
 } from './catalog'
 import {
@@ -393,6 +394,7 @@ function buildSoloRankHistory(): {
   const steps = SEEDS.map((s, index) => ({
     index,
     at: NOW - s.agoMs,
+    duration: s.mins * 60 + s.secs,
     win: s.win,
     queueId: s.queueId,
     remake: s.remake ?? false
@@ -456,7 +458,7 @@ function buildSoloRankHistory(): {
 
     if (unobserved(n)) continue
 
-    const after = snapshot(step.at)
+    const after = snapshot(resultReadAt(step.at, step.duration))
     snapshots.push(after)
 
     if (sinceSnapshot.length === 1) {

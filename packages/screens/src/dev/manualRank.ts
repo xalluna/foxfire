@@ -1,4 +1,4 @@
-import { ladderPosition, rankMovement, queueIdForQueueType } from '@foxfire/core'
+import { gameEndMs, ladderPosition, rankMovement, queueIdForQueueType } from '@foxfire/core'
 import type {
   EditableMatch,
   ManualRank,
@@ -18,7 +18,7 @@ import { devSeasonIdAt } from './seasons'
  * `npm run dev:web` can be used to build and check the editor end to end with
  * no Riot key, no League client and no synced database. The rule it applies is
  * the one in rankAttribution.ts: a game's LP is known only when exactly one
- * ranked game sits between two consecutive readings.
+ * ranked game ends between two consecutive readings.
  *
  * The fixtures are mutated in place. That is fine here and nowhere else: this
  * module is dynamically imported only when window.api is missing, so it never
@@ -101,8 +101,9 @@ function ladderMatches(accountId: string, queueType: QueueType): MatchSummary[] 
     .sort((a, b) => a.gameCreation - b.gameCreation)
 }
 
+/** Where the rule places a game, and where its entry is stored. See gameEndMs. */
 function endOf(match: MatchSummary): number {
-  return match.gameCreation + match.gameDuration * 1000
+  return gameEndMs(match.gameCreation, match.gameDuration)
 }
 
 function toSnapshot(queueType: QueueType, rank: ManualRank, capturedAt: number): RankSnapshot {
@@ -159,7 +160,7 @@ function rebuild(accountId: string, queueType: QueueType): void {
     if (before.ladderPosition === null || after.ladderPosition === null) continue
 
     const between = matches.filter(
-      (m) => m.gameCreation > before.capturedAt && m.gameCreation <= after.capturedAt
+      (m) => endOf(m) > before.capturedAt && endOf(m) <= after.capturedAt
     )
     if (between.length !== 1) continue
 
@@ -187,8 +188,9 @@ export function editableMatches(accountId: string, queueType: QueueType): Editab
     .map((match) => {
       const entry = entered.get(match.matchId)
       // Manual readings count: after entering the rank following one game, that
-      // is exactly what the next game starts from.
-      const previous = [...snapshots].reverse().find((s) => s.capturedAt < match.gameCreation)
+      // is exactly what the next game starts from. Before the game's end, as the
+      // rule pairs it — a reading taken mid-game is the rank it started from.
+      const previous = [...snapshots].reverse().find((s) => s.capturedAt < endOf(match))
 
       return {
         matchId: match.matchId,
