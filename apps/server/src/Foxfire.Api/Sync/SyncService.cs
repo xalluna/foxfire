@@ -254,6 +254,14 @@ public sealed class SyncService(
         await RefreshProfileAsync(profile, account, priority);
         await ReplayAttributionAsync(attribution, riotAccountId, puuid);
 
+        // Everybody else in those games, whose own reading nothing else takes.
+        // Not after a backfill: that is history, and a reading taken now says
+        // nothing about any game in it.
+        if (!isBackfill && stored > 0)
+        {
+            await ReadCoPlayersAsync(services.GetRequiredService<CoPlayerRanks>(), account, idsToFetch, priority);
+        }
+
         // Only advance the marker when everything landed. Leaving it alone on a
         // partial failure means the next run retries just the gaps, and already
         // stored ids are filtered out, so the retry is cheap.
@@ -409,6 +417,28 @@ public sealed class SyncService(
             // Logged rather than truly silent: a rank call failing on every
             // single sync is a real problem that would otherwise never surface.
             log.LogDebug(ex, "Rank reading failed after syncing {RiotId}", account.RiotId);
+        }
+    }
+
+    /// <summary>
+    /// Reads rank for the other tracked accounts in the games just stored — see
+    /// <see cref="CoPlayerRanks"/>. Never fails the sync, for the same reason as
+    /// the reading above.
+    /// </summary>
+    private async Task ReadCoPlayersAsync(
+        CoPlayerRanks coPlayers,
+        RiotAccount account,
+        IReadOnlyList<string> matchIds,
+        RiotRequestPriority priority)
+    {
+        try
+        {
+            var read = await coPlayers.ReadAsync(account.Id, matchIds, IsSyncing, priority);
+            if (read > 0) log.LogDebug("Read rank for {Count} co-player(s) of {RiotId}", read, account.RiotId);
+        }
+        catch (Exception ex)
+        {
+            log.LogDebug(ex, "Reading co-players' rank failed after syncing {RiotId}", account.RiotId);
         }
     }
 

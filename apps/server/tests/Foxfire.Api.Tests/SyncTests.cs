@@ -470,6 +470,140 @@ public class SyncTests(FoxfireServerFixture server)
         }
     }
 
+    /// <summary>Where somebody stood on the solo ladder, as a League client reported it.</summary>
+    private static RankSnapshot GoldII(Guid riotAccountId, int lp, long capturedAt) => new()
+    {
+        RiotAccountId = riotAccountId,
+        QueueType = RankedQueue.SoloDuo.RiotName(),
+        Tier = RankTier.Gold,
+        Division = RankDivision.II,
+        LeaguePoints = lp,
+        LadderPosition = Ladder.LadderPosition(new Rank(RankTier.Gold, RankDivision.II, lp)),
+        Source = RankSources.Lcu,
+        CapturedAt = capturedAt
+    };
+
+    private static int LeagueReads(FakeRiot riot, string puuid) =>
+        riot.Requests.Count(r => r.Contains($"/league/v4/entries/by-puuid/{puuid}", StringComparison.Ordinal));
+
+    private const string TheirGoldII62 =
+        """
+        [{"queueType":"RANKED_SOLO_5x5","tier":"GOLD","rank":"II","leaguePoints":62,"wins":31,"losses":28}]
+        """;
+
+    /// <summary>
+    /// Two members, a game only the first had before, and one they then queued
+    /// into together — so the first's next sync is a delta that finds it, the
+    /// shape of the post-game sync one client asked for.
+    /// </summary>
+    private static async Task<(Guid Mine, Guid Theirs)> SyncASharedGameAsync(
+        Rig rig,
+        FakeRiot riot,
+        string mine,
+        string theirs,
+        string shared,
+        Action<FoxfireDbContext, Guid>? seedTheirs = null)
+    {
+        var earlier = UniqueMatchId();
+        riot.WithMatchIds(mine, earlier)
+            .WithMatch(earlier, MatchPayloads.TenPlayerGame(earlier, T0 - 3_600_000, 420, [mine]))
+            .WithMatch(shared, MatchPayloads.TenPlayerGame(shared, T0, 420, [mine, theirs]));
+
+        Guid myId, theirId;
+        await using (var scope = rig.Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            myId = (await AddAccountAsync(db, mine)).Id;
+            theirId = (await AddAccountAsync(db, theirs)).Id;
+            seedTheirs?.Invoke(db, theirId);
+            await db.SaveChangesAsync();
+        }
+
+        await rig.Sync.SyncAsync(myId, SyncTrigger.Manual);
+        riot.WithMatchIds(mine, shared, earlier);
+        await rig.Sync.SyncAsync(myId, SyncTrigger.Auto);
+
+        return (myId, theirId);
+    }
+
+    [Fact]
+    public async Task A_sync_reads_rank_for_the_other_members_in_a_ranked_game_it_stored()
+    {
+        // Two members queue together and only one client reports the game. The
+        // other's history gains it from the same payload, and nothing used to
+        // read where it left them — their next reading came games later, and the
+        // stretch in between could not be split.
+        var mine = UniquePuuid();
+        var theirs = UniquePuuid();
+        var shared = UniqueMatchId();
+        var riot = new FakeRiot().WithLeagueEntries(theirs, TheirGoldII62);
+
+        await using var rig = Start(riot);
+        var (_, theirId) = await SyncASharedGameAsync(
+            rig, riot, mine, theirs, shared, (db, id) => db.RankSnapshots.Add(GoldII(id, 41, T0 - 60_000)));
+
+        Assert.Equal(1, LeagueReads(riot, theirs));
+
+        await using var scope = rig.Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var attributed = await db.MatchRanks.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.MatchId == shared && r.RiotAccountId == theirId);
+
+        Assert.NotNull(attributed);
+        Assert.Equal(21, attributed.LpDelta);
+
+        // Their standing moved on the profile card too, not only in the history.
+        var entry = await db.LeagueEntries.AsNoTracking()
+            .FirstAsync(l => l.RiotAccountId == theirId && l.QueueType == "RANKED_SOLO_5x5");
+        Assert.Equal(62, entry.LeaguePoints);
+    }
+
+    [Fact]
+    public async Task A_member_already_read_since_the_game_ended_is_not_read_again()
+    {
+        // Their own League client reported the game's result, so a reading from
+        // here would only be the same value again — a request spent for nothing.
+        var mine = UniquePuuid();
+        var theirs = UniquePuuid();
+        var riot = new FakeRiot().WithLeagueEntries(theirs, TheirGoldII62);
+
+        await using var rig = Start(riot);
+        await SyncASharedGameAsync(
+            rig, riot, mine, theirs, UniqueMatchId(), (db, id) => db.RankSnapshots.Add(GoldII(id, 62, T0 + 2_400_000)));
+
+        Assert.Equal(0, LeagueReads(riot, theirs));
+    }
+
+    [Fact]
+    public async Task A_backfill_reads_nobody_else()
+    {
+        // A backfill is history. A reading taken now says nothing about any game
+        // in it, and a new member's first sync would otherwise read everybody
+        // they ever queued with.
+        var mine = UniquePuuid();
+        var theirs = UniquePuuid();
+        var shared = UniqueMatchId();
+
+        var riot = new FakeRiot()
+            .WithMatchIds(mine, shared)
+            .WithMatch(shared, MatchPayloads.TenPlayerGame(shared, T0, 420, [mine, theirs]))
+            .WithLeagueEntries(theirs, TheirGoldII62);
+
+        await using var rig = Start(riot);
+
+        Guid myId;
+        await using (var scope = rig.Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            myId = (await AddAccountAsync(db, mine)).Id;
+            await AddAccountAsync(db, theirs);
+        }
+
+        Assert.Equal(1, (await rig.Sync.SyncAsync(myId, SyncTrigger.Manual)).Stored);
+        Assert.Equal(0, LeagueReads(riot, theirs));
+    }
+
     [Fact]
     public async Task A_rank_reading_that_has_not_moved_is_not_recorded_twice()
     {

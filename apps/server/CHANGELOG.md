@@ -13,7 +13,8 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.5.1] — 2026-09-26
 
-A fix for LP in match history that disagreed with Edit LP. Serves Foxfire 0.15 and newer.
+A fix for LP in match history that disagreed with Edit LP, and for games played
+with another member that were left without any. Serves Foxfire 0.15 and newer.
 
 ### Fixed
 
@@ -31,6 +32,13 @@ A fix for LP in match history that disagreed with Edit LP. Serves Foxfire 0.15 a
 - **Edit LP counts from the reading match history does.** A game's "From" is the
   last reading before the game ended, which is the one its entry is paired with,
   so the change the editor shows is the one the match row will.
+- **A game two members played together gets its LP for both of them.** The sync
+  after a game read rank only for whoever's client reported the game. The other
+  member gained it in their history, but nothing read where it left them, so
+  their LP waited on their own next sync — often games later, when the games in
+  between could no longer be told apart and had to be typed in by hand. Every
+  other member in a ranked game a sync stores is now read as well, unless their
+  own client or their own sync already has.
 - **Saving the season table works when somebody has Flex LP.** Saving works
   every figure out again, one ladder after the other, and the second tripped
   over the rows the first had just written — so the save failed on any server
@@ -49,6 +57,12 @@ A fix for LP in match history that disagreed with Edit LP. Serves Foxfire 0.15 a
   stale figures until the next start.
 - The routine replay looks for games a day further back than its window, since a
   game that began before the window can end inside it.
+- After a sync that is not a backfill stores ranked games, `CoPlayerRanks` reads
+  league-v4 for every other tracked account in them — one request each, at the
+  sync's own priority — skipping one read since the game ended or whose own sync
+  is running. Their attribution replays, and `rank:changed` refreshes whoever is
+  looking at them. Riot publishes a game only once it has ended, so the reading
+  always lands after it.
 - Tests for the reported case, for a game handed its predecessor's movement, and
   for the exact end of a game as the boundary, mirrored case for case in the
   desktop's suite.
