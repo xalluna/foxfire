@@ -1,4 +1,5 @@
 import type { MatchDetail, MatchParticipant, MatchSummary } from '@foxfire/core'
+import { gameEndMs } from '@foxfire/core'
 
 /**
  * Static game data and scoreboard scaffolding shared by every fixture.
@@ -20,6 +21,19 @@ export const DAY = 24 * HOUR
  * against one clock rather than two Date.now() calls milliseconds apart.
  */
 export const NOW = Date.now()
+
+/**
+ * When a fixture game's result is read: a minute after it ends, about when the
+ * League client reports the new rank.
+ *
+ * Attribution places a game by its end (gameEndMs), so a reading stamped at the
+ * game's creation — which is what these fixtures used to do — would land inside
+ * the game, and the harness's first rebuild after an LP edit would shift every
+ * figure one game along.
+ */
+export function resultReadAt(gameCreation: number, gameDurationSeconds: number): number {
+  return gameEndMs(gameCreation, gameDurationSeconds) + 60_000
+}
 
 /** Champion ids referenced by the fixtures, named for readability. */
 export const C = {

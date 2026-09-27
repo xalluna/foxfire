@@ -53,19 +53,21 @@ public static class ManualRanks
     /// <summary>
     /// When an assertion is taken to have been true.
     ///
-    /// Game end rather than game start, so it falls inside the interval for its
-    /// own match and clear of the next one. Duration is seconds, unlike every
-    /// other time in this schema.
+    /// The game's end, which is also where attribution places the game, so the
+    /// entry closes its own game's interval and opens the next one.
     /// </summary>
     public static long AfterTime(long gameCreation, int gameDurationSeconds) =>
-        gameCreation + (gameDurationSeconds * 1000L);
+        GameTimes.End(gameCreation, gameDurationSeconds);
 
     /// <summary>
     /// A moment just before a game, for the entry that must state the rank going
     /// in as well as the one coming out.
     ///
-    /// A millisecond is enough: the interval test is a strict greater-than, so
-    /// the game still falls inside it.
+    /// Before the creation rather than merely before the end: the editor tells a
+    /// game's own "before" from its "after" by which side of the creation it
+    /// falls, and a game is placed at its end, so it sits inside the interval
+    /// this opens by its whole length — and a millisecond earlier is still after
+    /// the previous game ended.
     /// </summary>
     public static long BeforeTime(long gameCreation) => gameCreation - 1;
 

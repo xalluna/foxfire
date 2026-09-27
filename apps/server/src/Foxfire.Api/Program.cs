@@ -268,6 +268,17 @@ catch (Exception ex)
     throw;
 }
 
+try
+{
+    await app.Services.RebuildAttributionIfRuleChangedAsync(app.Lifetime.ApplicationStopping);
+}
+catch (Exception ex) when (ex is not OperationCanceledException)
+{
+    // Not worth the server. What fails here costs LP figures worked out under
+    // the old rule until the next start tries again, not anybody's access.
+    startup.LogError(ex, "Could not work LP out again under the current attribution rule");
+}
+
 var spa = SpaHosting.Locate(app.Configuration, app.Environment);
 
 app.UseFoxfireRequestLogging();

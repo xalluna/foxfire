@@ -363,6 +363,76 @@ public class ReadTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task Hand_entered_LP_reaches_match_history_around_readings_taken_mid_game()
+    {
+        // The reported case, as a server stored it. A sync read Silver II 80
+        // while B was being played and Silver I 10 while C was. Placed by their
+        // creation, B and C were each closed by the reading taken during them —
+        // equal to the entry before it — and match history read 0 for both while
+        // the editor showed +30.
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var editor = scope.ServiceProvider.GetRequiredService<ManualRankEditor>();
+
+        var account = await AddAccountAsync(db);
+        const long Minute = 60_000;
+
+        // Thirty-minute games.
+        var a = await AddMatchAsync(db, account.Puuid, T0);
+        var b = await AddMatchAsync(db, account.Puuid, T0 + (40 * Minute));
+        var c = await AddMatchAsync(db, account.Puuid, T0 + (80 * Minute));
+
+        foreach (var (division, lp, at) in new[]
+        {
+            (RankDivision.II, 90, T0 - (10 * Minute)),
+            (RankDivision.II, 80, T0 + (50 * Minute)),
+            (RankDivision.I, 10, T0 + (90 * Minute)),
+            (RankDivision.I, 40, T0 + (115 * Minute))
+        })
+        {
+            db.RankSnapshots.Add(new RankSnapshot
+            {
+                RiotAccountId = account.Id,
+                QueueType = RankedQueue.SoloDuo.RiotName(),
+                Tier = RankTier.Silver,
+                Division = division,
+                LeaguePoints = lp,
+                LadderPosition = Ladder.LadderPosition(new Rank(RankTier.Silver, division, lp)),
+                Source = RankSources.LeagueV4,
+                CapturedAt = at
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        var problem = await editor.SaveAsync(
+            account.Id,
+            account.Puuid,
+            RankedQueue.SoloDuo,
+            [
+                new ManualRankEdit(a, new ManualRank(RankTier.Silver, RankDivision.II, 80), null),
+                new ManualRankEdit(b, new ManualRank(RankTier.Silver, RankDivision.I, 10), null)
+            ]);
+
+        Assert.Null(problem);
+
+        db.ChangeTracker.Clear();
+        var figures = await db.MatchRanks.AsNoTracking()
+            .Where(r => r.RiotAccountId == account.Id)
+            .ToDictionaryAsync(r => r.MatchId, r => r.LpDelta);
+
+        Assert.Equal(-10, figures[a]);
+        Assert.Equal(30, figures[b]);
+        Assert.Equal(30, figures[c]);
+
+        // And the editor measures B from the reading attribution paired it with.
+        var offered = await editor.EditableAsync(account.Id, account.Puuid, RankedQueue.SoloDuo);
+        var editable = Assert.Single(offered, m => m.MatchId == b);
+        Assert.Equal(new ManualRankDto("SILVER", "II", 80), editable.Before);
+        Assert.Equal(T0 + (50 * Minute), editable.BeforeAt);
+    }
+
+    [Fact]
     public async Task A_rank_that_could_not_exist_is_refused_rather_than_stored()
     {
         // Attribution silently skips a reading it cannot place on the ladder, so

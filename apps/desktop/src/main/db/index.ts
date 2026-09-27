@@ -16,6 +16,7 @@ import recordingsRenameSql from './migrations/011_recordings_rename.sql?raw'
 import roflReplaysSql from './migrations/012_rofl_replays.sql?raw'
 import serverModeSql from './migrations/013_server_mode.sql?raw'
 import youtubeSql from './migrations/014_youtube.sql?raw'
+import attributionByGameEndSql from './migrations/015_attribution_by_game_end.sql?raw'
 
 let db: DatabaseSync | null = null
 
@@ -35,7 +36,8 @@ const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
   { name: '011_recordings_rename.sql', sql: recordingsRenameSql },
   { name: '012_rofl_replays.sql', sql: roflReplaysSql },
   { name: '013_server_mode.sql', sql: serverModeSql },
-  { name: '014_youtube.sql', sql: youtubeSql }
+  { name: '014_youtube.sql', sql: youtubeSql },
+  { name: '015_attribution_by_game_end.sql', sql: attributionByGameEndSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

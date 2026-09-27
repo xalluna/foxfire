@@ -73,4 +73,14 @@ public static class ServerSettingKeys
     /// starts, rather than finding out from a storage bill or a full volume.
     /// </summary>
     public const string ReplayByteCap = "replays.byteCap";
+
+    /// <summary>
+    /// The LP attribution rule the stored MatchRanks were last worked out under.
+    ///
+    /// Bookkeeping rather than a switch — nobody sets it. The server writes it
+    /// after rebuilding every figure, and rebuilds again whenever the rule it
+    /// was built with differs from this. Absent means before the rule had a
+    /// number: games placed by their creation.
+    /// </summary>
+    public const string AttributionRule = "attribution.rule";
 }

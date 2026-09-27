@@ -17,6 +17,7 @@ import { getAccountByRiotId } from './accounts.repo'
 import { applyAllMigrations } from '../testMigrations'
 import type { MatchDto } from '../../riot/types'
 import type { Season } from '@shared/types'
+import { gameEndMs } from '@foxfire/core'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -371,19 +372,45 @@ describe('getRankedMatchesBetween', () => {
     seedAccount(db)
   })
 
-  it('bounds exclusively below and inclusively above', () => {
-    insertMatch(db, soloMatch('NA1_1', T0))
-    insertMatch(db, soloMatch('NA1_2', T0 + 1000))
+  /** soloMatch's games last 1669 seconds; these are placed by where they end. */
+  const GAME_MS = 1669 * 1000
 
-    // T0 itself is excluded — it belongs to the preceding interval.
+  it('bounds exclusively below and inclusively above', () => {
+    insertMatch(db, soloMatch('NA1_1', T0 - GAME_MS))
+    insertMatch(db, soloMatch('NA1_2', T0 + 1000 - GAME_MS))
+
+    // A game ending at T0 is excluded — it belongs to the preceding interval.
     expect(getRankedMatchesBetween(db, ME, 420, T0, T0 + 1000).map((m) => m.matchId)).toEqual([
       'NA1_2'
     ])
     expect(getRankedMatchesBetween(db, ME, 420, T0 - 1, T0 + 1000)).toHaveLength(2)
   })
 
+  it('places a game by its end, so a reading taken mid-game comes before it', () => {
+    // Started before the interval opened and ended inside it: this interval's.
+    insertMatch(db, soloMatch('NA1_straddles', T0 - 60_000))
+    // Started inside and ended after it: the next interval's.
+    insertMatch(db, soloMatch('NA1_runs_on', T0 + GAME_MS - 60_000))
+
+    expect(
+      getRankedMatchesBetween(db, ME, 420, T0, T0 + GAME_MS).map((m) => m.matchId)
+    ).toEqual(['NA1_straddles'])
+  })
+
+  it('agrees with gameEndMs to the millisecond', () => {
+    // The SQL fragment and the core function are two spellings of one instant,
+    // and a hand-entered rank is stored at the second. Either drifting leaves
+    // the entry closing an interval with no game in it.
+    const creation = T0 + 123_456
+    insertMatch(db, soloMatch('NA1_1', creation))
+    const end = gameEndMs(creation, 1669)
+
+    expect(getRankedMatchesBetween(db, ME, 420, end - 1, end)).toHaveLength(1)
+    expect(getRankedMatchesBetween(db, ME, 420, end, end + 1)).toHaveLength(0)
+  })
+
   it('ignores other queues', () => {
-    insertMatch(db, soloMatch('NA1_aram', T0 + 500, 450))
+    insertMatch(db, soloMatch('NA1_aram', T0 + 500 - GAME_MS, 450))
     expect(getRankedMatchesBetween(db, ME, 420, T0, T0 + 1000)).toEqual([])
   })
 })

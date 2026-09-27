@@ -11,6 +11,49 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.5.1] — 2026-09-26
+
+A fix for LP in match history that disagreed with Edit LP. Serves Foxfire 0.15 and newer.
+
+### Fixed
+
+- **Match history shows the LP Edit LP does.** A rank reading taken while a game
+  was still being played — a sync that happened to run mid-game, a desktop opened
+  mid-game — still shows the rank the player went in with, but it was counted as
+  that game's result. So a game could read ▼ 0 LP, or the LP of the game before
+  it, even with the right figure typed in for it and shown in Edit LP. Games are
+  now placed by when they ended, so a reading taken during one counts as the rank
+  it started from. Every figure is worked out again the first time 0.5.1 starts:
+  the wrong ones are corrected, some games that needed typing in no longer do,
+  and one that only ever showed the previous game's movement goes blank for Edit
+  LP to fill in. Updating the server is the whole fix for anybody connected to
+  one.
+- **Edit LP counts from the reading match history does.** A game's "From" is the
+  last reading before the game ended, which is the one its entry is paired with,
+  so the change the editor shows is the one the match row will.
+- **Saving the season table works when somebody has Flex LP.** Saving works
+  every figure out again, one ladder after the other, and the second tripped
+  over the rows the first had just written — so the save failed on any server
+  where somebody had an LP figure on a Flex game.
+
+### Under the hood
+
+- Attribution places a game at its creation plus its duration — the instant a
+  hand-entered rank was already stored at, so no entry moves — through one
+  `GameTimes.End` that both read.
+- The rule has a number, `RankAttribution.RuleVersion`, and the server keeps the
+  one its figures were built under as `attribution.rule` in its settings. When
+  the two differ it rebuilds every account's figures at boot, before it serves,
+  and writes the number last, so an interrupted rebuild starts over rather than
+  leaving half the figures on the old rule. A failure is logged and costs only
+  stale figures until the next start.
+- The routine replay looks for games a day further back than its window, since a
+  game that began before the window can end inside it.
+- Tests for the reported case, for a game handed its predecessor's movement, and
+  for the exact end of a game as the boundary, mirrored case for case in the
+  desktop's suite.
+- Desktop 0.16.1 on the allow list beside 0.15.0 and 0.16.0.
+
 ## [0.5.0] — 2026-09-26
 
 Head admins. Every admin used to be able to do everything an admin could — import
@@ -890,6 +933,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.5.1]: https://github.com/xalluna/foxfire/compare/server-v0.5.0...server-v0.5.1
 [0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0
 [0.3.1]: https://github.com/xalluna/foxfire/compare/server-v0.3.0...server-v0.3.1

@@ -1,3 +1,4 @@
+using Foxfire.Api.Sync;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
@@ -364,7 +365,8 @@ public class GameSchemaTests(FoxfireServerFixture server)
         var solo = RankedQueue.SoloDuo;
         var matchId = UniqueMatchId();
 
-        db.Matches.Add(NewMatch(matchId, T0 + 500, solo.QueueId()));
+        // Ending between the two readings, which is where attribution places it.
+        db.Matches.Add(NewMatch(matchId, T0 + 500 - 1_669_000, solo.QueueId()));
         db.MatchParticipants.Add(new MatchParticipant
         {
             MatchId = matchId,
@@ -403,6 +405,7 @@ public class GameSchemaTests(FoxfireServerFixture server)
             .Join(db.Matches, p => p.MatchId, m => m.MatchId, (p, m) => new RankedMatch(
                 m.MatchId,
                 m.GameCreation,
+                m.GameDuration,
                 m.QueueId ?? 0,
                 p.GameEndedInEarlySurrender))
             .ToListAsync();
@@ -443,5 +446,160 @@ public class GameSchemaTests(FoxfireServerFixture server)
         var stored = await db.MatchRanks.SingleAsync(r => r.MatchId == matchId && r.RiotAccountId == account.Id);
         Assert.Equal(21, stored.LpDelta);
         Assert.False(stored.IsPromotion);
+    }
+
+    /// <summary>A ranked game the account played, lasting NewMatch's 1669 seconds.</summary>
+    private static string AddRankedGame(
+        FoxfireDbContext db,
+        RiotAccount account,
+        long gameCreation,
+        RankedQueue queue = RankedQueue.SoloDuo)
+    {
+        var matchId = UniqueMatchId();
+
+        db.Matches.Add(NewMatch(matchId, gameCreation, queue.QueueId()));
+        db.MatchParticipants.Add(new MatchParticipant
+        {
+            MatchId = matchId,
+            Puuid = account.Puuid,
+            TeamId = 100,
+            Win = true,
+            ChampionId = 112,
+            GameEndedInEarlySurrender = false
+        });
+
+        return matchId;
+    }
+
+    private static void AddReading(
+        FoxfireDbContext db,
+        RiotAccount account,
+        int lp,
+        long capturedAt,
+        RankedQueue queue = RankedQueue.SoloDuo) =>
+        db.RankSnapshots.Add(new RankSnapshot
+        {
+            RiotAccountId = account.Id,
+            QueueType = queue.RiotName(),
+            Tier = RankTier.Gold,
+            Division = RankDivision.II,
+            LeaguePoints = lp,
+            LadderPosition = Ladder.LadderPosition(new Rank(RankTier.Gold, RankDivision.II, lp)),
+            Source = "league_v4",
+            CapturedAt = capturedAt
+        });
+
+    [Fact]
+    public async Task A_windowed_replay_still_sees_a_game_that_began_before_its_window()
+    {
+        // A game is placed by its end, so one that began before the window and
+        // ended inside it belongs to the window's first interval. Loaded by
+        // creation from the window's start, it would be missing, the game after
+        // it would look like the only one, and that game would be written the
+        // pair's whole movement — a row no later replay takes back.
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var attribution = scope.ServiceProvider.GetRequiredService<AttributionRunner>();
+
+        var account = await AddAccountAsync(db);
+        const long Since = T0 + 86_400_000;
+
+        AddRankedGame(db, account, Since - 600_000);
+        var later = AddRankedGame(db, account, Since + 3_600_000);
+        AddReading(db, account, 20, Since);
+        AddReading(db, account, 61, Since + 7_200_000);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, await attribution.ReplayAsync(account.Id, account.Puuid, Since));
+
+        db.ChangeTracker.Clear();
+        Assert.False(await db.MatchRanks.AnyAsync(r => r.MatchId == later));
+    }
+
+    [Fact]
+    public async Task Rebuilding_every_ladder_corrects_rows_and_drops_the_unprovable_ones()
+    {
+        // What a rule change needs: a replay only upserts, so a figure the old
+        // rule proved and the new one cannot would otherwise stay for good.
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var attribution = scope.ServiceProvider.GetRequiredService<AttributionRunner>();
+
+        var account = await AddAccountAsync(db);
+        var measured = AddRankedGame(db, account, T0);
+        var ambiguousA = AddRankedGame(db, account, T0 + 3_600_000);
+        var ambiguousB = AddRankedGame(db, account, T0 + 7_200_000);
+        AddReading(db, account, 20, T0 - 60_000);
+        AddReading(db, account, 41, T0 + 1_800_000);
+        AddReading(db, account, 62, T0 + 10_800_000);
+
+        foreach (var (matchId, delta) in new[] { (measured, 0), (ambiguousB, 21) })
+        {
+            db.MatchRanks.Add(new MatchRank
+            {
+                MatchId = matchId,
+                RiotAccountId = account.Id,
+                QueueType = RankedQueue.SoloDuo.RiotName(),
+                LpDelta = delta
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        Assert.Equal(1, await attribution.RebuildAllAsync(account.Id, account.Puuid));
+
+        db.ChangeTracker.Clear();
+        var rows = await db.MatchRanks.AsNoTracking()
+            .Where(r => r.RiotAccountId == account.Id)
+            .ToDictionaryAsync(r => r.MatchId, r => r.LpDelta);
+
+        Assert.Equal(21, rows[measured]);
+        Assert.False(rows.ContainsKey(ambiguousA));
+        Assert.False(rows.ContainsKey(ambiguousB));
+    }
+
+    [Fact]
+    public async Task Rebuilding_one_ladder_after_the_other_in_one_scope_does_not_trip_over_itself()
+    {
+        // Saving the season table does exactly this for every account. The first
+        // rebuild's replay covers both ladders and leaves their rows tracked, so
+        // the second's delete has to forget them as well as remove them — or its
+        // replay adds a row with the key of one still held, and EF refuses it.
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var attribution = scope.ServiceProvider.GetRequiredService<AttributionRunner>();
+
+        var account = await AddAccountAsync(db);
+        var solo = AddRankedGame(db, account, T0);
+        var flex = AddRankedGame(db, account, T0, RankedQueue.Flex);
+        AddReading(db, account, 20, T0 - 60_000);
+        AddReading(db, account, 41, T0 + 1_800_000);
+        AddReading(db, account, 20, T0 - 60_000, RankedQueue.Flex);
+        AddReading(db, account, 35, T0 + 1_800_000, RankedQueue.Flex);
+        await db.SaveChangesAsync();
+
+        foreach (var queue in RankedQueues.All)
+        {
+            await attribution.RebuildAsync(account.Id, account.Puuid, queue);
+        }
+
+        db.ChangeTracker.Clear();
+        var rows = await db.MatchRanks.AsNoTracking()
+            .Where(r => r.RiotAccountId == account.Id)
+            .ToDictionaryAsync(r => r.MatchId, r => r.LpDelta);
+
+        Assert.Equal(21, rows[solo]);
+        Assert.Equal(15, rows[flex]);
+    }
+
+    [Fact]
+    public async Task The_server_records_which_rule_its_figures_were_built_under()
+    {
+        // Written at boot once every figure has been worked out again, so a
+        // server started twice under one rule rebuilds once.
+        await using var scope = Scope();
+        var settings = scope.ServiceProvider.GetRequiredService<Foxfire.Api.Services.ServerSettingsService>();
+
+        Assert.Equal(RankAttribution.RuleVersion, await settings.GetAttributionRuleAsync());
     }
 }

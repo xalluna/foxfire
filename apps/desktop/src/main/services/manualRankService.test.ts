@@ -160,7 +160,8 @@ describe('manual LP entry', () => {
     it('excludes a game attribution already worked out', () => {
       observe(db, rank('GOLD', 'II', 20), T0)
       insertMatch(db, match('NA1_A', T0 + 10 * MINUTE))
-      observe(db, rank('GOLD', 'II', 41), T0 + 20 * MINUTE)
+      // After A has ended, which is where attribution places it.
+      observe(db, rank('GOLD', 'II', 41), T0 + 40 * MINUTE)
       // Snapshots alone write no LP — the real flow attributes on replay.
       replayAttribution(db, ACCOUNT, ME)
 
@@ -192,6 +193,19 @@ describe('manual LP entry', () => {
       // real reading separates the games, so each starts where the last ended.
       expect(new Set(stretch.map((m) => m.beforeAt)).size).toBe(1)
       expect(stretch[0].beforeAt).toBe(T0)
+    })
+
+    it('counts from a reading taken while the game was being played', () => {
+      // Such a reading is the rank the game started from, and it is the one
+      // attribution pairs the game's entry with — so it is what the editor has
+      // to measure from, or it shows a figure the match row never will.
+      seedAmbiguousRun(db)
+      observe(db, rank('GOLD', 'II', 38), T0 + 70 * MINUTE)
+
+      const b = getEditableMatches(db, ACCOUNT, ME, SOLO).find((m) => m.matchId === 'NA1_B')!
+
+      expect(b.before).toEqual(rank('GOLD', 'II', 38))
+      expect(b.beforeAt).toBe(T0 + 70 * MINUTE)
     })
 
     it('flags a game with nothing usable before it', () => {
@@ -240,6 +254,34 @@ describe('manual LP entry', () => {
       const manual = getRankSnapshots(db, ACCOUNT, SOLO).filter((s) => s.source === 'manual')
       expect(manual).toHaveLength(1)
       expect(manual[0].capturedAt).toBe(manualSnapshotTime(T0 + 10 * MINUTE, DURATION))
+    })
+
+    it('gives match history the figure the editor showed, around readings taken mid-game', () => {
+      // The reported case. A sync read Silver II 80 while B was being played
+      // and Silver I 10 while C was. Placed by their creation, B and C were
+      // each closed by the reading taken during them — equal to the entry
+      // before — and read 0 while the editor showed +30.
+      observe(db, rank('SILVER', 'II', 90), T0)
+      insertMatch(db, match('NA1_A', T0 + 10 * MINUTE))
+      insertMatch(db, match('NA1_B', T0 + 45 * MINUTE))
+      observe(db, rank('SILVER', 'II', 80), T0 + 55 * MINUTE)
+      insertMatch(db, match('NA1_C', T0 + 80 * MINUTE))
+      observe(db, rank('SILVER', 'I', 10), T0 + 90 * MINUTE)
+      observe(db, rank('SILVER', 'I', 40), T0 + 180 * MINUTE)
+
+      saveManualRanks(db, ACCOUNT, ME, SOLO, [
+        { matchId: 'NA1_A', after: rank('SILVER', 'II', 80) },
+        { matchId: 'NA1_B', after: rank('SILVER', 'I', 10) }
+      ])
+
+      expect(lpFor(db, 'NA1_A')).toBe(-10)
+      expect(lpFor(db, 'NA1_B')).toBe(30)
+      expect(lpFor(db, 'NA1_C')).toBe(30)
+
+      // And the editor measures B from the reading attribution paired it with.
+      const b = getEditableMatches(db, ACCOUNT, ME, SOLO).find((m) => m.matchId === 'NA1_B')!
+      expect(b.before).toEqual(rank('SILVER', 'II', 80))
+      expect(b.beforeAt).toBe(T0 + 55 * MINUTE)
     })
 
     it('re-editing corrects the entry rather than stacking another', () => {
@@ -417,6 +459,24 @@ describe('manual LP entry', () => {
 
       expect(removed).toBe(0)
       expect(lpFor(db, 'NA1_A')).toBe(18)
+    })
+
+    it('drops an entry that a reading taken during the next game measured', () => {
+      seedAmbiguousRun(db)
+      saveManualRanks(db, ACCOUNT, ME, SOLO, [{ matchId: 'NA1_A', after: rank('GOLD', 'II', 38) }])
+
+      // B began at 60 minutes and was still being played at 70, so the reading
+      // is the rank A left the player at — exactly what the entry asserted.
+      const removed = deleteSupersededManualSnapshots(
+        db,
+        ACCOUNT,
+        ME,
+        SOLO,
+        420,
+        T0 + 70 * MINUTE
+      )
+
+      expect(removed).toBe(1)
     })
   })
 

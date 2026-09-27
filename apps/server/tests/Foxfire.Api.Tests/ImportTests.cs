@@ -31,6 +31,13 @@ public class ImportTests(FoxfireServerFixture server)
 {
     private static readonly long T0 = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 7_200_000;
 
+    /// <summary>
+    /// Half an hour on from a game's creation: past the end of the 1669-second
+    /// games MatchPayloads builds, which is where attribution places a game, so
+    /// a reading taken then knows its result.
+    /// </summary>
+    private const long AfterTheGame = 30 * 60_000;
+
     private static string UniqueMatchId() => $"NA1_{Random.Shared.NextInt64(1, long.MaxValue)}";
 
     private static string UniquePuuid() => $"puuid-{Guid.NewGuid():N}";
@@ -369,7 +376,7 @@ public class ImportTests(FoxfireServerFixture server)
         var readingsBefore = new[]
         {
             Reading(deadPuuid, "GOLD", "II", 41, earlier - 60_000),
-            Reading(deadPuuid, "GOLD", "II", 62, earlier + 60_000)
+            Reading(deadPuuid, "GOLD", "II", 62, earlier + AfterTheGame)
         };
 
         Assert.Equal(1, (await PostAsync<ImportBatchResult>(client, "/api/admin/import/matches", new[] { firstGame })).Accepted);
@@ -378,7 +385,7 @@ public class ImportTests(FoxfireServerFixture server)
 
         // ── The same file, three days later ────────────────────────────────────
         var laterGame = new { matchId = laterMatch, rawJson = MatchPayloads.TenPlayerGame(laterMatch, T0, 420, [deadPuuid], win: false) };
-        var readingsAfter = readingsBefore.Append(Reading(deadPuuid, "GOLD", "II", 41, T0 + 60_000)).ToArray();
+        var readingsAfter = readingsBefore.Append(Reading(deadPuuid, "GOLD", "II", 41, T0 + AfterTheGame)).ToArray();
 
         var lookupsBefore = AccountLookups(riot, gameName);
 
@@ -567,7 +574,7 @@ public class ImportTests(FoxfireServerFixture server)
             new[]
             {
                 Reading(deadPuuid, "GOLD", "II", 41, T0 - 60_000),
-                Reading(deadPuuid, "GOLD", "II", 62, T0 + 60_000)
+                Reading(deadPuuid, "GOLD", "II", 62, T0 + AfterTheGame)
             });
 
         var finished = await client.PostAsync(new Uri("/api/admin/import/finish", UriKind.Relative), null);

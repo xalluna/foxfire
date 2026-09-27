@@ -20,6 +20,7 @@ import {
   S,
   detailFor,
   perks,
+  resultReadAt,
   type Keystone,
   type TrackedPlayer
 } from './catalog'
@@ -378,7 +379,7 @@ function buildClimb(): {
     if (game.win) wins += 1
     else losses += 1
 
-    const after = snapshot(game.at)
+    const after = snapshot(resultReadAt(game.at, summaries[index].gameDuration))
     snapshots.push(after)
 
     const movement = rankMovement(before, after)
@@ -553,7 +554,7 @@ function buildPrior(): { matches: MatchSummary[]; snapshots: RankSnapshot[] } {
     if (game.win) wins += 1
     else losses += 1
 
-    const after = snapshot(game.at)
+    const after = snapshot(resultReadAt(game.at, summaries[index].gameDuration))
     snapshots.push(after)
 
     const movement = rankMovement(before, after)
