@@ -14,10 +14,30 @@ commit, and there is no `[Unreleased]` section.
 ## [0.5.1] — 2026-09-26
 
 A fix for LP in match history that disagreed with Edit LP, and for games played
-with another member that were left without any. Serves Foxfire 0.15 and newer.
+with another member that were left without any — and for the server's mail, which
+arrived from a bare address with a dark button on a light page. Serves Foxfire
+0.15 and newer.
+
+### Added
+
+- **The test email has a button.** It opens the server, and it is the button
+  every other message carries — so sending a test from the Email page is enough
+  to see how the server's mail looks.
+
+### Changed
+
+- **Email buttons are light.** They were the app's dark navy dropped onto a
+  white message; now they are a pale blue with a blue edge, matching the page
+  they sit on.
 
 ### Fixed
 
+- **Mail arrives under a name.** Every message showed up from the bare address —
+  `noreply@…` in the inbox — whatever name the server was set to sign it with,
+  because the name went out in a form Resend throws away. It now goes out the way
+  Resend reads it, so the inbox shows the server's name, or `EMAIL_FROM_NAME` when
+  that is set. A name with punctuation a sender line cannot carry, like a comma,
+  loses that punctuation rather than the whole name.
 - **Match history shows the LP Edit LP does.** A rank reading taken while a game
   was still being played — a sync that happened to run mid-game, a desktop opened
   mid-game — still shows the rank the player went in with, but it was counted as
@@ -67,6 +87,9 @@ with another member that were left without any. Serves Foxfire 0.15 and newer.
   for the exact end of a game as the boundary, mirrored case for case in the
   desktop's suite.
 - Desktop 0.16.1 on the allow list beside 0.15.0 and 0.16.0.
+- The From line goes to Resend as `Name <address>`, never quoted: 0.5.0's
+  `"noreply" <…>` reached Gmail with no name at all. `ActiveEmailProvider.FromLine`
+  drops the characters that would need the quotes, and a test holds it to that.
 
 ## [0.5.0] — 2026-09-26
 
