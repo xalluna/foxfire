@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
-## [0.16.1] — 2026-09-26
+## [0.16.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP. Needs Foxfire Server 0.5.1, which is
 where the fix lives for anybody connected to one.

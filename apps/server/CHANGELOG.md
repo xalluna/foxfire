@@ -11,7 +11,7 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
-## [0.5.1] — 2026-09-26
+## [0.5.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP, and for games played
 with another member that were left without any — and for the server's mail, which
