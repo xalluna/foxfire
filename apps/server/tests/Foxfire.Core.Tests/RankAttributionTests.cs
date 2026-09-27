@@ -50,8 +50,19 @@ public class RankAttributionTests
         new(RankedQueue.SoloDuo, RankSpelling.Tier(tier), RankSpelling.Division(division), lp,
             Wins: 10, Losses: 8, ladderPosition, "lcu", capturedAt);
 
-    private static RankedMatch Match(string matchId, long gameCreation, int queueId = SoloQueueId) =>
-        new(matchId, gameCreation, queueId, EndedInEarlySurrender: false);
+    /// <summary>The length of every fixture game, as in the desktop's suite.</summary>
+    private const int GameSeconds = 1669;
+
+    /// <summary>
+    /// A game that ended at <paramref name="endedAt"/>, which is where attribution
+    /// places it — the timestamps below are the ones the desktop's suite uses, so
+    /// they name ends and the creations sit a game's length earlier.
+    /// </summary>
+    private static RankedMatch Match(string matchId, long endedAt, int queueId = SoloQueueId) =>
+        new(matchId, endedAt - (GameSeconds * 1000L), GameSeconds, queueId, EndedInEarlySurrender: false);
+
+    /// <summary>Minutes after T0, for the timelines laid out like a real evening.</summary>
+    private static long Min(double minutes) => T0 + (long)(minutes * 60_000);
 
     /* ---------------------------------------------------------------- */
     /* attributeInterval                                                */
@@ -124,7 +135,7 @@ public class RankAttributionTests
                 Snapshot("GOLD", "II", 41, T0 + 1000, 1441),
                 [
                     Match("NA1_1", T0 + 500),
-                    new RankedMatch("NA1_remake", T0 + 600, SoloQueueId, EndedInEarlySurrender: true)
+                    new RankedMatch("NA1_remake", T0 + 600 - 180_000, 180, SoloQueueId, EndedInEarlySurrender: true)
                 ],
                 []);
 
@@ -189,7 +200,7 @@ public class RankAttributionTests
         [Fact]
         public void Is_exclusive_below_and_inclusive_above()
         {
-            // The asymmetry the SQL encodes, asserted directly. A game landing
+            // The asymmetry the SQL encodes, asserted directly. A game ending
             // exactly on a reading belongs to the interval ending there, not the
             // one starting there — the other way round it would be counted twice
             // across adjacent pairs and make both ambiguous.
@@ -352,6 +363,102 @@ public class RankAttributionTests
                 Assert.Equal(-7, results.Single(r => r.MatchId == "NA1_LOSS").LpDelta);
                 Assert.Equal(21, results.Single(r => r.MatchId == "NA1_WIN").LpDelta);
             }
+        }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* a reading taken while a game was being played                    */
+    /* ---------------------------------------------------------------- */
+
+    /// <summary>
+    /// Three games of an evening, each running 27 minutes and ending at 30, 70
+    /// and 110. A sync that runs mid-game reads the rank the player went in with,
+    /// and those readings land after the game began — which is what placing a
+    /// game by its creation got wrong.
+    /// </summary>
+    public class AReadingTakenMidGame
+    {
+        private static readonly RankedMatch[] Evening =
+            [Match("NA1_A", Min(30)), Match("NA1_B", Min(70)), Match("NA1_C", Min(110))];
+
+        [Fact]
+        public void Does_not_close_the_game_it_was_taken_during()
+        {
+            // The reported case, from a server's own rows. Silver II 80 and
+            // Silver I 10 were typed in for A and B; a sync read Silver II 80
+            // during B and Silver I 10 during C. Paired by creation, B and C both
+            // read 0 — each met the reading taken during it, which matched the
+            // entry before it — while the editor showed +30 for each.
+            var results = RankAttribution.Replay(
+                [
+                    Snapshot("SILVER", "II", 90, T0, 1090),
+                    Snapshot("SILVER", "II", 80, Min(30), 1080),
+                    Snapshot("SILVER", "II", 80, Min(50), 1080),
+                    Snapshot("SILVER", "I", 10, Min(70), 1110),
+                    Snapshot("SILVER", "I", 10, Min(85), 1110),
+                    Snapshot("SILVER", "I", 40, Min(140), 1140)
+                ],
+                Evening,
+                []);
+
+            Assert.Equal(3, results.Count);
+            Assert.Equal(-10, results.Single(r => r.MatchId == "NA1_A").LpDelta);
+            Assert.Equal(30, results.Single(r => r.MatchId == "NA1_B").LpDelta);
+            Assert.Equal(30, results.Single(r => r.MatchId == "NA1_C").LpDelta);
+        }
+
+        [Fact]
+        public void Does_not_hand_a_game_the_movement_of_the_one_before_it()
+        {
+            // No hand entry at all: only readings from syncs that each happened to
+            // run during the next game. By creation, A and B shared the first
+            // interval and got nothing, and C was handed B's +25.
+            var results = RankAttribution.Replay(
+                [
+                    Snapshot("SILVER", "II", 90, T0, 1090),
+                    Snapshot("SILVER", "II", 80, Min(50), 1080),
+                    Snapshot("SILVER", "I", 5, Min(85), 1105),
+                    Snapshot("SILVER", "I", 25, Min(140), 1125)
+                ],
+                Evening,
+                []);
+
+            Assert.Equal(3, results.Count);
+            Assert.Equal(-10, results.Single(r => r.MatchId == "NA1_A").LpDelta);
+            Assert.Equal(25, results.Single(r => r.MatchId == "NA1_B").LpDelta);
+            Assert.Equal(20, results.Single(r => r.MatchId == "NA1_C").LpDelta);
+        }
+
+        [Fact]
+        public void Is_closed_by_a_reading_exactly_at_its_end_and_not_one_just_before()
+        {
+            // A hand-entered rank is stored at exactly the game's end, so that
+            // instant has to close the game. A millisecond earlier the game is
+            // still being played, and it shares the next interval with B.
+            RankedMatch[] games = [Evening[0], Evening[1]];
+
+            var atTheEnd = RankAttribution.Replay(
+                [
+                    Snapshot("GOLD", "II", 20, T0, 1420),
+                    Snapshot("GOLD", "II", 41, Min(30), 1441),
+                    Snapshot("GOLD", "II", 62, Min(100), 1462)
+                ],
+                games,
+                []);
+
+            var justBefore = RankAttribution.Replay(
+                [
+                    Snapshot("GOLD", "II", 20, T0, 1420),
+                    Snapshot("GOLD", "II", 41, Min(30) - 1, 1441),
+                    Snapshot("GOLD", "II", 62, Min(100), 1462)
+                ],
+                games,
+                []);
+
+            Assert.Equal(2, atTheEnd.Count);
+            Assert.Equal(21, atTheEnd.Single(r => r.MatchId == "NA1_A").LpDelta);
+            Assert.Equal(21, atTheEnd.Single(r => r.MatchId == "NA1_B").LpDelta);
+            Assert.Empty(justBefore);
         }
     }
 

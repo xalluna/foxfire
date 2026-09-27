@@ -7,6 +7,40 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.16.1] — 2026-09-27
+
+A fix for LP in match history that disagreed with Edit LP. Needs Foxfire Server 0.5.1, which is
+where the fix lives for anybody connected to one.
+
+### Fixed
+
+- **Match history shows the LP Edit LP does.** A rank reading taken while a game was still being
+  played — a sync that happened to run mid-game, Foxfire opened mid-game — still shows the rank you
+  went in with, but it was counted as that game's result. So a game could read ▼ 0 LP, or the LP of
+  the game before it, even with the right figure typed in for it and shown in Edit LP. Games are now
+  placed by when they ended, so a reading taken during one counts as the rank it started from.
+  Without a server, every figure is worked out again the first time 0.16.1 opens: the wrong ones are
+  corrected, some games that needed typing in no longer do, and one that only ever showed the
+  previous game's movement goes blank for Edit LP to fill in.
+- **Edit LP counts from the reading match history does.** A game's "From" is the last reading
+  before the game ended, which is the one its entry is paired with, so the change the editor shows
+  is the one the match row will.
+
+### Under the hood
+
+- Attribution, the LP editor and a hand-entered rank all place a game at its creation plus its
+  duration, through one `gameEndMs` in `@foxfire/core` — the instant entries were already stored at,
+  so none of them moves.
+- Migration 015 clears the stored LP figures, and the repair that already runs at every launch
+  writes them back under the new rule. A replay only ever adds, so it could not have taken back a
+  figure the old rule proved and the new one cannot.
+- An entry is now also superseded by a reading taken during the next game, which measures the rank
+  the entry asserted.
+- The browser harness places games the same way, and its fixture readings are taken a minute after
+  each game ends rather than as it began.
+- Tests for the reported case, for a game handed its predecessor's movement, for the exact end of a
+  game as the boundary, and for the upgrade, mirrored case for case in the server's suite.
+
 ## [0.16.0] — 2026-09-26
 
 Head admins, on a server that has them. A head admin can fix LP on anybody's games and is the one
@@ -1322,6 +1356,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.16.1]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.0...desktop-v0.16.1
 [0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0
 [0.14.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.13.0...desktop-v0.14.0

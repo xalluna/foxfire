@@ -70,6 +70,21 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
         return int.TryParse(raw, out var value) && value > 0 ? value : BackfillTargetDefault;
     }
 
+    /// <summary>
+    /// The attribution rule the stored LP figures were built under.
+    ///
+    /// 1 when never written: every server from before the rule had a number
+    /// worked its figures out under the first one.
+    /// </summary>
+    public async Task<int> GetAttributionRuleAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.AttributionRule, cancellationToken);
+        return int.TryParse(raw, out var value) && value > 0 ? value : 1;
+    }
+
+    public Task SetAttributionRuleAsync(int rule, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.AttributionRule, rule.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
     private async Task<string?> ReadAsync(string key, CancellationToken cancellationToken)
     {
         var value = await db.ServerSettings

@@ -17,6 +17,15 @@ import type { QueueType, RankSnapshot, Season } from '@shared/types'
  * split between them any number of ways, and nothing is written rather than
  * spreading a guess across games and presenting it as a measurement.
  *
+ * A game falls in the interval that holds its end (gameEndMs), not its
+ * creation. A reading only knows a game's result once the game is over, and
+ * one taken while it was being played — a sync that ran mid-game, the app
+ * opening mid-game — shows the rank the player went in with. Placed by its
+ * creation, the game was closed by that reading: it read 0 LP, or the previous
+ * game's movement, while the entry typed for it closed an interval holding
+ * nothing. The server's RankAttribution is the port, and a change to where a
+ * game is placed bumps its RuleVersion so its stored figures are rebuilt.
+ *
  * Kept free of getDb() so it can be tested against an in-memory database —
  * importing the app's db module would pull in Electron.
  *

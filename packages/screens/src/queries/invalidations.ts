@@ -55,9 +55,11 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
       ]
 
     case 'rankChanged':
-      // A League client recorded an LP change. Unscoped, as it always was: the
-      // reading can settle a game on whichever account was playing, and a
-      // refetch of a list nobody is looking at costs nothing.
+      // A League client recorded an LP change, or another member's sync read
+      // this account's rank after a game they shared — which also put that game
+      // in this account's history. Unscoped, as it always was: the reading can
+      // settle a game on whichever account was playing, and a refetch of a list
+      // nobody is looking at costs nothing.
       return [
         queryKeys.rankHistory(),
         queryKeys.rankTrend(),

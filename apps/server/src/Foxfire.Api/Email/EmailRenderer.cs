@@ -54,7 +54,7 @@ public sealed class EmailRenderer(
             EmailKinds.PasswordReset => await ResetAsync(message, name, now, cancellationToken),
             EmailKinds.Verification or EmailKinds.EmailChange => await ConfirmationAsync(message, name, now, cancellationToken),
             EmailKinds.PasswordChanged => await PasswordChangedAsync(message, name, cancellationToken),
-            EmailKinds.Test => (EmailTemplates.Test(name, message.CreatedAt), null),
+            EmailKinds.Test => (EmailTemplates.Test(name, message.CreatedAt, $"{server.Value.PublicUrl.TrimEnd('/')}/"), null),
             _ => (null, "unknown_kind")
         };
 

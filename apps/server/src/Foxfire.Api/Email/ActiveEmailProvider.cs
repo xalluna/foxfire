@@ -54,18 +54,27 @@ public sealed class ActiveEmailProvider
     public string SenderName =>
         string.IsNullOrWhiteSpace(Options.FromName) ? _server.Value.Name : Options.FromName.Trim();
 
-    /// <summary>
-    /// The From line: <c>"Name" &lt;address&gt;</c>. The name loses anything that
-    /// could end the quoted string or the header it sits in.
-    /// </summary>
-    public string From
-    {
-        get
-        {
-            var name = new string([.. SenderName.Where(c => c is not ('"' or '\\' or '\r' or '\n' or '<' or '>'))]).Trim();
-            var address = Options.FromAddress.Trim();
+    /// <summary>The From line, as <see cref="FromLine"/> spells it.</summary>
+    public string From => FromLine(SenderName, Options.FromAddress.Trim());
 
-            return name.Length == 0 ? address : $"\"{name}\" <{address}>";
-        }
+    /// <summary>
+    /// <c>Name &lt;address&gt;</c>, never with the name in quotes.
+    ///
+    /// Quoting is how RFC 5322 carries a name with a comma in it, but Resend
+    /// drops a quoted name: Server 0.5.0 sent <c>"noreply" &lt;…&gt;</c> and
+    /// the mail arrived from the bare address. So the name goes unquoted, the
+    /// way Resend's own docs write it, and loses whatever would have needed the
+    /// quotes — the specials, and anything that could end the header — rather
+    /// than the whole name. The period stays: every client reads it unquoted.
+    /// </summary>
+    public static string FromLine(string name, string address)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(address);
+
+        var kept = name.Select(c => c is '(' or ')' or '<' or '>' or '[' or ']' or ':' or ';' or '@' or '\\' or ',' or '"' || char.IsWhiteSpace(c) ? ' ' : c);
+        var words = new string([.. kept]).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        return words.Length == 0 ? address : $"{string.Join(' ', words)} <{address}>";
     }
 }
