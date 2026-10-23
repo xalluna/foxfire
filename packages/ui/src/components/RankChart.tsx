@@ -1,9 +1,9 @@
 import { useId, useState } from 'react'
 import { format } from 'date-fns'
 import type { RankCloses, RankTrendPoint } from '@foxfire/core'
-import { tierBandBoundaries } from '@foxfire/core'
+import { ratedBandBoundaries, ratedTierAt, tierBandBoundaries } from '@foxfire/core'
 import { roundedPath } from '../lib/curve'
-import { tierColor, tierLabel } from '../lib/rank'
+import { ratedTierColor, ratedTierLabel, tierColor, tierLabel } from '../lib/rank'
 
 const DAY_MS = 86_400_000
 
@@ -34,8 +34,12 @@ type Plotted = RankTrendPoint & { ladderPosition: number }
  * read as one thing at two sizes. The x axis is the whole range whatever was
  * played in it: a quiet fortnight is a flat stretch, and a line that starts
  * late starts where tracking began.
+ *
+ * A rated ladder — Hyper Roll — is the same graph of a different number: its
+ * position is the rating, and the bands and colours are its own tiers, read
+ * off the rating rather than off a tier the close carries.
  */
-export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
+export function RankChart({ closes, rated = false }: { closes: RankCloses; rated?: boolean }): JSX.Element {
   const [hover, setHover] = useState<number | null>(null)
   // The gradient and mask are referenced by id, which is document-global — two
   // charts on one screen would otherwise silently share the first one's colours.
@@ -49,6 +53,10 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
   }
 
   const positions = points.map((p) => p.ladderPosition)
+
+  // Which band a close stands in, and its colour, on either kind of ladder.
+  const bandOf = (p: Plotted): string | null => (rated ? ratedTierAt(p.ladderPosition) : p.tier)
+  const colorOf = (band: string | null): string => (rated ? ratedTierColor(band) : tierColor(band))
 
   // A minimum span keeps a flat or single-point series from filling the plot
   // with one division blown up to full height.
@@ -96,22 +104,27 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
   // of. The stops are hard-edged pairs at the same offset: the new colour
   // begins exactly at the close that first stood in the new tier.
   const stops: Array<{ offset: number; color: string }> = [
-    { offset: 0, color: tierColor(points[0].tier) }
+    { offset: 0, color: colorOf(bandOf(points[0])) }
   ]
   for (let i = 1; i < points.length; i++) {
-    if (points[i].tier === points[i - 1].tier) continue
+    if (bandOf(points[i]) === bandOf(points[i - 1])) continue
     const offset = (x(points[i].at) - PAD.left) / (PLOT_W || 1)
-    stops.push({ offset, color: tierColor(points[i - 1].tier) })
-    stops.push({ offset, color: tierColor(points[i].tier) })
+    stops.push({ offset, color: colorOf(bandOf(points[i - 1])) })
+    stops.push({ offset, color: colorOf(bandOf(points[i])) })
   }
 
   // Only the boundaries inside the visible range, so a short series is not
   // covered in labels for tiers it never touched.
-  const bands = tierBandBoundaries().filter((b) => b.start >= yMin - 400 && b.start <= yMax + 400)
+  const bands = (rated ? ratedBandBoundaries() : tierBandBoundaries()).filter(
+    (b) => b.start >= yMin - 400 && b.start <= yMax + 400
+  )
+  const bandLabel = (tier: string): string => (rated ? ratedTierLabel(tier) : tierLabel(tier, null))
 
-  // Division gridlines within the visible span, one per 100 LP.
+  // Gridlines within the visible span: one per division's 100 LP, and every
+  // 200 of a rating, which moves several times as far a game.
+  const gridStep = rated ? 200 : 100
   const divisionLines: number[] = []
-  for (let p = Math.ceil(yMin / 100) * 100; p <= yMax; p += 100) divisionLines.push(p)
+  for (let p = Math.ceil(yMin / gridStep) * gridStep; p <= yMax; p += gridStep) divisionLines.push(p)
 
   const active = hover === null ? null : points[hover]
 
@@ -186,7 +199,7 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
               x2={WIDTH - PAD.right}
               y1={y(band.start)}
               y2={y(band.start)}
-              stroke={tierColor(band.tier)}
+              stroke={colorOf(band.tier)}
               strokeOpacity="0.35"
               strokeWidth="1"
               strokeDasharray="3 3"
@@ -196,10 +209,10 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
               y={y(band.start) + 3}
               textAnchor="end"
               className="text-[9px]"
-              fill={tierColor(band.tier)}
+              fill={colorOf(band.tier)}
               fillOpacity="0.8"
             >
-              {tierLabel(band.tier, null)}
+              {bandLabel(band.tier)}
             </text>
           </g>
         ))}
@@ -236,7 +249,7 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
               cy={y(p.ladderPosition)}
               r={3}
               fill="rgb(var(--canvas))"
-              stroke={tierColor(p.tier)}
+              stroke={colorOf(bandOf(p))}
               strokeWidth="1.5"
             />
           ))
@@ -249,8 +262,8 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
             cx={x(active.at)}
             cy={y(active.ladderPosition)}
             r={4.5}
-            fill={tierColor(active.tier)}
-            stroke={tierColor(active.tier)}
+            fill={colorOf(bandOf(active))}
+            stroke={colorOf(bandOf(active))}
             strokeWidth="1.5"
           />
         )}
@@ -295,10 +308,12 @@ export function RankChart({ closes }: { closes: RankCloses }): JSX.Element {
             top: `${(y(active.ladderPosition) / HEIGHT) * 100}%`
           }}
         >
-          <p className="font-medium" style={{ color: tierColor(active.tier) }}>
-            {tierLabel(active.tier, active.rank)}
+          <p className="font-medium" style={{ color: colorOf(bandOf(active)) }}>
+            {rated ? ratedTierLabel(bandOf(active)) : tierLabel(active.tier, active.rank)}
           </p>
-          <p className="tabular-nums text-text-dim">{active.leaguePoints ?? 0} LP</p>
+          <p className="tabular-nums text-text-dim">
+            {rated ? `${active.ladderPosition.toLocaleString()} rating` : `${active.leaguePoints ?? 0} LP`}
+          </p>
           {/* When the close was drawn, not when its game was played: a day's
               close names the day, and six hours' the moment they ended. */}
           <p className="tabular-nums text-text-mute">

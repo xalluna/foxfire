@@ -1,14 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { ladderPosition, queueFilterLabel, queueIdForQueueType } from '@foxfire/core'
-import type { EditableMatch, ManualRank, ManualRankEdit, QueueType } from '@foxfire/core'
+import {
+  countedPlacement,
+  isTopHalf,
+  ladderPosition,
+  ordinal,
+  queueFilterLabel,
+  queueIdForQueueType,
+  DOUBLE_UP_QUEUE_ID
+} from '@foxfire/core'
+import type { EditableMatch, ManualRank, ManualRankEdit, QueueType, TftEditableMatch } from '@foxfire/core'
 import { useAssetManifest } from '../context/assetManifest'
 import { championIconUrl, championName } from '../lib/assets'
 import { formatAge, formatClock } from '../lib/matchStats'
+import { placementTone } from '../lib/tft'
 import { Asset } from '../components/Asset'
 import { EmptyState } from '../components/EmptyState'
 import * as Icon from '../components/icons'
 import { RankInput, RankLabel } from './RankInput'
+
+/** A game the editor lists: League's, with a champion and a score, or TFT's, with a place. */
+type Editable = EditableMatch | TftEditableMatch
+
+const isTft = (match: Editable): match is TftEditableMatch => 'placement' in match
+
+/** Whether the game went well, which is what the row's edge is coloured by. */
+function wentWell(match: Editable): boolean {
+  return isTft(match) ? isTopHalf(match, match.queueId) : match.win
+}
 
 /** A draft is the after state, plus the before for the rare game that needs one. */
 interface Draft {
@@ -45,7 +64,7 @@ export function LpEditorPage({
   onSave
 }: {
   queueType: QueueType
-  matches: EditableMatch[] | undefined
+  matches: Editable[] | undefined
   loading: boolean
   /** The game the editor was opened on, scrolled to and picked out. */
   focusedMatchId: string | null
@@ -85,7 +104,7 @@ export function LpEditorPage({
    * before field from whatever it has, so opening a saved entry shows both
    * halves rather than a blank starting point.
    */
-  const draftFor = (match: EditableMatch): Draft =>
+  const draftFor = (match: Editable): Draft =>
     drafts[match.matchId] ?? {
       after: match.manual,
       before: match.beforeUsable ? null : match.before
@@ -112,7 +131,7 @@ export function LpEditorPage({
    * *below* it. A different beforeAt means a real reading separates the two and
    * the stretch has ended.
    */
-  const predecessor = (match: EditableMatch, index: number): EditableMatch | null => {
+  const predecessor = (match: Editable, index: number): Editable | null => {
     const earlier = matches[index + 1]
     return earlier && earlier.beforeAt === match.beforeAt ? earlier : null
   }
@@ -125,7 +144,7 @@ export function LpEditorPage({
    * anywhere below anchors the ladder, but a delta needs the game *immediately*
    * before this one, or it measures across whatever sits between them.
    */
-  const anchorBelow = (match: EditableMatch, index: number): ManualRank | null => {
+  const anchorBelow = (match: Editable, index: number): ManualRank | null => {
     for (let i = index + 1; i < matches.length; i++) {
       if (matches[i].beforeAt !== match.beforeAt) break
       const after = draftFor(matches[i]).after
@@ -134,7 +153,7 @@ export function LpEditorPage({
     return null
   }
 
-  const beforeFor = (match: EditableMatch, index: number): ManualRank | null => {
+  const beforeFor = (match: Editable, index: number): ManualRank | null => {
     const earlier = predecessor(match, index)
     if (earlier) return draftFor(earlier).after
     // Opens the stretch: the stored reading, or the one this row supplies
@@ -148,16 +167,16 @@ export function LpEditorPage({
    * first. Every game after it starts where its predecessor finished, so asking
    * again would be redundant typing and an invitation to contradict it.
    */
-  const needsOwnBefore = (match: EditableMatch, index: number): boolean =>
+  const needsOwnBefore = (match: Editable, index: number): boolean =>
     !match.beforeUsable && anchorBelow(match, index) === null
 
   /** Whether the game directly before this one is still waiting to be filled in. */
-  const awaitingEarlier = (match: EditableMatch, index: number): boolean => {
+  const awaitingEarlier = (match: Editable, index: number): boolean => {
     const earlier = predecessor(match, index)
     return earlier !== null && draftFor(earlier).after === null
   }
 
-  const setDraft = (match: EditableMatch, patch: Partial<Draft>): void =>
+  const setDraft = (match: Editable, patch: Partial<Draft>): void =>
     setDrafts((prev) => ({ ...prev, [match.matchId]: { ...draftFor(match), ...patch } }))
 
   /**
@@ -169,7 +188,7 @@ export function LpEditorPage({
    * usually resolves the game on the *other* side of it. Refusing to save it
    * because this one row's figure is unknowable would throw that away.
    */
-  const isSaveable = (match: EditableMatch, index: number): boolean => {
+  const isSaveable = (match: Editable, index: number): boolean => {
     if (draftFor(match).after === null) return false
     if (match.beforeUsable) return true
     return anchorBelow(match, index) !== null || draftFor(match).before !== null
@@ -239,30 +258,34 @@ export function LpEditorPage({
                   }}
                   className={clsx(
                     'flex flex-wrap items-center gap-x-4 gap-y-2 border-l-[3px] px-3 py-2.5 transition',
-                    match.win ? 'border-l-teal' : 'border-l-red',
+                    wentWell(match) ? 'border-l-teal' : 'border-l-red',
                     focusedMatchId === match.matchId && 'bg-accent/[0.07]'
                   )}
                 >
-                  <div className="flex w-[210px] shrink-0 items-center gap-2">
-                    <Asset
-                      src={assets ? championIconUrl(assets, match.championId) : null}
-                      className="h-8 w-8"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-2xs text-text">
-                        {assets
-                          ? championName(assets, match.championId, match.championName)
-                          : (match.championName ?? '')}
-                        <span className={clsx('ml-1.5', match.win ? 'text-teal' : 'text-red')}>
-                          {match.win ? 'Win' : 'Loss'}
-                        </span>
-                      </p>
-                      <p className="truncate text-2xs tabular-nums text-text-mute">
-                        {match.kills}/{match.deaths}/{match.assists} ·{' '}
-                        {formatClock(match.gameDuration)} · {formatAge(match.gameCreation)}
-                      </p>
+                  {isTft(match) ? (
+                    <TftGame match={match} />
+                  ) : (
+                    <div className="flex w-[210px] shrink-0 items-center gap-2">
+                      <Asset
+                        src={assets ? championIconUrl(assets, match.championId) : null}
+                        className="h-8 w-8"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-2xs text-text">
+                          {assets
+                            ? championName(assets, match.championId, match.championName)
+                            : (match.championName ?? '')}
+                          <span className={clsx('ml-1.5', match.win ? 'text-teal' : 'text-red')}>
+                            {match.win ? 'Win' : 'Loss'}
+                          </span>
+                        </p>
+                        <p className="truncate text-2xs tabular-nums text-text-mute">
+                          {match.kills}/{match.deaths}/{match.assists} ·{' '}
+                          {formatClock(match.gameDuration)} · {formatAge(match.gameCreation)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="flex items-center gap-2">
                     <span className="text-2xs text-text-mute">From</span>
@@ -358,6 +381,38 @@ export function LpEditorPage({
           </span>
         </footer>
       )}
+    </div>
+  )
+}
+
+/**
+ * A TFT game, as the editor names it: the place that moved the LP — the team's
+ * in Double Up — then how long it lasted and when.
+ */
+function TftGame({ match }: { match: TftEditableMatch }): JSX.Element {
+  const doubleUp = match.queueId === DOUBLE_UP_QUEUE_ID && match.teamPlacement !== null
+  const place = countedPlacement(match, match.queueId)
+  const tone = placementTone(place, doubleUp ? 2 : 4)
+
+  return (
+    <div className="flex w-[210px] shrink-0 items-center gap-2">
+      <span
+        className={clsx(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-hairline font-display text-sm tabular-nums',
+          tone === 'first' ? 'text-gold' : tone === 'top' ? 'text-teal' : 'text-text-dim'
+        )}
+      >
+        {place}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-2xs text-text">
+          {ordinal(place)}
+          {doubleUp && <span className="ml-1 text-text-mute">team</span>}
+        </p>
+        <p className="truncate text-2xs tabular-nums text-text-mute">
+          {formatClock(match.gameDuration)} · {formatAge(match.gameCreation)}
+        </p>
+      </div>
     </div>
   )
 }

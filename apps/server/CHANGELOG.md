@@ -24,6 +24,15 @@ Teamfight Tactics, beside League.
   the last 20 games at a glance, and a history of every game's board that opens
   onto all eight in its lobby. A link to somebody's TFT profile opens on it, so
   it can be shared like any other page.
+- **TFT rank history in the web client**, at `/players/{name}/tft/rank`: each
+  ladder's climb with its milestones, Hyper Roll drawn by its rating and banded
+  by its colours. **Edit LP** takes TFT's Ranked and Double Up games too.
+- **A recording of a TFT game** plays like League's, under a header with the
+  place it finished, its strongest trait and its carry.
+- **History backfill on Data & storage.** How many games a newly added
+  account's history goes back is now set from the page, for League and TFT
+  separately, where it used to be an API call. Both share the server's one
+  Riot budget.
 
 ### Under the hood
 

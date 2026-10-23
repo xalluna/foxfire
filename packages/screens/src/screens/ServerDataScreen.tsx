@@ -88,6 +88,15 @@ export function ServerDataScreen(): JSX.Element {
         await client.admin.setSettings({ replayByteCap: bytes })
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
       }}
+      backfill={
+        settings.data
+          ? { league: settings.data.backfillTarget, tft: settings.data.tftBackfillTarget }
+          : undefined
+      }
+      onSaveBackfill={async (patch) => {
+        await client.admin.setSettings(patch)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
+      }}
       replays={replays.data === undefined ? undefined : pageItems(replays.data, (replay) => replay.matchId)}
       hasMoreReplays={replays.hasNextPage}
       loadingMoreReplays={replays.isFetchingNextPage}

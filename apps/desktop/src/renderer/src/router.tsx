@@ -108,7 +108,7 @@ const routeTree = root.addChildren([
       players.dashboard,
       players.champions,
       players.rank,
-      players.tft.addChildren([players.tftProfile]),
+      players.tft.addChildren([players.tftProfile, players.tftRank]),
       captures
     ]),
     settings

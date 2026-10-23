@@ -24,15 +24,25 @@ export function parseRankQueueParam(raw: unknown): QueueType | undefined {
 }
 
 const TFT_PLAYER_PATH = /^\/players\/[^/]+\/tft(?:\/|$)/
+const LP_EDITOR_PATH = /^\/players\/[^/]+\/lp\/?$/
+const RECORDING_PATH = /^\/players\/[^/]+\/recordings\//
 
 /**
- * Which game a player path is showing.
+ * Which game a player page is showing.
  *
  * TFT lives under the player — `/players/Faker-KR1/tft` — because the Riot ID
  * is shared, and everything else under a player is League's, as it always was.
+ * Two pages are both games' and say which in their query: the LP editor by its
+ * ladder, and a recording by its `game`.
  */
-export function gameOfPlayerPath(pathname: string): GameId {
-  return TFT_PLAYER_PATH.test(pathname) ? 'tft' : 'lol'
+export function gameOfPlayerPath(pathname: string, search: { queue?: unknown; game?: unknown } = {}): GameId {
+  if (TFT_PLAYER_PATH.test(pathname)) return 'tft'
+  if (LP_EDITOR_PATH.test(pathname)) {
+    const ladder = parseRankQueueParam(search.queue)
+    return ladder ? LADDERS[ladder].game : 'lol'
+  }
+  if (RECORDING_PATH.test(pathname) && search.game === 'tft') return 'tft'
+  return 'lol'
 }
 
 /**

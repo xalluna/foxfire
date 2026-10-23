@@ -9,7 +9,12 @@ function Tab({
   exact,
   children
 }: {
-  to: '/players/$slug' | '/players/$slug/champions' | '/players/$slug/rank' | '/players/$slug/tft'
+  to:
+    | '/players/$slug'
+    | '/players/$slug/champions'
+    | '/players/$slug/rank'
+    | '/players/$slug/tft'
+    | '/players/$slug/tft/rank'
   slug: string
   exact?: boolean
   children: ReactNode
@@ -44,23 +49,29 @@ function Tab({
  * into a 1px vertical scroll, with a scrollbar to match.
  */
 export function WebPlayerLayout({ account, children }: PlayerLayoutProps): JSX.Element {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const game = useRouterState({
+    select: (s) => gameOfPlayerPath(s.location.pathname, s.location.search as Record<string, unknown>)
+  })
   if (!account) return <div className="mx-auto max-w-7xl">{children}</div>
 
   const slug = playerSlug(account)
-  const game = gameOfPlayerPath(pathname)
 
   return (
     <div className="mx-auto max-w-7xl">
-      {/* The game first, then that game's pages: League has three, TFT its
-          profile. The switch sits on the tabs' own line so it reads as the
-          choice the tabs belong to. */}
+      {/* The game first, then that game's pages: League has three, TFT two.
+          The switch sits on the tabs' own line so it reads as the choice the
+          tabs belong to. */}
       <nav className="flex items-center gap-1 border-b border-hairline px-4 max-md:px-2">
         <GameSwitch account={account} className="mr-2 max-sm:mr-1" />
         {game === 'tft' ? (
-          <Tab to="/players/$slug/tft" slug={slug} exact>
-            Profile
-          </Tab>
+          <>
+            <Tab to="/players/$slug/tft" slug={slug} exact>
+              Profile
+            </Tab>
+            <Tab to="/players/$slug/tft/rank" slug={slug}>
+              Rank
+            </Tab>
+          </>
         ) : (
           <>
             <Tab to="/players/$slug" slug={slug} exact>

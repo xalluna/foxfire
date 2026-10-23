@@ -2,9 +2,11 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { Asset } from '../components/Asset'
 import { useAssetManifest } from '../context/assetManifest'
+import { ordinal } from '@foxfire/core'
 import { championIconUrl, championName } from '../lib/assets'
 import { formatAge, formatClock, kdaRatio } from '../lib/matchStats'
 import { queueName } from '../lib/queues'
+import { initials, placementTone, tftAsset, tftName } from '../lib/tft'
 
 /** What the strip above a recording says about the game. Null wherever the game did not say. */
 export interface RecordingHeaderFacts {
@@ -20,6 +22,19 @@ export interface RecordingHeaderFacts {
   kills: number | null
   deaths: number | null
   assists: number | null
+  /**
+   * A TFT game's finish and board, which the header shows in place of a
+   * champion and a score. Absent for League's.
+   */
+  tft?: {
+    /** The place that counted — the team's, in Double Up. */
+    placement: number
+    team: boolean
+    /** The trait the board is remembered by, as Riot names it. */
+    trait: string | null
+    /** The unit whose portrait stands for the board, as Riot names it. */
+    unit: string | null
+  } | null
 }
 
 /**
@@ -41,21 +56,29 @@ export function RecordingHeader({
   actions?: ReactNode
 }): JSX.Element {
   const assets = useAssetManifest()
-  const { championId } = facts
+  const { championId, tft } = facts
 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
-      <Asset
-        src={assets && championId !== null ? championIconUrl(assets, championId) : null}
-        className="h-9 w-9"
-        rounded="rounded-md"
-      />
+      {tft ? (
+        <TftPortrait unit={tft.unit} />
+      ) : (
+        <Asset
+          src={assets && championId !== null ? championIconUrl(assets, championId) : null}
+          className="h-9 w-9"
+          rounded="rounded-md"
+        />
+      )}
 
       <div className="min-w-0">
         <p className="truncate font-display text-base text-text">
-          {assets && championId !== null
-            ? championName(assets, championId, facts.championName)
-            : (facts.championName ?? 'Recording')}
+          {tft
+            ? tft.trait
+              ? tftName(assets, 'traits', tft.trait)
+              : 'Recording'
+            : assets && championId !== null
+              ? championName(assets, championId, facts.championName)
+              : (facts.championName ?? 'Recording')}
         </p>
         <p className="text-2xs text-text-mute">
           {queueName(facts.queueId, facts.gameMode)}
@@ -70,7 +93,9 @@ export function RecordingHeader({
         </p>
       </div>
 
-      {facts.win !== null && (
+      {tft && <PlacementChip placement={tft.placement} team={tft.team} />}
+
+      {!tft && facts.win !== null && (
         <span
           className={clsx(
             'ml-2 rounded border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide',
@@ -95,6 +120,40 @@ export function RecordingHeader({
         {actions}
       </div>
     </header>
+  )
+}
+
+/** The board's face: its carry's portrait, or the carry's initials where Data Dragon has none. */
+function TftPortrait({ unit }: { unit: string | null }): JSX.Element {
+  const assets = useAssetManifest()
+  const portrait = unit ? (tftAsset(assets, 'units', unit)?.image ?? null) : null
+
+  if (portrait || !unit) return <Asset src={portrait} className="h-9 w-9" rounded="rounded-md" />
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-2 text-2xs font-semibold text-text-dim">
+      {initials(tftName(assets, 'units', unit))}
+    </span>
+  )
+}
+
+/** "3rd", or "2nd team" in Double Up, in the colour of how it went. */
+function PlacementChip({ placement, team }: { placement: number; team: boolean }): JSX.Element {
+  const tone = placementTone(placement, team ? 2 : 4)
+
+  return (
+    <span
+      className={clsx(
+        'ml-2 rounded border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide tabular-nums',
+        tone === 'first'
+          ? 'border-gold/30 bg-gold/10 text-gold'
+          : tone === 'top'
+            ? 'border-teal/30 bg-teal/10 text-teal'
+            : 'border-red/30 bg-red/10 text-red'
+      )}
+    >
+      {ordinal(placement)}
+      {team && ' team'}
+    </span>
   )
 }
 

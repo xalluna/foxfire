@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   queueTypeForQueueId,
@@ -8,7 +8,7 @@ import {
   type QueueType,
   type TftMatchSummary
 } from '@foxfire/core'
-import { paths } from '@foxfire/core/routes'
+import { paths, playerSlug } from '@foxfire/core/routes'
 import { TftProfilePage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useIsHeadAdmin } from '../client/useConnection'
@@ -21,6 +21,8 @@ import { useFavorites, useToggleFavorite } from '../queries/favorites'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 import { isSyncing, syncCooldownUntil, useSyncProgress } from '../store/syncProgress'
+import { tftRankQueueSearchFor } from '../routes/params'
+import { MoreLink } from './MoreLink'
 
 const PAGE_SIZE = 20
 
@@ -39,15 +41,12 @@ export function TftProfileScreen({
   account,
   queueId,
   onQueueChange,
-  focus = null,
-  rankMore
+  focus = null
 }: {
   account: Account
   queueId: number | null
   onQueueChange: (queueId: number | null) => void
   focus?: MatchFocus | null
-  /** The way from Ranked's card to the TFT Rank page, built by whoever has a router. */
-  rankMore?: ReactNode
 }): JSX.Element {
   const client = useClient()
   const queryClient = useQueryClient()
@@ -177,7 +176,15 @@ export function TftProfileScreen({
           where: platform.kind === 'web' ? 'this browser' : 'this PC'
         }}
         rankedTrend={rankedTrend.data}
-        rankMore={rankMore}
+        rankMore={(ladder) => (
+          // That card's ladder, and no range: thirty days is where the Rank page opens.
+          <MoreLink
+            to="/players/$slug/tft/rank"
+            slug={playerSlug(account)}
+            search={{ queue: tftRankQueueSearchFor(ladder) }}
+            label="Rank history"
+          />
+        )}
         matches={rows}
         matchesLoading={matches.isLoading}
         hasMoreMatches={matches.hasNextPage}

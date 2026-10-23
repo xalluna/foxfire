@@ -10,15 +10,17 @@ import { gameOfPlayerPath, playerSlug } from '@foxfire/core/routes'
  * A player is a Riot ID, and the same Riot ID has a history in each game, so
  * the switch moves between the two profiles of one person rather than between
  * two apps. Which side is lit is read off the address: everything under a
- * player is League's except what is under `/tft`, which is also how a shared
- * link opens on the right one.
+ * player is League's except what is under `/tft`, and the LP editor and a
+ * recording, which say in their query — which is also how a shared link opens
+ * on the right one.
  *
  * Links rather than buttons, so a middle-click opens the other game in a tab
  * in a browser, and the address is the whole of the state.
  */
 export function GameSwitch({ account, className }: { account: Account; className?: string }): JSX.Element {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const game = gameOfPlayerPath(pathname)
+  const game = useRouterState({
+    select: (s) => gameOfPlayerPath(s.location.pathname, s.location.search as Record<string, unknown>)
+  })
   const slug = playerSlug(account)
 
   const option = (to: '/players/$slug' | '/players/$slug/tft', active: boolean, label: string): JSX.Element => (

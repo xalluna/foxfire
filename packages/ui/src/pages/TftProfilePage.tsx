@@ -46,8 +46,8 @@ export interface TftProfilePageProps {
 
   /** Ranked's last thirty days, for the graph on its card. Undefined while it loads. */
   rankedTrend: RankTrend | undefined
-  /** The way from that card to the TFT Rank page. */
-  rankMore?: ReactNode
+  /** The way from a ladder's card to the TFT Rank page, open on that ladder. */
+  rankMore?: (ladder: TftLadder) => ReactNode
 
   matches: TftMatchSummary[]
   matchesLoading: boolean
@@ -129,7 +129,7 @@ export function TftProfilePage({
       entry={leagueEntries.find((e) => e.queueType === ladder) ?? emptyEntry(ladder)}
       summary={ladders?.find((l) => l.queueType === ladder)}
       trend={ladder === 'RANKED_TFT' ? rankedTrend : null}
-      more={ladder === 'RANKED_TFT' ? rankMore : undefined}
+      more={rankMore?.(ladder)}
     />
   ))
 

@@ -30,13 +30,19 @@ import {
   validateDashboardSearch,
   validateLpEditorSearch,
   validateRankSearch,
+  validateRecordingSearch,
+  validateTftRankSearch,
   validateTftSearch,
+  tftLadderFrom,
   tftQueueIdFrom,
   tftQueueSearchFor,
+  tftRankQueueSearchFor,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
   type RankSearch,
+  type RecordingSearch,
+  type TftRankSearch,
   type TftSearch
 } from './params'
 import { rememberSearch } from './rememberSearch'
@@ -149,6 +155,7 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   const recording = createRoute({
     getParentRoute: () => player,
     path: 'recordings/$matchId',
+    validateSearch: validateRecordingSearch,
     component: RecordingRoute
   })
 
@@ -170,7 +177,14 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
     component: TftProfileRoute
   })
 
-  return { player, dashboard, champions, rank, lpEditor, recording, tft, tftProfile }
+  const tftRank = createRoute({
+    getParentRoute: () => tft,
+    path: 'rank',
+    validateSearch: validateTftRankSearch,
+    component: TftRankRoute
+  })
+
+  return { player, dashboard, champions, rank, lpEditor, recording, tft, tftProfile, tftRank }
 }
 
 /**
@@ -342,15 +356,35 @@ function RankRoute(): JSX.Element {
   )
 }
 
+function TftRankRoute(): JSX.Element {
+  const account = usePlayer()
+  const [search, setSearch] = useRouteSearch<TftRankSearch>()
+
+  return (
+    <RankScreen
+      account={account}
+      game="tft"
+      queueType={tftLadderFrom(search.queue)}
+      onQueueTypeChange={(queueType) => setSearch({ queue: tftRankQueueSearchFor(queueType) })}
+      range={search.range ?? DEFAULT_RANK_RANGE}
+      onRangeChange={(range) => setSearch({ range: rankRangeSearchFor(range) })}
+      back={<PlayerBackLink account={account} label="profile" game="tft" />}
+    />
+  )
+}
+
 function RecordingRoute(): JSX.Element {
   const account = usePlayer()
   const { matchId } = useParams({ strict: false }) as { matchId: string }
+  const [search] = useRouteSearch<RecordingSearch>()
+  const game = search.game ?? 'lol'
 
   return (
     <RecordingScreen
       account={account}
       matchId={matchId}
-      back={<PlayerBackLink account={account} label="history" match={matchId} />}
+      game={game}
+      back={<PlayerBackLink account={account} label="history" match={matchId} game={game} />}
     />
   )
 }

@@ -148,6 +148,16 @@ describe('gameOfPlayerPath', () => {
     expect(gameOfPlayerPath('/players/Faker-KR1/rank')).toBe('lol')
     expect(gameOfPlayerPath('/players/tft-KR1')).toBe('lol')
   })
+
+  it('reads the two pages both games share off their query', () => {
+    expect(gameOfPlayerPath('/players/Faker-KR1/lp', { queue: 'double-up' })).toBe('tft')
+    expect(gameOfPlayerPath('/players/Faker-KR1/lp', { queue: 'flex' })).toBe('lol')
+    expect(gameOfPlayerPath('/players/Faker-KR1/lp')).toBe('lol')
+    expect(gameOfPlayerPath('/players/Faker-KR1/recordings/KR_1', { game: 'tft' })).toBe('tft')
+    expect(gameOfPlayerPath('/players/Faker-KR1/recordings/KR_1')).toBe('lol')
+    // Only those two: a stray query elsewhere says nothing about the game.
+    expect(gameOfPlayerPath('/players/Faker-KR1/rank', { queue: 'tft', game: 'tft' })).toBe('lol')
+  })
 })
 
 describe('absoluteUrl', () => {

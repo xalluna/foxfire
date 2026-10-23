@@ -429,6 +429,8 @@ export interface RankMilestone {
   tier: string | null
   rank: string | null
   capturedAt: number
+  /** On a rated ladder, the colour crossed into; tier and rank are null there. */
+  ratedTier?: string | null
 }
 
 export interface RankHistory {

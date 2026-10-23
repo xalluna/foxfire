@@ -23,6 +23,15 @@ Teamfight Tactics, beside League.
   and your board — every unit with its stars and items — and the LP it moved. Open one to see all
   eight boards in that lobby, with anybody Foxfire tracks a link to their own TFT profile. The
   history filters by queue, as League's does.
+- **TFT rank history.** "Rank history" on any TFT card opens that ladder's climb over 7 days, 30
+  days, a set or all of it, with its promotions and demotions. Hyper Roll is drawn by its rating,
+  banded by its colours — Gray to Orange — and its milestones are the colours you crossed.
+- **Edit LP for TFT.** Right-click a Ranked or Double Up game whose LP could not be worked out to
+  enter the rank you finished at, as you can for League. Double Up rows show your team's place.
+  Hyper Roll has a rating and no LP, and the menu says so.
+- **TFT sets in Settings › Rank tracking.** The seasons card has a League | TFT switch: TFT's sets
+  have dates of their own, Set 13 to Set 18 already filled in, and saving one game's list never
+  touches the other's.
 
 ### Under the hood
 

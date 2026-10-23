@@ -39,6 +39,7 @@ import type {
 } from '@foxfire/core'
 import {
   compareSearchResults,
+  ladderMovementFor,
   pageOf,
   rankMovement,
   rankTrend,
@@ -601,6 +602,7 @@ function isMemberMatch(user: AdminUser, needle: string): boolean {
 let mockServerSettings: ServerAdminSettings = {
   publicSignup: true,
   backfillTarget: 200,
+  tftBackfillTarget: 200,
   replayByteCap: 0
 }
 
@@ -815,7 +817,25 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
             (s) => (sinceMs === null || s.capturedAt >= sinceMs) && (untilMs === null || s.capturedAt < untilMs)
           )
           const before = sinceMs === null ? null : (series.filter((s) => s.capturedAt < sinceMs).at(-1) ?? null)
-          return delay({ snapshots, milestones: [], before }, 280)
+          // As League's below, on whichever scale the ladder climbs.
+          const milestones = snapshots
+            .flatMap((snapshot, i) => {
+              if (i === 0 || resetsBetween(TFT_SEASONS, snapshots[i - 1].capturedAt, snapshot.capturedAt)) return []
+              const movement = ladderMovementFor(queueType, snapshots[i - 1], snapshot)
+              if (movement === 'none') return []
+              return [
+                {
+                  queueType,
+                  movement,
+                  tier: snapshot.tier,
+                  rank: snapshot.rank,
+                  capturedAt: snapshot.capturedAt,
+                  ratedTier: snapshot.ratedTier ?? null
+                }
+              ]
+            })
+            .reverse()
+          return delay({ snapshots, milestones, before }, 280)
         },
 
         trend: (accountId: string, queueType: QueueType): Promise<RankTrend> => {

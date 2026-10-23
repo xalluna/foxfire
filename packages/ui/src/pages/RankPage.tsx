@@ -1,19 +1,33 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { format } from 'date-fns'
-import type { QueueType, RankHistory, RankRange, Season } from '@foxfire/core'
-import { parseSeasonRange, rankNetChange, rankRangeCloses, seasonRange } from '@foxfire/core'
+import type { QueueType, RankHistory, RankMilestone, RankRange, RankSnapshot, Season } from '@foxfire/core'
+import { LADDERS, laddersOf, parseSeasonRange, rankNetChange, rankRangeCloses, seasonRange } from '@foxfire/core'
 import { EmptyState } from '../components/EmptyState'
 import { RankChart } from '../components/RankChart'
 import { Segmented } from '../components/Segmented'
 import { Skeleton } from '../components/Skeleton'
 import * as Icon from '../components/icons'
-import { queueLabel, tierColor, tierCrest, tierLabel } from '../lib/rank'
+import { queueLabel, ratedTierColor, ratedTierLabel, tierColor, tierCrest, tierLabel } from '../lib/rank'
 
-const QUEUES: Array<[QueueType, string]> = [
-  ['RANKED_SOLO_5x5', 'Solo/Duo'],
-  ['RANKED_FLEX_SR', 'Flex']
-]
+/** League's two ladders, which is what the page offers unless it is handed a game's own. */
+const LEAGUE_LADDERS: Array<[QueueType, string]> = laddersOf('lol').map((ladder) => [
+  ladder,
+  LADDERS[ladder].shortLabel
+])
+
+/** Where a reading stands, as the header says it: a rank and LP, or a colour and a rating. */
+function standing(reading: RankSnapshot, rated: boolean): string {
+  if (rated) return `${ratedTierLabel(reading.ratedTier)} · ${(reading.ratedRating ?? 0).toLocaleString()} rating`
+  return `${tierLabel(reading.tier, reading.rank)} · ${reading.leaguePoints ?? 0} LP`
+}
+
+/** What a milestone crossed into, and the colour it is said in. */
+function crossedInto(m: RankMilestone, rated: boolean): { label: string; color: string } {
+  return rated
+    ? { label: ratedTierLabel(m.ratedTier), color: ratedTierColor(m.ratedTier) }
+    : { label: tierLabel(m.tier, m.rank), color: tierColor(m.tier) }
+}
 
 /**
  * The two relative windows, which exist whether or not anything was recorded.
@@ -33,6 +47,7 @@ const RELATIVE_RANGES: Array<[RankRange, string]> = [
  * empty state says so plainly rather than implying data is still loading.
  */
 export function RankPage({
+  ladders = LEAGUE_LADDERS,
   queueType,
   onQueueTypeChange: setQueueType,
   range,
@@ -45,6 +60,8 @@ export function RankPage({
   headerExtra,
   back
 }: {
+  /** The ladders to pick between, as the picker labels them — one game's. League's by default. */
+  ladders?: Array<[QueueType, string]>
   queueType: QueueType
   onQueueTypeChange: (queueType: QueueType) => void
   range: RankRange
@@ -66,6 +83,10 @@ export function RankPage({
   /** Above the heading: the way back to the profile this page hangs off. */
   back?: ReactNode
 }): JSX.Element {
+  // Hyper Roll climbs a rating rather than divisions: the same page, read in
+  // its own unit and coloured by its own tiers.
+  const rated = LADDERS[queueType].scale === 'rated'
+  const unit = rated ? 'rating' : 'LP'
 
   const ranges: Array<[RankRange, string]> = [
     ...RELATIVE_RANGES,
@@ -109,7 +130,7 @@ export function RankPage({
               ? // "Currently" would be a lie on a year the player has since been
                 // reset out of — that reading is where they finished, not where
                 // they stand.
-                `${pastSeason ? 'Finished' : 'Currently'} ${tierLabel(latest.tier, latest.rank)} · ${latest.leaguePoints ?? 0} LP`
+                `${pastSeason ? 'Finished' : 'Currently'} ${standing(latest, rated)}`
               : 'No rank recorded yet.'}
           </p>
           {headerExtra}
@@ -117,7 +138,7 @@ export function RankPage({
 
         {/* Wraps because the range picker grows by one button every January. */}
         <div className="flex flex-wrap items-center justify-end gap-2 max-md:justify-start">
-          <Segmented options={QUEUES} value={queueType} onChange={setQueueType} />
+          <Segmented options={ladders} value={queueType} onChange={setQueueType} />
           <Segmented options={ranges} value={range} onChange={setRange} />
         </div>
       </div>
@@ -161,11 +182,11 @@ export function RankPage({
                   )}
                 >
                   {netLp > 0 ? '+' : ''}
-                  {netLp} LP over this period
+                  {netLp} {unit} over this period
                 </p>
               )}
             </div>
-            <RankChart closes={closes} />
+            <RankChart closes={closes} rated={rated} />
           </section>
 
           <section className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
@@ -180,11 +201,13 @@ export function RankPage({
             ) : (
               <ul className="divide-y divide-hairline/60">
                 {milestones.map((m) => {
-                  const crest = tierCrest(m.tier)
+                  // A rated tier has no crest, so it gets a swatch of its colour.
+                  const crest = rated ? null : tierCrest(m.tier)
                   const promoted = m.movement === 'promotion'
+                  const into = crossedInto(m, rated)
                   return (
                     <li
-                      key={`${m.capturedAt}-${m.tier}-${m.rank}`}
+                      key={`${m.capturedAt}-${m.tier}-${m.rank}-${m.ratedTier ?? ''}`}
                       className="flex items-center gap-3 px-4 py-2.5"
                     >
                       {crest ? (
@@ -193,12 +216,19 @@ export function RankPage({
                           alt=""
                           className={clsx('h-7 w-7 object-contain', !promoted && 'opacity-50')}
                         />
+                      ) : rated ? (
+                        <div className="flex h-7 w-7 items-center justify-center">
+                          <span
+                            className={clsx('h-3 w-3 rounded-full', !promoted && 'opacity-50')}
+                            style={{ backgroundColor: into.color }}
+                          />
+                        </div>
                       ) : (
                         <div className="h-7 w-7" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm" style={{ color: tierColor(m.tier) }}>
-                          {promoted ? 'Promoted to' : 'Demoted to'} {tierLabel(m.tier, m.rank)}
+                        <p className="text-sm" style={{ color: into.color }}>
+                          {promoted ? 'Promoted to' : 'Demoted to'} {into.label}
                         </p>
                       </div>
                       <p className="text-2xs tabular-nums text-text-mute">
