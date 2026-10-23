@@ -13,7 +13,10 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.6.0] — 2026-10-23
 
-Teamfight Tactics, beside League.
+Teamfight Tactics, beside League. The server syncs every account's TFT — history, boards, its three
+ladders and the LP each game moved — on its Riot key or one of TFT's own, and the web client gains a
+TFT profile and rank page for every player. Everything League had stays as it was: the API is
+version 3 still, and a desktop from before TFT is served as it always was.
 
 ### Added
 

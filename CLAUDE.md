@@ -77,11 +77,73 @@ A server that has not been updated refuses a desktop newer than anything it know
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
 
+## Games
+
+Foxfire tracks two Riot titles on one Riot ID: League of Legends and Teamfight Tactics. A game is
+a tenant of everything that was League's — matches, ladders, seasons, syncs, recordings — rather
+than a second app, because it is the same player: one account, one profile with a League | TFT
+switch, `/players/{slug}` for League and `/players/{slug}/tft` (and `/tft/rank`) for TFT. Links
+land on League, as they always did.
+
+- **The registry** is `packages/core/src/games`: `GAMES` (each game's queues with their labels and
+  recording folders, its default history filter, its key scope, its post-game retry ladder and how
+  long a recording waits for its match) and `LADDERS` (each ranked ladder's game, queue, URL
+  spelling, scale, whether LP can be typed for it, and how many places its card counts).
+  `QueueType` is `LadderId`. Every list of queues League used to keep for itself is read from here,
+  with League's answers pinned by `registry.test.ts`, so ask the registry rather than listing
+  queues again. The server's copy is `Foxfire.Core/Games.cs` and `RankedQueues.cs`;
+  `fixtures/game-registry.json`, generated from the TypeScript with
+  `npm run generate-game-registry -w @foxfire/core`, holds the two together in `GameRegistryTests`.
+  Change one and you regenerate it and change the other.
+- **TFT's ladders** are Ranked (1100), Double Up (1160) and Hyper Roll (1130). Hyper Roll is
+  *rated*: a colour (`ratedTier`, Gray to Orange) and a rating, no tier, division or LP, and its
+  ladder position is the rating — `ratedLadder.ts` and `RatedTiers.cs`. It has no LP to type, so
+  the LP editor refuses it. Double Up counts the team's place, #1 to #4, worked out from the whole
+  lobby on the way in (`teamPlacements`, `TftPlacements`).
+- **A TFT game is placed at its player's elimination** — `time_eliminated`, `tftGameEndMs`,
+  `TftPlacements.GameEnd` — not the end of its lobby, everywhere a game is placed among rank
+  readings: attribution, the LP editor's "before", co-player ranks. TFT moves LP the moment
+  somebody is knocked out, and the lobby can play on for twenty minutes.
+- **Storage reuses `Matches`.** A TFT game is a row there with `Game = tft`, its boards in
+  `TftParticipants` (`tft_participants` on the desktop), so LP rows, hand-entered readings and
+  recordings reach it by the keys they already have. Every League read starts from
+  `MatchParticipants` by puuid and so cannot see a TFT game; the one that does not —
+  `MatchDetailAsync` — filters on `Game == Lol`.
+- **Per game:** sync state, in-flight runs, cooldown and post-game ladder are per (account, game);
+  seasons are one game's at a time (`?game=` on `/api/seasons`, a League | TFT picker in the
+  editor); a route that was League's before takes an optional `game` and means League without one,
+  so a desktop from before TFT keeps working. TFT's own routes are under
+  `/api/riot-accounts/{id}/tft`. The API stayed version 3: all of it was additive.
+
+A new game is a registry entry and its ladders in both languages, a regenerated fixture, its
+boards' table, its sync, and its pages.
+
+## Riot keys
+
+Riot grants each API key its products, and a key registered for League alone gets a 403 from every
+TFT endpoint — the same status an expired key gets. So TFT is asked through its own key when there
+is one and the main key when there is not, and on the main key a 403 from TFT means "no TFT here"
+(`RiotApiException.NoProductAccess`, the desktop's `RiotApiError.noProductAccess`) and never
+latches the main key's limiter: League keeps syncing. `TftAccess` (server) and `tftAccess.ts`
+(desktop) remember the answer — unknown, granted, denied — and ask a denial again after ten
+minutes; `/health` reports it as `tftAccess`, and the TFT profile says so.
+
+- **Server:** `Riot__Tft__ApiKey` and `Riot__Tft__KeyType` give TFT a key and a limiter of its own
+  (`Sync/TftRiot.cs`); docker-compose and `.env.example` list them.
+- **Desktop:** Settings › Riot API key takes an optional TFT key, kept in the secret store beside
+  the main one, with its own limiter and key type (`riot/client.ts`'s scopes).
+- **Ids follow the key.** Riot encrypts a puuid per key, so with a TFT key the same player is a
+  different id to TFT: `ScopedPuuids` / `account_scoped_puuids` hold it, learnt from the Riot ID on
+  the first TFT sync (`TftIdentity`, `services/tftIdentity.ts`), and an account's TFT boards are
+  filed under it. Adding, replacing or removing the TFT key moves them; League's identity repair
+  after a new main key moves TFT's boards too while the two share it.
+
 ## Lists that grow are paged
 
 A list whose length depends on time or on the size of the community is read a page at a time,
 never whole — the accounts rule above is one case of it. That is the finder (`/api/search`), match
-history (`/api/riot-accounts/{id}/matches`), the members (`/api/admin/users`, searched on the
+history (`/api/riot-accounts/{id}/matches`), TFT's history
+(`/api/riot-accounts/{id}/tft/matches`), the members (`/api/admin/users`, searched on the
 server by `q`), used invites (`/api/admin/invites/used`), the replay library
 (`/api/admin/storage/replays`), the server's recent log lines (`/api/admin/insights/logs`), the
 email log and suppressions (`/api/admin/email/messages`, `/api/admin/email/suppressions`), and on
@@ -127,10 +189,10 @@ Two lists that grow are whole on purpose, and say so where they are read:
 The insights charts (`/api/admin/insights/{section}`) are not lists at all: a window is at most 360
 points whatever it spans, and its tables are capped — the fifty busiest routes, the last ten syncs.
 
-**Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`) grows
-with a player's history and is still read whole, with a query per game for the rank before it. It
-should be paged; what makes that more than a page size is that saving one game's rank can settle
-its neighbours anywhere in the list.
+**Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`, and
+TFT's `/tft/rank/editable`, `TftEditableAsync`) grows with a player's history and is still read
+whole, with a query per game for the rank before it. It should be paged; what makes that more than
+a page size is that saving one game's rank can settle its neighbours anywhere in the list.
 
 A new list that can grow is paged the same way, and its route goes in
 `WireShapeTests.Every_list_that_grows_answers_with_a_page`. Turning an existing array into a page
@@ -153,7 +215,7 @@ is one more reason for the rules below.
 
 Every request gets one line, and every line written during it carries its trace id, the client, the
 member and their address; the response carries the trace id as `X-Trace-Id`. A sync puts the account
-on its lines with a log scope, and so should any other long piece of background work.
+and the game on its lines with a log scope, and so should any other long piece of background work.
 
 When you add a log line:
 
@@ -202,6 +264,10 @@ maps in `MappingFor` or a line in its `Sample`, then a series in the section han
 (`Features/Insights`). Dimensions are capped at 200 series a metric, the rest counted as `other` —
 never tag by something unbounded like a path or a user id. `Telemetry__Persist=false` is the test
 fixture's: the store's tests drive `TelemetryStore` themselves, with times of their own.
+
+A sync's game is not a dimension of `sync.runs`: stored dimensions are merged by position, and the
+metric kept the shape it had before there were two games. The recent-syncs table says which game
+each run was instead.
 
 One tab is a head admin's rather than every admin's: **Email**, beside the Email page it goes with.
 Its route adds `RequireRole(HeadAdmin)` to the group's, and the screen offers the tab only through
@@ -293,8 +359,14 @@ A recording starts as an OBS file on one PC. From 0.14.0 it can go to YouTube, a
 watched by everybody on a server — on the desktop and in the browser. The rule everything follows:
 **a recording is one player's view of one game**. A server keys it on (match, Riot account), never on
 the match alone, so in a game two members recorded each history plays its own and no other history
-offers either. That rule lives in the row query in `MatchReads.MatchListAsync`, which is where to
-look if a recording ever turns up on the wrong history.
+offers either. That rule lives in the row queries in `MatchReads.MatchListAsync` and, for TFT,
+`TftReads.MatchListAsync`, which is where to look if a recording ever turns up on the wrong history.
+
+A TFT recording is the same thing for a TFT game. It has no roster to be bound by, so it is bound by
+the game's id instead: the League client names the game while it is played, and
+`${platform}_${gameId}` is its match id (`findTftMatchForRecording`); one without an id is bound
+only when a single game's span holds it. It keeps no markers — TFT's game serves no events worth
+keeping — and is titled from a template of its own, `{placement} · {queue} · {trait}` to start.
 
 **It is switched off at build time, everywhere, by one switch.** `FOXFIRE_FEATURE_YOUTUBE` in the
 environment of a build — `1`, `true`, `yes` or `on` — is what includes it, and the release workflows
@@ -348,6 +420,24 @@ its requests as the Referer. Nothing may be drawn over YouTube's player; the mar
 
 Electron accepts `registerSchemesAsPrivileged` once. Every scheme of ours is in the single call in
 `main/schemes.ts` — registering a new one anywhere else silently unregisters the others.
+
+## Recordings on disk
+
+OBS writes every recording into the capture folder by a name of its own. When it closes the file,
+`capture/fileRecording.ts` moves it to
+`<folder>\<Riot ID>\<LoL | TFT>\<mode>\<YYYY-MM-DD HH-mm-ss>.<ext>` — `Faker-KR1\TFT\Ranked\…`, the
+mode's folder from the registry, the time this PC's own — and the row follows it. The rules are
+`capture/recordingLayout.ts`, pure and tested: names are made safe for Windows (refused and control
+characters replaced, trailing dots and spaces dropped, device names like `CON` suffixed, length
+capped); a recording nobody claimed goes under `Unknown`, a queue the registry does not list under
+`Other`, and a second recording in the same second gets ` (2)`.
+
+Only a file under the capture folder moves, so a folder OBS was pointed at by hand stays where the
+person put it, and nothing recorded before 0.17 is relocated. A move refused because the file is
+still open is tried once more two seconds later; any other failure leaves the file where OBS wrote
+it, which is still a recording that plays. Deleting a recording removes the folders it leaves
+empty, up to but never the capture folder itself. Riot replays are not recordings, and keep a
+folder of their own (`<folder>\Replays` unless somebody chose another).
 
 The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and, optionally,
 `MAIN_VITE_YOUTUBE_CLIENT_SECRET` (repository secrets in the release workflow; `.env.local` for
@@ -496,3 +586,11 @@ Tests go at the seams as plain node-environment vitest — the rules, the search
 event refreshes, what a menu offers on each platform — with no DOM test setup. The screens
 themselves are checked by eye in the fixture harnesses: `npm run dev:web` for the desktop's
 renderer and `npm run dev:mock -w @foxfire/web` for the web client, both switched by `?scenario=`.
+Their TFT is generated from a fixed seed (`packages/screens/src/dev/tftFixtures.ts`), so a
+screenshot today matches one next week; `?scenario=tft-no-access` is TFT as a key without it sees
+it.
+
+The fixtures that hold the two languages to one rule are generated from the TypeScript and checked
+by the server's tests: `npm run generate-trend-corpus -w @foxfire/core` for the rank trend, and
+`npm run generate-game-registry -w @foxfire/core` for the games and ladders. A change to either
+side is a regenerated fixture and the same change on the other.

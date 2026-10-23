@@ -9,7 +9,9 @@ changes you would never notice while using the app.
 
 ## [0.17.0] — 2026-10-23
 
-Teamfight Tactics, beside League.
+Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
+and the LP each game moved, and recordings of it — tracked the way League always has been, on a
+server or on its own. And every new recording is filed by player, game and mode.
 
 ### Added
 
