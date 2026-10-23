@@ -1,3 +1,4 @@
+import { GAMES, type GameId } from '@foxfire/core'
 import { RiotApiError } from '../riot/rateLimiter'
 import { createLogger } from '../telemetry/logger'
 import { syncAccount } from './syncService'
@@ -19,16 +20,23 @@ const log = createLogger('postGameSync')
  * two minutes, so the cost of being patient here is negligible. The last
  * attempt sits at ten minutes because a match that has not appeared by then is
  * not going to be caught by trying once more — the launch sweep will get it.
+ *
+ * Each game has its own schedule, in the registry: TFT's is longer, because
+ * Riot publishes a TFT match only once the whole lobby is done, which can be
+ * twenty minutes after the player was knocked out.
  */
-const RETRY_DELAYS_MS = [30_000, 90_000, 180_000, 360_000, 600_000]
+const retryDelays = (game: GameId): readonly number[] => GAMES[game].postGameRetryMs
 
-const pending = new Map<number, NodeJS.Timeout>()
+/** Per account and per game: a League game and a TFT one ending close together are two searches. */
+const pending = new Map<string, NodeJS.Timeout>()
 
-function clearPending(accountId: number): void {
-  const timer = pending.get(accountId)
+const pendingKey = (accountId: number, game: GameId): string => `${accountId}:${game}`
+
+function clearPending(key: string): void {
+  const timer = pending.get(key)
   if (timer) {
     clearTimeout(timer)
-    pending.delete(accountId)
+    pending.delete(key)
   }
 }
 
@@ -40,36 +48,39 @@ function clearPending(accountId: number): void {
  * schedule subsumes the earlier one — a delta sync fetches everything new, so
  * the first game is picked up by the second game's attempts anyway.
  */
-export function schedulePostGameSync(accountId: number): void {
-  clearPending(accountId)
-  log.info('Scheduling post-game sync', { accountId, attempts: RETRY_DELAYS_MS.length })
-  scheduleAttempt(accountId, 0)
+export function schedulePostGameSync(accountId: number, game: GameId = 'lol'): void {
+  clearPending(pendingKey(accountId, game))
+  log.info('Scheduling post-game sync', { accountId, game, attempts: retryDelays(game).length })
+  scheduleAttempt(accountId, game, 0)
 }
 
-function scheduleAttempt(accountId: number, index: number): void {
-  if (index >= RETRY_DELAYS_MS.length) {
-    log.debug('Post-game sync gave up; match never appeared', { accountId })
-    pending.delete(accountId)
+function scheduleAttempt(accountId: number, game: GameId, index: number): void {
+  const key = pendingKey(accountId, game)
+  const delays = retryDelays(game)
+
+  if (index >= delays.length) {
+    log.debug('Post-game sync gave up; match never appeared', { accountId, game })
+    pending.delete(key)
     return
   }
 
   const timer = setTimeout(() => {
-    pending.delete(accountId)
-    void attempt(accountId, index)
-  }, RETRY_DELAYS_MS[index])
+    pending.delete(key)
+    void attempt(accountId, game, index)
+  }, delays[index])
 
   // Nothing should be kept alive purely to wait for a match. In tray mode the
   // LCU watcher already holds the process open, and if the app is quitting the
   // launch sweep will find the game next time.
   timer.unref?.()
-  pending.set(accountId, timer)
+  pending.set(key, timer)
 }
 
-async function attempt(accountId: number, index: number): Promise<void> {
+async function attempt(accountId: number, game: GameId, index: number): Promise<void> {
   try {
-    const { stored } = await syncAccount(accountId, 'auto')
+    const { stored } = await syncAccount(accountId, 'auto', game)
     if (stored > 0) {
-      log.info('Post-game sync stored new matches', { accountId, stored, attempt: index + 1 })
+      log.info('Post-game sync stored new matches', { accountId, game, stored, attempt: index + 1 })
       // Nothing to do about the recording here: every completed sync binds what
       // it can before returning, so the match that just landed has already been
       // offered to whatever was waiting for it.
@@ -79,21 +90,22 @@ async function attempt(accountId: number, index: number): Promise<void> {
     // An expired or rejected key fails every remaining attempt too — the rate
     // limiter latches paused until a new one is saved — so stop rather than
     // spending four more requests proving it.
-    if (err instanceof RiotApiError && (err.status === 401 || err.status === 403)) {
-      log.debug('Post-game sync abandoned: Riot rejected the API key', { accountId })
+    if (err instanceof RiotApiError && err.isKeyRejection) {
+      log.debug('Post-game sync abandoned: Riot rejected the API key', { accountId, game })
       return
     }
     log.debug('Post-game sync attempt failed', {
       accountId,
+      game,
       attempt: index + 1,
       error: String(err)
     })
   }
 
-  scheduleAttempt(accountId, index + 1)
+  scheduleAttempt(accountId, game, index + 1)
 }
 
 /** Drops every pending schedule. Called on quit so no timer outlives the app. */
 export function cancelAllPostGameSyncs(): void {
-  for (const accountId of [...pending.keys()]) clearPending(accountId)
+  for (const key of [...pending.keys()]) clearPending(key)
 }

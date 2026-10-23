@@ -7,7 +7,8 @@
  * fixtures/game-registry.json.
  */
 
-import type { TftTrait } from '../types/tft'
+import { LADDERS, type TftLadder } from '../games/ladders'
+import type { TftLadderSummary, TftTrait } from '../types/tft'
 
 /** Double Up and Hyper Roll by queue, which is how a match row knows what it is. */
 export const DOUBLE_UP_QUEUE_ID = 1160
@@ -171,4 +172,38 @@ export function tftDisplayName(id: string): string {
  */
 export function tftGameEndMs(gameCreation: number, timeEliminatedSeconds: number | null, gameDurationSeconds: number): number {
   return gameCreation + Math.round((timeEliminatedSeconds ?? gameDurationSeconds) * 1000)
+}
+
+/** One finish, as a ladder summary counts it. */
+export interface TftFinish {
+  placement: number
+  teamPlacement: number | null
+  queueId: number | null
+}
+
+/**
+ * One ladder's card: how many of the finishes were on it, how many at each
+ * place it counts — the team's, #1 to #4, in Double Up — the average place, and
+ * how often it was the top half.
+ *
+ * The caller chooses the finishes, which is the current set's on both sides.
+ * The server's TftReads.LaddersAsync is the same rule.
+ */
+export function tftLadderSummary(ladder: TftLadder, finishes: readonly TftFinish[]): TftLadderSummary {
+  const { queueId, placementSlots: slots } = LADDERS[ladder]
+  const counted = finishes
+    .filter((f) => f.queueId === queueId)
+    .map((f) => countedPlacement(f, f.queueId))
+    .filter((place) => place >= 1 && place <= slots)
+
+  const placements = Array.from({ length: slots }, (_, i) => counted.filter((c) => c === i + 1).length)
+  const games = counted.length
+
+  return {
+    queueType: ladder,
+    games,
+    placements,
+    averagePlacement: games === 0 ? null : counted.reduce((sum, c) => sum + c, 0) / games,
+    topRate: games === 0 ? null : counted.filter((c) => c <= slots / 2).length / games
+  }
 }

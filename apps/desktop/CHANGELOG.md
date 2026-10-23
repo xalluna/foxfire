@@ -36,6 +36,10 @@ Teamfight Tactics, beside League.
   for League alone cannot reach TFT. Settings › Riot API key says whether yours can, and takes a
   second key for TFT when it cannot — or when you would rather TFT's backfill had a budget of its
   own. Without one, TFT uses the key you already have.
+- **All of it without a server, too.** On its own, Foxfire backfills each account's TFT history
+  beside its League history, reads TFT's ladders, works out the LP each game moved and lets you
+  type the ones it cannot, exactly as it does for League. A game ending starts the search for it,
+  waiting longer for TFT, whose games Riot publishes only once the whole lobby is done.
 
 ### Under the hood
 
@@ -63,6 +67,12 @@ Teamfight Tactics, beside League.
   key does.
 - Importing a stats.db into a server brings its TFT games, sets, TFT ids and Hyper Roll ratings
   across. A file from before TFT imports exactly as it did.
+- A TFT game is placed among rank readings at your own elimination, not the end of its lobby:
+  TFT moves your LP the moment you are knocked out, and the lobby can play on for twenty minutes.
+- With a TFT key of its own, every account's TFT id is learnt from its Riot ID the first time TFT
+  syncs, and its games move with it; taking the key away moves them back. League's identity
+  repair after a new main key carries TFT's games along too while the two share it.
+- League's rank refresh keeps League's ladders, and TFT's keeps TFT's.
 
 ## [0.16.1] — 2026-09-27
 

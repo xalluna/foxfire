@@ -148,7 +148,8 @@ import type {
   ServerRegistration,
   SeasonInput
 } from '@shared/types'
-import type { GameId, RiotKeyScope } from '@foxfire/core'
+import { GAME_IDS, type GameId, type RiotKeyScope } from '@foxfire/core'
+import { puuidForGame } from '../services/tftIdentity'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 import {
   isInsightsSection,
@@ -561,7 +562,9 @@ export function registerIpcHandlers(): void {
     const db = getDb()
     let attributed = 0
     for (const account of listAccounts(db)) {
-      attributed += replayAttribution(db, account.id, account.puuid)
+      for (const game of GAME_IDS) {
+        attributed += replayAttribution(db, account.id, puuidForGame(db, account, game), null, game)
+      }
     }
     return attributed
   })

@@ -20,7 +20,7 @@ import { clearApiKey, clearSecret, loadApiKey, loadSecret, saveApiKey, saveSecre
 import { createLogger } from '../telemetry/logger'
 import { repairAllIdentities } from './identityService'
 import { recordTftAccess, resetTftAccess, tftAccess } from './tftAccess'
-import { forgetTftIdentities } from './tftKeyScope'
+import { forgetTftIdentities } from './tftIdentity'
 import type { AppSettingsPublic, IdentityReport, RiotKeyLimits, RiotKeyType } from '@shared/types'
 
 const log = createLogger('settings')

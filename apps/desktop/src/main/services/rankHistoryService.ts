@@ -15,12 +15,16 @@ import { attributeInterval, replayAttribution } from './rankAttribution'
 import { rebuildAttribution } from './manualRankService'
 import { listSeasons } from '../db/repositories/seasons.repo'
 import {
+  GAME_IDS,
+  LADDERS,
   queueIdForQueueType,
   rangeBounds,
   rankTrend,
   rankTrendSince,
-  seasonsSpanning
+  seasonsSpanning,
+  type GameId
 } from '@foxfire/core'
+import { puuidForGame } from './tftIdentity'
 import { createLogger } from '../telemetry/logger'
 import type { QueueType, RankHistory, RankRange, RankTrend, Season } from '@shared/types'
 
@@ -41,7 +45,7 @@ export function getRankHistory(
   range: RankRange
 ): RankHistory {
   const db = getDb()
-  const seasons = listSeasons(db)
+  const seasons = listSeasons(db, LADDERS[queueType].game)
   const { sinceMs, untilMs } = rangeBounds(range, seasons)
 
   return {
@@ -61,7 +65,7 @@ export function getRankHistory(
 export function getRankTrend(accountId: number, queueType: QueueType, now = Date.now()): RankTrend {
   const db = getDb()
   const readings = getTrendReadings(db, accountId, queueType, rankTrendSince(now))
-  return rankTrend(readings, listSeasons(db), now)
+  return rankTrend(readings, listSeasons(db, LADDERS[queueType].game), now)
 }
 
 /**
@@ -75,13 +79,13 @@ export function getRankTrend(accountId: number, queueType: QueueType, now = Date
  * the picker is never empty. Seasons are returned whole rather than as ids so
  * the renderer can label them without a copy of the table.
  */
-export function getRankPeriods(accountId: number): Season[] {
+export function getRankPeriods(accountId: number, game: GameId = 'lol'): Season[] {
   const db = getDb()
   const account = getAccountById(db, accountId)
   if (!account) return []
 
-  const seasons = listSeasons(db)
-  const span = getHistorySpan(db, accountId, account.puuid)
+  const seasons = listSeasons(db, game)
+  const span = getHistorySpan(db, accountId, puuidForGame(db, account, game), game)
   if (!span) {
     const current = seasons[seasons.length - 1]
     return current ? [current] : []
@@ -108,7 +112,9 @@ export function repairAttribution(): void {
   try {
     let attributed = 0
     for (const account of listAccounts(db)) {
-      attributed += replayAttribution(db, account.id, account.puuid)
+      for (const game of GAME_IDS) {
+        attributed += replayAttribution(db, account.id, puuidForGame(db, account, game), null, game)
+      }
     }
     if (attributed > 0) log.info('Backfilled LP for games on startup', { attributed })
   } catch (err) {
@@ -147,6 +153,10 @@ export function recordRankSnapshot(
   const account = getAccountById(db, accountId)
   if (!account) return false
 
+  // TFT's ladders find their games under TFT's id for the account.
+  const game = LADDERS[input.queueType].game
+  const puuid = puuidForGame(db, account, game)
+
   const previous = getLatestSnapshot(db, accountId, input.queueType)
   const inserted = insertRankSnapshot(db, accountId, input, source, capturedAt, force)
   if (inserted === null) return false
@@ -154,7 +164,7 @@ export function recordRankSnapshot(
   const superseded = deleteSupersededManualSnapshots(
     db,
     accountId,
-    account.puuid,
+    puuid,
     input.queueType,
     queueIdForQueueType(input.queueType),
     capturedAt
@@ -164,21 +174,13 @@ export function recordRankSnapshot(
     // remove a row it no longer has grounds to write. Rebuild instead of
     // trusting the fast path below.
     log.info('Live rank reading replaced hand-entered LP', { accountId, superseded })
-    rebuildAttribution(db, accountId, account.puuid, input.queueType)
+    rebuildAttribution(db, accountId, puuid, input.queueType)
     return true
   }
 
   const current = getLatestSnapshot(db, accountId, input.queueType)
   if (previous && current) {
-    attributeInterval(
-      db,
-      accountId,
-      account.puuid,
-      input.queueType,
-      previous,
-      current,
-      listSeasons(db)
-    )
+    attributeInterval(db, accountId, puuid, input.queueType, previous, current, listSeasons(db, game))
   }
 
   return true

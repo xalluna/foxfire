@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Account, LeagueEntry, QueueType } from '@shared/types'
-import { LADDERS, TRACKED_QUEUES, isLadderId, type GameId } from '@foxfire/core'
+import { LADDERS, isLadderId, type GameId } from '@foxfire/core'
 
 interface AccountRow {
   id: number
@@ -235,6 +235,15 @@ export function rekeyAccountPuuid(
       .prepare('UPDATE match_participants SET puuid = ? WHERE puuid = ?')
       .run(newPuuid, oldPuuid)
 
+    // TFT's boards under the same id — all of them while TFT shares the main
+    // key — follow it the same way, payloads first.
+    db.prepare(
+      `UPDATE matches
+          SET raw_json = replace(raw_json, ?, ?)
+        WHERE match_id IN (SELECT match_id FROM tft_participants WHERE puuid = ?)`
+    ).run(oldPuuid, newPuuid, oldPuuid)
+    db.prepare('UPDATE OR IGNORE tft_participants SET puuid = ? WHERE puuid = ?').run(newPuuid, oldPuuid)
+
     db.prepare(`UPDATE accounts SET puuid = ?, updated_at = datetime('now') WHERE id = ?`).run(
       newPuuid,
       accountId
@@ -317,6 +326,14 @@ export function getLeagueEntries(db: DatabaseSync, accountId: number, game: Game
     }))
 }
 
+/**
+ * Stores one game's current ladders for an account.
+ *
+ * Only that game's: league-v4 has been known to answer with a TFT ladder
+ * beside League's, and TFT's endpoint answers with every TFT queue including
+ * ones nobody tracks, so anything else in the answer is dropped rather than
+ * filed under the wrong game.
+ */
 export function upsertLeagueEntries(
   db: DatabaseSync,
   accountId: number,
@@ -327,21 +344,26 @@ export function upsertLeagueEntries(
     leaguePoints?: number
     wins?: number
     losses?: number
-  }>
+    ratedTier?: string
+    ratedRating?: number
+  }>,
+  game: GameId = 'lol'
 ): void {
   const stmt = db.prepare(
     `INSERT INTO league_entries
-       (account_id, queue_type, tier, rank, league_points, wins, losses, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       (account_id, queue_type, tier, rank, league_points, wins, losses, rated_tier, rated_rating, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(account_id, queue_type) DO UPDATE SET
        tier = excluded.tier, rank = excluded.rank, league_points = excluded.league_points,
-       wins = excluded.wins, losses = excluded.losses, fetched_at = excluded.fetched_at`
+       wins = excluded.wins, losses = excluded.losses,
+       rated_tier = excluded.rated_tier, rated_rating = excluded.rated_rating,
+       fetched_at = excluded.fetched_at`
   )
 
   db.exec('BEGIN')
   try {
     for (const entry of entries) {
-      if (!TRACKED_QUEUES.includes(entry.queueType as QueueType)) continue
+      if (!isLadderId(entry.queueType) || LADDERS[entry.queueType].game !== game) continue
       stmt.run(
         accountId,
         entry.queueType,
@@ -349,7 +371,9 @@ export function upsertLeagueEntries(
         entry.rank ?? null,
         entry.leaguePoints ?? null,
         entry.wins ?? null,
-        entry.losses ?? null
+        entry.losses ?? null,
+        entry.ratedTier ?? null,
+        entry.ratedRating ?? null
       )
     }
     db.exec('COMMIT')

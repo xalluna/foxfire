@@ -9,6 +9,7 @@ import {
   teamPlacements,
   tftDisplayName,
   tftGameEndMs,
+  tftLadderSummary,
   unitCost
 } from './tft'
 import type { TftTrait } from '../types'
@@ -127,5 +128,34 @@ describe('tftGameEndMs', () => {
   it('places a game at its player’s own elimination', () => {
     expect(tftGameEndMs(1_000_000, 900.4, 2_100)).toBe(1_000_000 + 900_400)
     expect(tftGameEndMs(1_000_000, null, 2_100)).toBe(1_000_000 + 2_100_000)
+  })
+})
+
+describe('tftLadderSummary', () => {
+  const ranked = (placement: number) => ({ placement, teamPlacement: null, queueId: 1100 })
+
+  it('counts one ladder’s finishes into eight places, with the average and top-four rate', () => {
+    const summary = tftLadderSummary('RANKED_TFT', [ranked(1), ranked(4), ranked(5), ranked(8), { ...ranked(2), queueId: 1090 }])
+
+    expect(summary).toEqual({
+      queueType: 'RANKED_TFT',
+      games: 4,
+      placements: [1, 0, 0, 1, 1, 0, 0, 1],
+      averagePlacement: 4.5,
+      topRate: 0.5
+    })
+  })
+
+  it('counts Double Up by the team, into four places, and the top two as the top half', () => {
+    const summary = tftLadderSummary('RANKED_TFT_DOUBLE_UP', [
+      { placement: 3, teamPlacement: 2, queueId: 1160 },
+      { placement: 7, teamPlacement: 4, queueId: 1160 }
+    ])
+
+    expect(summary).toMatchObject({ games: 2, placements: [0, 1, 0, 1], averagePlacement: 3, topRate: 0.5 })
+  })
+
+  it('says nothing about an average of no games', () => {
+    expect(tftLadderSummary('RANKED_TFT_TURBO', [])).toMatchObject({ games: 0, averagePlacement: null, topRate: null })
   })
 })
