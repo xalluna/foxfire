@@ -666,6 +666,7 @@ export const mockApi: Api = {
 
   champions: fixture.champions,
   seasons: fixture.seasons,
+  tft: fixture.tft,
   mastery: fixture.mastery,
 
   rank: {

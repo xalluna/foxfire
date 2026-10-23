@@ -1,4 +1,5 @@
 import type {
+  GameId,
   InsightsSection,
   InsightsWindow,
   QueueType,
@@ -91,8 +92,34 @@ export const queryKeys = {
       ...(queueType === undefined ? [] : [queueType])
     ] as const,
 
-  rankPeriods: (accountId?: string) =>
-    accountId === undefined ? (['rankPeriods'] as const) : (['rankPeriods', accountId] as const),
+  /**
+   * League's periods under the key they always had, and TFT's beneath the same
+   * account — so invalidating an account's periods reaches both games'.
+   */
+  rankPeriods: (accountId?: string, game?: GameId) =>
+    [
+      'rankPeriods',
+      ...(accountId === undefined ? [] : [accountId]),
+      ...(accountId !== undefined && game === 'tft' ? ['tft'] : [])
+    ] as const,
+
+  /** TFT's profile header and its ladders' placements. */
+  tftDashboard: (accountId?: string) =>
+    accountId === undefined ? (['tftDashboard'] as const) : (['tftDashboard', accountId] as const),
+
+  /** Every account's TFT history — what a change nobody can scope refreshes. */
+  tftMatchLists: () => ['tftMatchList'] as const,
+
+  tftMatchList: (accountId: string, queueId?: number | null) =>
+    queueId === undefined
+      ? (['tftMatchList', accountId] as const)
+      : (['tftMatchList', accountId, queueId] as const),
+
+  /** One TFT row, under its account's history so the history's refresh reaches it. */
+  tftMatchSummary: (accountId: string, matchId: string) => ['tftMatchList', accountId, 'match', matchId] as const,
+
+  /** A TFT game's eight boards, which belong to the game rather than an account. */
+  tftLobby: (matchId: string) => ['tftLobby', matchId] as const,
 
   championStats: (accountId?: string, queueId?: number | null, range?: RankRange) =>
     [
@@ -105,7 +132,8 @@ export const queryKeys = {
   editableMatches: (accountId: string, queueType: QueueType) =>
     ['editableMatches', accountId, queueType] as const,
 
-  seasons: () => ['seasons'] as const,
+  /** League's season list under the key it always had; TFT's beneath it. */
+  seasons: (game?: GameId) => (game === 'tft' ? (['seasons', 'tft'] as const) : (['seasons'] as const)),
 
   admin: {
     all: () => ['admin'] as const,

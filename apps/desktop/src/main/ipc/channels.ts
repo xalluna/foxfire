@@ -107,6 +107,19 @@ export const CH = {
     getState: 'sync:getState',
     progress: 'sync:progress'
   },
+  // One account's TFT, answered by the server or this PC as everything else is.
+  tft: {
+    dashboard: 'tft:dashboard',
+    matchList: 'tft:matchList',
+    matchSummary: 'tft:matchSummary',
+    lobby: 'tft:lobby',
+    rankHistory: 'tft:rankHistory',
+    rankTrend: 'tft:rankTrend',
+    rankPeriods: 'tft:rankPeriods',
+    editable: 'tft:editable',
+    saveManual: 'tft:saveManual',
+    clearManual: 'tft:clearManual'
+  },
   // Separate from mastery:get on purpose. Champion stats are pure SQLite, so
   // they must not sit behind a channel that can reach out to Riot and fail.
   champions: {

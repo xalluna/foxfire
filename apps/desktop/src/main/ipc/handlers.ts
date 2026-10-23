@@ -141,6 +141,7 @@ import type {
   ServerRegistration,
   SeasonInput
 } from '@shared/types'
+import type { GameId } from '@foxfire/core'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 import {
   isInsightsSection,
@@ -275,9 +276,40 @@ export function registerIpcHandlers(): void {
     serverBacked().dashboard.matchSummary?.(accountId, matchId) ?? null
   )
 
-  ipcMain.handle(CH.sync.start, (_e, accountId: string) => serverBacked().sync.start(accountId))
-  ipcMain.handle(CH.sync.getState, (_e, accountId: string) =>
-    serverBacked().sync.getState(accountId)
+  ipcMain.handle(CH.sync.start, (_e, accountId: string, game?: GameId) =>
+    serverBacked().sync.start(accountId, game)
+  )
+  ipcMain.handle(CH.sync.getState, (_e, accountId: string, game?: GameId) =>
+    serverBacked().sync.getState(accountId, game)
+  )
+
+  ipcMain.handle(CH.tft.dashboard, (_e, accountId: string) => serverBacked().tft.dashboard(accountId))
+  ipcMain.handle(
+    CH.tft.matchList,
+    (_e, accountId: string, limit: number, offset: number, queueId: number | null) =>
+      serverBacked().tft.matchList(accountId, limit, offset, queueId)
+  )
+  ipcMain.handle(CH.tft.matchSummary, (_e, accountId: string, matchId: string) =>
+    serverBacked().tft.matchSummary(accountId, matchId)
+  )
+  ipcMain.handle(CH.tft.lobby, (_e, accountId: string, matchId: string) =>
+    serverBacked().tft.lobby(accountId, matchId)
+  )
+  ipcMain.handle(CH.tft.rankHistory, (_e, accountId: string, queueType: QueueType, range: RankRange) =>
+    serverBacked().tft.rank.history(accountId, queueType, range)
+  )
+  ipcMain.handle(CH.tft.rankTrend, (_e, accountId: string, queueType: QueueType) =>
+    serverBacked().tft.rank.trend(accountId, queueType)
+  )
+  ipcMain.handle(CH.tft.rankPeriods, (_e, accountId: string) => serverBacked().tft.rank.periods(accountId))
+  ipcMain.handle(CH.tft.editable, (_e, accountId: string, queueType: QueueType) =>
+    serverBacked().tft.rank.editable(accountId, queueType)
+  )
+  ipcMain.handle(CH.tft.saveManual, (_e, accountId: string, queueType: QueueType, edits: ManualRankEdit[]) =>
+    serverBacked().tft.rank.saveManual(accountId, queueType, edits)
+  )
+  ipcMain.handle(CH.tft.clearManual, (_e, accountId: string, queueType: QueueType, matchId: string) =>
+    serverBacked().tft.rank.clearManual(accountId, queueType, matchId)
   )
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
@@ -308,9 +340,9 @@ export function registerIpcHandlers(): void {
     serverBacked().rank.periods(accountId)
   )
 
-  ipcMain.handle(CH.seasons.list, () => serverBacked().seasons.list())
-  ipcMain.handle(CH.seasons.save, (_e, seasons: SeasonInput[]) =>
-    serverBacked().seasons.save(seasons)
+  ipcMain.handle(CH.seasons.list, (_e, game?: GameId) => serverBacked().seasons.list(game))
+  ipcMain.handle(CH.seasons.save, (_e, seasons: SeasonInput[], game?: GameId) =>
+    serverBacked().seasons.save(seasons, game)
   )
 
   ipcMain.handle(CH.rank.editable, (_e, accountId: string, queueType: QueueType) =>

@@ -751,6 +751,25 @@ export interface AssetManifest {
   championById: Record<number, { id: string; name: string }>
   spellById: Record<number, { id: string; name: string }>
   runeById: Record<number, { icon: string; name: string }>
+  /** TFT's, when Data Dragon gave them. A client draws names where this has nothing. */
+  tft?: TftAssets
+}
+
+/** One TFT unit, trait, item or augment, as Data Dragon names and draws it. */
+export interface TftAsset {
+  name: string
+  /** The whole URL, on the Data Dragon host every CSP already allows. Null when Data Dragon has no image. */
+  image: string | null
+  /** A unit's cost, 1 to 5. Units only, and only when Data Dragon says. */
+  cost?: number
+}
+
+/** TFT's lookups, each keyed by Riot's id lower-cased: `tft18_jinx`. */
+export interface TftAssets {
+  units: Record<string, TftAsset>
+  traits: Record<string, TftAsset>
+  items: Record<string, TftAsset>
+  augments: Record<string, TftAsset>
 }
 
 /** Everything the dashboard header needs, in one answer. */

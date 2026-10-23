@@ -124,8 +124,8 @@ const api: Api = {
     }
   },
   sync: {
-    start: (accountId) => ipcRenderer.invoke(CH.sync.start, accountId),
-    getState: (accountId) => ipcRenderer.invoke(CH.sync.getState, accountId),
+    start: (accountId, game) => ipcRenderer.invoke(CH.sync.start, accountId, game),
+    getState: (accountId, game) => ipcRenderer.invoke(CH.sync.getState, accountId, game),
     onProgress: (cb) => {
       const listener = (_e: IpcRendererEvent, event: SyncProgressEvent): void => cb(event)
       ipcRenderer.on(CH.sync.progress, listener)
@@ -140,8 +140,25 @@ const api: Api = {
       ipcRenderer.invoke(CH.champions.stats, accountId, queueId, range)
   },
   seasons: {
-    list: () => ipcRenderer.invoke(CH.seasons.list),
-    save: (seasons) => ipcRenderer.invoke(CH.seasons.save, seasons)
+    list: (game) => ipcRenderer.invoke(CH.seasons.list, game),
+    save: (seasons, game) => ipcRenderer.invoke(CH.seasons.save, seasons, game)
+  },
+  tft: {
+    dashboard: (accountId) => ipcRenderer.invoke(CH.tft.dashboard, accountId),
+    matchList: (accountId, limit, offset, queueId) =>
+      ipcRenderer.invoke(CH.tft.matchList, accountId, limit, offset, queueId),
+    matchSummary: (accountId, matchId) => ipcRenderer.invoke(CH.tft.matchSummary, accountId, matchId),
+    lobby: (accountId, matchId) => ipcRenderer.invoke(CH.tft.lobby, accountId, matchId),
+    rank: {
+      history: (accountId, queueType, range) => ipcRenderer.invoke(CH.tft.rankHistory, accountId, queueType, range),
+      trend: (accountId, queueType) => ipcRenderer.invoke(CH.tft.rankTrend, accountId, queueType),
+      periods: (accountId) => ipcRenderer.invoke(CH.tft.rankPeriods, accountId),
+      editable: (accountId, queueType) => ipcRenderer.invoke(CH.tft.editable, accountId, queueType),
+      saveManual: (accountId, queueType, edits) =>
+        ipcRenderer.invoke(CH.tft.saveManual, accountId, queueType, edits),
+      clearManual: (accountId, queueType, matchId) =>
+        ipcRenderer.invoke(CH.tft.clearManual, accountId, queueType, matchId)
+    }
   },
   mastery: {
     get: (accountId, refresh, queueId) =>

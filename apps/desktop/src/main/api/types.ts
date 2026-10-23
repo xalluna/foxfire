@@ -41,6 +41,7 @@ export interface ServerBackedApi {
   mastery: Api['mastery']
   rank: Omit<Api['rank'], 'openEditor' | 'onEdited' | 'onEditorFocus'>
   seasons: Api['seasons']
+  tft: Api['tft']
   search: Api['search']
   favorites: Api['favorites']
 }

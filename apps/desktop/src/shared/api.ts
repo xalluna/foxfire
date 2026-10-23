@@ -283,6 +283,7 @@ export interface Api {
   }
   champions: FoxfireData['champions']
   seasons: FoxfireData['seasons']
+  tft: FoxfireData['tft']
   mastery: FoxfireData['mastery']
   rank: FoxfireData['rank'] & {
     openEditor: (accountId: string, queueType: QueueType, matchId: string) => Promise<void>

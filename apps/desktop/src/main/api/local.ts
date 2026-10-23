@@ -136,11 +136,30 @@ export const localApi: ServerBackedApi = {
   sync: {
     // No cooldown on this PC: its own key, its own budget, and a sync already
     // running for the account is joined rather than repeated.
-    start: async (accountId) => {
+    start: async (accountId, game) => {
+      // TFT is synced on this PC from a later commit; until then a TFT sync
+      // has nothing to fetch with and nothing to file into.
+      if (game === 'tft') return { ok: true, error: null }
       startSync(rowId(accountId))
       return { ok: true, error: null }
     },
-    getState: async (accountId) => readSyncState(rowId(accountId))
+    getState: async (accountId, game) => (game === 'tft' ? null : readSyncState(rowId(accountId)))
+  },
+
+  // Empty until this PC keeps TFT history of its own.
+  tft: {
+    dashboard: async () => null,
+    matchList: async () => ({ items: [], total: 0 }),
+    matchSummary: async () => null,
+    lobby: async () => null,
+    rank: {
+      history: async () => ({ snapshots: [], milestones: [], before: null }),
+      trend: async () => ({ from: Date.now() - 30 * 86_400_000, to: Date.now(), points: [], netLp: null }),
+      periods: async () => [],
+      editable: async () => [],
+      saveManual: async () => [],
+      clearManual: async () => []
+    }
   },
 
   champions: {
@@ -203,8 +222,8 @@ export const localApi: ServerBackedApi = {
   },
 
   seasons: {
-    list: async () => listSeasons(getDb()),
-    save: async (seasons) => saveSeasons(getDb(), seasons)
+    list: async (game) => (game === 'tft' ? [] : listSeasons(getDb())),
+    save: async (seasons, game) => (game === 'tft' ? [] : saveSeasons(getDb(), seasons))
   },
 
   /**

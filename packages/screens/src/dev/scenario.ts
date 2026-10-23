@@ -58,6 +58,9 @@ export type Scenario =
   | 'email-held'
   | 'unverified'
   | 'email-change-pending'
+  // A server whose Riot key cannot reach TFT: every TFT page says so, and its
+  // history is whatever was stored before.
+  | 'tft-no-access'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

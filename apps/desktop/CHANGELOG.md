@@ -20,6 +20,12 @@ Teamfight Tactics, beside League.
   holds the two together.
 - A ladder that is not Solo/Duo no longer reads as Flex wherever it becomes a queue id or a label,
   which every ladder did while League's two were the only ones.
+- The client contract every screen reads through has a `tft` namespace — the TFT profile, a paged
+  history, a game's lobby, and rank on TFT's ladders — and syncs and seasons take a game. A server
+  answers it under `/api/riot-accounts/{id}/tft`; Data Dragon's TFT files join the asset manifest,
+  and a TFT file Data Dragon will not give costs TFT its icons rather than League its manifest.
+  What a finished sync refreshes depends on which game it was, and sync progress is kept per game.
+- Linking an account on a server starts its TFT backfill as well as its League one.
 
 ## [0.16.1] — 2026-09-27
 

@@ -76,6 +76,9 @@ Teamfight Tactics, beside League.
 - A stats.db's TFT games import through `/api/admin/import/tft-matches`,
   rewritten onto whichever id this server files TFT under; an account can
   bring its TFT id along, and finishing an import works out TFT's LP too.
+- The web client reads TFT through the same contract the desktop does, and its
+  asset manifest carries Data Dragon's TFT units, traits, items and augments
+  when Data Dragon gives them.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.

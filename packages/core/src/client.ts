@@ -46,8 +46,13 @@ import type {
   ServerLogQuery,
   ServerStorageUsage,
   SyncProgressEvent,
-  SyncState
+  SyncState,
+  TftDashboard,
+  TftEditableMatch,
+  TftLobby,
+  TftMatchSummary
 } from './types'
+import type { GameId } from './games/registry'
 
 /**
  * Everything a screen reads and writes about League data, whoever answers.
@@ -125,8 +130,9 @@ export interface FoxfireData {
      * throw, because the person pressing the button wants to know how long to
      * wait. How it goes is the progress events, not this.
      */
-    start: (accountId: string) => Promise<AdminActionResult>
-    getState: (accountId: string) => Promise<SyncState | null>
+    start: (accountId: string, game?: GameId) => Promise<AdminActionResult>
+    /** League's history unless a game is named; each game syncs on its own. */
+    getState: (accountId: string, game?: GameId) => Promise<SyncState | null>
   }
   champions: {
     stats: (accountId: string, queueId: number | null, range: RankRange) => Promise<ChampionStats[]>
@@ -179,8 +185,26 @@ export interface FoxfireData {
    * calendar is not a stand-in for one. Saving replaces the whole list.
    */
   seasons: {
-    list: () => Promise<Season[]>
-    save: (seasons: SeasonInput[]) => Promise<Season[]>
+    /** One game's seasons, League's unless another is named. Each game keeps its own calendar. */
+    list: (game?: GameId) => Promise<Season[]>
+    save: (seasons: SeasonInput[], game?: GameId) => Promise<Season[]>
+  }
+  /**
+   * One account's TFT. Its own namespace rather than a game parameter on
+   * League's, because almost nothing about a TFT row is League's shape; rank is
+   * the same machinery read on TFT's ladders, so it reads the same way.
+   */
+  tft: {
+    dashboard: (accountId: string) => Promise<TftDashboard | null>
+    matchList: (
+      accountId: string,
+      limit: number,
+      offset: number,
+      queueId: number | null
+    ) => Promise<Page<TftMatchSummary>>
+    matchSummary: (accountId: string, matchId: string) => Promise<TftMatchSummary | null>
+    lobby: (accountId: string, matchId: string) => Promise<TftLobby | null>
+    rank: TftRank
   }
   search: {
     /**
@@ -230,6 +254,19 @@ export interface FoxfireData {
 }
 
 /** Stops listening. Every subscription below hands one back. */
+/** TFT's rank, read and typed as League's is, on TFT's ladders. */
+export interface TftRank {
+  history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+  trend: (accountId: string, queueType: QueueType) => Promise<RankTrend>
+  periods: (accountId: string) => Promise<Season[]>
+  editable: (accountId: string, queueType: QueueType) => Promise<TftEditableMatch[]>
+  saveManual: (accountId: string, queueType: QueueType, edits: ManualRankEdit[]) => Promise<TftEditableMatch[]>
+  clearManual: (accountId: string, queueType: QueueType, matchId: string) => Promise<TftEditableMatch[]>
+}
+
+/** The rank reads both games answer alike, which is what the Rank screen draws from. */
+export type RankReader = Pick<FoxfireData['rank'], 'history' | 'trend' | 'periods'>
+
 export type Unsubscribe = () => void
 
 /**

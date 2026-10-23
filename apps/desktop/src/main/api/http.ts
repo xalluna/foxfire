@@ -76,6 +76,10 @@ export const httpApi: ServerBackedApi = {
       // picks it up.
       void serverApi().sync.start(account.id)
 
+      // And TFT's: the same Riot ID has a second history there, and a
+      // League-only player's costs the server one empty id list.
+      void serverApi().sync.start(account.id, 'tft')
+
       return account
     }
   },
