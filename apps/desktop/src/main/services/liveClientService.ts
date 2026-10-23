@@ -43,21 +43,3 @@ export async function getScoreboard(accountId: string): Promise<Scoreboard | nul
 
   return toScoreboard(data, await getAssetManifest(), `${account.gameName}#${account.tagLine}`)
 }
-
-/**
- * A TFT game's clock, in seconds, or null when nothing answers.
- *
- * TFT runs in League's executable and serves the same loopback API, but its
- * roster is not League's ten champions, so the scoreboard above has nothing to
- * give it. The game's own stats answer with the clock alone, which is all a
- * TFT recording needs: when to start, and whether the game is still there.
- */
-export async function getTftClock(): Promise<number | null> {
-  try {
-    const raw = await liveClientGet<{ gameTime?: unknown }>('/liveclientdata/gamestats')
-    return typeof raw.gameTime === 'number' ? raw.gameTime : null
-  } catch (err) {
-    if (isNotRunning(err)) return null
-    throw err
-  }
-}

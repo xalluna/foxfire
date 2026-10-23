@@ -268,16 +268,26 @@ async function tick(): Promise<void> {
 
     for (const reading of readings) {
       const now = Date.now()
-      const recorded = await reporting.recordRank(
-        account.id,
-        reading,
-        // A ranked game that moved no LP — a loss at 0 LP with demotion
-        // protection — still has to close its interval, or the open one runs on
-        // and swallows the next game too, costing both their LP figure. Only
-        // once the reading has had time to settle, though; before that
-        // "unchanged" more often means the client has not caught up yet.
-        isSettled(pendingReading, reading.queueType, now)
-      )
+      let recorded: boolean
+      try {
+        recorded = await reporting.recordRank(
+          account.id,
+          reading,
+          // A ranked game that moved no LP — a loss at 0 LP with demotion
+          // protection — still has to close its interval, or the open one runs on
+          // and swallows the next game too, costing both their LP figure. Only
+          // once the reading has had time to settle, though; before that
+          // "unchanged" more often means the client has not caught up yet.
+          isSettled(pendingReading, reading.queueType, now)
+        )
+      } catch (err) {
+        // One ladder a server will not take is no reason to drop the others, or
+        // the game end below that the post-game sync waits on. Left to the poll's
+        // own catch, a refused TFT reading did both on every tick, and showed the
+        // League client as disconnected while it was not.
+        log.debug('Rank reading not recorded', { queueType: reading.queueType, error: String(err) })
+        continue
+      }
 
       // Whether the reading moved on its own or was forced once settled, the
       // finished game's interval is now closed and nothing is left to wait for.

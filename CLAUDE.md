@@ -365,8 +365,17 @@ offers either. That rule lives in the row queries in `MatchReads.MatchListAsync`
 A TFT recording is the same thing for a TFT game. It has no roster to be bound by, so it is bound by
 the game's id instead: the League client names the game while it is played, and
 `${platform}_${gameId}` is its match id (`findTftMatchForRecording`); one without an id is bound
-only when a single game's span holds it. It keeps no markers — TFT's game serves no events worth
-keeping — and is titled from a template of its own, `{placement} · {queue} · {trait}` to start.
+only when a single game's span holds it. It keeps no markers, and is titled from a template of its
+own, `{placement} · {queue} · {trait}` to start.
+
+TFT's game is not League's program. It is Riot's own Unreal client,
+`TFT\Binaries\Win64\TFTClient-Win64-Shipping.exe` under its own install, launched by the League
+client — which is still where its lobby, gameflow and ranks are read. It serves no Live Client Data
+API: nothing on port 2999, so no clock, no events and no roster. A TFT recording therefore starts
+`TFT_START_DELAY_MS` after the client says the game is on and stops when the client says it is over
+(`capture/gameClock.ts`). Managed OBS keeps a Game Capture for each game's window in its scene
+(`GAME_SOURCES` in `obs/provision.ts`); only the game being played has a window, so the other draws
+nothing, and a new game is a new entry there or it records black.
 
 **It is switched off at build time, everywhere, by one switch.** `FOXFIRE_FEATURE_YOUTUBE` in the
 environment of a build — `1`, `true`, `yes` or `on` — is what includes it, and the release workflows

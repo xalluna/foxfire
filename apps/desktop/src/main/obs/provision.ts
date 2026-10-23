@@ -9,6 +9,7 @@ import {
 } from './config'
 import { captureQualityOption, OBS_RECORD_QUALITY } from '@shared/captureQuality'
 import type { CaptureAudio, CaptureQuality } from '@shared/types'
+import type { GameId } from '@foxfire/core'
 
 /**
  * Managed mode: an OBS profile and scene collection this app owns outright.
@@ -36,19 +37,33 @@ const OURS = 'Foxfire '
 
 const PROFILE = `${OURS}Capture`
 const COLLECTION = `${OURS}Capture`
+/** Named when League was the only game, and kept so a collection built then is the one still used. */
 const SCENE = 'League'
-const GAME_INPUT = 'League of Legends'
 const DESKTOP_INPUT = `${OURS}Desktop Audio`
 const MIC_INPUT = `${OURS}Microphone`
 
 /**
- * OBS's own window spec, "title:class:executable".
+ * One Game Capture for each game, each waiting for its own program's window.
  *
- * The game window, not the client: the client is a separate process with a
- * different class, and capturing it would record the post-game screen and
- * nothing else.
+ * The two are different programs: League's game is `League of Legends.exe`,
+ * and TFT's is Riot's own Unreal client. Both sit in the scene all the time,
+ * and only the game being played has a window, so the other draws nothing —
+ * which means the scene never depends on having been told which game is on.
+ *
+ * `window` is OBS's own spec, "title:class:executable". The game window, not
+ * the League client: the client is a separate process, and capturing it would
+ * record the post-game screen and nothing else.
  */
-const LEAGUE_WINDOW = 'League of Legends (TM) Client:RiotWindowClass:League of Legends.exe'
+const GAME_SOURCES: Record<GameId, { input: string; window: string }> = {
+  lol: {
+    input: 'League of Legends',
+    window: 'League of Legends (TM) Client:RiotWindowClass:League of Legends.exe'
+  },
+  tft: {
+    input: 'Teamfight Tactics',
+    window: 'Teamfight Tactics:UnrealWindow:TFTClient-Win64-Shipping.exe'
+  }
+}
 
 /** What was selected before we switched, so it can be put back. */
 let previous: { profile: string | null; collection: string | null } | null = null
@@ -153,37 +168,41 @@ async function stopMonitoring(inputName: string): Promise<void> {
  * earlier version of this app still carries whatever it was made with — and one
  * of these settings is the audio hook.
  */
-const GAME_CAPTURE_SETTINGS = {
-  capture_mode: 'window',
-  window: LEAGUE_WINDOW,
-  // Match on the executable when the window title does not line up — League's
-  // title carries a trademark symbol that has moved between patches, and the
-  // process name has not.
-  priority: 2,
-  capture_cursor: true,
-  // Off, explicitly. Game Capture's audio option injects an audio hook into the
-  // game process, and that hook is a known cause of added latency in the game's
-  // own output — intolerable in a game played on sound cues. Desktop audio is
-  // captured passively off the output device instead, where nothing is hooked.
-  capture_audio: false
-} as const
+function gameCaptureSettings(window: string): Record<string, unknown> {
+  return {
+    capture_mode: 'window',
+    window,
+    // Match on the executable when the window title does not line up — League's
+    // title carries a trademark symbol that has moved between patches, and the
+    // process name has not.
+    priority: 2,
+    capture_cursor: true,
+    // Off, explicitly. Game Capture's audio option injects an audio hook into the
+    // game process, and that hook is a known cause of added latency in the game's
+    // own output — intolerable in a game played on sound cues. Desktop audio is
+    // captured passively off the output device instead, where nothing is hooked.
+    capture_audio: false
+  }
+}
 
 async function ensureScene(audio: CaptureAudio): Promise<void> {
   if (!(await sceneExists(SCENE))) await obsTry('CreateScene', { sceneName: SCENE })
 
-  if (await inputExists(GAME_INPUT)) {
-    await obsTry('SetInputSettings', {
-      inputName: GAME_INPUT,
-      inputSettings: GAME_CAPTURE_SETTINGS,
-      overlay: true
-    })
-  } else {
-    await obsTry('CreateInput', {
-      sceneName: SCENE,
-      inputName: GAME_INPUT,
-      inputKind: 'game_capture',
-      inputSettings: GAME_CAPTURE_SETTINGS
-    })
+  for (const { input, window } of Object.values(GAME_SOURCES)) {
+    if (await inputExists(input)) {
+      await obsTry('SetInputSettings', {
+        inputName: input,
+        inputSettings: gameCaptureSettings(window),
+        overlay: true
+      })
+    } else {
+      await obsTry('CreateInput', {
+        sceneName: SCENE,
+        inputName: input,
+        inputKind: 'game_capture',
+        inputSettings: gameCaptureSettings(window)
+      })
+    }
   }
 
   // Only created if OBS has nothing of the kind already. A fresh profile has a
@@ -304,9 +323,12 @@ export async function leaveManagedMode(): Promise<void> {
   }
 }
 
-/** The source the settings preview screenshots in managed mode. */
+/**
+ * The source the settings preview screenshots in managed mode: the scene, so
+ * the frame is whichever game is on, as the recording would be.
+ */
 export function managedPreviewSource(): string {
-  return GAME_INPUT
+  return SCENE
 }
 
 /** Whether OBS is currently sitting in our own collection. */

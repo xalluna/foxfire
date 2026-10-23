@@ -87,33 +87,21 @@ export function containsGameStart(
 }
 
 /**
- * How long after the client says a TFT game is on to record without having
- * seen its clock move.
+ * How long after the client says a TFT game is on to start recording it.
  *
- * TFT's loading screen is short — eight little legends, no champion art — and
- * whether the game's own clock answers on loopback for TFT at all is the
- * thing the live check is for. A recording that starts a few seconds into the
- * carousel loses nothing; one that never starts loses the game.
+ * TFT's game is not League's. It is Riot's own Unreal client,
+ * `TFTClient-Win64-Shipping.exe`, and it serves no Live Client Data API — no
+ * clock, no events, nothing on loopback to say that play has begun — so a TFT
+ * recording starts on time alone. Measured on a real game: the client was
+ * drawing the board about ten seconds after it was launched, which is when the
+ * League client says the game is on, and the watcher notices that up to ten
+ * seconds later still. Ten seconds from arming starts on the board or just
+ * after it; a slower machine records a little of the loading screen first,
+ * which loses nothing.
  */
-export const TFT_START_DELAY_MS = 30_000
+export const TFT_START_DELAY_MS = 10_000
 
-export interface TftReadinessInput {
-  previousGameTime: number | null
-  /** Null while the clock does not answer. */
-  gameTime: number | null
-  /** Since the client said the game was on. */
-  inProgressForMs: number
-}
-
-/**
- * When a TFT game is ready to record: its clock moving, as League's is, or
- * TFT_START_DELAY_MS after the client said it was on, whichever is first.
- *
- * There is no event to wait for — TFT's game serves none worth reading — and
- * no roster to wait for either, which is what League's readiness leans on.
- */
-export function tftReadiness(input: TftReadinessInput): Readiness {
-  if (input.gameTime !== null && isClockRunning(input.previousGameTime, input.gameTime)) return 'clock'
-  if (input.inProgressForMs >= TFT_START_DELAY_MS) return 'fallback'
-  return 'wait'
+/** Whether a TFT game the client has said is on for this long is ready to record. */
+export function isTftReady(inProgressForMs: number): boolean {
+  return inProgressForMs >= TFT_START_DELAY_MS
 }

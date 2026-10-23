@@ -348,7 +348,7 @@ function ScenePicker({
   return (
     <SettingsBlock
       label="Scene"
-      description="The scene that captures the game — League or TFT, which run in the same window. It is switched to when recording starts."
+      description="The scene that captures the game. League and TFT are separate programs — League of Legends.exe and TFTClient-Win64-Shipping.exe — so a scene for both needs a game capture of each. It is switched to when recording starts."
     >
       <select
         value={value ?? ''}

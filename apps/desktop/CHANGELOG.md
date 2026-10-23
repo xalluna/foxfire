@@ -51,7 +51,9 @@ server or on its own. And every new recording is filed by player, game and mode.
   League client gave it, shows up on its TFT history row, and goes to YouTube like a League one,
   titled by its own template — `{placement} · {queue} · {trait}` to start with, in Settings ›
   YouTube. The Recordings tab can show all of them, or just League's or TFT's, and "View match
-  history" on a TFT recording opens its game on the TFT profile.
+  history" on a TFT recording opens its game on the TFT profile. TFT is a program of its own now,
+  not League's: Foxfire's own OBS setup captures both, and a scene of your own needs a game capture
+  of `TFTClient-Win64-Shipping.exe` beside League's.
 
 ### Changed
 
@@ -95,10 +97,13 @@ server or on its own. And every new recording is filed by player, game and mode.
   repair after a new main key carries TFT's games along too while the two share it.
 - League's rank refresh keeps League's ladders, and TFT's keeps TFT's.
 - The League client watcher tells TFT from League by the gameflow session's mode and map, and
-  logs each game's session once, with the ranked readings after it, at debug level.
-- A TFT game starts recording when its clock moves, or 30 seconds after the client says it is on
-  if the clock never answers; whether it does is logged. A recording keeps the game's id and
-  platform, which name its match exactly; one without them is bound only when a single game's
+  logs each game's session once, with the ranked readings after it, at debug level. A rank reading
+  that cannot be recorded is skipped on its own, rather than taking the poll's other readings and
+  its game end with it — and showing the League client as disconnected while it was not.
+- TFT's game serves nothing on loopback for a recording to read — no clock, no events — so a TFT
+  game starts recording ten seconds after the League client says it is on, and stops when the
+  client says it is over. A recording keeps the game's id and platform, which name its match
+  exactly; one without them is bound only when a single game's
   span — its start to your elimination, give or take five minutes — holds it. TFT recordings wait
   90 minutes for their game before being written off, League's 30. "Other and rotating modes" is
   League's: it does not record a TFT event queue.
