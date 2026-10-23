@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.17.0] — 2026-10-23
+
+Teamfight Tactics, beside League.
+
+### Under the hood
+
+- Games are a first-class idea. `@foxfire/core` holds a registry of the Riot titles Foxfire tracks
+  — League and TFT — with each one's queues, ladders, recording folders and Riot key, and every list
+  of queues League used to keep for itself is now read from it, with League's answers pinned by a
+  test so the move changed nothing. The server keeps its own copy, and `fixtures/game-registry.json`
+  holds the two together.
+- A ladder that is not Solo/Duo no longer reads as Flex wherever it becomes a queue id or a label,
+  which every ladder did while League's two were the only ones.
+
 ## [0.16.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP. Needs Foxfire Server 0.5.1, which is
@@ -1356,6 +1370,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.17.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.1...desktop-v0.17.0
 [0.16.1]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.0...desktop-v0.16.1
 [0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0

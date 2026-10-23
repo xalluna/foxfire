@@ -15,7 +15,7 @@ internal sealed class GetRankHistoryRequestValidator : AbstractValidator<GetRank
 {
     public GetRankHistoryRequestValidator() =>
         RuleFor(x => x.QueueType)
-            .Must(queue => RankedQueues.FromRiotName(queue) is not null)
+            .Must(queue => RankedQueues.FromRiotName(queue, Game.Lol) is not null)
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue.");
 }
@@ -45,7 +45,7 @@ internal sealed class GetRankTrendRequestValidator : AbstractValidator<GetRankTr
 {
     public GetRankTrendRequestValidator() =>
         RuleFor(x => x.QueueType)
-            .Must(queue => RankedQueues.FromRiotName(queue) is not null)
+            .Must(queue => RankedQueues.FromRiotName(queue, Game.Lol) is not null)
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue.");
 }

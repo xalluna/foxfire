@@ -144,10 +144,7 @@ function rebuild(accountId: string, queueType: QueueType): void {
   const snapshots = [...baseSnapshots(accountId, queueType), ...manual].sort(
     (a, b) => a.capturedAt - b.capturedAt
   )
-  RANK_SNAPSHOTS[accountId] = { ...RANK_SNAPSHOTS[accountId], [queueType]: snapshots } as Record<
-    QueueType,
-    RankSnapshot[]
-  >
+  RANK_SNAPSHOTS[accountId] = { ...RANK_SNAPSHOTS[accountId], [queueType]: snapshots }
 
   for (const match of matches) {
     match.rank = null

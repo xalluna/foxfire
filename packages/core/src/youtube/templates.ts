@@ -1,4 +1,6 @@
 import type { RecordingEvent } from '../types'
+import { queueDefinition } from '../games/registry'
+import { countedPlacement, ordinal } from '../rules/tft'
 
 /**
  * What a recording is called on YouTube, and what its description says.
@@ -70,7 +72,8 @@ const MODE_LABELS: Record<string, string> = {
   CHERRY: 'Arena',
   PRACTICETOOL: 'Practice Tool',
   TUTORIAL: 'Tutorial',
-  URF: 'URF'
+  URF: 'URF',
+  TFT: 'Teamfight Tactics'
 }
 
 /**
@@ -82,6 +85,8 @@ const MODE_LABELS: Record<string, string> = {
  */
 export function queueLabel(queueId: number | null, gameMode: string | null): string | null {
   if (queueId !== null && QUEUE_LABELS[queueId]) return QUEUE_LABELS[queueId]!
+  const known = queueDefinition(queueId)?.label
+  if (known) return known
   if (gameMode) return MODE_LABELS[gameMode.toUpperCase()] ?? titleCase(gameMode)
   return null
 }
@@ -134,15 +139,77 @@ export function renderRecordingTitle(template: string, facts: RecordingTitleFact
     return token ? (tokenValue(token, facts) ?? '') : whole
   })
 
+  return finishTitle(filled, 'League of Legends recording')
+}
+
+/**
+ * A filled template made fit for YouTube: separators with nothing either side
+ * dropped, angle brackets stripped, and the whole held to 100 characters.
+ */
+function finishTitle(filled: string, fallback: string): string {
   const tidy = stripAngles(filled)
     .split('·')
     .map((part) => part.replace(/\s+/g, ' ').trim())
     .filter((part) => part !== '')
     .join(' · ')
 
-  const title = tidy === '' ? 'League of Legends recording' : tidy
+  const title = tidy === '' ? fallback : tidy
   // By code point, so a title never ends in half a surrogate pair.
   return Array.from(title).slice(0, TITLE_MAX_CHARS).join('').trim()
+}
+
+/**
+ * The title a TFT recording gets unless its owner has written their own.
+ *
+ * TFT has no champion and no KDA, so it has its own tokens and its own
+ * template: where the board finished, in which queue, and the trait it was
+ * built around — `1st · Ranked TFT · Flora Fatalis`.
+ */
+export const DEFAULT_TFT_TITLE_TEMPLATE = '{placement} · {queue} · {trait}'
+
+/** A TFT recording that never found its match has no placement and no board. */
+export const UNMATCHED_TFT_TITLE_TEMPLATE = '{queue} · {date}'
+
+/** The tokens a TFT title template may use, in the order the settings page lists them. */
+export const TFT_TITLE_TOKENS = ['placement', 'queue', 'trait', 'date'] as const
+export type TftTitleToken = (typeof TFT_TITLE_TOKENS)[number]
+
+/** What a TFT title can be made from. Null wherever the game did not say. */
+export interface TftRecordingTitleFacts {
+  queueId: number | null
+  /** The player's own place, 1 to 8. Null for a recording that never found its match. */
+  placement: number | null
+  /** The team's place in Double Up, which is the one a title names there. */
+  teamPlacement: number | null
+  /** The strongest active trait, by name — already named, from the manifest or the id. */
+  trait: string | null
+  /** Epoch milliseconds. */
+  playedAt: number | null
+}
+
+function tftTokenValue(token: TftTitleToken, facts: TftRecordingTitleFacts): string | null {
+  switch (token) {
+    case 'placement':
+      return facts.placement === null
+        ? null
+        : ordinal(countedPlacement({ placement: facts.placement, teamPlacement: facts.teamPlacement }, facts.queueId))
+    case 'queue':
+      return queueLabel(facts.queueId, 'TFT')
+    case 'trait':
+      return facts.trait
+    case 'date':
+      return facts.playedAt === null ? null : formatDate(facts.playedAt)
+  }
+}
+
+/** Fills a TFT title template in, by the same rules as renderRecordingTitle. */
+export function renderTftRecordingTitle(template: string, facts: TftRecordingTitleFacts): string {
+  const filled = template.replace(/\{(\w+)\}/g, (whole, name: string) => {
+    const token = TFT_TITLE_TOKENS.find((candidate) => candidate === name.toLowerCase())
+    return token ? (tftTokenValue(token, facts) ?? '') : whole
+  })
+
+  return finishTitle(filled, 'Teamfight Tactics recording')
 }
 
 /** YouTube ignores a chapter shorter than this. */
@@ -229,6 +296,17 @@ export function buildRecordingDescription(events: readonly RecordingEvent[]): st
   }
 
   return rendered.join('\n') + footer
+}
+
+/**
+ * A TFT recording's description: the credit alone.
+ *
+ * Not a lone "0:00 Start" chapter above it. TFT gives Foxfire nothing to mark
+ * on the way — no kills, no deaths — and a chapter list of one is a list
+ * YouTube ignores anyway.
+ */
+export function buildTftRecordingDescription(): string {
+  return DESCRIPTION_FOOTER
 }
 
 /** Whether a description is within YouTube's limit, for the upload form's counter. */

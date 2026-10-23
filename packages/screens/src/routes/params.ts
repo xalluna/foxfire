@@ -1,4 +1,4 @@
-import { DEFAULT_QUEUE_FILTER, type QueueType, type RankRange } from '@foxfire/core'
+import { DEFAULT_QUEUE_FILTER, LADDERS, type QueueType, type RankRange } from '@foxfire/core'
 import {
   parseQueueParam,
   parseRangeParam,
@@ -63,10 +63,21 @@ function readQueue(raw: unknown): QueueSearch | undefined {
   return queueId === null ? 'all' : queueId
 }
 
-function readRankQueue(raw: unknown): RankQueue | undefined {
+/**
+ * A ladder from a URL, if it is one this page can show.
+ *
+ * A TFT ladder in a League page's URL reads as absent rather than as a ladder,
+ * so the page opens on its own default instead of asking for a history it
+ * does not draw.
+ */
+function readRankQueue(raw: unknown, accept: (queueType: QueueType) => boolean): RankQueue | undefined {
   const queueType = parseRankQueueParam(raw)
-  return queueType === undefined ? undefined : rankQueueParam(queueType)
+  return queueType === undefined || !accept(queueType) ? undefined : rankQueueParam(queueType)
 }
+
+const isLeagueLadder = (queueType: QueueType): boolean => LADDERS[queueType].game === 'lol'
+
+const isEditableLadder = (queueType: QueueType): boolean => LADDERS[queueType].lpEditable
 
 function readText(raw: unknown): string | undefined {
   // A query value that looks like a number arrives as one. An id is text
@@ -88,11 +99,11 @@ export function validateChampionsSearch(raw: RawSearch): ChampionsSearch {
 }
 
 export function validateRankSearch(raw: RawSearch): RankSearch {
-  return present({ queue: readRankQueue(raw.queue), range: parseRangeParam(raw.range) })
+  return present({ queue: readRankQueue(raw.queue, isLeagueLadder), range: parseRangeParam(raw.range) })
 }
 
 export function validateLpEditorSearch(raw: RawSearch): LpEditorSearch {
-  return present({ queue: readRankQueue(raw.queue), match: readText(raw.match) })
+  return present({ queue: readRankQueue(raw.queue, isEditableLadder), match: readText(raw.match) })
 }
 
 export function validateMatchSearch(raw: RawSearch): MatchSearch {

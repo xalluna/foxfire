@@ -15,9 +15,22 @@
  * Every list passed in must be ordered oldest first. listSeasons guarantees it.
  */
 
+import type { GameId } from '../games/registry'
 import type { RankRange, Season } from '../types'
 
 const DAY_MS = 86_400_000
+
+/**
+ * One game's seasons, in the order given.
+ *
+ * Every function below works on a single game's list: League's annual reset
+ * says nothing about a TFT set, and a TFT set boundary in League's list would
+ * split a League season in two. A season with no game is League's, which is
+ * what every row was before there were two games.
+ */
+export function seasonsOfGame(seasons: Season[], game: GameId): Season[] {
+  return seasons.filter((s) => (s.game ?? 'lol') === game)
+}
 
 const SEASON_PREFIX = 'season:'
 

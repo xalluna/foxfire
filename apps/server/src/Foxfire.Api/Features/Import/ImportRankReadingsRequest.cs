@@ -64,7 +64,7 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
                 continue;
             }
 
-            if (RankedQueues.FromRiotName(incoming.QueueType) is null)
+            if (RankedQueues.FromRiotName(incoming.QueueType, Game.Lol) is null)
             {
                 unplaced++;
                 continue;

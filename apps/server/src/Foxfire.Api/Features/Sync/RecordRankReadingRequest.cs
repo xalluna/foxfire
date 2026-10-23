@@ -37,7 +37,7 @@ internal sealed class RecordRankReadingRequestValidator : AbstractValidator<Reco
 {
     public RecordRankReadingRequestValidator() =>
         RuleFor(x => x.QueueType)
-            .Must(queue => RankedQueues.FromRiotName(queue) is not null)
+            .Must(queue => RankedQueues.FromRiotName(queue, Game.Lol) is not null)
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue this server tracks.");
 }

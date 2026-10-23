@@ -51,7 +51,7 @@ public sealed class AttributionRunner(FoxfireDbContext db)
 
         var written = 0;
 
-        foreach (var queue in RankedQueues.All)
+        foreach (var queue in RankedQueues.Of(Game.Lol))
         {
             var readings = await LoadReadingsAsync(riotAccountId, queue, sinceMs, cancellationToken);
             if (readings.Count < 2) continue;

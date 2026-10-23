@@ -58,7 +58,7 @@ public sealed class CoPlayerRanks(
 
         if (matchIds.Count == 0) return 0;
 
-        var rankedQueueIds = RankedQueues.All.Select(q => q.QueueId()).ToList();
+        var rankedQueueIds = RankedQueues.Of(Game.Lol).Select(q => q.QueueId()).ToList();
 
         // A remake moves no LP, so a co-player who only shared one has nothing to
         // read. Games that failed to store are simply not here.

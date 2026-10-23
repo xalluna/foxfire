@@ -312,7 +312,7 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
 
         if (queueType is null) return false;
 
-        var queue = RankedQueues.FromRiotName(queueType);
+        var queue = RankedQueues.FromRiotName(queueType, Game.Lol);
         if (queue is null) return false;
 
         await db.RankSnapshots

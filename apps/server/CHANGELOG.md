@@ -11,6 +11,23 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.6.0] — 2026-10-23
+
+Teamfight Tactics, beside League.
+
+### Under the hood
+
+- Games are a first-class idea. `Foxfire.Core` has `Game` and the ladders of
+  both — `RankedQueue` gains TFT's Ranked, Double Up and Hyper Roll, and Hyper
+  Roll's rating has a scale of its own — kept in step with `@foxfire/core`'s
+  registry by `fixtures/game-registry.json`. Everything that meant League's two
+  ladders asks for League's by name.
+- A rank reading on a queue no ladder answers to is an error rather than a
+  Solo/Duo reading. Nothing writes one.
+- `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
+  `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
+  advisories, and with warnings as errors a restore refused to start.
+
 ## [0.5.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP, and for games played
@@ -970,6 +987,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.6.0]: https://github.com/xalluna/foxfire/compare/server-v0.5.1...server-v0.6.0
 [0.5.1]: https://github.com/xalluna/foxfire/compare/server-v0.5.0...server-v0.5.1
 [0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0

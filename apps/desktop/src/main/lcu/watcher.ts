@@ -242,7 +242,10 @@ async function tick(): Promise<void> {
     // than a bare "was ranked" flag: only the ladder that was actually played on
     // is waited on, and forcing the other one writes a duplicate row that closes
     // an interval nothing measured.
-    const endedQueueType = gameEnded ? queueTypeForQueueId(currentQueueId) : null
+    const endedLadder = gameEnded ? queueTypeForQueueId(currentQueueId) : null
+    // Only a ladder whose readings this loop records can be waited on; a TFT
+    // reading is skipped below, so waiting on one would never close.
+    const endedQueueType = endedLadder && TRACKED_QUEUES.includes(endedLadder) ? endedLadder : null
     if (gameEnded) currentQueueId = null
     if (endedQueueType) pendingReading = pendingReadingFor(endedQueueType, Date.now())
 

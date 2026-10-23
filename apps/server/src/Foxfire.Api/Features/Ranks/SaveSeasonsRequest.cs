@@ -91,7 +91,7 @@ internal sealed class SaveSeasonsRequestHandler(
 
         foreach (var account in accounts)
         {
-            foreach (var queue in RankedQueues.All)
+            foreach (var queue in RankedQueues.Of(Game.Lol))
             {
                 await attribution.RebuildAsync(account.Id, account.Puuid, queue, cancellationToken);
             }

@@ -481,7 +481,10 @@ function buildSoloRankHistory(): {
 
 const soloHistory = buildSoloRankHistory()
 
-const FAKER_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
+/** Rank history per ladder; a ladder an account never played is simply absent. */
+type LadderSnapshots = Partial<Record<QueueType, RankSnapshot[]>>
+
+const FAKER_SNAPSHOTS: LadderSnapshots = {
   RANKED_SOLO_5x5: soloHistory.snapshots,
   // Flex is deliberately sparse — the queue toggle has to stay legible when one
   // ladder has far fewer points than the other.
@@ -510,7 +513,7 @@ const FAKER_SNAPSHOTS: Record<QueueType, RankSnapshot[]> = {
  * accountId, and a harness that ignored it would hide any bug where the app
  * shows one account's climb under another's name.
  */
-export const RANK_SNAPSHOTS: Record<string, Record<QueueType, RankSnapshot[]>> = {
+export const RANK_SNAPSHOTS: Record<string, LadderSnapshots> = {
   1: FAKER_SNAPSHOTS,
   2: {
     // Two ranked years, oldest first. The gap between them is January's reset:

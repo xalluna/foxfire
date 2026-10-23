@@ -14,7 +14,18 @@ namespace Foxfire.Core;
 /// a boundary at all: rank carries into a preseason, and Riot has reset mid-year
 /// without one.
 /// </param>
-public sealed record Season(int Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
+/// <param name="Game">
+/// Whose calendar it is. TFT's sets reset on their own dates, so each game
+/// keeps its own list, and every function below is handed one game's list —
+/// League's annual reset says nothing about a TFT set.
+/// </param>
+public sealed record Season(
+    int Id,
+    string Label,
+    long StartsAt,
+    bool IsPreseason,
+    bool ResetsRank,
+    Game Game = Game.Lol);
 
 /// <summary>
 /// Arithmetic over the season list. Ported from packages/core/src/rules/seasons.ts.

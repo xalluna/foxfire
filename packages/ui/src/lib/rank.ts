@@ -1,5 +1,5 @@
 import type { LeagueEntry, QueueType } from '@foxfire/core'
-import { ALL_TIERS, DIVISIONS, DIVISIONED_TIERS } from '@foxfire/core'
+import { ALL_TIERS, DIVISIONS, DIVISIONED_TIERS, LADDERS } from '@foxfire/core'
 
 import iron from '../assets/ranks/iron.png'
 import bronze from '../assets/ranks/bronze.png'
@@ -117,7 +117,7 @@ export function tierProgress(
 }
 
 export function queueLabel(queueType: QueueType): string {
-  return queueType === 'RANKED_SOLO_5x5' ? 'Ranked Solo/Duo' : 'Ranked Flex'
+  return LADDERS[queueType].label
 }
 
 export interface RankRecord {

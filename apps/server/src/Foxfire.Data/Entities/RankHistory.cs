@@ -86,10 +86,18 @@ public sealed class RankSnapshot
     public string? MatchId { get; set; }
     public Match? Match { get; set; }
 
-    /// <summary>The shape the attribution rule takes as input.</summary>
+    /// <summary>
+    /// The shape the attribution rule takes as input.
+    ///
+    /// Every caller read this row by a ladder it had already checked, so a queue
+    /// type no ladder answers to is a broken invariant rather than a value to
+    /// guess at. It used to fall back to Solo/Duo, which was harmless while
+    /// League had the only two ladders and would file a TFT reading as League's.
+    /// </summary>
     public RankReading ToReading() =>
         new(
-            RankedQueues.FromRiotName(QueueType) ?? RankedQueue.SoloDuo,
+            RankedQueues.FromRiotName(QueueType)
+                ?? throw new InvalidOperationException($"A reading of {QueueType} is on no ladder Foxfire tracks."),
             Tier,
             Division,
             LeaguePoints,

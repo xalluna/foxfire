@@ -14,8 +14,12 @@ namespace Foxfire.Core;
 /// (<see cref="RankedMatch.GameEnd"/>).
 /// </param>
 /// <param name="LadderPosition">
-/// Stamped on write from tier, division and LP. Null when the reading was of an
-/// unranked account, which is why an interval touching one is never attributed.
+/// Stamped on write from tier, division and LP — or, on a rated ladder, the
+/// rating. Null when the reading was of an unranked account, which is why an
+/// interval touching one is never attributed.
+/// </param>
+/// <param name="RatedTier">
+/// Hyper Roll's colour, on its rated ladder. Null on every other.
 /// </param>
 public sealed record RankReading(
     RankedQueue Queue,
@@ -26,7 +30,8 @@ public sealed record RankReading(
     int? Losses,
     int? LadderPosition,
     string Source,
-    long CapturedAt) : IRank;
+    long CapturedAt,
+    RatedTier? RatedTier = null) : IRank;
 
 /// <summary>A ranked game, as far as attribution cares.</summary>
 /// <param name="GameCreation">Epoch milliseconds.</param>
@@ -52,7 +57,10 @@ public sealed record RankedMatch(
 /// <param name="LpDelta">
 /// A difference of ladder positions rather than of raw LP, so it stays correct
 /// across a division or tier boundary where LP itself wraps back to near zero.
+/// On a rated ladder it is the change in rating.
 /// </param>
+/// <param name="RatedTierBefore">Hyper Roll's colour going in, on its rated ladder.</param>
+/// <param name="RatedTierAfter">And coming out.</param>
 public sealed record MatchRankAttribution(
     string MatchId,
     RankedQueue Queue,
@@ -64,7 +72,9 @@ public sealed record MatchRankAttribution(
     int? LpAfter,
     int LpDelta,
     bool IsPromotion,
-    bool IsDemotion);
+    bool IsDemotion,
+    RatedTier? RatedTierBefore = null,
+    RatedTier? RatedTierAfter = null);
 
 /// <summary>
 /// Assigning an LP change to a game, but only when it is unambiguous.
@@ -162,7 +172,7 @@ public static class RankAttribution
 
         if (only is null) return null;
 
-        var movement = Ladder.Movement(before, after);
+        var movement = Ladders.Movement(before, after);
 
         return new MatchRankAttribution(
             MatchId: only,
@@ -175,7 +185,9 @@ public static class RankAttribution
             LpAfter: after.LeaguePoints,
             LpDelta: after.LadderPosition.Value - before.LadderPosition.Value,
             IsPromotion: movement == RankMovement.Promotion,
-            IsDemotion: movement == RankMovement.Demotion);
+            IsDemotion: movement == RankMovement.Demotion,
+            RatedTierBefore: before.RatedTier,
+            RatedTierAfter: after.RatedTier);
     }
 
     /// <summary>

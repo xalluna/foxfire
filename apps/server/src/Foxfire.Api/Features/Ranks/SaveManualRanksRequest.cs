@@ -32,7 +32,7 @@ internal sealed class GetEditableGamesRequestHandler(AccountOwnership ownership,
                 AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
         }
 
-        if (RankedQueues.FromRiotName(request.QueueType) is not { } queue)
+        if (RankedQueues.FromRiotName(request.QueueType, Game.Lol) is not { } queue)
         {
             return new Error("unknown_queue", $"{request.QueueType} is not a ranked queue.");
         }
@@ -63,7 +63,7 @@ internal sealed class SaveManualRanksRequestHandler(
         var account = await ownership.RankWritableAsync(request.RiotAccountId, cancellationToken);
         if (account is null) return Response.Failure(AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
 
-        if (RankedQueues.FromRiotName(request.QueueType) is not { } queue)
+        if (RankedQueues.FromRiotName(request.QueueType, Game.Lol) is not { } queue)
         {
             return new Error("unknown_queue", $"{request.QueueType} is not a ranked queue.");
         }
