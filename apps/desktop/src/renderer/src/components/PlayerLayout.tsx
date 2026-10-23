@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { useRouterState } from '@tanstack/react-router'
 import { GameSwitch, useMyAccounts, type PlayerLayoutProps } from '@foxfire/screens'
 import { useLastPlayer } from '../store/lastPlayer'
 import { AccountSwitcher } from './AccountSwitcher'
@@ -18,6 +19,7 @@ export function Main({ children }: { children: ReactNode }): JSX.Element {
  */
 export function PlayerLayout({ account, children }: PlayerLayoutProps): JSX.Element {
   const remember = useLastPlayer((s) => s.remember)
+  const onCaptures = useRouterState({ select: (s) => /\/captures\/?$/.test(s.location.pathname) })
   const accounts = useMyAccounts()
 
   useEffect(() => {
@@ -30,8 +32,9 @@ export function PlayerLayout({ account, children }: PlayerLayoutProps): JSX.Elem
       <Main>
         {/* Which of the player's games this is. The desktop has no tabs — its
             other pages open from the cards that summarise them — so the switch
-            is the one thing above the page. */}
-        {account && (
+            is the one thing above the page. Not on Captures, which is this
+            PC's recordings of both games and has a filter of its own. */}
+        {account && !onCaptures && (
           <div className="flex justify-end px-4 pt-3">
             <GameSwitch account={account} />
           </div>

@@ -69,6 +69,9 @@ let currentQueueId: number | null = null
  */
 let currentGame: GameId = 'lol'
 
+/** Riot's id for the game being played, which with the platform names its match. */
+let currentGameId: number | null = null
+
 /** The game whose session has been logged, so each is logged once rather than every tick. */
 let loggedGameId: number | null = null
 
@@ -143,6 +146,7 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
       const facts = sessionFacts(session)
       currentQueueId = facts.queueId
       currentGame = facts.game
+      currentGameId = facts.gameId
 
       // Once a game, what the session said and how it was read — which game,
       // which queue, which id — so a real client can be held to what this
@@ -161,7 +165,7 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
   // the loading screen that follows lasts at least a minute, and the recording
   // itself is started by the game answering on loopback.
   inGame = isPlayingPhase(phase)
-  onGamePhase(accountId, currentQueueId, inGame)
+  onGamePhase(accountId, currentQueueId, inGame, { game: currentGame, gameId: currentGameId })
   setGameflowPhase(phase)
 
   const ended = isGameEndTransition(lastPhase, phase, currentGame)
@@ -249,6 +253,7 @@ async function tick(): Promise<void> {
     if (gameEnded) {
       currentQueueId = null
       currentGame = 'lol'
+      currentGameId = null
     }
     if (endedQueueType) pendingReading = pendingReadingFor(endedQueueType, Date.now())
 
@@ -351,6 +356,7 @@ export function stopLcuWatcher(): void {
   lastPhase = null
   currentQueueId = null
   currentGame = 'lol'
+  currentGameId = null
   loggedGameId = null
   inGame = false
   pendingReading = null

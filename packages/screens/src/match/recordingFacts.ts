@@ -29,7 +29,13 @@ export function headerFactsFor(match: MatchSummary | null | undefined, durationS
  * strongest trait and its carry — the most expensive, best-starred unit — where
  * League has a champion.
  */
-export function tftHeaderFactsFor(match: TftMatchSummary, durationSeconds: number | null): RecordingHeaderFacts {
+export function tftHeaderFactsFor(
+  match: Pick<
+    TftMatchSummary,
+    'queueId' | 'gameCreation' | 'placement' | 'teamPlacement' | 'timeEliminated' | 'traits' | 'units'
+  >,
+  durationSeconds: number | null
+): RecordingHeaderFacts {
   const carry = match.units
     .slice()
     .sort((a, b) => b.rarity - a.rarity || b.tier - a.tier || b.items.length - a.items.length)[0]

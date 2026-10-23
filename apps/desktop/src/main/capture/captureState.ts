@@ -1,3 +1,4 @@
+import type { GameId } from '@foxfire/core'
 import { shouldCapture } from '@shared/captureQueues'
 
 /**
@@ -22,6 +23,10 @@ export interface CaptureSessionState {
   phase: CapturePhase
   accountId: string | null
   queueId: number | null
+  /** League or TFT — they share the client and the executable, and are recorded differently. */
+  game: GameId
+  /** Riot's id for the game, from the client's session, which TFT's recording is bound by. */
+  gameId: number | null
   recordingId: number | null
   /** When the client said a game was on, so a loading screen that never ends can be given up on. */
   armedAt: number | null
@@ -34,6 +39,8 @@ export const INITIAL_STATE: CaptureSessionState = {
   phase: 'idle',
   accountId: null,
   queueId: null,
+  game: 'lol',
+  gameId: null,
   recordingId: null,
   armedAt: null,
   startedAt: null,
@@ -42,7 +49,7 @@ export const INITIAL_STATE: CaptureSessionState = {
 
 export type SessionEvent =
   /** The League client entered a playing phase. */
-  | { type: 'gameStarted'; accountId: string; queueId: number | null; at: number }
+  | { type: 'gameStarted'; accountId: string; queueId: number | null; game?: GameId; gameId?: number | null; at: number }
   /** The game answered on loopback, so there is finally something to capture. */
   | { type: 'gameReady'; gameTime: number; at: number }
   | { type: 'recordingStarted'; recordingId: number; at: number }
@@ -61,6 +68,8 @@ export type SessionEffect =
       type: 'beginRecording'
       accountId: string
       queueId: number | null
+      game: GameId
+      gameId: number | null
       gameTime: number
       at: number
     }
@@ -110,13 +119,16 @@ export function reduce(
       // saying the same thing.
       if (state.phase !== 'idle') return stay(state)
       if (!config.enabled || !config.hasFolder) return stay(state)
-      if (!shouldCapture(event.queueId, config.queues, config.otherQueues)) return stay(state)
+      const game = event.game ?? 'lol'
+      if (!shouldCapture(event.queueId, config.queues, config.otherQueues, game)) return stay(state)
 
       return stay({
         ...idle(),
         phase: 'armed',
         accountId: event.accountId,
         queueId: event.queueId,
+        game,
+        gameId: event.gameId ?? null,
         armedAt: event.at
       })
     }
@@ -133,6 +145,8 @@ export function reduce(
           type: 'beginRecording',
           accountId: state.accountId,
           queueId: state.queueId,
+          game: state.game,
+          gameId: state.gameId,
           gameTime: event.gameTime,
           at: event.at
         }

@@ -31,13 +31,17 @@ import { YOUTUBE_ENABLED } from '@shared/features'
 import {
   BIND_RETRY_HORIZON_MS,
   findMatchForRecording,
+  findTftMatchForRecording,
   shouldGiveUpBinding,
-  type MatchCandidate
+  type BindingResult,
+  type MatchCandidate,
+  type TftMatchCandidate
 } from '../capture/matchBinding'
+import type { BindableRecording } from '../db/repositories/recordings.repo'
 import { getCaptureSettings } from './captureSettings'
 import { pruneEmptyFolders } from '../capture/fileRecording'
 import type { Page, PageOptions, Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
-import { clampPage } from '@foxfire/core'
+import { clampPage, type GameId } from '@foxfire/core'
 
 import { accountContext } from '../api/accountContext'
 
@@ -48,10 +52,14 @@ export function broadcastRecordingsChanged(): void {
 }
 
 /** A page of an account's recordings, newest first, and how many there are. */
-export async function listRecordings(accountId: string, page?: PageOptions): Promise<Page<Recording>> {
+export async function listRecordings(
+  accountId: string,
+  page?: PageOptions,
+  game: GameId | null = null
+): Promise<Page<Recording>> {
   const db = getDb()
   const account = await accountContext(accountId)
-  return { items: getRecordings(db, account, clampPage(page)), total: countRecordings(db, account) }
+  return { items: getRecordings(db, account, clampPage(page), game), total: countRecordings(db, account, game) }
 }
 
 /**
@@ -234,6 +242,74 @@ function localCandidates(
   }))
 }
 
+/**
+ * TFT games around the pending TFT recordings: when each ran, and when the
+ * account's player went out. Whether one is already spoken for is decided
+ * here, as for League's.
+ */
+async function tftCandidatesFor(accountId: string, since: number, until: number): Promise<TftMatchCandidate[]> {
+  const found = isServerMode()
+    ? await serverTftCandidates(accountId, since, until)
+    : localTftCandidates(accountId, since, until)
+
+  if (found.length === 0) return []
+
+  const taken = takenMatchIds(
+    getDb(),
+    found.map((candidate) => candidate.matchId)
+  )
+  return found.map((candidate) => ({ ...candidate, taken: taken.has(candidate.matchId) }))
+}
+
+async function serverTftCandidates(
+  accountId: string,
+  since: number,
+  until: number
+): Promise<Omit<TftMatchCandidate, 'taken'>[]> {
+  try {
+    const rows = await authedRequest<
+      Array<{ matchId: string; gameCreation: number; gameDuration: number; timeEliminated: number | null }>
+    >(`/riot-accounts/${accountId}/tft/bind-candidates?sinceMs=${since}&untilMs=${until}`)
+    return rows.map(({ matchId, gameCreation, gameDuration, timeEliminated }) => ({
+      matchId,
+      gameCreation,
+      gameDuration,
+      timeEliminated
+    }))
+  } catch (err) {
+    log.debug('Could not ask the server for TFT binding candidates', { error: String(err) })
+    return []
+  }
+}
+
+function localTftCandidates(accountId: string, since: number, until: number): Omit<TftMatchCandidate, 'taken'>[] {
+  // The account's boards are under its TFT key's id while it has one, and its
+  // own puuid otherwise — see services/tftIdentity.ts.
+  const rows = getDb()
+    .prepare(
+      `SELECT m.match_id, m.game_creation, m.game_duration, p.time_eliminated
+         FROM matches m
+         JOIN tft_participants p ON p.match_id = m.match_id
+        WHERE p.puuid = COALESCE(
+                (SELECT puuid FROM account_scoped_puuids WHERE account_id = ? AND scope = 'tft'),
+                (SELECT puuid FROM accounts WHERE id = ?))
+          AND m.game_creation BETWEEN ? AND ?`
+    )
+    .all(Number(accountId), Number(accountId), since, until) as unknown as Array<{
+    match_id: string
+    game_creation: number
+    game_duration: number
+    time_eliminated: number | null
+  }>
+
+  return rows.map((row) => ({
+    matchId: row.match_id,
+    gameCreation: row.game_creation,
+    gameDuration: row.game_duration,
+    timeEliminated: row.time_eliminated
+  }))
+}
+
 /** Widened either side of the recording so clock differences cannot exclude the game. */
 const CANDIDATE_WINDOW_MS = 6 * 60 * 60 * 1000
 
@@ -272,25 +348,31 @@ export async function bindPendingRecordings(
   const pending = getBindableRecordings(db, account, now - BIND_RETRY_HORIZON_MS)
   if (pending.length === 0) return 0
 
-  const oldest = Math.min(...pending.map((recording) => recording.startedAt))
-  const candidates = await candidatesFor(
-    accountId,
-    oldest - CANDIDATE_WINDOW_MS,
+  // Each game's recordings against that game's matches: League's by roster,
+  // TFT's by the game's id or, failing that, by when it was played.
+  const league = pending.filter((recording) => recording.game === 'lol')
+  const tft = pending.filter((recording) => recording.game === 'tft')
+  const window = (recordings: BindableRecording[]): [number, number] => [
+    Math.min(...recordings.map((recording) => recording.startedAt)) - CANDIDATE_WINDOW_MS,
     now + CANDIDATE_WINDOW_MS
-  )
+  ]
+  const candidates = league.length > 0 ? await candidatesFor(accountId, ...window(league)) : []
+  const tftCandidates = tft.length > 0 ? await tftCandidatesFor(accountId, ...window(tft)) : []
 
   let bound = 0
   const claimed = new Set<string>()
   const settled: number[] = []
 
+  // A match bound earlier in this same pass is off the table too, or two
+  // back-to-back games on the same champion could both take the first one.
+  const unclaimed = <T extends { matchId: string; taken: boolean }>(list: T[]): T[] =>
+    list.map((candidate) => (claimed.has(candidate.matchId) ? { ...candidate, taken: true } : candidate))
+
   for (const recording of pending) {
-    const result = findMatchForRecording(recording,
-      // A match bound earlier in this same pass is off the table too, or two
-      // back-to-back games on the same champion could both take the first one.
-      candidates.map((candidate) =>
-        claimed.has(candidate.matchId) ? { ...candidate, taken: true } : candidate
-      )
-    )
+    const result: BindingResult | null =
+      recording.game === 'tft'
+        ? findTftMatchForRecording(recording, unclaimed(tftCandidates))
+        : findMatchForRecording(recording, unclaimed(candidates))
 
     if (result) {
       bindRecording(db, recording.id, result.matchId)
@@ -302,7 +384,7 @@ export async function bindPendingRecordings(
         matchId: result.matchId,
         confidence: result.confidence
       })
-    } else if (allowGiveUp && shouldGiveUpBinding(recording, now)) {
+    } else if (allowGiveUp && shouldGiveUpBinding(recording, now, recording.game)) {
       markRecordingUnmatched(db, recording.id)
       settled.push(recording.id)
       log.info('Recording left unmatched; keeping the footage', { recordingId: recording.id })

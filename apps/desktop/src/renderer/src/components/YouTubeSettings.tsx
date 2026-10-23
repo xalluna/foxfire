@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  DEFAULT_TFT_TITLE_TEMPLATE,
   DEFAULT_TITLE_TEMPLATE,
+  TFT_TITLE_TOKENS,
   TITLE_TOKENS,
-  renderRecordingTitle
+  renderRecordingTitle,
+  renderTftRecordingTitle
 } from '@foxfire/core/youtube'
 import {
   SettingsBlock,
@@ -162,8 +165,21 @@ export function YouTubeSettings(): JSX.Element {
           />
 
           <TitleTemplate
+            label="Title"
             template={settings.data.titleTemplate}
+            defaultTemplate={DEFAULT_TITLE_TEMPLATE}
+            tokens={TITLE_TOKENS}
+            preview={(template) => renderRecordingTitle(template, PREVIEW_FACTS)}
             onSave={(titleTemplate) => save.mutate({ titleTemplate })}
+          />
+
+          <TitleTemplate
+            label="TFT title"
+            template={settings.data.tftTitleTemplate}
+            defaultTemplate={DEFAULT_TFT_TITLE_TEMPLATE}
+            tokens={TFT_TITLE_TOKENS}
+            preview={(template) => renderTftRecordingTitle(template, TFT_PREVIEW_FACTS)}
+            onSave={(tftTitleTemplate) => save.mutate({ tftTitleTemplate })}
           />
         </SettingsCard>
       )}
@@ -201,8 +217,35 @@ function ConnectionStatus({ state, error }: { state: YouTubeState | undefined; e
   return null
 }
 
-/** The title every upload starts with, previewed against a game as it is typed. */
-function TitleTemplate({ template, onSave }: { template: string; onSave: (template: string) => void }): JSX.Element {
+/** A believable TFT game for the TFT template's preview. */
+const TFT_PREVIEW_FACTS = {
+  queueId: 1100,
+  placement: 2,
+  teamPlacement: null,
+  trait: 'Flora Fatalis',
+  playedAt: Date.now()
+}
+
+/**
+ * The title every upload of one game starts with, previewed against a game as
+ * it is typed. League's and TFT's are separate: what a title can say about a
+ * game is that game's — a score, or a place.
+ */
+function TitleTemplate({
+  label,
+  template,
+  defaultTemplate,
+  tokens,
+  preview,
+  onSave
+}: {
+  label: string
+  template: string
+  defaultTemplate: string
+  tokens: readonly string[]
+  preview: (template: string) => string
+  onSave: (template: string) => void
+}): JSX.Element {
   const [draft, setDraft] = useState(template)
   useEffect(() => setDraft(template), [template])
 
@@ -210,10 +253,10 @@ function TitleTemplate({ template, onSave }: { template: string; onSave: (templa
 
   return (
     <SettingsBlock
-      label="Title"
+      label={label}
       description={
         <>
-          Words in braces are filled in from the game: {TITLE_TOKENS.map((token) => `{${token}}`).join(', ')}.
+          Words in braces are filled in from the game: {tokens.map((token) => `{${token}}`).join(', ')}.
           One with nothing to say — no result for a game that never found its match — is left out.
         </>
       }
@@ -222,7 +265,7 @@ function TitleTemplate({ template, onSave }: { template: string; onSave: (templa
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder={DEFAULT_TITLE_TEMPLATE}
+          placeholder={defaultTemplate}
           className={`${inputClass} flex-1`}
         />
         <button type="button" className={ghostButtonClass} disabled={!dirty} onClick={() => onSave(draft)}>
@@ -231,14 +274,14 @@ function TitleTemplate({ template, onSave }: { template: string; onSave: (templa
         <button
           type="button"
           className={ghostButtonClass}
-          disabled={template === DEFAULT_TITLE_TEMPLATE}
+          disabled={template === defaultTemplate}
           onClick={() => onSave('')}
         >
           Default
         </button>
       </div>
       <p className="mt-2 text-2xs text-text-mute">
-        Reads as: <span className="text-text-dim">{renderRecordingTitle(draft || DEFAULT_TITLE_TEMPLATE, PREVIEW_FACTS)}</span>
+        Reads as: <span className="text-text-dim">{preview(draft || defaultTemplate)}</span>
       </p>
     </SettingsBlock>
   )

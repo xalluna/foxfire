@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { renderRecordingTitle, UNMATCHED_TITLE_TEMPLATE } from '@foxfire/core/youtube'
+import {
+  renderRecordingTitle,
+  renderTftRecordingTitle,
+  UNMATCHED_TFT_TITLE_TEMPLATE,
+  UNMATCHED_TITLE_TEMPLATE
+} from '@foxfire/core/youtube'
 import {
   Dialog,
   DialogActions,
@@ -9,8 +14,10 @@ import {
   ghostButtonClass,
   primaryButtonClass,
   selectClass,
+  tftName,
   useAssetManifest
 } from '@foxfire/ui'
+import { tftTitleFacts } from '@shared/tftRecordingTitle'
 import { UNVERIFIED_LIMIT_SECONDS } from '@shared/youtubeLimits'
 import type { BulkUploadResult, Recording, YouTubePrivacy } from '@shared/types'
 import { YOUTUBE_LINKS } from './links'
@@ -22,7 +29,18 @@ const GB = 1024 * 1024 * 1024
  * the champion's name falling back to the asset list, as the upload's own
  * draft does.
  */
-function titleFor(recording: Recording, template: string, champion: (id: number) => string | null): string {
+function titleFor(
+  recording: Recording,
+  templates: { league: string; tft: string },
+  champion: (id: number) => string | null,
+  trait: (id: string) => string
+): string {
+  if (recording.game === 'tft') {
+    const facts = tftTitleFacts(recording, recording.tftMatch, trait)
+    return renderTftRecordingTitle(facts.placement === null ? UNMATCHED_TFT_TITLE_TEMPLATE : templates.tft, facts)
+  }
+
+  const template = templates.league
   const match = recording.match
   const championId = match?.championId ?? recording.selfChampionId
   return renderRecordingTitle(match ? template : UNMATCHED_TITLE_TEMPLATE, {
@@ -61,6 +79,7 @@ export function BulkUploadDialog({
   const navigate = useNavigate()
   const assets = useAssetManifest()
   const champion = (id: number): string | null => (assets ? championName(assets, id) : null)
+  const trait = (id: string): string => tftName(assets, 'traits', id)
   const state = useQuery({ queryKey: ['youtubeState'], queryFn: () => window.api.youtube.getState() })
   const settings = useQuery({ queryKey: ['youtubeSettings'], queryFn: () => window.api.youtube.getSettings() })
 
@@ -159,7 +178,12 @@ export function BulkUploadDialog({
         {settings.data && example && (
           <p className="text-2xs text-text-mute">
             Each is titled from your template in Settings › YouTube — for example{' '}
-            <span className="text-text-dim">&ldquo;{titleFor(example, settings.data.titleTemplate, champion)}&rdquo;</span> — and
+            <span className="text-text-dim">&ldquo;{titleFor(
+                example,
+                { league: settings.data.titleTemplate, tft: settings.data.tftTitleTemplate },
+                champion,
+                trait
+              )}&rdquo;</span> — and
             described with its own kills and deaths.
             {unmatched > 0 &&
               ` ${unmatched} never found ${unmatched === 1 ? 'its game, so it is' : 'their game, so they are'} titled with the date instead.`}

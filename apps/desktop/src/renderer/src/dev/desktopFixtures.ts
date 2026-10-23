@@ -16,6 +16,9 @@ import { C, NOW, FIXTURE_VIDEO_ID, matchIdAt, scenario } from '@foxfire/screens/
 /** What every recording carries about YouTube before anything has happened. */
 const NOT_ON_YOUTUBE = { fileDeleted: false, youtube: null, upload: null, attachment: null } as const
 
+/** A League recording, which has no TFT board. */
+const LEAGUE = { game: 'lol', tftMatch: null } as const
+
 const ON_YOUTUBE = {
   videoId: FIXTURE_VIDEO_ID,
   privacy: 'unlisted' as const,
@@ -50,7 +53,8 @@ function queueStates(): Recording[] {
     durationSeconds: 1_680,
     selfChampionId: champion,
     match: null,
-    ...NOT_ON_YOUTUBE
+    ...LEAGUE,
+      ...NOT_ON_YOUTUBE
   })
 
   return [
@@ -107,6 +111,7 @@ function backlog(): Recording[] {
               deaths: 1 + (i % 6),
               assists: 4 + (i % 8)
             },
+      ...LEAGUE,
       ...NOT_ON_YOUTUBE
     } satisfies Recording
   })
@@ -147,6 +152,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
         deaths: 3,
         assists: 8
       },
+      ...LEAGUE,
       ...NOT_ON_YOUTUBE,
       youtube: ON_YOUTUBE,
       upload: upload('done', { bytesSent: 1_820_000_000, fileBytes: 1_820_000_000 }),
@@ -165,6 +171,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
       durationSeconds: 1_412,
       selfChampionId: C.Ahri,
       match: null,
+      ...LEAGUE,
       ...NOT_ON_YOUTUBE,
       upload:
         scenario === 'youtube-queue'
@@ -186,6 +193,59 @@ export const RECORDINGS: Record<string, Recording[]> = {
       durationSeconds: 420,
       selfChampionId: C.LeeSin,
       match: null,
+      ...LEAGUE,
+      ...NOT_ON_YOUTUBE
+    },
+    // A TFT game, bound to the harness's newest Double Up game, and one still
+    // waiting for its match — TFT's are published only once the lobby is done.
+    {
+      id: 11,
+      game: 'tft',
+      accountId: '1',
+      matchId: 'NA1_7399997366',
+      bindState: 'bound',
+      fileBytes: 1_250_000_000,
+      fileExists: true,
+      queueId: 1160,
+      startedAt: NOW - 22 * 60 * 60_000,
+      endedAt: NOW - 22 * 60 * 60_000 + 1_880_000,
+      durationSeconds: 1_880,
+      selfChampionId: null,
+      match: null,
+      tftMatch: {
+        matchId: 'NA1_7399997366',
+        gameCreation: NOW - 22 * 60 * 60_000 - 40_000,
+        gameDuration: 2_160,
+        queueId: 1160,
+        placement: 3,
+        teamPlacement: 2,
+        timeEliminated: 1_920,
+        traits: [
+          { name: 'TFT18_FloraFatalis', numUnits: 5, style: 3, tierCurrent: 2, tierTotal: 4 },
+          { name: 'TFT18_Executioner', numUnits: 2, style: 1, tierCurrent: 1, tierTotal: 3 }
+        ],
+        units: [
+          { characterId: 'TFT18_Xayah', tier: 2, rarity: 6, items: ['TFT_Item_InfinityEdge'] },
+          { characterId: 'TFT18_Jinx', tier: 3, rarity: 4, items: [] }
+        ]
+      },
+      ...NOT_ON_YOUTUBE
+    },
+    {
+      id: 12,
+      game: 'tft',
+      accountId: '1',
+      matchId: null,
+      bindState: 'pending',
+      fileBytes: 980_000_000,
+      fileExists: true,
+      queueId: 1100,
+      startedAt: NOW - 30 * 60_000,
+      endedAt: NOW - 4 * 60_000,
+      durationSeconds: 1_560,
+      selfChampionId: null,
+      match: null,
+      tftMatch: null,
       ...NOT_ON_YOUTUBE
     },
     ...(scenario === 'youtube-queue' ? queueStates() : []),

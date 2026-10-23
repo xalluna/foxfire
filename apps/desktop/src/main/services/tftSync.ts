@@ -13,6 +13,7 @@ import { createLogger } from '../telemetry/logger'
 import { withSpan } from '../telemetry/spans'
 import { BACKFILL_TARGET, refreshTftRank } from './accountService'
 import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttribution'
+import { bindPendingRecordings } from './recordingService'
 import { recordTftAccess, shouldTryTft } from './tftAccess'
 import { forgetTftIdentity, resolveTftPuuid } from './tftIdentity'
 import { selectNewMatchIds } from './syncPlanning'
@@ -152,6 +153,13 @@ export async function runTftSync(accountId: number, trigger: SyncTrigger): Promi
       replayAttribution(db, accountId, puuid, Date.now() - ATTRIBUTION_REPLAY_WINDOW_MS, 'tft')
     } catch (err) {
       log.debug('TFT LP attribution replay failed', { accountId, error: String(err) })
+    }
+    // A TFT recording waiting for this game finds it now. Written off only by a
+    // run that landed everything, as League's are.
+    try {
+      await bindPendingRecordings(String(accountId), { allowGiveUp: failed === 0 })
+    } catch (err) {
+      log.debug('Recording binding failed after TFT sync', { accountId, error: String(err) })
     }
 
     // Only advanced when everything landed, so the next run retries the gaps.

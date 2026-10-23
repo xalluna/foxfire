@@ -44,6 +44,12 @@ Teamfight Tactics, beside League.
   way it reads League's — Hyper Roll's colour and rating too — so each TFT game's LP lands as you
   finish, connected to a server or not. Leaving a TFT game early with "Exit now" counts as
   finishing it.
+- **Record your TFT games.** Settings › Game capture lists TFT's queues under their own heading —
+  unticked, so nothing changes until you tick one. A TFT recording finds its game by the id the
+  League client gave it, shows up on its TFT history row, and goes to YouTube like a League one,
+  titled by its own template — `{placement} · {queue} · {trait}` to start with, in Settings ›
+  YouTube. The Recordings tab can show all of them, or just League's or TFT's, and "View match
+  history" on a TFT recording opens its game on the TFT profile.
 
 ### Changed
 
@@ -88,6 +94,12 @@ Teamfight Tactics, beside League.
 - League's rank refresh keeps League's ladders, and TFT's keeps TFT's.
 - The League client watcher tells TFT from League by the gameflow session's mode and map, and
   logs each game's session once, with the ranked readings after it, at debug level.
+- A TFT game starts recording when its clock moves, or 30 seconds after the client says it is on
+  if the clock never answers; whether it does is logged. A recording keeps the game's id and
+  platform, which name its match exactly; one without them is bound only when a single game's
+  span — its start to your elimination, give or take five minutes — holds it. TFT recordings wait
+  90 minutes for their game before being written off, League's 30. "Other and rotating modes" is
+  League's: it does not record a TFT event queue.
 
 ## [0.16.1] — 2026-09-27
 

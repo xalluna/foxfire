@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
+import type { GameId } from '@foxfire/core'
 import type {
   ArchiveCopyProgress,
   CaptureStatus,
@@ -225,7 +226,7 @@ const api: Api = {
     reconnect: () => ipcRenderer.invoke(CH.capture.reconnect)
   },
   recordings: {
-    list: (accountId, page) => ipcRenderer.invoke(CH.recordings.list, accountId, page),
+    list: (accountId, page, game) => ipcRenderer.invoke(CH.recordings.list, accountId, page, game),
     detail: (recordingId) => ipcRenderer.invoke(CH.recordings.detail, recordingId),
     usage: () => ipcRenderer.invoke(CH.recordings.usage),
     remove: (recordingId) => ipcRenderer.invoke(CH.recordings.remove, recordingId),
@@ -238,11 +239,11 @@ const api: Api = {
       ipcRenderer.on(CH.recordings.changed, listener)
       return () => ipcRenderer.removeListener(CH.recordings.changed, listener)
     },
-    showMatch: (accountId, matchId) =>
-      ipcRenderer.invoke(CH.recordings.showMatch, accountId, matchId),
+    showMatch: (accountId, matchId, game) =>
+      ipcRenderer.invoke(CH.recordings.showMatch, accountId, matchId, game),
     onShowMatch: (cb) => {
-      const listener = (_e: IpcRendererEvent, accountId: string, matchId: string): void =>
-        cb(accountId, matchId)
+      const listener = (_e: IpcRendererEvent, accountId: string, matchId: string, game?: GameId): void =>
+        cb(accountId, matchId, game)
       ipcRenderer.on(CH.recordings.showMatch, listener)
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
     },

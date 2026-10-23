@@ -7,7 +7,7 @@ import { createLogger } from '../telemetry/logger'
 import { isNotRunning, liveClientGet } from '../liveClient/client'
 import { accountContext } from '../api/accountContext'
 import type { Scoreboard } from '../liveClient/scoreboardMapping'
-import { getScoreboard } from '../services/liveClientService'
+import { getScoreboard, getTftClock } from '../services/liveClientService'
 import { getCaptureSettings } from '../services/captureSettings'
 import { bindPendingRecordings, broadcastRecordingsChanged } from '../services/recordingService'
 import {
@@ -42,8 +42,9 @@ import {
 } from './captureState'
 import { selfNameSet, toRecordingEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
-import { containsGameStart, gameReadiness } from './gameClock'
+import { containsGameStart, gameReadiness, tftReadiness } from './gameClock'
 import { fileFinishedRecording } from './fileRecording'
+import type { GameId } from '@foxfire/core'
 import type { CaptureStatus } from '@shared/types'
 
 /**
@@ -72,7 +73,7 @@ let timer: NodeJS.Timeout | null = null
 let running = false
 
 /** Set between asking OBS to record and OBS confirming it started. */
-let awaitingStart: { accountId: string; queueId: number | null } | null = null
+let awaitingStart: { accountId: string; queueId: number | null; game: GameId; gameId: number | null } | null = null
 
 /** Last moment the game answered on loopback, so a crash can be told from a stall. */
 let gameLastSeen = 0
@@ -102,6 +103,13 @@ let answeringSince: number | null = null
 
 /** Logged once per game rather than every two seconds. */
 let loggedAnswering = false
+
+/**
+ * Whether a TFT game's clock has answered at all. Only then can its silence
+ * mean the game is gone; a clock that never answered says nothing, and the
+ * client's end of game closes the recording instead.
+ */
+let tftClockAnswered = false
 
 export function getCaptureStatus(): CaptureStatus {
   const settings = getCaptureSettings()
@@ -162,7 +170,12 @@ async function runEffect(effect: SessionEffect): Promise<void> {
 
     case 'beginRecording': {
       if (awaitingStart) return
-      awaitingStart = { accountId: effect.accountId, queueId: effect.queueId }
+      awaitingStart = {
+        accountId: effect.accountId,
+        queueId: effect.queueId,
+        game: effect.game,
+        gameId: effect.gameId
+      }
       try {
         await beginRecording()
       } catch (err) {
@@ -235,8 +248,11 @@ async function onRecordingStarted(): Promise<void> {
   awaitingStart = null
   if (!pending) return
 
-  const board = await readScoreboard(pending.accountId)
-  gameTimeOffset = board?.gameTime ?? 0
+  // A TFT game has no League scoreboard and no event feed worth keeping: its
+  // clock is all there is, and its match is found by its id, not a roster.
+  const tft = pending.game === 'tft'
+  const board = tft ? null : await readScoreboard(pending.accountId)
+  gameTimeOffset = tft ? ((await readTftClock()) ?? 0) : (board?.gameTime ?? 0)
   selfNames = selfNameSet(
     board?.players
       .filter((player) => player.isSelf)
@@ -259,10 +275,13 @@ async function onRecordingStarted(): Promise<void> {
     startedAt: Date.now(),
     gameTimeOffset,
     selfChampionId: board?.players.find((player) => player.isSelf)?.championId ?? null,
-    roster: board?.players.map((player) => player.championId ?? -1) ?? []
+    roster: board?.players.map((player) => player.championId ?? -1) ?? [],
+    game: pending.game,
+    gameId: pending.gameId,
+    platformId: account.platformId ?? null
   })
 
-  log.info('Recording started', { recordingId, gameTimeOffset })
+  log.info('Recording started', { recordingId, game: pending.game, gameId: pending.gameId, gameTimeOffset })
   dispatch({ type: 'recordingStarted', recordingId, at: Date.now() })
   broadcastRecordingsChanged()
 }
@@ -310,6 +329,56 @@ function finalizeRecording(recordingId: number, eventPath: string | null): void 
   if (accountId !== null) void bindPendingRecordings(accountId).catch(() => undefined)
 }
 
+async function readTftClock(): Promise<number | null> {
+  try {
+    return await getTftClock()
+  } catch (err) {
+    log.debug('TFT clock read failed', { error: String(err) })
+    return null
+  }
+}
+
+/**
+ * One tick of a TFT game: armed until its clock moves or the start delay
+ * passes, then recording until the client says it ended — or, if its clock
+ * ever answered, until it stops answering.
+ */
+async function tickTft(now: number): Promise<void> {
+  const clock = await readTftClock()
+  if (clock !== null) {
+    gameLastSeen = now
+    tftClockAnswered = true
+  }
+
+  if (state.phase === 'armed') {
+    // Whether TFT's game answers on loopback at all is the open question the
+    // live check settles: this line, or a start "via fallback" with no game
+    // time, is what it reads.
+    if (!loggedAnswering && clock !== null) {
+      log.info('TFT game: clock answering', { gameTime: clock })
+      loggedAnswering = true
+    }
+
+    const readiness = tftReadiness({
+      previousGameTime: lastGameTime,
+      gameTime: clock,
+      inProgressForMs: now - (state.armedAt ?? now)
+    })
+    if (clock !== null) lastGameTime = clock
+
+    if (readiness !== 'wait') {
+      log.info('TFT game is live; starting the recording', { via: readiness, gameTime: clock })
+      dispatch({ type: 'gameReady', gameTime: clock ?? 0, at: now })
+    }
+    return
+  }
+
+  if (state.phase === 'recording' && tftClockAnswered && clock === null && now - gameLastSeen > GAME_LOST_MS) {
+    log.info('TFT game stopped answering; closing the recording')
+    dispatch({ type: 'gameGone', at: now })
+  }
+}
+
 async function readScoreboard(accountId: string): Promise<Scoreboard | null> {
   try {
     return await getScoreboard(accountId)
@@ -351,6 +420,11 @@ async function pollEvents(recordingId: number): Promise<void> {
 async function tick(): Promise<void> {
   const now = Date.now()
   dispatch({ type: 'tick', at: now })
+
+  if (state.game === 'tft') {
+    if (state.phase === 'armed' || state.phase === 'recording') await tickTft(now)
+    return
+  }
 
   if (state.phase === 'armed' && state.accountId !== null) {
     // The 404 that lasts from champion select until the game process is up is
@@ -421,18 +495,27 @@ function scheduleNextPoll(): void {
  * The watcher polls every ten seconds, which is far too slow to time a
  * recording by — but arming does not need to be quick. It only has to happen
  * before the loading screen ends, and that takes at least a minute.
+ *
+ * `session` is what the client's session said about the game: which game it
+ * is, and Riot's id for it.
  */
-export function onGamePhase(accountId: string, queueId: number | null, playing: boolean): void {
+export function onGamePhase(
+  accountId: string,
+  queueId: number | null,
+  playing: boolean,
+  session: { game: GameId; gameId: number | null } = { game: 'lol', gameId: null }
+): void {
   if (!running) return
   if (playing) {
     const wasIdle = state.phase === 'idle'
-    dispatch({ type: 'gameStarted', accountId, queueId, at: Date.now() })
+    dispatch({ type: 'gameStarted', accountId, queueId, game: session.game, gameId: session.gameId, at: Date.now() })
     if (wasIdle && state.phase === 'armed') {
       // Forgotten between games, or the previous game's final reading would
       // look like an advance against the next game's first one.
       lastGameTime = null
       answeringSince = null
       loggedAnswering = false
+      tftClockAnswered = false
       gameLastSeen = Date.now()
       scheduleNextPoll()
     }

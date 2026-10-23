@@ -85,3 +85,35 @@ export function containsGameStart(
 ): boolean {
   return events.some((event) => event.EventName === 'GameStart' || event.EventID === 0)
 }
+
+/**
+ * How long after the client says a TFT game is on to record without having
+ * seen its clock move.
+ *
+ * TFT's loading screen is short — eight little legends, no champion art — and
+ * whether the game's own clock answers on loopback for TFT at all is the
+ * thing the live check is for. A recording that starts a few seconds into the
+ * carousel loses nothing; one that never starts loses the game.
+ */
+export const TFT_START_DELAY_MS = 30_000
+
+export interface TftReadinessInput {
+  previousGameTime: number | null
+  /** Null while the clock does not answer. */
+  gameTime: number | null
+  /** Since the client said the game was on. */
+  inProgressForMs: number
+}
+
+/**
+ * When a TFT game is ready to record: its clock moving, as League's is, or
+ * TFT_START_DELAY_MS after the client said it was on, whichever is first.
+ *
+ * There is no event to wait for — TFT's game serves none worth reading — and
+ * no roster to wait for either, which is what League's readiness leans on.
+ */
+export function tftReadiness(input: TftReadinessInput): Readiness {
+  if (input.gameTime !== null && isClockRunning(input.previousGameTime, input.gameTime)) return 'clock'
+  if (input.inProgressForMs >= TFT_START_DELAY_MS) return 'fallback'
+  return 'wait'
+}

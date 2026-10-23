@@ -5,6 +5,8 @@ import {
   gameReadiness,
   isClockRunning,
   READY_FALLBACK_MS,
+  TFT_START_DELAY_MS,
+  tftReadiness,
   type ReadinessInput
 } from './gameClock'
 
@@ -105,5 +107,20 @@ describe('containsGameStart', () => {
 
   it('copes with an empty feed, which is what loading returns', () => {
     expect(containsGameStart([])).toBe(false)
+  })
+})
+
+describe('tftReadiness', () => {
+  it('records as soon as the clock moves', () => {
+    expect(tftReadiness({ previousGameTime: 3, gameTime: 5, inProgressForMs: 4_000 })).toBe('clock')
+  })
+
+  it('waits while the clock is still or silent, but not past the start delay', () => {
+    expect(tftReadiness({ previousGameTime: 3, gameTime: 3, inProgressForMs: 4_000 })).toBe('wait')
+    expect(tftReadiness({ previousGameTime: null, gameTime: null, inProgressForMs: 4_000 })).toBe('wait')
+    // A game whose clock never answers on loopback is recorded anyway.
+    expect(tftReadiness({ previousGameTime: null, gameTime: null, inProgressForMs: TFT_START_DELAY_MS })).toBe(
+      'fallback'
+    )
   })
 })

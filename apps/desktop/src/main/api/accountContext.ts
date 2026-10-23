@@ -15,7 +15,9 @@ export type { AccountContext } from '../db/accountScope'
  * that has since been deleted, or one from a server this machine is no longer
  * on. The row is still written, and still findable by the id.
  */
-export async function accountContext(accountId: string): Promise<AccountContext> {
+export async function accountContext(
+  accountId: string
+): Promise<AccountContext & { platformId?: string | null }> {
   const serverKey = getServerState().activeUrl
 
   try {
@@ -24,7 +26,10 @@ export async function accountContext(accountId: string): Promise<AccountContext>
     return {
       accountId,
       riotId: account ? `${account.gameName}#${account.tagLine}` : null,
-      serverKey
+      serverKey,
+      // The platform half of the account's match ids — NA1 of NA1_5312345678 —
+      // which with the client's game id names a match before any sync has it.
+      platformId: account?.platform ? account.platform.toUpperCase() : null
     }
   } catch {
     // A server that cannot be reached must not stop a recording from being

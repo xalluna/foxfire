@@ -456,7 +456,9 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions) => listRecordings(accountId, page))
+  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions, game?: GameId | null) =>
+    listRecordings(accountId, page, game === 'lol' || game === 'tft' ? game : null)
+  )
   ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
   ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
   ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
@@ -521,13 +523,13 @@ export function registerIpcHandlers(): void {
 
   // Sent by a recording window, delivered to the main one: the match list it wants
   // opened lives in a different renderer process with its own state.
-  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: string, matchId: string) => {
+  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: string, matchId: string, game?: GameId) => {
     const main = getMainWindow()
     if (!main) return
     if (main.isMinimized()) main.restore()
     main.show()
     main.focus()
-    main.webContents.send(CH.recordings.showMatch, accountId, matchId)
+    main.webContents.send(CH.recordings.showMatch, accountId, matchId, game === 'tft' ? 'tft' : 'lol')
   })
 
   ipcMain.handle(CH.search.players, (_e, query: string, options?: PlayerSearchOptions) =>

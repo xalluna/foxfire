@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { CAPTURE_QUEUE_OPTIONS } from '@shared/captureQueues'
+import { CAPTURE_QUEUE_GROUPS } from '@shared/captureQueues'
 import { CAPTURE_QUALITY_OPTIONS } from '@shared/captureQuality'
 import { SettingsCard, SettingsPage, ByteCapRow, PathRow, SettingsBlock, Stat, StatRow, StatusRow, ToggleRow, checkboxClass, ghostButtonClass, inputClass, primaryButtonClass, selectClass, Icon } from '@foxfire/ui'
 import type {
@@ -348,7 +348,7 @@ function ScenePicker({
   return (
     <SettingsBlock
       label="Scene"
-      description="The scene that captures League. It is switched to when recording starts."
+      description="The scene that captures the game — League or TFT, which run in the same window. It is switched to when recording starts."
     >
       <select
         value={value ?? ''}
@@ -453,41 +453,52 @@ function QueuePicker({
   disabled: boolean
   onChange: (patch: Partial<Settings>) => void
 }): JSX.Element {
+  const box = (option: { value: number; label: string }): JSX.Element => (
+    <label key={option.value} className="flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        disabled={disabled}
+        checked={queues.includes(option.value)}
+        onChange={(event) =>
+          onChange({
+            queues: event.target.checked ? [...queues, option.value] : queues.filter((id) => id !== option.value)
+          })
+        }
+        className={checkboxClass}
+      />
+      <span className="text-text-dim">{option.label}</span>
+    </label>
+  )
+
+  // A group per game. League's ends with its catch-all for modes nobody
+  // listed; TFT's queues are listed and start unticked, and nothing records
+  // TFT that is not ticked here.
   return (
     <SettingsBlock>
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {CAPTURE_QUEUE_OPTIONS.map((option) => (
-          <label key={option.value} className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              disabled={disabled}
-              checked={queues.includes(option.value)}
-              onChange={(event) =>
-                onChange({
-                  queues: event.target.checked
-                    ? [...queues, option.value]
-                    : queues.filter((id) => id !== option.value)
-                })
-              }
-              className={checkboxClass}
-            />
-            <span className="text-text-dim">{option.label}</span>
-          </label>
-        ))}
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            disabled={disabled}
-            checked={otherQueues}
-            onChange={(event) => onChange({ otherQueues: event.target.checked })}
-            className={checkboxClass}
-          />
-          <span className="text-text-dim">Other and rotating modes</span>
-        </label>
-      </div>
+      {CAPTURE_QUEUE_GROUPS.map((group) => (
+        <div key={group.game} className="mb-3 last:mb-0">
+          <p className="mb-1.5 text-2xs uppercase tracking-widest text-text-mute">{group.label}</p>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {group.options.map(box)}
+            {group.game === 'lol' && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  disabled={disabled}
+                  checked={otherQueues}
+                  onChange={(event) => onChange({ otherQueues: event.target.checked })}
+                  className={checkboxClass}
+                />
+                <span className="text-text-dim">Other and rotating modes</span>
+              </label>
+            )}
+          </div>
+        </div>
+      ))}
       <p className="mt-2.5 text-2xs leading-relaxed text-text-mute">
-        “Other” covers customs, Practice Tool and whatever rotating mode is running, so a new
-        gamemode is not silently missed. It never overrides a queue you unticked above.
+        “Other” covers League’s customs, Practice Tool and whatever rotating mode is running, so a
+        new gamemode is not silently missed. It never overrides a queue you unticked above, and it
+        does not record TFT.
       </p>
     </SettingsBlock>
   )
@@ -637,7 +648,7 @@ function Preview({
             <p className="p-6 text-center text-2xs leading-relaxed text-text-mute">
               {managed
                 ? 'The capture source is created the first time a game is recorded, so there is nothing to preview yet.'
-                : 'No frame yet. Check OBS is running and the scene above is the one that captures League.'}
+                : 'No frame yet. Check OBS is running and the scene above is the one that captures the game.'}
             </p>
           )}
         </div>
@@ -662,7 +673,7 @@ function describeProblem(problem: { kind: string; [key: string]: unknown }): str
     case 'recordFormat':
       return `OBS is recording as ${String(problem.found)}. Set Settings → Output → Recording Format to MP4 — MKV records fine but cannot be played back here.`
     case 'sceneNotChosen':
-      return 'Pick the scene that captures League.'
+      return 'Pick the scene that captures the game.'
     case 'sceneMissing':
       return `The scene "${String(problem.scene)}" no longer exists in OBS.`
     case 'noCaptureSource':
