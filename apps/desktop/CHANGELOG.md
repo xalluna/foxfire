@@ -32,6 +32,10 @@ Teamfight Tactics, beside League.
 - **TFT sets in Settings › Rank tracking.** The seasons card has a League | TFT switch: TFT's sets
   have dates of their own, Set 13 to Set 18 already filled in, and saving one game's list never
   touches the other's.
+- **A TFT key of its own, if you need one.** Riot grants each key its games, and a key registered
+  for League alone cannot reach TFT. Settings › Riot API key says whether yours can, and takes a
+  second key for TFT when it cannot — or when you would rather TFT's backfill had a budget of its
+  own. Without one, TFT uses the key you already have.
 
 ### Under the hood
 
@@ -48,6 +52,17 @@ Teamfight Tactics, beside League.
   and a TFT file Data Dragon will not give costs TFT its icons rather than League its manifest.
   What a finished sync refreshes depends on which game it was, and sync progress is kept per game.
 - Linking an account on a server starts its TFT backfill as well as its League one.
+- Migration 016. Matches, seasons, sync state and recordings say which game they are, and
+  everything already stored reads as League's. A TFT board has a table of its own
+  (`tft_participants`); Hyper Roll's colour and rating have columns on entries, readings and LP
+  rows; an account can hold an id under a TFT key (`account_scoped_puuids`). Seasons and sync
+  state were rebuilt to be one game's at a time, with every season keeping its id, so a picked
+  period or a link still names the same one. TFT's sets from Set 13 are seeded.
+- Each Riot key has a queue of its own. A 403 from TFT on the main key is read as "this key has
+  no TFT" — telemetry calls it `no_access` — and no longer stops League's queue the way a refused
+  key does.
+- Importing a stats.db into a server brings its TFT games, sets, TFT ids and Hyper Roll ratings
+  across. A file from before TFT imports exactly as it did.
 
 ## [0.16.1] — 2026-09-27
 

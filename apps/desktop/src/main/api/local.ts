@@ -222,8 +222,8 @@ export const localApi: ServerBackedApi = {
   },
 
   seasons: {
-    list: async (game) => (game === 'tft' ? [] : listSeasons(getDb())),
-    save: async (seasons, game) => (game === 'tft' ? [] : saveSeasons(getDb(), seasons))
+    list: async (game) => listSeasons(getDb(), game ?? 'lol'),
+    save: async (seasons, game) => saveSeasons(getDb(), seasons, game ?? 'lol')
   },
 
   /**

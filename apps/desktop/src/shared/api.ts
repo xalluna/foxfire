@@ -79,6 +79,7 @@ import type {
   TelemetryState,
   TelemetrySummary
 } from './telemetry'
+import type { RiotKeyScope } from '@foxfire/core'
 
 export interface ValidateResult {
   ok: boolean
@@ -245,8 +246,12 @@ export interface Api {
     get: () => Promise<AppSettingsPublic>
     setApiKey: (key: string) => Promise<ValidateResult>
     clearApiKey: () => Promise<AppSettingsPublic>
-    /** Personal or application, and for the latter the allowance it was granted. */
-    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits) => Promise<AppSettingsPublic>
+    /** Personal or application, and for the latter the allowance it was granted — the main key's, or TFT's own. */
+    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope) => Promise<AppSettingsPublic>
+    /** Gives TFT a key of its own, after checking it can reach TFT. */
+    setTftApiKey: (key: string) => Promise<ValidateResult>
+    /** Takes it away; TFT goes back to the main key. */
+    clearTftApiKey: () => Promise<AppSettingsPublic>
     /** Fires when Riot rejects the stored key (personal keys expire every 24h). */
     onKeyInvalid: (cb: () => void) => () => void
   }

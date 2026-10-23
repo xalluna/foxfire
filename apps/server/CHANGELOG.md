@@ -95,6 +95,10 @@ Teamfight Tactics, beside League.
 - A stats.db's TFT games import through `/api/admin/import/tft-matches`,
   rewritten onto whichever id this server files TFT under; an account can
   bring its TFT id along, and finishing an import works out TFT's LP too.
+  Imported seasons say whose they are, and are matched within their game —
+  a TFT set and a League season can open on the same day — and an imported
+  reading can be on any game's ladder, Hyper Roll's arriving with its colour
+  and rating.
 - The web client reads TFT through the same contract the desktop does, and its
   asset manifest carries Data Dragon's TFT units, traits, items and augments
   when Data Dragon gives them.

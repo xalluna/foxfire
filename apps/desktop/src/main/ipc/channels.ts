@@ -73,7 +73,9 @@ export const CH = {
     setApiKey: 'settings:setApiKey',
     clearApiKey: 'settings:clearApiKey',
     setKeyType: 'settings:setKeyType',
-    keyInvalid: 'settings:keyInvalid'
+    keyInvalid: 'settings:keyInvalid',
+    setTftApiKey: 'settings:setTftApiKey',
+    clearTftApiKey: 'settings:clearTftApiKey'
   },
   accounts: {
     mine: 'accounts:mine',

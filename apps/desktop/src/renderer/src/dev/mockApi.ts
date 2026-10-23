@@ -62,7 +62,7 @@ import {
   buildRecordingDescription,
   renderRecordingTitle
 } from '@foxfire/core/youtube'
-import { pageOf } from '@foxfire/core'
+import { pageOf, type RiotKeyScope } from '@foxfire/core'
 import { canUploadRecording } from '@shared/uploadEligibility'
 import {
   RECORDINGS,
@@ -149,6 +149,26 @@ const keyInvalidListeners = new Set<() => void>()
 // does not exist in the browser harness.
 let keyType: RiotKeyType = 'personal'
 let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+let hasTftKey = false
+let tftKeyType: RiotKeyType = 'personal'
+let tftApplicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+
+/** The Riot key settings as they stand in the harness, both keys. */
+function mockSettings(): AppSettingsPublic {
+  return {
+    hasApiKey: scenario !== 'no-key',
+    homeAccountId: scenario === 'no-accounts' ? null : 1,
+    keyRejected: scenario === 'key-expired',
+    keyType,
+    applicationLimits,
+    hasTftApiKey: hasTftKey,
+    tftKeyRejected: false,
+    tftKeyType,
+    tftApplicationLimits,
+    // `tft-no-access` is the main key with no TFT on it, until a key of its own is added.
+    tftAccess: scenario === 'tft-no-access' && !hasTftKey ? 'denied' : 'granted'
+  }
+}
 
 /**
  * The server connection, as module state so the harness behaves like the real
@@ -574,18 +594,7 @@ export const mockApi: Api = {
     }
   },
   settings: {
-    get: (): Promise<AppSettingsPublic> =>
-      delay(
-        {
-          hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired',
-          keyType,
-          applicationLimits
-        },
-        180,
-        false
-      ),
+    get: (): Promise<AppSettingsPublic> => delay(mockSettings(), 180, false),
     setApiKey: (key: string): Promise<ValidateResult> =>
       delay(
         key.startsWith('RGAPI-')
@@ -593,21 +602,25 @@ export const mockApi: Api = {
           : { ok: false, message: 'That does not look like a Riot API key.' },
         600
       ),
-    clearApiKey: (): Promise<AppSettingsPublic> =>
-      delay({ hasApiKey: false, homeAccountId: 1, keyRejected: false, keyType, applicationLimits }),
-    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits): Promise<AppSettingsPublic> => {
-      keyType = next
-      if (limits) applicationLimits = limits
-      return delay(
-        {
-          hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired',
-          keyType,
-          applicationLimits
-        },
-        180
-      )
+    clearApiKey: (): Promise<AppSettingsPublic> => delay({ ...mockSettings(), hasApiKey: false, keyRejected: false }),
+    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope): Promise<AppSettingsPublic> => {
+      if (scope === 'tft') {
+        tftKeyType = next
+        if (limits) tftApplicationLimits = limits
+      } else {
+        keyType = next
+        if (limits) applicationLimits = limits
+      }
+      return delay(mockSettings(), 180)
+    },
+    setTftApiKey: (key: string): Promise<ValidateResult> => {
+      const ok = key.startsWith('RGAPI-')
+      if (ok) hasTftKey = true
+      return delay(ok ? { ok: true } : { ok: false, message: 'That does not look like a Riot API key.' }, 600)
+    },
+    clearTftApiKey: (): Promise<AppSettingsPublic> => {
+      hasTftKey = false
+      return delay(mockSettings())
     },
     onKeyInvalid: (cb: () => void) => {
       keyInvalidListeners.add(cb)

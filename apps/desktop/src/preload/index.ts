@@ -88,7 +88,9 @@ const api: Api = {
     get: () => ipcRenderer.invoke(CH.settings.get),
     setApiKey: (key) => ipcRenderer.invoke(CH.settings.setApiKey, key),
     clearApiKey: () => ipcRenderer.invoke(CH.settings.clearApiKey),
-    setKeyType: (keyType, limits) => ipcRenderer.invoke(CH.settings.setKeyType, keyType, limits),
+    setKeyType: (keyType, limits, scope) => ipcRenderer.invoke(CH.settings.setKeyType, keyType, limits, scope),
+    setTftApiKey: (key) => ipcRenderer.invoke(CH.settings.setTftApiKey, key),
+    clearTftApiKey: () => ipcRenderer.invoke(CH.settings.clearTftApiKey),
     onKeyInvalid: (cb) => {
       const listener = (): void => cb()
       ipcRenderer.on(CH.settings.keyInvalid, listener)

@@ -1,6 +1,13 @@
 import { app, dialog, ipcMain } from 'electron'
 import { CH } from './channels'
-import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
+import {
+  getSettings,
+  removeApiKey,
+  removeTftApiKey,
+  setAndValidateApiKey,
+  setAndValidateTftApiKey,
+  setKeyType
+} from '../services/settingsService'
 import { getAssetManifest } from '../services/ddragonService'
 import {
   accountEmail,
@@ -141,7 +148,7 @@ import type {
   ServerRegistration,
   SeasonInput
 } from '@shared/types'
-import type { GameId } from '@foxfire/core'
+import type { GameId, RiotKeyScope } from '@foxfire/core'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 import {
   isInsightsSection,
@@ -240,11 +247,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CH.settings.get, () => getSettings())
   ipcMain.handle(CH.settings.setApiKey, (_e, key: string) => setAndValidateApiKey(key))
-  ipcMain.handle(CH.settings.setKeyType, (_e, keyType: RiotKeyType, limits?: RiotKeyLimits) =>
-    setKeyType(keyType, limits)
+  ipcMain.handle(
+    CH.settings.setKeyType,
+    (_e, keyType: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope) =>
+      setKeyType(keyType, limits, scope === 'tft' ? 'tft' : 'main')
   )
   ipcMain.handle(CH.settings.clearApiKey, () => {
     removeApiKey()
+    return getSettings()
+  })
+  ipcMain.handle(CH.settings.setTftApiKey, (_e, key: string) => setAndValidateTftApiKey(key))
+  ipcMain.handle(CH.settings.clearTftApiKey, () => {
+    removeTftApiKey()
     return getSettings()
   })
 

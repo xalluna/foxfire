@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Account, LeagueEntry, QueueType } from '@shared/types'
-import { TRACKED_QUEUES } from '@foxfire/core'
+import { LADDERS, TRACKED_QUEUES, isLadderId, type GameId } from '@foxfire/core'
 
 interface AccountRow {
   id: number
@@ -289,21 +289,32 @@ interface LeagueEntryRow {
   wins: number | null
   losses: number | null
   fetched_at: string
+  rated_tier: string | null
+  rated_rating: number | null
 }
 
-export function getLeagueEntries(db: DatabaseSync, accountId: number): LeagueEntry[] {
+/**
+ * One game's ladders for an account: League's two unless asked for TFT's.
+ *
+ * Filtered here rather than by the caller, because every caller from before TFT
+ * read every row and meant League's.
+ */
+export function getLeagueEntries(db: DatabaseSync, accountId: number, game: GameId = 'lol'): LeagueEntry[] {
   const rows = db
     .prepare('SELECT * FROM league_entries WHERE account_id = ?')
     .all(accountId) as unknown as LeagueEntryRow[]
-  return rows.map((row) => ({
-    queueType: row.queue_type as QueueType,
-    tier: row.tier,
-    rank: row.rank,
-    leaguePoints: row.league_points,
-    wins: row.wins,
-    losses: row.losses,
-    fetchedAt: row.fetched_at
-  }))
+  return rows
+    .filter((row) => isLadderId(row.queue_type) && LADDERS[row.queue_type].game === game)
+    .map((row) => ({
+      queueType: row.queue_type as QueueType,
+      tier: row.tier,
+      rank: row.rank,
+      leaguePoints: row.league_points,
+      wins: row.wins,
+      losses: row.losses,
+      fetchedAt: row.fetched_at,
+      ...(row.rated_rating !== null ? { ratedTier: row.rated_tier, ratedRating: row.rated_rating } : {})
+    }))
 }
 
 export function upsertLeagueEntries(

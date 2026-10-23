@@ -1,4 +1,4 @@
-import type { RecordingEvent, YouTubePrivacy } from '@foxfire/core'
+import type { RecordingEvent, TftAccess, YouTubePrivacy } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -138,6 +138,13 @@ export interface AppSettingsPublic {
   keyType: RiotKeyType
   /** Ignored while `keyType` is personal, whose limits are Riot's fixed ones. */
   applicationLimits: RiotKeyLimits
+  /** Whether TFT has a key of its own. Without one it is asked through the main key. */
+  hasTftApiKey: boolean
+  tftKeyRejected: boolean
+  tftKeyType: RiotKeyType
+  tftApplicationLimits: RiotKeyLimits
+  /** Whether the key TFT is asked through can reach it, as last found out. */
+  tftAccess: TftAccess
 }
 
 export type ApiKeyStatus = 'valid' | 'missing' | 'expired' | 'invalid'

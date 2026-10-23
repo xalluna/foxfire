@@ -16,7 +16,17 @@ vi.mock('../telemetry/spans', () => ({
   runInContext: <T>(_context: unknown, fn: () => T): T => fn()
 }))
 
-const { isStaleIdentity, rateLimiter, riotRequest, setApiKey } = await import('./client')
+const {
+  isNoProductAccess,
+  isStaleIdentity,
+  rateLimiter,
+  riotRequest,
+  setApiKey,
+  setTftApiKey,
+  tftKeyScope,
+  tftRequest,
+  tftScope
+} = await import('./client')
 
 const PASSTHROUGH = { parse: (data: unknown): unknown => data }
 
@@ -63,5 +73,53 @@ describe('riotRequest', () => {
     answer(JSON.stringify(['NA1_1']), 200)
 
     await expect(attempt()).resolves.toEqual(['NA1_1'])
+  })
+})
+
+describe('tftRequest', () => {
+  const tft = (): Promise<unknown> => tftRequest('/tft/status/v1/platform-data', 'https://x', '/status', PASSTHROUGH)
+
+  beforeEach(() => {
+    setApiKey('RGAPI-test')
+    setTftApiKey(null)
+    rateLimiter.resume()
+    tftScope.limiter.resume()
+  })
+
+  it('reads a 403 on the main key as no TFT, and leaves League’s queue running', async () => {
+    // A key registered for League alone gets a 403 from every TFT endpoint,
+    // the status an expired key gets too. Latching on it would stop League
+    // syncing over a game the key was never meant for.
+    answer('Forbidden', 403)
+
+    await expect(tft()).rejects.toSatisfy(isNoProductAccess)
+    expect(rateLimiter.keyRejected).toBe(false)
+    expect(tftKeyScope()).toBe('main')
+
+    answer(JSON.stringify(['NA1_1']), 200)
+    await expect(attempt()).resolves.toEqual(['NA1_1'])
+  })
+
+  it('still latches League’s queue on a 403 from League itself', async () => {
+    answer('Forbidden', 403)
+
+    await expect(attempt()).rejects.not.toSatisfy(isNoProductAccess)
+    expect(rateLimiter.keyRejected).toBe(true)
+  })
+
+  it('asks through TFT’s own key when there is one, where a 403 is that key refused', async () => {
+    setTftApiKey('RGAPI-tft')
+    const sent: Array<string | null> = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      sent.push(new Headers(init.headers).get('X-Riot-Token'))
+      return new Response('Forbidden', { status: 403 })
+    })
+
+    await expect(tft()).rejects.not.toSatisfy(isNoProductAccess)
+    expect(sent).toEqual(['RGAPI-tft'])
+    expect(tftKeyScope()).toBe('tft')
+    expect(tftScope.limiter.keyRejected).toBe(true)
+    // TFT's refused key is TFT's problem alone.
+    expect(rateLimiter.keyRejected).toBe(false)
   })
 })

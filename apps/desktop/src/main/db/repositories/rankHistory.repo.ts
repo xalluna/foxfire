@@ -7,7 +7,7 @@ import type {
   Season,
   SnapshotSource
 } from '@shared/types'
-import { ladderPosition, rankMovement, resetsBetween, seasonAt } from '@foxfire/core'
+import { ladderPosition, laddersOf, rankMovement, resetsBetween, seasonAt, type GameId } from '@foxfire/core'
 
 /**
  * Where a game sits among rank readings, as SQL over `matches m`: its end, the
@@ -228,22 +228,31 @@ export function getRankMilestones(
 export function getHistorySpan(
   db: DatabaseSync,
   accountId: number,
-  puuid: string
+  puuid: string,
+  game: GameId = 'lol'
 ): { oldestMs: number; newestMs: number } | null {
+  // One game's span: its own ladders' readings, and its own boards — League's
+  // participants, or TFT's under whichever id TFT files this account by.
+  const ladders = laddersOf(game)
+  const queues = ladders.map(() => '?').join(', ')
+  const boards = game === 'tft' ? 'tft_participants' : 'match_participants'
+
   const row = db
     .prepare(
-      `SELECT (SELECT MIN(captured_at) FROM rank_snapshots WHERE account_id = ?) AS snap_min,
-              (SELECT MAX(captured_at) FROM rank_snapshots WHERE account_id = ?) AS snap_max,
+      `SELECT (SELECT MIN(captured_at) FROM rank_snapshots
+                WHERE account_id = ? AND queue_type IN (${queues}))             AS snap_min,
+              (SELECT MAX(captured_at) FROM rank_snapshots
+                WHERE account_id = ? AND queue_type IN (${queues}))             AS snap_max,
               (SELECT MIN(m.game_creation)
                  FROM matches m
-                 JOIN match_participants p ON p.match_id = m.match_id
+                 JOIN ${boards} p ON p.match_id = m.match_id
                 WHERE p.puuid = ?)                                              AS match_min,
               (SELECT MAX(m.game_creation)
                  FROM matches m
-                 JOIN match_participants p ON p.match_id = m.match_id
+                 JOIN ${boards} p ON p.match_id = m.match_id
                 WHERE p.puuid = ?)                                              AS match_max`
     )
-    .get(accountId, accountId, puuid, puuid) as unknown as {
+    .get(accountId, ...ladders, accountId, ...ladders, puuid, puuid) as unknown as {
     snap_min: number | null
     snap_max: number | null
     match_min: number | null

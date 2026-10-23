@@ -13,6 +13,12 @@ export interface ImportAccountRow {
   platform: string | null
   /** Dead on arrival — encrypted against somebody's own key — but what the server records a translation for. */
   puuid: string
+  /**
+   * The account's id under a TFT key of its own, when the file's desktop had
+   * one — what its TFT games are filed under. Absent when TFT shared the main
+   * key, whose id is `puuid`.
+   */
+  tftPuuid?: string
 }
 
 /** What the server made of one account. */
@@ -49,6 +55,8 @@ export interface ImportSeasonRow {
   startsAt: number
   isPreseason: boolean
   resetsRank: boolean
+  /** Whose season it is. Absent from a file from before TFT, whose seasons are League's. */
+  game?: string
 }
 
 /** A match as the payload it already is: the server knows how to turn one into rows. */
@@ -69,4 +77,7 @@ export interface ImportReadingRow {
   source: string
   capturedAt: number
   matchId: string | null
+  /** Hyper Roll's colour and rating, on the one ladder measured by them. */
+  ratedTier?: string | null
+  ratedRating?: number | null
 }
