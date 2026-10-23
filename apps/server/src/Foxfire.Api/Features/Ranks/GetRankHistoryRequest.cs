@@ -89,15 +89,30 @@ internal sealed class GetRankPeriodsRequestHandler(FoxfireDbContext db, RankRead
     }
 }
 
-/// <summary>Every recorded season boundary, oldest first.</summary>
-public sealed record ListSeasonsRequest : IDomainRequest<IReadOnlyList<SeasonResponse>>;
+/// <summary>
+/// One game's recorded season boundaries, oldest first — League's when the
+/// request names no game, which is what a desktop from before TFT means.
+/// </summary>
+public sealed record ListSeasonsRequest(string? Game = null) : IValidatedRequest<IReadOnlyList<SeasonResponse>>;
+
+internal sealed class ListSeasonsRequestValidator : AbstractValidator<ListSeasonsRequest>
+{
+    public ListSeasonsRequestValidator()
+    {
+        RuleFor(x => x.Game).MustNameAGame();
+    }
+}
 
 internal sealed class ListSeasonsRequestHandler(RankReads ranks)
-    : IDomainRequestHandler<ListSeasonsRequest, IReadOnlyList<SeasonResponse>>
+    : IValidatedRequestHandler<ListSeasonsRequest, IReadOnlyList<SeasonResponse>>
 {
     public async Task<Response<IReadOnlyList<SeasonResponse>>> Handle(
         ListSeasonsRequest request,
-        CancellationToken cancellationToken) =>
-        Response<IReadOnlyList<SeasonResponse>>.Success(
-            [.. (await ranks.SeasonsAsync(cancellationToken)).Select(RankReads.Describe)]);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return Response<IReadOnlyList<SeasonResponse>>.Success(
+            [.. (await ranks.SeasonsAsync(GameParam.Parse(request.Game), cancellationToken)).Select(RankReads.Describe)]);
+    }
 }

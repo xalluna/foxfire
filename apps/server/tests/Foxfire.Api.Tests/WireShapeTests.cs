@@ -546,7 +546,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/seasons", UriKind.Relative));
         var season = seasons.EnumerateArray().First();
 
-        AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank");
+        AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank", "game");
     }
 
     [Fact]

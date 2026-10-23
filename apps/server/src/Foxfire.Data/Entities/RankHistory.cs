@@ -54,6 +54,15 @@ public sealed class RankSnapshot
     public int? LadderPosition { get; set; }
 
     /// <summary>
+    /// Hyper Roll's colour, on its rated ladder — where tier, division and LP are
+    /// null and <see cref="LadderPosition"/> is the rating.
+    /// </summary>
+    public RatedTier? RatedTier { get; set; }
+
+    /// <summary>Hyper Roll's rating, as Riot reported it.</summary>
+    public int? RatedRating { get; set; }
+
+    /// <summary>
     /// Where the reading came from: `lcu` from a running League client, `league_v4`
     /// from Riot's API, or `manual` when somebody typed it.
     /// </summary>
@@ -105,7 +114,8 @@ public sealed class RankSnapshot
             Losses,
             LadderPosition,
             Source,
-            CapturedAt);
+            CapturedAt,
+            RatedTier);
 }
 
 internal sealed class RankSnapshotConfiguration : IEntityTypeConfiguration<RankSnapshot>
@@ -116,6 +126,7 @@ internal sealed class RankSnapshotConfiguration : IEntityTypeConfiguration<RankS
         builder.Property(r => r.QueueType).HasMaxLength(32);
         builder.Property(r => r.Tier).HasConversion(RankConverters.Tier).HasMaxLength(16);
         builder.Property(r => r.Division).HasConversion(RankConverters.Division).HasMaxLength(4);
+        builder.Property(r => r.RatedTier).HasConversion(RankConverters.RatedTier).HasMaxLength(16);
         builder.Property(r => r.Source).HasMaxLength(16).IsRequired();
         builder.Property(r => r.MatchId).HasMaxLength(32);
 
@@ -182,6 +193,13 @@ public sealed class MatchRank
 
     public bool IsPromotion { get; set; }
     public bool IsDemotion { get; set; }
+
+    /// <summary>
+    /// Hyper Roll's colour either side of the game, on its rated ladder, where
+    /// the LP columns hold the rating and <see cref="LpDelta"/> its change.
+    /// </summary>
+    public RatedTier? RatedTierBefore { get; set; }
+    public RatedTier? RatedTierAfter { get; set; }
 }
 
 internal sealed class MatchRankConfiguration : IEntityTypeConfiguration<MatchRank>
@@ -195,6 +213,8 @@ internal sealed class MatchRankConfiguration : IEntityTypeConfiguration<MatchRan
         builder.Property(r => r.DivisionBefore).HasConversion(RankConverters.Division).HasMaxLength(4);
         builder.Property(r => r.TierAfter).HasConversion(RankConverters.Tier).HasMaxLength(16);
         builder.Property(r => r.DivisionAfter).HasConversion(RankConverters.Division).HasMaxLength(4);
+        builder.Property(r => r.RatedTierBefore).HasConversion(RankConverters.RatedTier).HasMaxLength(16);
+        builder.Property(r => r.RatedTierAfter).HasConversion(RankConverters.RatedTier).HasMaxLength(16);
 
         builder.HasOne(r => r.Match)
             .WithMany()
@@ -262,7 +282,14 @@ public sealed class RankedSeason
     /// </summary>
     public bool ResetsRank { get; set; }
 
-    public Season ToDomain() => new(Id, Label, StartsAt, IsPreseason, ResetsRank);
+    /// <summary>
+    /// Whose calendar it is. League's annual reset says nothing about a TFT
+    /// set, so each game keeps its own list, and every read asks for one game's.
+    /// League for every row from before there were two.
+    /// </summary>
+    public Game Game { get; set; }
+
+    public Season ToDomain() => new(Id, Label, StartsAt, IsPreseason, ResetsRank, Game);
 }
 
 internal sealed class RankedSeasonConfiguration : IEntityTypeConfiguration<RankedSeason>
@@ -272,9 +299,11 @@ internal sealed class RankedSeasonConfiguration : IEntityTypeConfiguration<Ranke
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Label).HasMaxLength(64).IsRequired();
 
-        // Two seasons opening at the same instant has no meaning and would
-        // make the ordering — which is the whole of how a season is read —
-        // ambiguous.
-        builder.HasIndex(s => s.StartsAt).IsUnique();
+        builder.Property(s => s.Game).HasConversion(GameConverters.Game).HasMaxLength(8);
+
+        // Two seasons of one game opening at the same instant has no meaning
+        // and would make the ordering — which is the whole of how a season is
+        // read — ambiguous. Two games may well reset on the same day.
+        builder.HasIndex(s => new { s.Game, s.StartsAt }).IsUnique();
     }
 }

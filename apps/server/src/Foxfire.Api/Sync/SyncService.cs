@@ -485,7 +485,7 @@ public sealed class SyncService(
         ServerSettingsService settings,
         Guid riotAccountId)
     {
-        var state = await db.SyncStates.FirstOrDefaultAsync(s => s.RiotAccountId == riotAccountId);
+        var state = await db.SyncStates.FirstOrDefaultAsync(s => s.RiotAccountId == riotAccountId && s.Game == Game.Lol);
         if (state is not null) return state;
 
         state = new SyncState
@@ -509,7 +509,7 @@ public sealed class SyncService(
         {
             // Another run created it first.
             db.Entry(state).State = EntityState.Detached;
-            return await db.SyncStates.FirstAsync(s => s.RiotAccountId == riotAccountId);
+            return await db.SyncStates.FirstAsync(s => s.RiotAccountId == riotAccountId && s.Game == Game.Lol);
         }
     }
 

@@ -131,6 +131,7 @@ public sealed class AttributionRunner(FoxfireDbContext db)
     {
         var seasons = await db.Seasons
             .AsNoTracking()
+            .Where(s => s.Game == Game.Lol)
             .OrderBy(s => s.StartsAt)
             .ToListAsync(cancellationToken);
 

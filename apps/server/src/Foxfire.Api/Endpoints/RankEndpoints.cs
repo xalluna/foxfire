@@ -78,16 +78,17 @@ public static class RankEndpoints
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ClearManualRankRequest(riotAccountId, matchId), cancellationToken));
 
-        app.MapGet("/seasons", (ISender sender, CancellationToken cancellationToken) =>
-                sender.SendAsync(new ListSeasonsRequest(), cancellationToken))
+        app.MapGet("/seasons", (string? game, ISender sender, CancellationToken cancellationToken) =>
+                sender.SendAsync(new ListSeasonsRequest(game), cancellationToken))
             .WithTags("Rank")
             .RequireAuthorization();
 
         app.MapPut("/seasons", (
                     [FromBody] IReadOnlyList<SeasonRequest> seasons,
+                    [FromQuery] string? game,
                     ISender sender,
                     CancellationToken cancellationToken) =>
-                sender.SendAsync(new SaveSeasonsRequest(seasons), cancellationToken))
+                sender.SendAsync(new SaveSeasonsRequest(seasons, game), cancellationToken))
             .WithTags("Rank")
             .RequireAuthorization(policy => policy.RequireRole(FoxfireRoles.Admin));
     }

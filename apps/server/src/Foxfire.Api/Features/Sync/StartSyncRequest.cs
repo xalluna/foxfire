@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using Foxfire.Api.Common;
+using Foxfire.Core;
 using Foxfire.Api.Sync;
 using Foxfire.Data;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,7 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
 
         var state = await db.SyncStates
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.RiotAccountId == request.RiotAccountId, cancellationToken);
+            .FirstOrDefaultAsync(s => s.RiotAccountId == request.RiotAccountId && s.Game == Game.Lol, cancellationToken);
 
         // Clients hold the button until the same moment, so this is only met by
         // one whose clock disagrees with ours, or that pressed a moment before

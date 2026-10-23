@@ -1,4 +1,5 @@
 using Foxfire.Api.Common;
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +34,11 @@ internal sealed class ImportSeasonsRequestHandler(FoxfireDbContext db)
         // ever, and the whole point is that they arrive together.
         if (request.Seasons is not { Count: > 0 }) return new ImportBatchResult(0, 0, 0);
 
-        var existing = await db.Seasons.Select(s => s.StartsAt).ToListAsync(cancellationToken);
+        // A stats.db from before TFT holds League's seasons alone.
+        var existing = await db.Seasons
+            .Where(s => s.Game == Game.Lol)
+            .Select(s => s.StartsAt)
+            .ToListAsync(cancellationToken);
         var known = existing.ToHashSet();
 
         var accepted = 0;

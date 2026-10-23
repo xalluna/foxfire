@@ -1,5 +1,6 @@
 using Foxfire.Api.Common;
 using Foxfire.Api.Sync;
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +24,8 @@ public sealed record SyncStateResponse(
     DateTimeOffset? LastFullSyncAt,
     DateTimeOffset? LastDeltaSyncAt,
     bool IsSyncing,
-    DateTimeOffset? CooldownUntil)
+    DateTimeOffset? CooldownUntil,
+    string Game = "lol")
 {
     public static SyncStateResponse Describe(SyncState state, bool isSyncing)
     {
@@ -37,7 +39,8 @@ public sealed record SyncStateResponse(
             state.LastFullSyncAt,
             state.LastDeltaSyncAt,
             isSyncing,
-            SyncCooldown.Until(state));
+            SyncCooldown.Until(state),
+            state.Game.Slug());
     }
 }
 
@@ -61,7 +64,7 @@ internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncServic
 
         var state = await db.SyncStates
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.RiotAccountId == id, cancellationToken);
+            .FirstOrDefaultAsync(s => s.RiotAccountId == id && s.Game == Game.Lol, cancellationToken);
 
         if (state is null)
         {

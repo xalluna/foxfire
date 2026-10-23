@@ -24,6 +24,18 @@ Teamfight Tactics, beside League.
   ladders asks for League's by name.
 - A rank reading on a queue no ladder answers to is an error rather than a
   Solo/Duo reading. Nothing writes one.
+- Migration `Games`. Matches, seasons and sync state say which game they are
+  of, and everything already stored reads as League's. A TFT board has a table
+  of its own (`TftParticipants`) beside a match like any other, so LP,
+  hand-entered LP and recordings reach a TFT game by the keys they already use.
+  Hyper Roll's colour and rating have columns on entries, readings and LP rows,
+  and an account can hold a puuid under a TFT key (`ScopedPuuids`). TFT's sets
+  from Set 13 to Set 18 are seeded as seasons that reset rank.
+- Seasons are one game's at a time. `GET` and `PUT /api/seasons` take an
+  optional `?game=`, and without one they mean League — so a desktop from
+  before TFT saving its season list replaces League's and never touches TFT's.
+- League's dashboard, match page, season periods and sync state read League's
+  rows alone.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.

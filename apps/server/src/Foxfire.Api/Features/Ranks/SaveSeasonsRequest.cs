@@ -12,7 +12,11 @@ namespace Foxfire.Api.Features.Ranks;
 public sealed record SeasonRequest(int? Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
 
 /// <summary>
-/// Replaces the whole season table, and then rebuilds everything derived from it.
+/// Replaces one game's whole season list, and then rebuilds everything derived from it.
+///
+/// One game's, and League's when the request names none. A desktop from before
+/// TFT saves its list with no game, and if that replaced the whole table it
+/// would delete TFT's sets — or, saved back, file them as League's.
 ///
 /// Whole rather than row-by-row because the boundaries are only meaningful as a
 /// series: a season runs until the next one starts, so inserting one changes
@@ -24,13 +28,15 @@ public sealed record SeasonRequest(int? Id, string Label, long StartsAt, bool Is
 /// boundaries and is replayed from scratch — so a mistaken boundary does not
 /// fail, it quietly produces different numbers for everybody on the server.
 /// </summary>
-public sealed record SaveSeasonsRequest(IReadOnlyList<SeasonRequest> Seasons) : IValidatedRequest;
+public sealed record SaveSeasonsRequest(IReadOnlyList<SeasonRequest> Seasons, string? Game = null) : IValidatedRequest;
 
 internal sealed class SaveSeasonsRequestValidator : AbstractValidator<SaveSeasonsRequest>
 {
     public SaveSeasonsRequestValidator()
     {
         ClassLevelCascadeMode = CascadeMode.Stop;
+
+        RuleFor(x => x.Game).MustNameAGame();
 
         RuleFor(x => x.Seasons)
             .Must(seasons => seasons is { Count: > 0 })
@@ -62,7 +68,9 @@ internal sealed class SaveSeasonsRequestHandler(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        await db.Seasons.ExecuteDeleteAsync(cancellationToken);
+        var game = GameParam.Parse(request.Game);
+
+        await db.Seasons.Where(s => s.Game == game).ExecuteDeleteAsync(cancellationToken);
 
         foreach (var season in request.Seasons.OrderBy(s => s.StartsAt))
         {
@@ -71,7 +79,8 @@ internal sealed class SaveSeasonsRequestHandler(
                 Label = season.Label.Trim(),
                 StartsAt = season.StartsAt,
                 IsPreseason = season.IsPreseason,
-                ResetsRank = season.ResetsRank
+                ResetsRank = season.ResetsRank,
+                Game = game
             });
         }
 
@@ -89,16 +98,22 @@ internal sealed class SaveSeasonsRequestHandler(
             .Select(a => new { a.Id, a.Puuid })
             .ToListAsync(cancellationToken);
 
-        foreach (var account in accounts)
+        // TFT's LP is not attributed until its syncs are, so a TFT list has
+        // nothing derived from it to rebuild yet.
+        if (game == Game.Lol)
         {
-            foreach (var queue in RankedQueues.Of(Game.Lol))
+            foreach (var account in accounts)
             {
-                await attribution.RebuildAsync(account.Id, account.Puuid, queue, cancellationToken);
+                foreach (var queue in RankedQueues.Of(Game.Lol))
+                {
+                    await attribution.RebuildAsync(account.Id, account.Puuid, queue, cancellationToken);
+                }
             }
         }
 
         logger.LogInformation(
-            "An admin rewrote the season table ({Count} boundaries); LP was recomputed for {Accounts} account(s)",
+            "An admin rewrote the {Game} season table ({Count} boundaries); LP was recomputed for {Accounts} account(s)",
+            game.Slug(),
             request.Seasons.Count,
             accounts.Count);
 

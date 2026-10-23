@@ -31,6 +31,12 @@ public sealed class LeagueEntry
     public int? Wins { get; set; }
     public int? Losses { get; set; }
 
+    /// <summary>Hyper Roll's colour, on its rated ladder, where tier, division and LP are null.</summary>
+    public RatedTier? RatedTier { get; set; }
+
+    /// <summary>Hyper Roll's rating, beside <see cref="RatedTier"/>.</summary>
+    public int? RatedRating { get; set; }
+
     public DateTimeOffset FetchedAt { get; set; }
 }
 
@@ -42,6 +48,7 @@ internal sealed class LeagueEntryConfiguration : IEntityTypeConfiguration<League
         builder.Property(l => l.QueueType).HasMaxLength(32);
         builder.Property(l => l.Tier).HasConversion(RankConverters.Tier).HasMaxLength(16);
         builder.Property(l => l.Division).HasConversion(RankConverters.Division).HasMaxLength(4);
+        builder.Property(l => l.RatedTier).HasConversion(RankConverters.RatedTier).HasMaxLength(16);
 
         builder.HasOne(l => l.RiotAccount)
             .WithMany()
@@ -87,9 +94,12 @@ internal sealed class ChampionMasteryConfiguration : IEntityTypeConfiguration<Ch
 }
 
 /// <summary>
-/// How far through fetching an account's history the server has got.
+/// How far through fetching an account's history in one game the server has got.
 ///
-/// One row per Riot account. The backfill is resumable because every match is
+/// One row per Riot account per game: League's and TFT's histories are fetched
+/// from different endpoints, backfill to their own targets and stop at their
+/// own newest match, so one row could not say where either had got to. The
+/// backfill is resumable because every match is
 /// committed as it arrives and already-stored ones are skipped, so this is a
 /// record of progress rather than a lock — losing it would cost a re-walk, not
 /// correctness.
@@ -98,6 +108,9 @@ public sealed class SyncState
 {
     public Guid RiotAccountId { get; set; }
     public RiotAccount RiotAccount { get; set; } = null!;
+
+    /// <summary>Whose history this is the progress of. League for every row from before TFT.</summary>
+    public Game Game { get; set; }
 
     /// <summary>
     /// The newest match already stored, which is where a delta sync stops
@@ -124,7 +137,8 @@ internal sealed class SyncStateConfiguration : IEntityTypeConfiguration<SyncStat
 {
     public void Configure(EntityTypeBuilder<SyncState> builder)
     {
-        builder.HasKey(s => s.RiotAccountId);
+        builder.HasKey(s => new { s.RiotAccountId, s.Game });
+        builder.Property(s => s.Game).HasConversion(GameConverters.Game).HasMaxLength(8);
         builder.Property(s => s.MostRecentMatchId).HasMaxLength(32);
 
         builder.HasOne(s => s.RiotAccount)
@@ -158,6 +172,12 @@ public sealed class RetiredPuuid
 
     public required string Puuid { get; set; }
 
+    /// <summary>
+    /// Which key it was encrypted under: the main one, or TFT's own when the
+    /// server has one. Main for every row from before there could be two.
+    /// </summary>
+    public RiotKeyScope Scope { get; set; }
+
     public DateTimeOffset RetiredAt { get; set; }
 }
 
@@ -167,10 +187,55 @@ internal sealed class RetiredPuuidConfiguration : IEntityTypeConfiguration<Retir
     {
         builder.HasKey(r => new { r.RiotAccountId, r.Puuid });
         builder.Property(r => r.Puuid).HasMaxLength(78);
+        builder.Property(r => r.Scope).HasConversion(GameConverters.Scope).HasMaxLength(8);
 
         builder.HasOne(r => r.RiotAccount)
             .WithMany()
             .HasForeignKey(r => r.RiotAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>
+/// An account's puuid under a key other than the main one.
+///
+/// Riot encrypts a puuid per key, and ties a key to a product. A server whose
+/// main key was registered for League alone needs a second key for TFT, and
+/// under that key every player has a second puuid: TFT's history is fetched
+/// with it, and its rows are keyed by it. <see cref="RiotAccount.Puuid"/> stays
+/// the main key's.
+///
+/// A row exists only while the server has a TFT key of its own. Without one,
+/// TFT is called with the main key and the main puuid is the TFT one too —
+/// and taking a TFT key away moves TFT's rows back onto it and deletes this.
+/// </summary>
+public sealed class ScopedPuuid
+{
+    public Guid RiotAccountId { get; set; }
+    public RiotAccount RiotAccount { get; set; } = null!;
+
+    public RiotKeyScope Scope { get; set; }
+
+    public required string Puuid { get; set; }
+
+    public DateTimeOffset ResolvedAt { get; set; }
+}
+
+internal sealed class ScopedPuuidConfiguration : IEntityTypeConfiguration<ScopedPuuid>
+{
+    public void Configure(EntityTypeBuilder<ScopedPuuid> builder)
+    {
+        builder.HasKey(s => new { s.RiotAccountId, s.Scope });
+        builder.Property(s => s.Scope).HasConversion(GameConverters.Scope).HasMaxLength(8);
+        builder.Property(s => s.Puuid).HasMaxLength(78);
+
+        // One player per puuid under a key, as RiotAccounts.Puuid is unique
+        // under the main one.
+        builder.HasIndex(s => new { s.Scope, s.Puuid }).IsUnique();
+
+        builder.HasOne(s => s.RiotAccount)
+            .WithMany()
+            .HasForeignKey(s => s.RiotAccountId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
