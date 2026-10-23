@@ -35,6 +35,7 @@ import {
   type MatchCandidate
 } from '../capture/matchBinding'
 import { getCaptureSettings } from './captureSettings'
+import { pruneEmptyFolders } from '../capture/fileRecording'
 import type { Page, PageOptions, Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
 import { clampPage } from '@foxfire/core'
 
@@ -126,7 +127,11 @@ function deleteFile(path: string | null): void {
     // The recording has left the app either way. A file locked by a player
     // still open on it is the usual cause.
     log.debug('Could not delete recording file', { path, error: String(err) })
+    return
   }
+
+  // The player, game and mode folders it was filed in, if it was their last.
+  pruneEmptyFolders(getCaptureSettings().folder, path)
 }
 
 /** The one-click cleanup offered when the advisory cap is crossed. */

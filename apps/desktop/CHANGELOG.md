@@ -45,6 +45,15 @@ Teamfight Tactics, beside League.
   finish, connected to a server or not. Leaving a TFT game early with "Exit now" counts as
   finishing it.
 
+### Changed
+
+- **Recordings are filed by player, game and mode.** A new recording lands in your recording
+  folder as `Faker-KR1\LoL\Solo-Duo\2026-10-23 21-04-17.mp4` — or `TFT\Ranked`, `TFT\Double-Up`
+  and so on — rather than loose beside every other. A recording that never learnt whose it was goes
+  under `Unknown`, and a mode Foxfire does not know under `Other`. Recordings you already have
+  stay where they are, and so does anything OBS was set to write somewhere else. Deleting the last
+  recording in a folder removes the folder too.
+
 ### Under the hood
 
 - Games are a first-class idea. `@foxfire/core` holds a registry of the Riot titles Foxfire tracks

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
+import type { GameId } from '@foxfire/core'
 import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
 import {
   canUploadRecording,
@@ -457,6 +458,41 @@ export function getRecordingFilePath(db: DatabaseSync, recordingId: number): str
     | { file_path: string }
     | undefined
   return row?.file_path ?? null
+}
+
+/** What a finished recording's place on disk is worked out from. See capture/recordingLayout.ts. */
+export interface RecordingPlacementFacts {
+  riotId: string | null
+  game: GameId
+  queueId: number | null
+  startedAt: number
+}
+
+export function getRecordingPlacementFacts(db: DatabaseSync, recordingId: number): RecordingPlacementFacts | null {
+  const row = db
+    .prepare('SELECT riot_id, game, queue_id, started_at FROM recordings WHERE id = ?')
+    .get(recordingId) as unknown as
+    | { riot_id: string | null; game: string; queue_id: number | null; started_at: number }
+    | undefined
+  if (!row) return null
+  return {
+    riotId: row.riot_id,
+    game: row.game === 'tft' ? 'tft' : 'lol',
+    queueId: row.queue_id,
+    startedAt: row.started_at
+  }
+}
+
+/** Whether another recording already claims this file, which the UNIQUE on file_path would refuse. */
+export function isRecordingPathTaken(db: DatabaseSync, filePath: string, exceptId: number): boolean {
+  return (
+    db.prepare('SELECT 1 FROM recordings WHERE file_path = ? AND id != ?').get(filePath, exceptId) !== undefined
+  )
+}
+
+/** Points a recording at the file where it now is, after it was moved into place late. */
+export function updateRecordingFilePath(db: DatabaseSync, recordingId: number, filePath: string): void {
+  db.prepare('UPDATE recordings SET file_path = ? WHERE id = ?').run(filePath, recordingId)
 }
 
 /** Removes the row and returns the file the caller should now unlink. */

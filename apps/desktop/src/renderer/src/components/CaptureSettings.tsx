@@ -213,7 +213,7 @@ export function CaptureSettings(): JSX.Element {
           {enabled && current && (
             <PathRow
               label="Recording folder"
-              description="Where recordings are written. Pick a drive with room — a 30 minute game is a gigabyte or two."
+              description="Where recordings are written, each filed by player, game and mode — Faker-KR1\TFT\Ranked. Pick a drive with room — a 30 minute game is a gigabyte or two."
               value={current.folder}
               disabled={disabled}
               onBrowse={async () => {

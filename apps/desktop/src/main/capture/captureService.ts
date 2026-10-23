@@ -43,6 +43,7 @@ import {
 import { selfNameSet, toRecordingEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
 import { containsGameStart, gameReadiness } from './gameClock'
+import { fileFinishedRecording } from './fileRecording'
 import type { CaptureStatus } from '@shared/types'
 
 /**
@@ -285,8 +286,14 @@ function finalizeRecording(recordingId: number, eventPath: string | null): void 
     }
   }
 
-  finishRecording(db, recordingId, endedAt, path ?? `unknown-${recordingId}`, bytes)
-  log.info('Recording finished', { recordingId, path, bytes })
+  // Into its place under the folder — player, game, mode — now that OBS has
+  // closed it. See recordingLayout.ts.
+  const filed = path
+    ? fileFinishedRecording(db, recordingId, path, getCaptureSettings().folder, broadcastRecordingsChanged)
+    : null
+
+  finishRecording(db, recordingId, endedAt, filed ?? `unknown-${recordingId}`, bytes)
+  log.info('Recording finished', { recordingId, path: filed, bytes })
 
   void leaveManagedMode().catch(() => undefined)
   dispatch({ type: 'recordingStopped', at: endedAt })
