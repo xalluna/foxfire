@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { useMyAccounts, type PlayerLayoutProps } from '@foxfire/screens'
+import { GameSwitch, useMyAccounts, type PlayerLayoutProps } from '@foxfire/screens'
 import { useLastPlayer } from '../store/lastPlayer'
 import { AccountSwitcher } from './AccountSwitcher'
 
@@ -27,7 +27,17 @@ export function PlayerLayout({ account, children }: PlayerLayoutProps): JSX.Elem
   return (
     <>
       <AccountSwitcher accounts={accounts.data ?? []} activeAccountId={account?.id ?? null} />
-      <Main>{children}</Main>
+      <Main>
+        {/* Which of the player's games this is. The desktop has no tabs — its
+            other pages open from the cards that summarise them — so the switch
+            is the one thing above the page. */}
+        {account && (
+          <div className="flex justify-end px-4 pt-3">
+            <GameSwitch account={account} />
+          </div>
+        )}
+        {children}
+      </Main>
     </>
   )
 }

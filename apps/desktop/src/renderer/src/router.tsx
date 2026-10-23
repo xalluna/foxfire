@@ -104,7 +104,13 @@ const lpEditor = createRoute({
 const routeTree = root.addChildren([
   app.addChildren([
     home,
-    players.player.addChildren([players.dashboard, players.champions, players.rank, captures]),
+    players.player.addChildren([
+      players.dashboard,
+      players.champions,
+      players.rank,
+      players.tft.addChildren([players.tftProfile]),
+      captures
+    ]),
     settings
   ]),
   windows.addChildren([

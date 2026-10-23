@@ -15,6 +15,16 @@ commit, and there is no `[Unreleased]` section.
 
 Teamfight Tactics, beside League.
 
+### Added
+
+- **A TFT profile for every player, in the web client.** `/players/{name}/tft`,
+  reached by a League | TFT switch beside a player's tabs: a card for each of
+  TFT's ladders — Ranked, Double Up and Hyper Roll — with the set's games,
+  average place, top-half rate and a bar for each place (by team in Double Up),
+  the last 20 games at a glance, and a history of every game's board that opens
+  onto all eight in its lobby. A link to somebody's TFT profile opens on it, so
+  it can be shared like any other page.
+
 ### Under the hood
 
 - Games are a first-class idea. `Foxfire.Core` has `Game` and the ladders of

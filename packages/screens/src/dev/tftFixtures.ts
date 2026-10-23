@@ -45,13 +45,32 @@ export const TFT_SEASONS: Season[] = [
   { id: 918, label: 'Set 18', startsAt: NOW - 58 * DAY, isPreseason: false, resetsRank: true, game: 'tft' }
 ]
 
-/** A small linear congruential generator — deterministic, and enough for fixtures. */
+/**
+ * A small linear congruential generator — deterministic, and enough for fixtures.
+ *
+ * In 32-bit integer arithmetic: the same step in doubles overflows 2^53 and
+ * rounds, and its output stopped matching between two loads of the same page.
+ */
 function seeded(seed: number): () => number {
-  let state = seed
+  let state = seed >>> 0
   return () => {
-    state = (state * 1_103_515_245 + 12_345) % 2_147_483_648
-    return state / 2_147_483_648
+    state = (Math.imul(state, 1_103_515_245) + 12_345) >>> 0
+    return (state >>> 1) / 2_147_483_648
   }
+}
+
+/**
+ * A copy of the list in a seeded order: one draw per element, whatever the
+ * engine. Sorting by a random comparator draws as many times as the sort
+ * happens to compare, which is the engine's business.
+ */
+function shuffled<T>(list: readonly T[], random: () => number): T[] {
+  const out = list.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    ;[out[i], out[j]] = [out[j]!, out[i]!]
+  }
+  return out
 }
 
 const TRAITS = [
@@ -96,16 +115,13 @@ const QUEUE_ROTATION = [1100, 1100, 1160, 1100, 1130, 1100, 1090, 1100, 1160, 11
 function board(random: () => number, placement: number): { traits: TftTrait[]; units: TftUnit[]; augments: string[] } {
   // Better boards finish higher, roughly: more stars, more active traits.
   const strength = (9 - placement) / 8
-  const units = UNITS.slice()
-    .sort(() => random() - 0.5)
+  const units = shuffled(UNITS, random)
     .slice(0, 7 + Math.round(strength * 2))
     .map(([characterId, rarity]) => ({
       characterId,
       tier: random() < strength * 0.6 ? 3 : random() < 0.8 ? 2 : 1,
       rarity,
-      items: ITEMS.slice()
-        .sort(() => random() - 0.5)
-        .slice(0, random() < strength ? 3 : Math.floor(random() * 3))
+      items: shuffled(ITEMS, random).slice(0, random() < strength ? 3 : Math.floor(random() * 3))
     }))
     .sort((a, b) => b.rarity - a.rarity || b.tier - a.tier)
 
@@ -114,7 +130,7 @@ function board(random: () => number, placement: number): { traits: TftTrait[]; u
     return { name, numUnits: style === 0 ? 1 : style + 1, style, tierCurrent: style, tierTotal: 4 }
   })
 
-  return { traits, units, augments: AUGMENTS.slice(0, 3).sort(() => random() - 0.5) }
+  return { traits, units, augments: shuffled(AUGMENTS.slice(0, 3), random) }
 }
 
 /** The stage a player reached, as Riot's round count: earlier for a lower place. */

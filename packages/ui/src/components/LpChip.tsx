@@ -14,7 +14,14 @@ import { formatTierShort, tierColor, tierCrest, tierLabel } from '../lib/rank'
  * showing; demotions keep the LP figure and get only a dimmed crest, so the two
  * read differently at a glance without the bad news shouting.
  */
-export function LpChip({ rank }: { rank: MatchRankInfo | null }): JSX.Element | null {
+export function LpChip({
+  rank,
+  unit = 'LP'
+}: {
+  rank: MatchRankInfo | null
+  /** What the figure counts: LP, or Hyper Roll's rating, which has no crest to promote into. */
+  unit?: 'LP' | 'rating'
+}): JSX.Element | null {
   if (!rank || rank.lpDelta === null) return null
 
   const gained = rank.lpDelta > 0
@@ -46,7 +53,7 @@ export function LpChip({ rank }: { rank: MatchRankInfo | null }): JSX.Element | 
       title={rank.isDemotion ? `Demoted to ${fullLabel}` : undefined}
     >
       <span aria-hidden>{arrow}</span>
-      {Math.abs(rank.lpDelta)} LP
+      {Math.abs(rank.lpDelta)} {unit}
       {/* Demotions are understated on purpose: a muted crest marks the drop
           without giving it the prominence a promotion gets. */}
       {rank.isDemotion && crest && (

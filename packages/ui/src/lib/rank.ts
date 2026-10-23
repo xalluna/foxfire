@@ -120,6 +120,27 @@ export function queueLabel(queueType: QueueType): string {
   return LADDERS[queueType].label
 }
 
+/**
+ * Hyper Roll's colours, which are its tiers: the rating band somebody is in,
+ * named and drawn as the client draws them. Literal for the same reason as
+ * League's tiers above.
+ */
+const RATED_TIERS: Record<string, { color: string; label: string }> = {
+  GRAY: { color: '#8D97A3', label: 'Gray' },
+  GREEN: { color: '#2FB577', label: 'Green' },
+  BLUE: { color: '#3D8BFD', label: 'Blue' },
+  PURPLE: { color: '#B05CF0', label: 'Purple' },
+  ORANGE: { color: '#F08A3C', label: 'Orange' }
+}
+
+export function ratedTierColor(tier: string | null | undefined): string {
+  return (tier && RATED_TIERS[tier]?.color) || 'rgb(var(--text-mute))'
+}
+
+export function ratedTierLabel(tier: string | null | undefined): string {
+  return (tier && RATED_TIERS[tier]?.label) || 'Unrated'
+}
+
 export interface RankRecord {
   games: number
   winRate: number | null

@@ -170,6 +170,7 @@ const routeTree = root.addChildren([
       player.dashboard,
       player.champions,
       player.rank,
+      player.tft.addChildren([player.tftProfile]),
       player.lpEditor,
       // A recording's page, from YouTube — only in a build that has it.
       ...(YOUTUBE_ENABLED ? [player.recording] : [])

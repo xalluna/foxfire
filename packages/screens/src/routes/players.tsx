@@ -18,6 +18,7 @@ import { DashboardScreen } from '../screens/DashboardScreen'
 import { LpEditorScreen } from '../screens/LpEditorScreen'
 import { RankScreen } from '../screens/RankScreen'
 import { RecordingScreen } from '../screens/RecordingScreen'
+import { TftProfileScreen } from '../screens/TftProfileScreen'
 import {
   DEFAULT_RANK_RANGE,
   queueIdFrom,
@@ -29,10 +30,14 @@ import {
   validateDashboardSearch,
   validateLpEditorSearch,
   validateRankSearch,
+  validateTftSearch,
+  tftQueueIdFrom,
+  tftQueueSearchFor,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
-  type RankSearch
+  type RankSearch,
+  type TftSearch
 } from './params'
 import { rememberSearch } from './rememberSearch'
 import { useRouteSearch } from './useRouteSearch'
@@ -92,6 +97,7 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   // never share what somebody last picked.
   const dashboardMemory = rememberSearch<DashboardSearch>(['queue'])
   const championsMemory = rememberSearch<ChampionsSearch>(['queue'])
+  const tftMemory = rememberSearch<TftSearch>(['queue'])
 
   const player = createRoute({
     getParentRoute: () => parent,
@@ -146,7 +152,25 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
     component: RecordingRoute
   })
 
-  return { player, dashboard, champions, rank, lpEditor, recording }
+  // TFT, under the same player: the Riot ID is shared, so its pages sit
+  // beside League's rather than under a game of their own.
+  const tft = createRoute({
+    getParentRoute: () => player,
+    path: 'tft',
+    component: Outlet
+  })
+
+  const tftProfile = createRoute({
+    getParentRoute: () => tft,
+    path: '/',
+    validateSearch: validateTftSearch,
+    search: { middlewares: [tftMemory.middleware as never] },
+    onEnter: (match) => tftMemory.record(match.search as TftSearch),
+    onStay: (match) => tftMemory.record(match.search as TftSearch),
+    component: TftProfileRoute
+  })
+
+  return { player, dashboard, champions, rank, lpEditor, recording, tft, tftProfile }
 }
 
 /**
@@ -258,6 +282,29 @@ function DashboardRoute(): JSX.Element {
       account={account}
       queueId={queueIdFrom(search.queue)}
       onQueueChange={(queueId) => setSearch({ queue: queueSearchFor(queueId) })}
+      focus={focus}
+    />
+  )
+}
+
+function TftProfileRoute(): JSX.Element {
+  const account = usePlayer()
+  const [search, setSearch] = useRouteSearch<TftSearch>()
+  const [focus, setFocus] = useState<MatchFocus | null>(null)
+
+  // A game asked for from elsewhere, opened and then taken out of the URL, as
+  // on League's profile.
+  useEffect(() => {
+    if (search.match === undefined) return
+    setFocus({ matchId: search.match })
+    setSearch({ match: undefined }, { replace: true })
+  }, [search.match, setSearch])
+
+  return (
+    <TftProfileScreen
+      account={account}
+      queueId={tftQueueIdFrom(search.queue)}
+      onQueueChange={(queueId) => setSearch({ queue: tftQueueSearchFor(queueId) })}
       focus={focus}
     />
   )

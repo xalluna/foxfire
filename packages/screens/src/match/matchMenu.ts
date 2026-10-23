@@ -1,5 +1,17 @@
-import { queueTypeForQueueId, type MatchSummary } from '@foxfire/core'
+import { LADDERS, queueTypeForQueueId, type MatchSummary } from '@foxfire/core'
 import type { ContextMenuItem } from '@foxfire/ui'
+
+/**
+ * What a row's menu reads of its game — whichever game's row it is.
+ *
+ * League's and TFT's rows share everything the menu decides on: which ladder,
+ * the LP figure and whether it was typed, and the footage. A TFT row has no
+ * remake and no Riot replay, so those two are optional and simply absent.
+ */
+export type MenuMatch = Pick<MatchSummary, 'queueId' | 'rank' | 'hasManualRank' | 'local' | 'recording'> & {
+  isRemake?: boolean
+  sharedReplay?: MatchSummary['sharedReplay']
+}
 
 /**
  * Why a game cannot be given an LP figure by hand, or null when it can.
@@ -10,14 +22,16 @@ import type { ContextMenuItem } from '@foxfire/ui'
  * it harder to work out.
  */
 export function lpEditBlockedReason(
-  match: MatchSummary,
+  match: MenuMatch,
   isMine?: boolean,
   isHeadAdmin = false
 ): string | null {
   const notYours = lpWriteBlockedReason(isMine, isHeadAdmin)
   if (notYours) return notYours
 
-  if (queueTypeForQueueId(match.queueId) === null) return 'Only ranked games move LP'
+  const ladder = queueTypeForQueueId(match.queueId)
+  if (ladder === null) return 'Only ranked games move LP'
+  if (!LADDERS[ladder].lpEditable) return 'Hyper Roll has a rating, not LP'
   if (match.isRemake) return 'Remakes move no LP'
   if (match.rank?.lpDelta != null) return 'Already worked out from your rank history'
   return null
@@ -53,7 +67,7 @@ export function lpWriteBlockedReason(isMine?: boolean, isHeadAdmin = false): str
  * the row of the account it belongs to — so the same game in somebody else's
  * history says there is nothing to watch, which is the truth for that view.
  */
-export function recordingBlockedReason(match: MatchSummary): string | null {
+export function recordingBlockedReason(match: MenuMatch): string | null {
   if ((match.local?.recordingId ?? null) === null && !match.recording) return 'No recording for this game'
   return null
 }
@@ -67,7 +81,7 @@ export function recordingBlockedReason(match: MatchSummary): string | null {
  * here can play, or a menu offering to watch it, would be a promise broken on
  * the click. The row's own files on this disk are left as they are.
  */
-export function withoutServerRecording(match: MatchSummary): MatchSummary {
+export function withoutServerRecording<T extends Pick<MenuMatch, 'recording'>>(match: T): T {
   return match.recording ? { ...match, recording: null } : match
 }
 
@@ -78,7 +92,7 @@ export function withoutServerRecording(match: MatchSummary): MatchSummary {
  * somebody else's account, or already there. A string is the item offered but
  * disabled — an upload of this game is already on its way.
  */
-function uploadState(match: MatchSummary, isMine?: boolean): 'offer' | 'pending' | null {
+function uploadState(match: MenuMatch, isMine?: boolean): 'offer' | 'pending' | null {
   if (isMine === false) return null
   if ((match.local?.recordingId ?? null) === null) return null
   if (match.local?.recordingVideoId || match.recording) return null
@@ -94,7 +108,7 @@ function uploadState(match: MatchSummary, isMine?: boolean): 'offer' | 'pending'
  * answer arrives when the replay is opened, and the Captures tab states it in
  * full.
  */
-export function replayBlockedReason(match: MatchSummary): string | null {
+export function replayBlockedReason(match: MenuMatch): string | null {
   if ((match.local?.replayId ?? null) === null) return 'No Riot replay for this game'
   return null
 }
@@ -108,7 +122,7 @@ export function replayBlockedReason(match: MatchSummary): string | null {
  * the download is pointless rather than unavailable, which is a different
  * sentence.
  */
-export function downloadBlockedReason(match: MatchSummary): string | null {
+export function downloadBlockedReason(match: MenuMatch): string | null {
   if ((match.local?.replayId ?? null) !== null) return 'Already downloaded'
   if (!match.sharedReplay) return 'Nobody has uploaded this game'
   return null
@@ -158,7 +172,7 @@ export interface MatchMenuContext {
 }
 
 export function matchContextItems(
-  match: MatchSummary,
+  match: MenuMatch,
   actions: MatchMenuActions,
   { expandable = true, isMine, isAdmin = false, isHeadAdmin = false, serverMode = false }: MatchMenuContext = {}
 ): ContextMenuItem[] {

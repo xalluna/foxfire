@@ -11,6 +11,19 @@ changes you would never notice while using the app.
 
 Teamfight Tactics, beside League.
 
+### Added
+
+- **A TFT profile for every player.** A League | TFT switch sits at the top of a player's page, and
+  the TFT side has a card for each ladder — Ranked, Double Up and Hyper Roll — with your rank (Hyper
+  Roll's colour and rating), the set's games, your average place and how often you made the top
+  half, laid out as a bar for each place you finished. Double Up counts your team's place, #1 to #4,
+  because that is what moved your LP. Ranked has a 30-day graph. Above the history, your last 20
+  games: top-4 rate, firsts, average place, the run of finishes and the traits you played most.
+- **TFT match history.** Each game shows your place, its queue, the stage you reached, your traits
+  and your board — every unit with its stars and items — and the LP it moved. Open one to see all
+  eight boards in that lobby, with anybody Foxfire tracks a link to their own TFT profile. The
+  history filters by queue, as League's does.
+
 ### Under the hood
 
 - Games are a first-class idea. `@foxfire/core` holds a registry of the Riot titles Foxfire tracks
