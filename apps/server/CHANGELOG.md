@@ -63,6 +63,19 @@ Teamfight Tactics, beside League.
 - League's rank refresh keeps League's ladders. It used to store whatever
   league-v4 answered with.
 - The insights page's recent syncs say which game each was.
+- TFT's reads, under `/api/riot-accounts/{id}/tft`: the dashboard (TFT's
+  ladders, its sync state, and each ladder's placements over the current set —
+  by team in Double Up), a paged history (`/matches`, 20 a page, in
+  `WireShapeTests`' list of lists that grow), one game, its eight-board lobby,
+  rank history, trend and periods on TFT's seasons, and the LP editor's list,
+  save and clear for Ranked and Double Up — Hyper Roll has a rating and nothing
+  to type. Rank history carries Hyper Roll's colour and rating. League's routes
+  refuse a TFT ladder, and TFT's a League one.
+- A recording attaches to a TFT game as it does to League's, and rides on its
+  TFT history row.
+- A stats.db's TFT games import through `/api/admin/import/tft-matches`,
+  rewritten onto whichever id this server files TFT under; an account can
+  bring its TFT id along, and finishing an import works out TFT's LP too.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.

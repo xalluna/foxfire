@@ -214,6 +214,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         [
             "/api/search?q=",
             $"/api/riot-accounts/{accountId}/matches",
+            $"/api/riot-accounts/{accountId}/tft/matches",
             "/api/admin/users/",
             "/api/admin/invites/used",
             "/api/admin/storage/replays",

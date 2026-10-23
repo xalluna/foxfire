@@ -8,14 +8,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Features.Ranks;
 
 /// <summary>One ladder's readings over a period, plus the crossings in it.</summary>
-public sealed record GetRankHistoryRequest(Guid RiotAccountId, string QueueType, string? Range)
+/// <param name="Game">Whose ladders the queue type must name: League's on League's routes, TFT's on TFT's.</param>
+public sealed record GetRankHistoryRequest(Guid RiotAccountId, string QueueType, string? Range, Game Game = Game.Lol)
     : IValidatedRequest<RankHistoryResponse>;
 
 internal sealed class GetRankHistoryRequestValidator : AbstractValidator<GetRankHistoryRequest>
 {
     public GetRankHistoryRequestValidator() =>
         RuleFor(x => x.QueueType)
-            .Must(queue => RankedQueues.FromRiotName(queue, Game.Lol) is not null)
+            .Must((request, queue) => RankedQueues.FromRiotName(queue, request.Game) is not null)
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue.");
 }
@@ -38,14 +39,14 @@ internal sealed class GetRankHistoryRequestHandler(FoxfireDbContext db, RankRead
 }
 
 /// <summary>The last thirty days of one ladder, a close a day, for the profile's graph.</summary>
-public sealed record GetRankTrendRequest(Guid RiotAccountId, string QueueType)
+public sealed record GetRankTrendRequest(Guid RiotAccountId, string QueueType, Game Game = Game.Lol)
     : IValidatedRequest<RankTrendResponse>;
 
 internal sealed class GetRankTrendRequestValidator : AbstractValidator<GetRankTrendRequest>
 {
     public GetRankTrendRequestValidator() =>
         RuleFor(x => x.QueueType)
-            .Must(queue => RankedQueues.FromRiotName(queue, Game.Lol) is not null)
+            .Must((request, queue) => RankedQueues.FromRiotName(queue, request.Game) is not null)
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue.");
 }
@@ -67,10 +68,10 @@ internal sealed class GetRankTrendRequestHandler(FoxfireDbContext db, RankReads 
 }
 
 /// <summary>The seasons this account has any history in, for the pickers.</summary>
-public sealed record GetRankPeriodsRequest(Guid RiotAccountId)
+public sealed record GetRankPeriodsRequest(Guid RiotAccountId, Game Game = Game.Lol)
     : IDomainRequest<IReadOnlyList<SeasonResponse>>;
 
-internal sealed class GetRankPeriodsRequestHandler(FoxfireDbContext db, RankReads ranks)
+internal sealed class GetRankPeriodsRequestHandler(FoxfireDbContext db, RankReads ranks, Foxfire.Api.Sync.TftIdentity tftIdentity)
     : IDomainRequestHandler<GetRankPeriodsRequest, IReadOnlyList<SeasonResponse>>
 {
     public async Task<Response<IReadOnlyList<SeasonResponse>>> Handle(
@@ -84,8 +85,14 @@ internal sealed class GetRankPeriodsRequestHandler(FoxfireDbContext db, RankRead
 
         if (account is null) return Response<IReadOnlyList<SeasonResponse>>.NotFound();
 
+        // An account never resolved under a TFT key of its own has no TFT games
+        // here; its readings alone place it, under a puuid nothing is filed by.
+        var puuid = request.Game == Game.Tft
+            ? await tftIdentity.KnownPuuidAsync(account, cancellationToken) ?? string.Empty
+            : account.Puuid;
+
         return Response<IReadOnlyList<SeasonResponse>>.Success(
-            await ranks.PeriodsAsync(request.RiotAccountId, account.Puuid, cancellationToken));
+            await ranks.PeriodsAsync(request.RiotAccountId, puuid, request.Game, cancellationToken));
     }
 }
 

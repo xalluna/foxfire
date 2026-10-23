@@ -21,6 +21,7 @@ public sealed record FinishImportRequest : IDomainRequest<ImportSummary>;
 internal sealed class FinishImportRequestHandler(
     FoxfireDbContext db,
     AttributionRunner attribution,
+    TftIdentity tftIdentity,
     IIdentityContext me,
     ILogger<FinishImportRequestHandler> logger)
     : IDomainRequestHandler<FinishImportRequest, ImportSummary>
@@ -29,15 +30,20 @@ internal sealed class FinishImportRequestHandler(
         FinishImportRequest request,
         CancellationToken cancellationToken)
     {
-        var accounts = await db.RiotAccounts.AsNoTracking()
-            .Select(a => new { a.Id, a.Puuid })
-            .ToListAsync(cancellationToken);
+        var accounts = await db.RiotAccounts.AsNoTracking().ToListAsync(cancellationToken);
 
         var attributed = 0;
 
         foreach (var account in accounts)
         {
             attributed += await attribution.ReplayAsync(account.Id, account.Puuid, null, cancellationToken);
+
+            // And TFT's, under whichever id TFT is filed by here.
+            if (await tftIdentity.KnownPuuidAsync(account, cancellationToken) is { } tftPuuid)
+            {
+                attributed += await attribution.ReplayAsync(
+                    account.Id, Foxfire.Core.Game.Tft, tftPuuid, null, cancellationToken);
+            }
         }
 
         logger.LogInformation(

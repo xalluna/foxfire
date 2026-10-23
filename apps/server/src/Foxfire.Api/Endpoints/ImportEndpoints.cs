@@ -70,6 +70,12 @@ public static class ImportEndpoints
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ImportMatchesRequest(matches), cancellationToken));
 
+        group.MapPost("/tft-matches", (
+                [FromBody] IReadOnlyList<ImportMatch> matches,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new ImportTftMatchesRequest(matches), cancellationToken));
+
         group.MapPost("/rank-readings", (
                 [FromBody] IReadOnlyList<ImportRankReading> readings,
                 ISender sender,

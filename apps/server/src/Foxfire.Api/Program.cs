@@ -217,6 +217,7 @@ builder.Services.AddScoped<IdentityRepair>();
 // through one of these.
 builder.Services.AddScoped<MatchReads>();
 builder.Services.AddScoped<RankReads>();
+builder.Services.AddScoped<TftReads>();
 builder.Services.AddScoped<ManualRankEditor>();
 
 builder.Services.AddSingleton<IServerEvents, SignalRServerEvents>();
@@ -361,6 +362,7 @@ api.MapRiotLinkEndpoints();
 api.MapSyncEndpoints();
 api.MapDashboardEndpoints();
 api.MapRankEndpoints();
+api.MapTftEndpoints();
 api.MapSearchEndpoints();
 api.MapReplayEndpoints();
 

@@ -85,6 +85,23 @@ public sealed class TftIdentity(
     }
 
     /// <summary>
+    /// The account's TFT puuid as far as this server already knows it, without
+    /// asking Riot: the main one while TFT shares the main key, the stored one
+    /// under TFT's own, and null for an account never resolved under it — which
+    /// has no TFT history here to read.
+    /// </summary>
+    public async Task<string?> KnownPuuidAsync(RiotAccount account, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        if (!tft.HasOwnKey) return account.Puuid;
+
+        return await db.ScopedPuuids.AsNoTracking()
+            .Where(s => s.RiotAccountId == account.Id && s.Scope == RiotKeyScope.Tft)
+            .Select(s => s.Puuid)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Re-resolves an account whose TFT puuid Riot no longer decrypts.
     ///
     /// On the main key that is the main puuid, which <see cref="IdentityRepair"/>

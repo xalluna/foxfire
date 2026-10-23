@@ -1,3 +1,4 @@
+using System.Net;
 using Foxfire.Api.Common;
 using Foxfire.Api.Reads;
 using Foxfire.Api.Sync;
@@ -43,14 +44,61 @@ internal sealed class GetEditableGamesRequestHandler(AccountOwnership ownership,
 }
 
 /// <summary>A batch of hand-entered figures for one ladder.</summary>
+/// <summary>
+/// TFT's ranked games with no LP figure, on Ranked or Double Up. Hyper Roll is
+/// refused: it has a rating, not LP, and there is nothing to type.
+/// </summary>
+public sealed record GetTftEditableGamesRequest(Guid RiotAccountId, string QueueType)
+    : IDomainRequest<IReadOnlyList<TftEditableMatchResponse>>;
+
+internal sealed class GetTftEditableGamesRequestHandler(
+    AccountOwnership ownership,
+    ManualRankEditor editor,
+    TftIdentity tftIdentity)
+    : IDomainRequestHandler<GetTftEditableGamesRequest, IReadOnlyList<TftEditableMatchResponse>>
+{
+    public async Task<Response<IReadOnlyList<TftEditableMatchResponse>>> Handle(
+        GetTftEditableGamesRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var account = await ownership.RankWritableAsync(request.RiotAccountId, cancellationToken);
+        if (account is null)
+        {
+            return Response<IReadOnlyList<TftEditableMatchResponse>>.Failure(
+                AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
+        }
+
+        if (RankedQueues.FromRiotName(request.QueueType, Game.Tft) is not { } queue)
+        {
+            return new Error("unknown_queue", $"{request.QueueType} is not a ranked TFT queue.");
+        }
+
+        if (!queue.LpEditable())
+        {
+            return Response<IReadOnlyList<TftEditableMatchResponse>>.Failure(
+                new Error("no_lp", "Hyper Roll has no LP to type."), HttpStatusCode.BadRequest);
+        }
+
+        var puuid = await tftIdentity.KnownPuuidAsync(account, cancellationToken);
+        if (puuid is null) return Response<IReadOnlyList<TftEditableMatchResponse>>.Success([]);
+
+        return Response<IReadOnlyList<TftEditableMatchResponse>>.Success(
+            await editor.TftEditableAsync(request.RiotAccountId, puuid, queue, cancellationToken));
+    }
+}
+
 public sealed record SaveManualRanksRequest(
     Guid RiotAccountId,
     string QueueType,
-    IReadOnlyList<ManualRankEditDto> Edits) : IEmptyDomainRequest;
+    IReadOnlyList<ManualRankEditDto> Edits,
+    Game Game = Game.Lol) : IEmptyDomainRequest;
 
 internal sealed class SaveManualRanksRequestHandler(
     AccountOwnership ownership,
     ManualRankEditor editor,
+    TftIdentity tftIdentity,
     IServerEvents events,
     IIdentityContext me,
     ILogger<SaveManualRanksRequestHandler> logger)
@@ -63,10 +111,16 @@ internal sealed class SaveManualRanksRequestHandler(
         var account = await ownership.RankWritableAsync(request.RiotAccountId, cancellationToken);
         if (account is null) return Response.Failure(AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
 
-        if (RankedQueues.FromRiotName(request.QueueType, Game.Lol) is not { } queue)
+        if (RankedQueues.FromRiotName(request.QueueType, request.Game) is not { } queue)
         {
             return new Error("unknown_queue", $"{request.QueueType} is not a ranked queue.");
         }
+
+        var puuid = request.Game == Game.Tft
+            ? await tftIdentity.KnownPuuidAsync(account, cancellationToken)
+            : account.Puuid;
+
+        if (puuid is null) return new Error("invalid_rank", "This account has no TFT games on this server yet.");
 
         // A tier that is not a tier is the one thing ManualRank cannot hold, so
         // it is refused for the batch rather than dropped from it: a save that
@@ -77,7 +131,7 @@ internal sealed class SaveManualRanksRequestHandler(
 
         var problem = await editor.SaveAsync(
             request.RiotAccountId,
-            account.Puuid,
+            puuid,
             queue,
             [.. edits.Select(e => e!)],
             cancellationToken);
@@ -108,6 +162,7 @@ public sealed record ClearManualRankRequest(Guid RiotAccountId, string MatchId) 
 internal sealed class ClearManualRankRequestHandler(
     AccountOwnership ownership,
     ManualRankEditor editor,
+    TftIdentity tftIdentity,
     IServerEvents events,
     IIdentityContext me,
     ILogger<ClearManualRankRequestHandler> logger)
@@ -120,8 +175,14 @@ internal sealed class ClearManualRankRequestHandler(
         var account = await ownership.RankWritableAsync(request.RiotAccountId, cancellationToken);
         if (account is null) return Response.Failure(AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
 
+        // Whichever game the entry was typed on, against its puuid there.
         var cleared = await editor.ClearAsync(
-            request.RiotAccountId, account.Puuid, request.MatchId, cancellationToken);
+            request.RiotAccountId,
+            game => game == Game.Tft
+                ? tftIdentity.KnownPuuidAsync(account, cancellationToken)
+                : Task.FromResult<string?>(account.Puuid),
+            request.MatchId,
+            cancellationToken);
 
         if (!cleared) return Response.NotFound();
 
