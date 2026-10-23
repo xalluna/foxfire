@@ -31,10 +31,14 @@ public sealed class CoPlayerRanks(
     FoxfireDbContext db,
     RankRecorder ranks,
     AttributionRunner attribution,
+    TftIdentity tftIdentity,
     IServerEvents events,
     TimeProvider time,
     ILogger<CoPlayerRanks> log)
 {
+    /// <summary>A co-player and the game they shared, as far as reading them needs.</summary>
+    private sealed record Shared(Guid AccountId, string Puuid, int? QueueId, long End);
+
     /// <summary>
     /// Reads every tracked account other than <paramref name="syncedAccountId"/>
     /// that played one of <paramref name="matchIds"/> on a ranked ladder and has
@@ -46,7 +50,20 @@ public sealed class CoPlayerRanks(
     /// fail the same way.
     /// </summary>
     /// <param name="syncing">Whether an account's own sync is running right now.</param>
+    public Task<int> ReadAsync(
+        Guid syncedAccountId,
+        IReadOnlyCollection<string> matchIds,
+        Func<Guid, bool> syncing,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(Game.Lol, syncedAccountId, matchIds, syncing, priority, cancellationToken);
+
+    /// <summary>
+    /// The same for one game's games: League's co-players from its participants,
+    /// TFT's from its boards, each read on that game's ladders.
+    /// </summary>
     public async Task<int> ReadAsync(
+        Game game,
         Guid syncedAccountId,
         IReadOnlyCollection<string> matchIds,
         Func<Guid, bool> syncing,
@@ -58,6 +75,65 @@ public sealed class CoPlayerRanks(
 
         if (matchIds.Count == 0) return 0;
 
+        var shared = game == Game.Tft
+            ? await SharedTftAsync(syncedAccountId, matchIds, cancellationToken)
+            : await SharedLolAsync(syncedAccountId, matchIds, cancellationToken);
+
+        var read = 0;
+
+        foreach (var coPlayer in shared.GroupBy(x => x.AccountId))
+        {
+            if (syncing(coPlayer.Key)) continue;
+
+            var ends = coPlayer
+                .GroupBy(x => RankedQueues.FromQueueId(x.QueueId)!.Value)
+                .Select(ladder => (Queue: ladder.Key, End: ladder.Max(x => x.End)));
+
+            if (!await NeedsReadingAsync(coPlayer.Key, ends, cancellationToken)) continue;
+
+            var account = await db.RiotAccounts.FirstOrDefaultAsync(a => a.Id == coPlayer.Key, cancellationToken);
+            if (account is null) continue;
+
+            try
+            {
+                var since = time.GetUtcNow().ToUnixTimeMilliseconds() - AttributionRunner.ReplayWindowMs;
+
+                if (game == Game.Tft)
+                {
+                    var puuid = coPlayer.First().Puuid;
+                    await ranks.RefreshTftFromRiotAsync(account, puuid, priority, cancellationToken);
+                    await attribution.ReplayAsync(account.Id, Game.Tft, puuid, since, cancellationToken);
+                }
+                else
+                {
+                    await ranks.RefreshFromRiotAsync(account, priority, cancellationToken);
+                    await attribution.ReplayAsync(account.Id, account.Puuid, since, cancellationToken);
+                }
+
+                // Their history gained the game as well as, perhaps, its LP, and
+                // the sync that stored it only announced the account it ran for.
+                await events.RankChangedAsync(account.Id, cancellationToken);
+                read++;
+            }
+            catch (RiotApiException ex) when (ex.IsKeyRejection || ex.NoProductAccess)
+            {
+                log.LogDebug("Stopped reading co-players' rank: Riot refused this server's key");
+                break;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogDebug(ex, "Rank reading failed for co-player {RiotId}", account.RiotId);
+            }
+        }
+
+        return read;
+    }
+
+    private async Task<IReadOnlyList<Shared>> SharedLolAsync(
+        Guid syncedAccountId,
+        IReadOnlyCollection<string> matchIds,
+        CancellationToken cancellationToken)
+    {
         var rankedQueueIds = RankedQueues.Of(Game.Lol).Select(q => q.QueueId()).ToList();
 
         // A remake moves no LP, so a co-player who only shared one has nothing to
@@ -74,49 +150,46 @@ public sealed class CoPlayerRanks(
                 db.RiotAccounts.AsNoTracking(),
                 x => x.Puuid,
                 a => a.Puuid,
-                (x, a) => new { AccountId = a.Id, x.QueueId, x.GameCreation, x.GameDuration })
+                (x, a) => new { AccountId = a.Id, x.Puuid, x.QueueId, x.GameCreation, x.GameDuration })
             .Where(x => x.AccountId != syncedAccountId)
             .ToListAsync(cancellationToken);
 
-        var read = 0;
+        return [.. played.Select(x => new Shared(x.AccountId, x.Puuid, x.QueueId, GameTimes.End(x.GameCreation, x.GameDuration)))];
+    }
 
-        foreach (var coPlayer in played.GroupBy(x => x.AccountId))
-        {
-            if (syncing(coPlayer.Key)) continue;
+    /// <summary>
+    /// TFT's co-players: the other boards in the games, each placed at that
+    /// player's own elimination, which is when their LP moved.
+    /// </summary>
+    private async Task<IReadOnlyList<Shared>> SharedTftAsync(
+        Guid syncedAccountId,
+        IReadOnlyCollection<string> matchIds,
+        CancellationToken cancellationToken)
+    {
+        var rankedQueueIds = RankedQueues.Of(Game.Tft).Select(q => q.QueueId()).ToList();
 
-            var ends = coPlayer
-                .GroupBy(x => RankedQueues.FromQueueId(x.QueueId)!.Value)
-                .Select(ladder => (Queue: ladder.Key, End: ladder.Max(x => GameTimes.End(x.GameCreation, x.GameDuration))));
+        var played = await db.TftParticipants.AsNoTracking()
+            .Where(p => matchIds.Contains(p.MatchId))
+            .Join(
+                db.Matches.AsNoTracking(),
+                p => p.MatchId,
+                m => m.MatchId,
+                (p, m) => new { p.Puuid, m.QueueId, m.GameCreation, m.GameDuration, p.TimeEliminated })
+            .Where(x => x.QueueId != null && rankedQueueIds.Contains(x.QueueId.Value))
+            .ToListAsync(cancellationToken);
 
-            if (!await NeedsReadingAsync(coPlayer.Key, ends, cancellationToken)) continue;
+        var accounts = await tftIdentity.AccountsByPuuidAsync([.. played.Select(x => x.Puuid).Distinct()], cancellationToken);
 
-            var account = await db.RiotAccounts.FirstOrDefaultAsync(a => a.Id == coPlayer.Key, cancellationToken);
-            if (account is null) continue;
-
-            try
-            {
-                await ranks.RefreshFromRiotAsync(account, priority, cancellationToken);
-
-                var since = time.GetUtcNow().ToUnixTimeMilliseconds() - AttributionRunner.ReplayWindowMs;
-                await attribution.ReplayAsync(account.Id, account.Puuid, since, cancellationToken);
-
-                // Their history gained the game as well as, perhaps, its LP, and
-                // the sync that stored it only announced the account it ran for.
-                await events.RankChangedAsync(account.Id, cancellationToken);
-                read++;
-            }
-            catch (RiotApiException ex) when (ex.IsKeyRejection)
-            {
-                log.LogDebug("Stopped reading co-players' rank: Riot rejected this server's API key");
-                break;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                log.LogDebug(ex, "Rank reading failed for co-player {RiotId}", account.RiotId);
-            }
-        }
-
-        return read;
+        return
+        [
+            .. played
+                .Where(x => accounts.TryGetValue(x.Puuid, out var id) && id != syncedAccountId)
+                .Select(x => new Shared(
+                    accounts[x.Puuid],
+                    x.Puuid,
+                    x.QueueId,
+                    TftPlacements.GameEnd(x.GameCreation, x.TimeEliminated, x.GameDuration)))
+        ];
     }
 
     /// <summary>

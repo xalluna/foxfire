@@ -71,6 +71,26 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
     }
 
     /// <summary>
+    /// How many TFT matches a newly linked account backfills — the same default
+    /// as League's, and a setting of its own, because a host whose community
+    /// barely plays TFT may well want to spend less of the key on it.
+    /// </summary>
+    public async Task<int> GetTftBackfillTargetAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.TftBackfillTarget, cancellationToken);
+        return int.TryParse(raw, out var value) && value > 0 ? value : BackfillTargetDefault;
+    }
+
+    public Task SetTftBackfillTargetAsync(int matches, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.TftBackfillTarget, matches.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    /// <summary>One game's backfill target.</summary>
+    public Task<int> GetBackfillTargetAsync(Foxfire.Core.Game game, CancellationToken cancellationToken = default) =>
+        game == Foxfire.Core.Game.Tft
+            ? GetTftBackfillTargetAsync(cancellationToken)
+            : GetBackfillTargetAsync(cancellationToken);
+
+    /// <summary>
     /// The attribution rule the stored LP figures were built under.
     ///
     /// 1 when never written: every server from before the rule had a number

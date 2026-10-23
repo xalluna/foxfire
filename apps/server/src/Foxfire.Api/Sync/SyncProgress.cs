@@ -59,6 +59,11 @@ public enum SyncPhase
 /// for that round trip between the spinner stopping and the new time arriving.
 /// The desktop's own event never carries it: this PC alone has no cooldown.
 /// </param>
+/// <param name="Game">
+/// Whose history the sync is of, as a slug. Last, and League by default, so a
+/// desktop from before TFT reads every event it always did — and reads a TFT
+/// sync's as its account's, which costs it a spinner and nothing else.
+/// </param>
 public sealed record SyncProgressEvent(
     Guid AccountId,
     SyncPhase Phase,
@@ -66,7 +71,8 @@ public sealed record SyncProgressEvent(
     int Total,
     string? Message,
     SyncTrigger Trigger,
-    DateTimeOffset? CooldownUntil = null);
+    DateTimeOffset? CooldownUntil = null,
+    string Game = "lol");
 
 /// <summary>
 /// Everything this server tells the desktops connected to it.

@@ -11,7 +11,8 @@ namespace Foxfire.Api.Features.ServerSettings;
 public sealed record ServerSettingsResponse(
     bool PublicSignup,
     int BackfillTarget,
-    long ReplayByteCap)
+    long ReplayByteCap,
+    int TftBackfillTarget)
 {
     /// <summary>
     /// Reads all three, so the two handlers that answer with this cannot drift
@@ -22,7 +23,8 @@ public sealed record ServerSettingsResponse(
         CancellationToken cancellationToken) =>
         new(await settings.IsPublicSignupEnabledAsync(cancellationToken),
             await settings.GetBackfillTargetAsync(cancellationToken),
-            await settings.GetReplayByteCapAsync(cancellationToken));
+            await settings.GetReplayByteCapAsync(cancellationToken),
+            await settings.GetTftBackfillTargetAsync(cancellationToken));
 }
 
 /// <summary>What this server currently allows.</summary>

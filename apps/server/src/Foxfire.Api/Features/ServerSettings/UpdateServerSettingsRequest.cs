@@ -14,10 +14,12 @@ namespace Foxfire.Api.Features.ServerSettings;
 /// <param name="PublicSignup">Null leaves it alone.</param>
 /// <param name="BackfillTarget">Null leaves it alone.</param>
 /// <param name="ReplayByteCap">Null leaves it alone. Zero removes the cap.</param>
+/// <param name="TftBackfillTarget">Null leaves it alone.</param>
 public sealed record UpdateServerSettingsRequest(
     bool? PublicSignup,
     int? BackfillTarget,
-    long? ReplayByteCap) : IValidatedRequest<ServerSettingsResponse>;
+    long? ReplayByteCap,
+    int? TftBackfillTarget = null) : IValidatedRequest<ServerSettingsResponse>;
 
 internal sealed class UpdateServerSettingsRequestHandler(
     ServerSettingsService settings,
@@ -53,6 +55,12 @@ internal sealed class UpdateServerSettingsRequestHandler(
             await settings.SetReplayByteCapAsync(cap, cancellationToken);
         }
 
+        if (request.TftBackfillTarget is { } tftTarget)
+        {
+            await settings.SetTftBackfillTargetAsync(tftTarget, cancellationToken);
+            logger.LogInformation("TFT backfill target is now {Target} matches", tftTarget);
+        }
+
         return await ServerSettingsResponse.ReadAsync(settings, cancellationToken);
     }
 }
@@ -77,5 +85,11 @@ internal sealed class UpdateServerSettingsRequestValidator : AbstractValidator<U
             .WithMessage(
                 "A backfill target is between 1 and 1000 matches. Remember it is roughly one Riot "
                 + "request per match, out of about a hundred every two minutes for the whole server.");
+
+        RuleFor(x => x.TftBackfillTarget)
+            .InclusiveBetween(1, 1000)
+            .When(x => x.TftBackfillTarget is not null)
+            .WithErrorCode("invalid_tft_backfill_target")
+            .WithMessage("A TFT backfill target is between 1 and 1000 matches, on the same budget as League's.");
     }
 }

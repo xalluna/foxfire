@@ -20,7 +20,8 @@ public sealed record InsightsSyncRun(
     int Stored,
     int Failed,
     string Outcome,
-    string? Error);
+    string? Error,
+    string Game);
 
 /// <param name="Failed">Runs that threw.</param>
 /// <param name="Partial">Runs that stored some matches and missed others.</param>
@@ -131,7 +132,8 @@ internal sealed class GetInsightsSyncRequestHandler(
                     r.Stored,
                     r.Failed,
                     r.Outcome,
-                    r.Error))
+                    r.Error,
+                    r.Game))
             ]);
     }
 }

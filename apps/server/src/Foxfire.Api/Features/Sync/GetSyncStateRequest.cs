@@ -49,7 +49,7 @@ public sealed record SyncStateResponse(
 /// somebody else's account is not a secret, and hiding it would make a shared
 /// history look broken while it filled in.
 /// </summary>
-public sealed record GetSyncStateRequest(Guid RiotAccountId) : IDomainRequest<SyncStateResponse>;
+public sealed record GetSyncStateRequest(Guid RiotAccountId, string? Game = null) : IDomainRequest<SyncStateResponse>;
 
 internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncService sync)
     : IDomainRequestHandler<GetSyncStateRequest, SyncStateResponse>
@@ -61,10 +61,12 @@ internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncServic
         ArgumentNullException.ThrowIfNull(request);
 
         var id = request.RiotAccountId;
+        if (!GameParam.IsValid(request.Game)) return Response<SyncStateResponse>.NotFound();
+        var game = GameParam.Parse(request.Game);
 
         var state = await db.SyncStates
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.RiotAccountId == id && s.Game == Game.Lol, cancellationToken);
+            .FirstOrDefaultAsync(s => s.RiotAccountId == id && s.Game == game, cancellationToken);
 
         if (state is null)
         {
@@ -73,9 +75,9 @@ internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncServic
 
             // Linked but never synced. A null row and a zeroed one say the same
             // thing to the desktop, and the zeroed one saves it a special case.
-            return new SyncStateResponse(id, null, false, 0, null, null, sync.IsSyncing(id), null);
+            return new SyncStateResponse(id, null, false, 0, null, null, sync.IsSyncing(id, game), null, game.Slug());
         }
 
-        return SyncStateResponse.Describe(state, sync.IsSyncing(id));
+        return SyncStateResponse.Describe(state, sync.IsSyncing(id, game));
     }
 }

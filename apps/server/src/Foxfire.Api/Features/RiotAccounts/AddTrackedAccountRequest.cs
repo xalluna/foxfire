@@ -150,6 +150,10 @@ internal sealed class AddTrackedAccountRequestHandler(
         // second knob for admin-added accounts to disagree with.
         _ = sync.SyncAsync(account.Id, SyncTrigger.Manual, CancellationToken.None);
 
+        // And TFT's, on its own run: the same Riot ID has a second history, and
+        // a League-only player's costs one empty id list.
+        _ = sync.SyncAsync(account.Id, Foxfire.Core.Game.Tft, SyncTrigger.Manual, CancellationToken.None);
+
         return RiotAccountResponse.Describe(account, me.UserId);
     }
 }

@@ -205,6 +205,8 @@ builder.Services.AddScoped<ServerSettingsService>();
 // little logic on top of it; the engine that drives them is not, because a
 // sync outlives the request that asked for it.
 builder.Services.AddScoped<MatchIngestion>();
+builder.Services.AddScoped<TftMatchIngestion>();
+builder.Services.AddScoped<TftIdentity>();
 builder.Services.AddScoped<RankRecorder>();
 builder.Services.AddScoped<AccountProfile>();
 builder.Services.AddScoped<AttributionRunner>();

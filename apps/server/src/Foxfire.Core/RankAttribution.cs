@@ -42,15 +42,22 @@ public sealed record RankReading(
 /// an interval — and worse, must not make an otherwise unambiguous interval look
 /// like it holds two.
 /// </param>
+/// <param name="EndedAt">
+/// Where the game is placed, when that is not its creation plus its length. A
+/// TFT game ends, for the player, when they are knocked out — which is when LP
+/// moves — and the lobby can play on for twenty minutes after; see
+/// <see cref="TftPlacements.GameEnd"/>.
+/// </param>
 public sealed record RankedMatch(
     string MatchId,
     long GameCreation,
     int GameDuration,
     int QueueId,
-    bool EndedInEarlySurrender)
+    bool EndedInEarlySurrender,
+    long? EndedAt = null)
 {
     /// <summary>Where attribution places the game. See <see cref="GameTimes"/>.</summary>
-    public long GameEnd => GameTimes.End(GameCreation, GameDuration);
+    public long GameEnd => EndedAt ?? GameTimes.End(GameCreation, GameDuration);
 }
 
 /// <summary>What attribution decided a game was worth.</summary>

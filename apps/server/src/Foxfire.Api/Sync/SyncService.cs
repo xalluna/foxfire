@@ -39,7 +39,7 @@ public sealed record SyncResult(int Stored, int Failed);
 /// second caller gets the first run's result, which is the honest answer to "did
 /// anything land".
 /// </summary>
-public sealed class SyncService(
+public sealed partial class SyncService(
     IServiceScopeFactory scopes,
     IServerEvents events,
     ServerMetrics metrics,
@@ -48,12 +48,15 @@ public sealed class SyncService(
     ILogger<SyncService> log)
 {
     private readonly Lock _gate = new();
-    private readonly Dictionary<Guid, Task<SyncResult>> _inFlight = [];
+    private readonly Dictionary<(Guid, Game), Task<SyncResult>> _inFlight = [];
 
-    /// <summary>Whether a run is under way for this account.</summary>
-    public bool IsSyncing(Guid riotAccountId)
+    /// <summary>Whether a League run is under way for this account — what every caller from before TFT asks.</summary>
+    public bool IsSyncing(Guid riotAccountId) => IsSyncing(riotAccountId, Game.Lol);
+
+    /// <summary>Whether a run of this game's history is under way for this account.</summary>
+    public bool IsSyncing(Guid riotAccountId, Game game)
     {
-        lock (_gate) return _inFlight.ContainsKey(riotAccountId);
+        lock (_gate) return _inFlight.ContainsKey((riotAccountId, game));
     }
 
     /// <summary>How many runs are under way, for the insights page.</summary>
@@ -74,16 +77,29 @@ public sealed class SyncService(
     public Task<SyncResult> SyncAsync(
         Guid riotAccountId,
         SyncTrigger trigger,
+        CancellationToken cancellationToken = default) =>
+        SyncAsync(riotAccountId, Game.Lol, trigger, cancellationToken);
+
+    /// <summary>
+    /// Syncs one game's history for an account. Each game's runs are joined and
+    /// tracked on their own: a TFT backfill holds up nobody's League sync, and a
+    /// League post-game ladder never spends TFT calls.
+    /// </summary>
+    public Task<SyncResult> SyncAsync(
+        Guid riotAccountId,
+        Game game,
+        SyncTrigger trigger,
         CancellationToken cancellationToken = default)
     {
         Task<SyncResult> run;
+        var key = (riotAccountId, game);
 
         lock (_gate)
         {
-            if (_inFlight.TryGetValue(riotAccountId, out var running)) return running;
+            if (_inFlight.TryGetValue(key, out var running)) return running;
 
-            run = Task.Run(() => RunGuardedAsync(riotAccountId, trigger), CancellationToken.None);
-            _inFlight[riotAccountId] = run;
+            run = Task.Run(() => RunGuardedAsync(riotAccountId, game, trigger), CancellationToken.None);
+            _inFlight[key] = run;
         }
 
         // Registered after the add, so the entry can never be cleared before it
@@ -93,7 +109,7 @@ public sealed class SyncService(
         _ = run.ContinueWith(
             _ =>
             {
-                lock (_gate) _inFlight.Remove(riotAccountId);
+                lock (_gate) _inFlight.Remove(key);
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
@@ -102,7 +118,7 @@ public sealed class SyncService(
         return run.WaitAsync(cancellationToken);
     }
 
-    private async Task<SyncResult> RunGuardedAsync(Guid riotAccountId, SyncTrigger trigger)
+    private async Task<SyncResult> RunGuardedAsync(Guid riotAccountId, Game game, SyncTrigger trigger)
     {
         // On every line the run writes, from here down through the Riot client
         // and the ingestion it calls — so a sync can be followed on its own, and
@@ -110,7 +126,8 @@ public sealed class SyncService(
         using var _ = log.BeginScope(new Dictionary<string, object>
         {
             ["RiotAccountId"] = riotAccountId,
-            ["SyncTrigger"] = trigger
+            ["SyncTrigger"] = trigger,
+            ["Game"] = game.Slug()
         });
 
         // Filled in by the run as it learns what it is, and read here whichever
@@ -124,7 +141,9 @@ public sealed class SyncService(
 
         try
         {
-            var result = await RunAsync(riotAccountId, trigger, run);
+            var result = game == Game.Tft
+                ? await RunTftAsync(riotAccountId, trigger, run)
+                : await RunAsync(riotAccountId, trigger, run);
             outcome = result.Failed > 0 ? "partial" : "ok";
             return result;
         }
@@ -132,9 +151,9 @@ public sealed class SyncService(
         {
             log.LogError(ex, "Sync failed for Riot account {RiotAccountId}", riotAccountId);
 
-            error = Describe(ex);
+            error = Describe(ex, game);
             await events.SyncProgressAsync(new SyncProgressEvent(
-                riotAccountId, SyncPhase.Error, 0, 0, error, trigger));
+                riotAccountId, SyncPhase.Error, 0, 0, error, trigger, Game: game.Slug()));
 
             throw;
         }
@@ -146,7 +165,7 @@ public sealed class SyncService(
             metrics.SyncFinished(triggerName, run.Kind, outcome, elapsed, run.Stored, run.Failed);
             recent.Add(new SyncRunRecord(
                 riotAccountId, run.RiotId, triggerName, run.Kind, startedAt, elapsed,
-                run.Stored, run.Failed, outcome, error));
+                run.Stored, run.Failed, outcome, error, game.Slug()));
         }
     }
 
@@ -171,8 +190,12 @@ public sealed class SyncService(
     /// this server's bug, and its exception text is for the log rather than for
     /// somebody's screen.
     /// </summary>
-    private static string Describe(Exception ex) => ex switch
+    private static string Describe(Exception ex, Game game) => ex switch
     {
+        RiotApiException { NoProductAccess: true } =>
+            "This server's Riot key has no TFT access. Its administrator can add a TFT key.",
+        RiotApiException { IsKeyRejection: true } when game == Game.Tft =>
+            "This server's Riot key for TFT is not working. Its administrator needs to replace it.",
         RiotApiException { IsKeyRejection: true } =>
             "This server's Riot API key is not working. Its administrator needs to replace it.",
         RiotApiException { Status: 429 } =>
@@ -199,7 +222,7 @@ public sealed class SyncService(
         var account = await db.RiotAccounts.FirstOrDefaultAsync(a => a.Id == riotAccountId)
             ?? throw new InvalidOperationException($"Unknown Riot account {riotAccountId}");
 
-        var state = await EnsureSyncStateAsync(db, settings, riotAccountId);
+        var state = await EnsureSyncStateAsync(db, settings, riotAccountId, Game.Lol);
         var isBackfill = !state.BackfillComplete;
         var phase = isBackfill ? SyncPhase.Backfill : SyncPhase.Delta;
 
@@ -483,19 +506,21 @@ public sealed class SyncService(
     private static async Task<SyncState> EnsureSyncStateAsync(
         FoxfireDbContext db,
         ServerSettingsService settings,
-        Guid riotAccountId)
+        Guid riotAccountId,
+        Game game)
     {
-        var state = await db.SyncStates.FirstOrDefaultAsync(s => s.RiotAccountId == riotAccountId && s.Game == Game.Lol);
+        var state = await db.SyncStates.FirstOrDefaultAsync(s => s.RiotAccountId == riotAccountId && s.Game == game);
         if (state is not null) return state;
 
         state = new SyncState
         {
             RiotAccountId = riotAccountId,
+            Game = game,
 
             // Copied onto the row rather than read live, so an admin lowering the
             // server-wide figure cannot retroactively declare a half-finished
             // backfill complete.
-            BackfillTarget = await settings.GetBackfillTargetAsync()
+            BackfillTarget = await settings.GetBackfillTargetAsync(game)
         };
 
         db.SyncStates.Add(state);
@@ -509,7 +534,7 @@ public sealed class SyncService(
         {
             // Another run created it first.
             db.Entry(state).State = EntityState.Detached;
-            return await db.SyncStates.FirstAsync(s => s.RiotAccountId == riotAccountId && s.Game == Game.Lol);
+            return await db.SyncStates.FirstAsync(s => s.RiotAccountId == riotAccountId && s.Game == game);
         }
     }
 

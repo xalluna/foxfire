@@ -44,6 +44,25 @@ Teamfight Tactics, beside League.
   key, so it never stops League syncing. The server probes TFT at boot, logs a
   warning once when it cannot reach it, and `/health` says `tftAccess`. Both
   settings are in docker-compose and `.env.example`.
+- Syncs are per account and per game. A TFT sync fetches TFT's games and
+  boards, reads TFT's ladders (Hyper Roll's colour and rating included),
+  attributes LP and reads co-players, on its own sync state, its own cooldown
+  and its own post-game ladder — a longer one, since Riot publishes a TFT match
+  only when its whole lobby is done. `POST /api/sync/{id}` and `GET` take
+  `?game=tft`; `POST /api/sync/game-ended` and `/api/rank-readings` take a
+  `game`, and without one mean League, which is what a desktop from before TFT
+  sends. Progress events carry the game.
+- A TFT game is placed at its player's own elimination, not the end of its
+  lobby. TFT moves LP the moment somebody is knocked out, and the lobby can play
+  on for twenty minutes.
+- With a TFT key of its own, every account gets a puuid under that key, and TFT
+  games are filed under it; taking the key away moves them back. A dead TFT
+  puuid is re-resolved like a dead League one.
+- An admin-added account backfills TFT as well as League. The TFT backfill
+  target is a setting of its own (`tftBackfillTarget`, default 200).
+- League's rank refresh keeps League's ladders. It used to store whatever
+  league-v4 answered with.
+- The insights page's recent syncs say which game each was.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.
