@@ -36,6 +36,14 @@ Teamfight Tactics, beside League.
   before TFT saving its season list replaces League's and never touches TFT's.
 - League's dashboard, match page, season periods and sync state read League's
   rows alone.
+- The server talks to Riot's TFT API — matches, league entries and status —
+  with its main key, or with `Riot__Tft__ApiKey` when a host sets one, on a
+  queue of its own under `Riot__Tft__KeyType`'s limits. A key registered for
+  League alone gets a 403 from every TFT endpoint, the same status an expired
+  key gets; on the main key that is read as "no TFT here" rather than a refused
+  key, so it never stops League syncing. The server probes TFT at boot, logs a
+  warning once when it cannot reach it, and `/health` says `tftAccess`. Both
+  settings are in docker-compose and `.env.example`.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.

@@ -93,6 +93,29 @@ public sealed class RiotOptions
     /// the key is not one just means collecting 429s faster.
     /// </summary>
     public string KeyType { get; set; } = "personal";
+
+    /// <summary>
+    /// A key of TFT's own, for a server whose main key cannot reach TFT.
+    ///
+    /// Riot ties a registered key to a product, so a key registered for League
+    /// alone is refused by every TFT endpoint. Left empty, TFT is called with
+    /// the main key, which is right for a development key and for a product
+    /// registered for both. Set, TFT gets its own key, its own queue under its
+    /// own limits, and — since Riot encrypts a puuid per key — a second puuid
+    /// for every account.
+    /// </summary>
+    public TftRiotOptions Tft { get; set; } = new();
+}
+
+/// <summary>The optional TFT key, read from <c>Riot__Tft__ApiKey</c> and <c>Riot__Tft__KeyType</c>.</summary>
+public sealed class TftRiotOptions
+{
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>"personal" or "application", as for the main key.</summary>
+    public string KeyType { get; set; } = "personal";
+
+    public bool IsSet => !string.IsNullOrWhiteSpace(ApiKey);
 }
 
 /// <summary>Signing keys and token lifetimes.</summary>
@@ -358,6 +381,11 @@ public static class ConfigurationCheck
         if (riot.KeyType is not ("personal" or "application"))
         {
             problems.Add($"Riot__KeyType must be 'personal' or 'application', not '{riot.KeyType}'.");
+        }
+
+        if (riot.Tft.IsSet && riot.Tft.KeyType is not ("personal" or "application"))
+        {
+            problems.Add($"Riot__Tft__KeyType must be 'personal' or 'application', not '{riot.Tft.KeyType}'.");
         }
 
         CheckSigningKey(problems, "Auth__JwtSigningKey", auth.JwtSigningKey);

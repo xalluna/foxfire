@@ -76,12 +76,12 @@ internal sealed class GetVersionRequestHandler(
 }
 
 /// <summary>Whether the server can currently reach Riot, and how busy the queue is.</summary>
-public sealed record HealthResponse(string Status, bool RiotKeyRejected, int QueueDepth);
+public sealed record HealthResponse(string Status, bool RiotKeyRejected, int QueueDepth, string TftAccess);
 
 /// <summary>The health check, which a container orchestrator and a curl both read.</summary>
 public sealed record GetHealthRequest : IDomainRequest<HealthResponse>;
 
-internal sealed class GetHealthRequestHandler(Foxfire.Riot.RiotClient riot)
+internal sealed class GetHealthRequestHandler(Foxfire.Riot.RiotClient riot, Foxfire.Api.Sync.TftAccess tft)
     : IDomainRequestHandler<GetHealthRequest, HealthResponse>
 {
     public Task<Response<HealthResponse>> Handle(GetHealthRequest request, CancellationToken cancellationToken)
@@ -96,6 +96,9 @@ internal sealed class GetHealthRequestHandler(Foxfire.Riot.RiotClient riot)
         return Task.FromResult<Response<HealthResponse>>(new HealthResponse(
             Status: rejected ? "degraded" : "healthy",
             RiotKeyRejected: rejected,
-            QueueDepth: riot.Limiter.QueueDepth));
+            QueueDepth: riot.Limiter.QueueDepth,
+            // Never the status: a server whose key has no TFT is a League
+            // server, and healthy at being one.
+            TftAccess: tft.Slug));
     }
 }
