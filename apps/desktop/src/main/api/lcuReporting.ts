@@ -1,12 +1,16 @@
 import { getDb } from '../db'
-import { getAccountByRiotId } from '../db/repositories/accounts.repo'
+import { getAccountById, getAccountByRiotId } from '../db/repositories/accounts.repo'
 import { recordRankSnapshot } from '../services/rankHistoryService'
-import { refreshRank } from '../services/accountService'
+import { refreshRank, refreshTftRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
 import { authedRequest, isServerMode } from '../services/serverService'
 import { startAllSyncs } from '../services/syncService'
-import type { GameId } from '@foxfire/core'
-import type { Account, QueueType } from '@shared/types'
+import { resolveTftPuuid } from '../services/tftIdentity'
+import { LADDERS, type GameId } from '@foxfire/core'
+import type { LcuRankReading } from '../lcu/rankedStats'
+import type { Account } from '@shared/types'
+
+export type { LcuRankReading } from '../lcu/rankedStats'
 
 /**
  * What the League client watcher does with what it sees, wherever the data lives.
@@ -49,22 +53,13 @@ export interface LcuReporting {
   gameEnded(accountId: string, game?: GameId): Promise<void>
 
   /**
-   * Refreshes the account's current standing after a reading moved.
+   * Refreshes the account's current standing in one game after a reading of
+   * it moved.
    *
    * Best-effort and never awaited for its result: the reading is already
    * recorded, and this only brings the profile card into line with it.
    */
-  refreshStanding(accountId: string): Promise<void>
-}
-
-/** A reading as the League client reports it. */
-export interface LcuRankReading {
-  queueType: QueueType
-  tier: string | null
-  rank: string | null
-  leaguePoints: number | null
-  wins: number | null
-  losses: number | null
+  refreshStanding(accountId: string, game?: GameId): Promise<void>
 }
 
 const localReporting: LcuReporting = {
@@ -80,8 +75,15 @@ const localReporting: LcuReporting = {
     schedulePostGameSync(Number(accountId), game)
   },
 
-  refreshStanding: async (accountId) => {
-    await refreshRank(Number(accountId))
+  refreshStanding: async (accountId, game = 'lol') => {
+    if (game === 'lol') {
+      await refreshRank(Number(accountId))
+      return
+    }
+
+    const db = getDb()
+    const account = getAccountById(db, Number(accountId))
+    if (account) await refreshTftRank(account.id, await resolveTftPuuid(db, account))
   }
 }
 
@@ -119,7 +121,12 @@ const serverReporting: LcuReporting = {
         leaguePoints: reading.leaguePoints,
         wins: reading.wins,
         losses: reading.losses,
-        force
+        force,
+        // TFT's say so, and Hyper Roll's carry its colour and rating; League's
+        // reading goes as it always did, which a server from before TFT reads.
+        ...(LADDERS[reading.queueType].game === 'tft'
+          ? { game: 'tft', ratedTier: reading.ratedTier ?? null, ratedRating: reading.ratedRating ?? null }
+          : {})
       }
     })
 

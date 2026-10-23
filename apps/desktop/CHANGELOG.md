@@ -40,6 +40,10 @@ Teamfight Tactics, beside League.
   beside its League history, reads TFT's ladders, works out the LP each game moved and lets you
   type the ones it cannot, exactly as it does for League. A game ending starts the search for it,
   waiting longer for TFT, whose games Riot publishes only once the whole lobby is done.
+- **TFT's LP from the League client.** With the client open, Foxfire reads your TFT ranks the
+  way it reads League's — Hyper Roll's colour and rating too — so each TFT game's LP lands as you
+  finish, connected to a server or not. Leaving a TFT game early with "Exit now" counts as
+  finishing it.
 
 ### Under the hood
 
@@ -73,6 +77,8 @@ Teamfight Tactics, beside League.
   syncs, and its games move with it; taking the key away moves them back. League's identity
   repair after a new main key carries TFT's games along too while the two share it.
 - League's rank refresh keeps League's ladders, and TFT's keeps TFT's.
+- The League client watcher tells TFT from League by the gameflow session's mode and map, and
+  logs each game's session once, with the ranked readings after it, at debug level.
 
 ## [0.16.1] — 2026-09-27
 

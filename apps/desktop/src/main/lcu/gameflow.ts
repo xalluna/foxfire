@@ -8,6 +8,8 @@
  * a real game.
  */
 
+import type { GameId } from '@foxfire/core'
+
 /** Phases during which the player is in a game that has not yet concluded. */
 const PLAYING_PHASES = ['InProgress', 'Reconnect'] as const
 
@@ -40,9 +42,18 @@ function isEndPhase(phase: string | null): boolean {
  * - Passing through several end phases in a row must fire once, not three
  *   times. Only the first crosses from a playing phase, so the later hops are
  *   inert.
+ *
+ * TFT ends sooner for the player than for the lobby. Knocked out, they can
+ * leave with "Exit now" while seven others play on, and the client need not
+ * walk the end phases League's games do on the way back — so for TFT, leaving
+ * a playing phase for anything but another one is the end. A TFT game left
+ * any other way has nothing in it left to wait for either: the player's LP
+ * moved when they went out.
  */
-export function isGameEndTransition(previous: string | null, next: string | null): boolean {
-  return isPlayingPhase(previous) && isEndPhase(next)
+export function isGameEndTransition(previous: string | null, next: string | null, game: GameId = 'lol'): boolean {
+  if (!isPlayingPhase(previous)) return false
+  if (game === 'tft') return next !== null && !isPlayingPhase(next)
+  return isEndPhase(next)
 }
 
 /**
