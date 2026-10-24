@@ -154,6 +154,13 @@ describe('findTftMatchForRecording', () => {
     expect(findTftMatchForRecording(tftRecording({ gameId: 8, platformId: 'NA1' }), candidates)).toBeNull()
   })
 
+  it('waits for a named game that is not stored yet rather than placing it by time', () => {
+    // Its own game unpublished, the recording sits inside the one before it.
+    const candidates = [tftGame('NA1_7', T0)]
+
+    expect(findTftMatchForRecording(tftRecording({ gameId: 8, platformId: 'NA1' }), candidates)).toBeNull()
+  })
+
   it('places a recording with no id by the one game whose span holds it', () => {
     // The player went out at 20 minutes; the recording stopped at 19.
     const candidates = [tftGame('NA1_1', T0), tftGame('NA1_2', T0 + 60 * MIN)]

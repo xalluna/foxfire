@@ -123,9 +123,15 @@ export function laddersOf(game: GameId): LadderId[] {
   return LADDER_IDS.filter((id) => LADDERS[id].game === game)
 }
 
-/** Whether a string names a ladder Foxfire tracks. */
+/**
+ * Whether a string names a ladder Foxfire tracks.
+ *
+ * Its own keys only: `in` would also say yes to `toString` and `constructor`,
+ * which every object inherits, and the caller would read a ladder that is not
+ * there.
+ */
 export function isLadderId(value: unknown): value is LadderId {
-  return typeof value === 'string' && value in LADDERS
+  return typeof value === 'string' && Object.hasOwn(LADDERS, value)
 }
 
 /** The ladder a queue id moves, or null for an unranked queue. */

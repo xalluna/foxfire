@@ -172,7 +172,9 @@ export const TftParticipantDtoSchema = z
     placement: z.number(),
     level: z.number().default(0),
     last_round: z.number().default(0),
-    time_eliminated: z.number().default(0),
+    // Left absent rather than defaulted: a missing time is not "out at the first
+    // second", and the board is stored with the lobby's length instead.
+    time_eliminated: z.number().optional(),
     players_eliminated: z.number().default(0),
     total_damage_to_players: z.number().default(0),
     gold_left: z.number().default(0),

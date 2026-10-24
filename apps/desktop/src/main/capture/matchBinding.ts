@@ -141,24 +141,25 @@ export function findMatchForRecording(
 }
 
 /**
- * How long to keep trying before calling a recording unmatched.
+ * How long to keep trying before calling a League recording unmatched.
  *
  * Comfortably past the last postGameSync retry at ten minutes, so giving up is
  * a real conclusion rather than a race with the sync that would have bound it.
+ * The registry holds it, beside TFT's.
  */
-export const BIND_GIVE_UP_MS = 30 * 60 * 1000
+export const BIND_GIVE_UP_MS = GAMES.lol.bindGiveUpMs
 
 /**
- * The same for either game: League's above, and TFT's longer one from the
- * registry — a TFT match is published only once its whole lobby is done, which
- * can be twenty minutes after the recording stopped.
+ * Whether to stop trying, by each game's own time from the registry: TFT's is
+ * longer, because a TFT match is published only once its whole lobby is done,
+ * which can be twenty minutes after the recording stopped.
  */
 export function shouldGiveUpBinding(
   recording: Pick<RecordingFingerprint, 'startedAt' | 'endedAt'>,
   now: number,
   game: GameId = 'lol'
 ): boolean {
-  return now - (recording.endedAt ?? recording.startedAt) > (game === 'lol' ? BIND_GIVE_UP_MS : GAMES[game].bindGiveUpMs)
+  return now - (recording.endedAt ?? recording.startedAt) > GAMES[game].bindGiveUpMs
 }
 
 /** A TFT game a recording might be of: when it ran, and when the player went out. */
@@ -188,13 +189,18 @@ const TFT_SPAN_SLACK_MS = 5 * 60 * 1000
 /**
  * Which stored TFT game a recording is of.
  *
- * By its id first: the client said which game it was while it was being
- * played, and `${platform}_${gameId}` is its match id — exact, and true however
- * many games were played that evening. A recording that did not get an id is
- * placed by time instead, and only when exactly one game's span, from its
- * start to the player's elimination give or take five minutes, holds the
- * whole recording. Two that could be it are no answer: TFT has no roster to
- * tell them apart, and a wrong binding is worse than none.
+ * By its id, when it has one: the client said which game it was while it was
+ * being played, and `${platform}_${gameId}` is its match id — exact, and true
+ * however many games were played that evening. That match not being stored
+ * yet only means Riot has not published it, so the answer is to wait, never to
+ * guess: placed by time, a short recording made just after an early exit
+ * could land on the game before it.
+ *
+ * A recording that did not get an id is placed by time instead, and only when
+ * exactly one game's span, from its start to the player's elimination give or
+ * take five minutes, holds the whole recording. Two that could be it are no
+ * answer: TFT has no roster to tell them apart, and a wrong binding is worse
+ * than none.
  */
 export function findTftMatchForRecording(
   recording: TftRecordingFingerprint,
@@ -203,7 +209,7 @@ export function findTftMatchForRecording(
   if (recording.gameId !== null && recording.platformId) {
     const id = `${recording.platformId}_${recording.gameId}`
     const exact = candidates.find((candidate) => candidate.matchId === id)
-    if (exact) return exact.taken ? null : { matchId: exact.matchId, confidence: 1 }
+    return exact && !exact.taken ? { matchId: exact.matchId, confidence: 1 } : null
   }
 
   const end = recording.endedAt ?? recording.startedAt

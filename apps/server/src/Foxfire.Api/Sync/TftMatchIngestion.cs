@@ -61,7 +61,8 @@ public sealed class TftMatchIngestion(FoxfireDbContext db, TimeProvider time)
             db.TftParticipants.Add(Project(
                 matchId,
                 participant,
-                teams.TryGetValue(participant.Puuid, out var team) ? team : null));
+                teams.TryGetValue(participant.Puuid, out var team) ? team : null,
+                info.GameLength));
         }
 
         try
@@ -108,7 +109,7 @@ public sealed class TftMatchIngestion(FoxfireDbContext db, TimeProvider time)
         db.Entry(match).State = EntityState.Detached;
     }
 
-    private static TftParticipant Project(string matchId, TftParticipantDto p, int? teamPlacement) =>
+    private static TftParticipant Project(string matchId, TftParticipantDto p, int? teamPlacement, double gameLength) =>
         new()
         {
             MatchId = matchId,
@@ -120,7 +121,10 @@ public sealed class TftMatchIngestion(FoxfireDbContext db, TimeProvider time)
             PartnerGroupId = p.PartnerGroupId,
             Level = p.Level,
             LastRound = p.LastRound,
-            TimeEliminated = p.TimeEliminated,
+            // Where the game is placed among rank readings. A board Riot sent
+            // without one lasted the lobby as far as anybody can tell — stored
+            // as 0 it would place the game at its own start.
+            TimeEliminated = p.TimeEliminated ?? gameLength,
             PlayersEliminated = p.PlayersEliminated,
             TotalDamageToPlayers = p.TotalDamageToPlayers,
             GoldLeft = p.GoldLeft,

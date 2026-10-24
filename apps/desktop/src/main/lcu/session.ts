@@ -3,10 +3,11 @@ import { gameOfLiveSession, type GameId } from '@foxfire/core'
 /*
  * The League client's gameflow session, read for which game is on.
  *
- * TFT runs in the same client and the same game executable as League, so the
- * session is the only thing that tells them apart — its mode and map before its
- * queue, because Riot opens TFT event queues under ids nobody has listed. Typed
- * loosely: the session is large, undocumented, and moves between patches.
+ * Both games are queued through the League client, which launches TFT's own
+ * program for a TFT game, so the session is what tells them apart — its mode
+ * and map before its queue, because Riot opens TFT event queues under ids
+ * nobody has listed. Typed loosely: the session is large, undocumented, and
+ * moves between patches.
  */
 
 export interface GameflowSession {

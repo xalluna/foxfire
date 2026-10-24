@@ -174,11 +174,12 @@ const TFT_MAP_ID = 22
 /**
  * Which game the League client is running.
  *
- * TFT runs in the same client and the same game executable as League, so the
- * gameflow session is the only thing that tells them apart. The mode and map
- * decide before the queue does, because Riot opens TFT event queues under ids
- * nobody has listed — and an unknown queue with no TFT marker is League,
- * which is what every session was before TFT was a game here.
+ * Both games are queued for and tracked through the League client — TFT's
+ * game itself is a program of its own, Riot's Unreal client — so the client's
+ * gameflow session is where they are told apart. The mode and map decide
+ * before the queue does, because Riot opens TFT event queues under ids nobody
+ * has listed — and an unknown queue with no TFT marker is League, which is
+ * what every session was before TFT was a game here.
  */
 export function gameOfLiveSession(facts: LiveSessionFacts): GameId {
   if (facts.gameMode?.toUpperCase() === 'TFT' || facts.mapId === TFT_MAP_ID) return 'tft'

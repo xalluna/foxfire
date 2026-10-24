@@ -96,7 +96,6 @@ INSERT INTO seasons_by_game (id, game, label, starts_at, is_preseason, resets_ra
 SELECT id, 'lol', label, starts_at, is_preseason, resets_rank FROM seasons;
 DROP TABLE seasons;
 ALTER TABLE seasons_by_game RENAME TO seasons;
-CREATE INDEX idx_seasons_game_starts_at ON seasons(game, starts_at);
 
 -- TFT's sets from Set 13, which is as far back as a backfill reaches, at
 -- midnight UTC on launch day — the same instants a Foxfire Server seeds. Each

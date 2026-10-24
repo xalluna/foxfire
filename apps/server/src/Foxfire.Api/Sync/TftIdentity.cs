@@ -64,20 +64,26 @@ public sealed class TftIdentity(
                 $"Cannot file {account.RiotId}'s TFT games: another account already holds that TFT id.");
         }
 
-        db.ScopedPuuids.Add(new ScopedPuuid
+        var learnt = new ScopedPuuid
         {
             RiotAccountId = account.Id,
             Scope = RiotKeyScope.Tft,
             Puuid = resolved.Puuid,
             ResolvedAt = time.GetUtcNow()
-        });
+        };
 
-        await db.SaveChangesAsync(cancellationToken);
-
-        // Boards stored while TFT shared the main key are under the main puuid.
+        // Boards stored while TFT shared the main key are under the main puuid,
+        // and move in the same transaction that records the new one. Saved on
+        // its own first, a move that then failed would strand them there: from
+        // then on the stored id is returned above, and nothing looks again.
         if (await db.TftParticipants.AnyAsync(p => p.Puuid == account.Puuid, cancellationToken))
         {
-            await MoveAsync(account, account.Puuid, resolved.Puuid, scoped: null, cancellationToken);
+            await MoveAsync(account, account.Puuid, resolved.Puuid, learnt, cancellationToken);
+        }
+        else
+        {
+            db.ScopedPuuids.Add(learnt);
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         log.LogInformation("Resolved {RiotId} under this server's TFT key", account.RiotId);
@@ -166,8 +172,9 @@ public sealed class TftIdentity(
 
     /// <summary>
     /// Moves TFT's boards from one puuid to another, retiring the old one, and
-    /// keeps the scoped row in step: updated when it is still TFT's key, gone
-    /// when the boards are going back to the main puuid.
+    /// keeps the scoped row in step in the same transaction: added when it is
+    /// new, updated when it is still TFT's key, gone when the boards are going
+    /// back to the main puuid.
     /// </summary>
     private async Task MoveAsync(
         RiotAccount account,
@@ -188,6 +195,10 @@ public sealed class TftIdentity(
                 if (to == account.Puuid)
                 {
                     db.ScopedPuuids.Remove(scoped);
+                }
+                else if (db.Entry(scoped).State == EntityState.Detached)
+                {
+                    db.ScopedPuuids.Add(scoped);
                 }
                 else
                 {

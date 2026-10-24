@@ -240,7 +240,7 @@ export async function setAndValidateTftApiKey(key: string): Promise<ValidateResu
   try {
     access = await probeTftAccess(DEFAULT_PLATFORM)
   } catch (err) {
-    applyTftApiKey(previous)
+    putTftApiKey(previous)
     if (err instanceof RiotApiError && err.isKeyRejection) {
       return { ok: false, message: 'Riot rejected this key. Check it was copied whole, and that it has not expired.' }
     }
@@ -248,7 +248,7 @@ export async function setAndValidateTftApiKey(key: string): Promise<ValidateResu
   }
 
   if (access === 'denied') {
-    applyTftApiKey(previous)
+    putTftApiKey(previous)
     return { ok: false, message: 'Riot will not let this key reach TFT. Use a key registered for Teamfight Tactics.' }
   }
 
@@ -259,10 +259,23 @@ export async function setAndValidateTftApiKey(key: string): Promise<ValidateResu
   return { ok: true }
 }
 
+/**
+ * TFT's own key from here on, or none — what a paste that did not take puts
+ * back, and what removing the key leaves.
+ *
+ * With none, also clears whatever a refusal latched on TFT's queue: a queue
+ * with no key has nothing to have been refused, and left latched it would read
+ * as a rejected TFT key in Settings with no key there.
+ */
+function putTftApiKey(key: string | null): void {
+  applyTftApiKey(key)
+  if (key === null) tftScope.limiter.resume()
+}
+
 /** Takes TFT's own key away; TFT goes back to asking through the main key. */
 export function removeTftApiKey(): void {
   clearSecret(TFT_KEY_SECRET)
-  applyTftApiKey(null)
+  putTftApiKey(null)
   onTftKeyChanged()
   log.info('TFT is back on the main key')
 }

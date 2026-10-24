@@ -212,8 +212,18 @@ namespace Foxfire.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // TFT's seasons go with the column that says they are TFT's, or
-            // they would come back as League boundaries.
+            // TFT's rows go with the columns that say they are TFT's, or they
+            // would come back as League's: seasons as League boundaries, and
+            // TFT's ladders and retired TFT-key ids where the code before TFT
+            // reads every queue and every retired puuid as League's. Readings
+            // and LP rows first, before the matches some of them name.
+            migrationBuilder.Sql(
+                "DELETE FROM RankSnapshots WHERE QueueType IN ('RANKED_TFT', 'RANKED_TFT_DOUBLE_UP', 'RANKED_TFT_TURBO')");
+            migrationBuilder.Sql(
+                "DELETE FROM MatchRanks WHERE QueueType IN ('RANKED_TFT', 'RANKED_TFT_DOUBLE_UP', 'RANKED_TFT_TURBO')");
+            migrationBuilder.Sql(
+                "DELETE FROM LeagueEntries WHERE QueueType IN ('RANKED_TFT', 'RANKED_TFT_DOUBLE_UP', 'RANKED_TFT_TURBO')");
+            migrationBuilder.Sql("DELETE FROM RetiredPuuids WHERE Scope <> 'main'");
             migrationBuilder.Sql("DELETE FROM Seasons WHERE Game <> 'lol'");
             migrationBuilder.Sql("DELETE FROM SyncStates WHERE Game <> 'lol'");
             migrationBuilder.Sql("DELETE FROM Matches WHERE Game <> 'lol'");

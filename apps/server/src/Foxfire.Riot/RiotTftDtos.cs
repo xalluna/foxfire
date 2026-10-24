@@ -52,8 +52,11 @@ public sealed record TftParticipantDto
     [JsonPropertyName("level")] public int Level { get; init; }
     [JsonPropertyName("last_round")] public int LastRound { get; init; }
 
-    /// <summary>Seconds, fractional, from the start until this player was out.</summary>
-    [JsonPropertyName("time_eliminated")] public double TimeEliminated { get; init; }
+    /// <summary>
+    /// Seconds, fractional, from the start until this player was out. Null when
+    /// Riot left it off, which is not the same as out at the first second.
+    /// </summary>
+    [JsonPropertyName("time_eliminated")] public double? TimeEliminated { get; init; }
 
     [JsonPropertyName("players_eliminated")] public int PlayersEliminated { get; init; }
     [JsonPropertyName("total_damage_to_players")] public int TotalDamageToPlayers { get; init; }

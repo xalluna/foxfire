@@ -164,8 +164,15 @@ export function lcuReporting(): LcuReporting {
  */
 export async function startSyncFor(accountId: string): Promise<void> {
   if (isServerMode()) {
-    await authedRequest<void>(`/sync/${accountId}`, { method: 'POST' })
-    await authedRequest<void>(`/sync/${accountId}?game=tft`, { method: 'POST' })
+    // Each game asked on its own. One after the other, League's refused —
+    // synced under two minutes ago, which a restart after a game often is —
+    // meant TFT's was never asked for at all.
+    const asked = await Promise.allSettled([
+      authedRequest<void>(`/sync/${accountId}`, { method: 'POST' }),
+      authedRequest<void>(`/sync/${accountId}?game=tft`, { method: 'POST' })
+    ])
+    const refused = asked.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (refused) throw refused.reason
     return
   }
 

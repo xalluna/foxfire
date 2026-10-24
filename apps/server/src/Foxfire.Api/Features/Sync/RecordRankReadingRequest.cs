@@ -118,12 +118,16 @@ internal sealed class RecordRankReadingRequestHandler(
         var game = RankedQueues.FromRiotName(request.QueueType)!.Value.Game();
 
         // TFT's games are filed under the account's TFT puuid, which differs
-        // from League's when the server has a TFT key of its own.
+        // from League's when the server has a TFT key of its own. As far as it
+        // is already known, and never learnt here: that is a Riot call and a
+        // move of boards, which a sync makes and a client's reading must not
+        // wait on or fail over. An account TFT has never resolved has no TFT
+        // games here for the reading to settle.
         var puuid = game == Game.Tft
-            ? await tftIdentity.PuuidAsync(account, Foxfire.Riot.RiotRequestPriority.Interactive, cancellationToken)
+            ? await tftIdentity.KnownPuuidAsync(account, cancellationToken)
             : account.Puuid;
 
-        await attribution.ReplayAsync(account.Id, game, puuid, since, cancellationToken);
+        if (puuid is not null) await attribution.ReplayAsync(account.Id, game, puuid, since, cancellationToken);
 
         // Everybody's rank views, not just this machine's. A game that just
         // ended moved somebody's LP, and a member watching the shared history

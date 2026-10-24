@@ -302,14 +302,11 @@ export function insertRecordingEvents(
 }
 
 /**
- * A page of one account's recordings, newest first.
+ * A page of one account's recordings, newest first — one game's, when the
+ * Recordings tab is filtered to it, or both.
  *
  * The id breaks ties so a page boundary cannot fall between two recordings that
  * started in the same millisecond and come back in the other order next time.
- */
-/**
- * A page of an account's recordings, newest first — one game's, when the
- * Recordings tab is filtered to it, or both.
  */
 export function getRecordings(
   db: DatabaseSync,

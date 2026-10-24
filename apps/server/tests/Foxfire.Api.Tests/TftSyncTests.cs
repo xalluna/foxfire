@@ -216,7 +216,7 @@ public class TftSyncTests(FoxfireServerFixture server)
     }
 
     [Fact]
-    public async Task A_key_with_no_tft_fails_the_tft_sync_and_league_carries_on()
+    public async Task A_key_with_no_tft_syncs_no_tft_and_league_carries_on()
     {
         var puuid = UniquePuuid();
         var lolMatch = UniqueMatchId();
@@ -235,9 +235,10 @@ public class TftSyncTests(FoxfireServerFixture server)
         }
 
         // Refused by Riot, or — when the boot probe got there first — by the
-        // server, which already knows. Either way, no TFT.
-        var refused = await Assert.ThrowsAnyAsync<Exception>(() => rig.Sync.SyncAsync(accountId, Game.Tft, SyncTrigger.Manual));
-        Assert.True(refused is RiotApiException { NoProductAccess: true } or InvalidOperationException);
+        // server, which already knows. Either way no TFT, and no failed sync:
+        // a League-only server is a healthy one.
+        var tft = await rig.Sync.SyncAsync(accountId, Game.Tft, SyncTrigger.Manual);
+        Assert.Equal(new SyncResult(0, 0), tft);
 
         var access = rig.Host.Services.GetRequiredService<TftAccess>();
         Assert.Equal(TftAccessState.Denied, access.State);
@@ -245,7 +246,7 @@ public class TftSyncTests(FoxfireServerFixture server)
 
         // Inside ten minutes a second TFT sync does not ask Riot again.
         var tftCalls = riot.Requests.Count(r => r.StartsWith("/tft/match", StringComparison.Ordinal));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => rig.Sync.SyncAsync(accountId, Game.Tft, SyncTrigger.Manual));
+        Assert.Equal(new SyncResult(0, 0), await rig.Sync.SyncAsync(accountId, Game.Tft, SyncTrigger.Manual));
         Assert.Equal(tftCalls, riot.Requests.Count(r => r.StartsWith("/tft/match", StringComparison.Ordinal)));
 
         var league = await rig.Sync.SyncAsync(accountId, SyncTrigger.Manual);

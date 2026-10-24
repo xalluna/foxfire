@@ -63,9 +63,10 @@ let lastPhase: string | null = null
 let currentQueueId: number | null = null
 
 /**
- * Which game is being played — League or TFT, which share the client and the
- * executable — read off the same session as the queue. Decides which end rule
- * applies and which game's search a finished one starts.
+ * Which game is being played — League or TFT, both queued through this client
+ * though each game is a program of its own — read off the same session as the
+ * queue. Decides which end rule applies and which game's search a finished
+ * one starts.
  */
 let currentGame: GameId = 'lol'
 

@@ -99,7 +99,10 @@ export function insertTftMatch(db: DatabaseSync, match: TftMatchDto, rawJson: st
           p.partner_group_id ?? null,
           p.level,
           p.last_round,
-          p.time_eliminated,
+          // Where the game is placed among rank readings. A board Riot sent
+          // without one lasted the lobby as far as anybody can tell — stored as
+          // 0 it would place the game at its own start.
+          p.time_eliminated ?? info.game_length,
           p.players_eliminated,
           p.total_damage_to_players,
           p.gold_left,

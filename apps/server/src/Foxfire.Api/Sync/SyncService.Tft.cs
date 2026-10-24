@@ -20,6 +20,11 @@ public sealed partial class SyncService
     /// puuid, which is a different string under that key; and it does not start
     /// at all while Riot has said this server's key has no TFT, beyond asking
     /// again once that answer is ten minutes old.
+    ///
+    /// A key with no TFT is not a failed sync. A League-only server is a healthy
+    /// one, and <see cref="TftAccess"/> has already said so once, as a warning:
+    /// the run completes with nothing fetched and the reason on its event, where
+    /// a throw would be an Error line for every account at every launch.
     /// </summary>
     private async Task<SyncResult> RunTftAsync(Guid riotAccountId, SyncTrigger trigger, SyncRunProgress run)
     {
@@ -36,7 +41,7 @@ public sealed partial class SyncService
         var attribution = services.GetRequiredService<AttributionRunner>();
         var settings = services.GetRequiredService<ServerSettingsService>();
 
-        if (!access.MayReprobe) throw new InvalidOperationException(access.Reason ?? "This server cannot reach TFT.");
+        if (!access.MayReprobe) return await NoTftAccessAsync(riotAccountId, trigger);
 
         var account = await db.RiotAccounts.FirstOrDefaultAsync(a => a.Id == riotAccountId)
             ?? throw new InvalidOperationException($"Unknown Riot account {riotAccountId}");
@@ -75,6 +80,10 @@ public sealed partial class SyncService
             access.Deny(ex.NoProductAccess
                 ? "This server's Riot key has no TFT access. Set Riot__Tft__ApiKey to a key registered for TFT."
                 : "Riot rejected this server's TFT key.");
+
+            // A TFT key of its own that Riot refused is a broken key, which is
+            // a failure; the main key simply not reaching TFT is not.
+            if (ex.NoProductAccess) return await NoTftAccessAsync(riotAccountId, trigger);
             throw;
         }
 
@@ -165,6 +174,21 @@ public sealed partial class SyncService
             Game.Tft.Slug()));
 
         return new SyncResult(stored, failed);
+    }
+
+    /// <summary>What a member is told about a TFT sync on a key with no TFT.</summary>
+    internal const string NoTftAccessMessage =
+        "This server's Riot key has no TFT access. Its administrator can add a TFT key.";
+
+    /// <summary>A TFT sync that had nothing it could fetch: complete, empty, and saying why.</summary>
+    private async Task<SyncResult> NoTftAccessAsync(Guid riotAccountId, SyncTrigger trigger)
+    {
+        log.LogDebug("TFT sync skipped for {RiotAccountId}: this server's Riot key has no TFT", riotAccountId);
+
+        await events.SyncProgressAsync(new SyncProgressEvent(
+            riotAccountId, SyncPhase.Complete, 0, 0, NoTftAccessMessage, trigger, Game: Game.Tft.Slug()));
+
+        return new SyncResult(0, 0);
     }
 
     /// <summary>The TFT id list and the puuid that fetched it, re-resolving once on a dead puuid.</summary>

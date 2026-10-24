@@ -192,8 +192,7 @@ public sealed partial class SyncService(
     /// </summary>
     private static string Describe(Exception ex, Game game) => ex switch
     {
-        RiotApiException { NoProductAccess: true } =>
-            "This server's Riot key has no TFT access. Its administrator can add a TFT key.",
+        RiotApiException { NoProductAccess: true } => NoTftAccessMessage,
         RiotApiException { IsKeyRejection: true } when game == Game.Tft =>
             "This server's Riot key for TFT is not working. Its administrator needs to replace it.",
         RiotApiException { IsKeyRejection: true } =>

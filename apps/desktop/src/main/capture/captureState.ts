@@ -23,7 +23,7 @@ export interface CaptureSessionState {
   phase: CapturePhase
   accountId: string | null
   queueId: number | null
-  /** League or TFT — they share the client and the executable, and are recorded differently. */
+  /** League or TFT — one League client, two game programs, and recorded differently. */
   game: GameId
   /** Riot's id for the game, from the client's session, which TFT's recording is bound by. */
   gameId: number | null

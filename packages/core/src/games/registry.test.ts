@@ -88,6 +88,9 @@ describe('the ladders', () => {
     }
     expect(ladderOfQueueId(1090)).toBeNull()
     expect(isLadderId('RANKED_TFT_PAIRS')).toBe(false)
+    // What every object inherits is not a ladder.
+    expect(isLadderId('toString')).toBe(false)
+    expect(isLadderId('constructor')).toBe(false)
   })
 
   it('makes Hyper Roll the rated one, and keeps it out of the LP editor', () => {

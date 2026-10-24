@@ -64,8 +64,11 @@ version 3 still, and a desktop from before TFT is served as it always was.
   League alone gets a 403 from every TFT endpoint, the same status an expired
   key gets; on the main key that is read as "no TFT here" rather than a refused
   key, so it never stops League syncing. The server probes TFT at boot, logs a
-  warning once when it cannot reach it, and `/health` says `tftAccess`. Both
-  settings are in docker-compose and `.env.example`.
+  warning once when it cannot reach it, and `/health` says `tftAccess`. A TFT
+  sync on such a key completes with nothing fetched and says why, rather than
+  failing — a League-only server is a healthy one, and its log should not say
+  otherwise for every account at every launch. Both settings are in
+  docker-compose and `.env.example`.
 - Syncs are per account and per game. A TFT sync fetches TFT's games and
   boards, reads TFT's ladders (Hyper Roll's colour and rating included),
   attributes LP and reads co-players, on its own sync state, its own cooldown

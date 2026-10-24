@@ -210,7 +210,6 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         ];
     }
 
-    /// <summary>Longer than any game lasts, which is all the candidate floor needs.</summary>
     /// <summary>
     /// A TFT player's ranked games, each placed where its LP moved: at the
     /// player's own elimination, which is earlier than the lobby's end by as
@@ -246,6 +245,7 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         ];
     }
 
+    /// <summary>Longer than any game lasts, which is all the candidate floor needs.</summary>
     private const long LookBackMs = 86_400_000L;
 
     private async Task<IReadOnlyList<RankReading>> LoadReadingsAsync(

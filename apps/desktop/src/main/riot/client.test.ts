@@ -27,6 +27,7 @@ const {
   tftRequest,
   tftScope
 } = await import('./client')
+const { probeTftAccess } = await import('./endpoints/tftStatus')
 
 const PASSTHROUGH = { parse: (data: unknown): unknown => data }
 
@@ -121,5 +122,31 @@ describe('tftRequest', () => {
     expect(tftScope.limiter.keyRejected).toBe(true)
     // TFT's refused key is TFT's problem alone.
     expect(rateLimiter.keyRejected).toBe(false)
+  })
+})
+
+describe('probeTftAccess', () => {
+  beforeEach(() => {
+    setApiKey('RGAPI-test')
+    setTftApiKey(null)
+    rateLimiter.resume()
+    tftScope.limiter.resume()
+  })
+
+  it('reads a 403 on the main key as a key without TFT', async () => {
+    answer('Forbidden', 403)
+
+    await expect(probeTftAccess('na1')).resolves.toBe('denied')
+  })
+
+  it('throws a 403 on TFT’s own key as that key refused, not as a key without TFT', async () => {
+    // An expired TFT key answers 403 too, and "register a key for TFT" would
+    // send somebody to fix the wrong thing.
+    setTftApiKey('RGAPI-tft')
+    answer('Forbidden', 403)
+
+    await expect(probeTftAccess('na1')).rejects.toSatisfy(
+      (err: unknown) => err instanceof Error && 'isKeyRejection' in err && err.isKeyRejection === true
+    )
   })
 })
