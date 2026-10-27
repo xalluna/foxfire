@@ -37,6 +37,11 @@ version 3 still, and a desktop from before TFT is served as it always was.
   separately, where it used to be an API call. Both share the server's one
   Riot budget.
 
+### Fixed
+
+- **An opened match lists each team by lane** in the web client — top,
+  jungle, mid, bot, then support — rather than in no particular order.
+
 ### Under the hood
 
 - Games are a first-class idea. `Foxfire.Core` has `Game` and the ladders of

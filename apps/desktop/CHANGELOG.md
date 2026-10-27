@@ -64,6 +64,11 @@ server or on its own. And every new recording is filed by player, game and mode.
   stay where they are, and so does anything OBS was set to write somewhere else. Deleting the last
   recording in a folder removes the folder too.
 
+### Fixed
+
+- **An opened match lists each team by lane** — top, jungle, mid, bot, then support — rather than
+  in whatever order the game's data happened to arrive, which on a server was no order at all.
+
 ### Under the hood
 
 - Games are a first-class idea. `@foxfire/core` holds a registry of the Riot titles Foxfire tracks
