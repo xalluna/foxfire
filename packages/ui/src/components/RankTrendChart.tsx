@@ -1,8 +1,8 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import type { RankTrend, RankTrendPoint } from '@foxfire/core'
-import { RANK_TREND_DAYS, rankAtPosition } from '@foxfire/core'
+import { RANK_TREND_DAYS, rankAtPosition, ratedTierAt } from '@foxfire/core'
 import { roundedPath } from '../lib/curve'
-import { formatTierShort, tierColor, tierLabel } from '../lib/rank'
+import { formatTierShort, ratedTierColor, ratedTierLabel, tierColor, tierLabel } from '../lib/rank'
 
 const DAY_MS = 86_400_000
 
@@ -43,7 +43,17 @@ function daysAgo(days: number): string {
  * sizes: ladder position up the side, the line coloured by the tier it was in,
  * and broken at a season boundary rather than drawn through a reset.
  */
-export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | null {
+export function RankTrendChart({
+  trend,
+  rated = false
+}: {
+  trend: RankTrend
+  /**
+   * Hyper Roll's: the position is a rating, and the colours and names are its
+   * rated tiers rather than League's.
+   */
+  rated?: boolean
+}): JSX.Element | null {
   const [hover, setHover] = useState<number | null>(null)
   const [width, setWidth] = useState(RAIL_WIDTH)
   const frame = useRef<HTMLDivElement>(null)
@@ -106,14 +116,15 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
 
   // Hard-edged tier stops, as on the big chart: the colour changes at the day
   // that first closed in the new tier.
-  const stops: Array<{ offset: number; color: string }> = [
-    { offset: 0, color: tierColor(points[0].tier) }
-  ]
+  const band = (p: Plotted): string | null => (rated ? ratedTierAt(p.ladderPosition) : p.tier)
+  const colorOf = (p: Plotted): string => (rated ? ratedTierColor(band(p)) : tierColor(p.tier))
+
+  const stops: Array<{ offset: number; color: string }> = [{ offset: 0, color: colorOf(points[0]) }]
   for (let i = 1; i < points.length; i++) {
-    if (points[i].tier === points[i - 1].tier) continue
+    if (band(points[i]) === band(points[i - 1])) continue
     const offset = (x(points[i].at) - PAD.left) / plotW
-    stops.push({ offset, color: tierColor(points[i - 1].tier) })
-    stops.push({ offset, color: tierColor(points[i].tier) })
+    stops.push({ offset, color: colorOf(points[i - 1]) })
+    stops.push({ offset, color: colorOf(points[i]) })
   }
 
   // Division lines, or tier lines once a month spans too many divisions for a
@@ -123,10 +134,13 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
   for (let p = Math.ceil(yMin / step) * step; p <= yMax; p += step) gridlines.push(p)
 
   // The two ends of the range, named the way the match rows name a rank.
+  // A rated ladder names them by the rating itself.
   const top = rankAtPosition(rawMax)
   const bottom = rankAtPosition(rawMin)
-  const topLabel = formatTierShort(top.tier, top.rank)
-  const bottomLabel = formatTierShort(bottom.tier, bottom.rank)
+  const topLabel = rated ? String(rawMax) : formatTierShort(top.tier, top.rank)
+  const bottomLabel = rated ? String(rawMin) : formatTierShort(bottom.tier, bottom.rank)
+  const topColor = rated ? ratedTierColor(ratedTierAt(rawMax)) : tierColor(top.tier)
+  const bottomColor = rated ? ratedTierColor(ratedTierAt(rawMin)) : tierColor(bottom.tier)
 
   const active = hover === null ? null : points[hover]
   const latest = points[points.length - 1]
@@ -215,7 +229,7 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
             y={y(rawMax) + 3}
             textAnchor="end"
             className="text-[9px]"
-            fill={tierColor(top.tier)}
+            fill={topColor}
           >
             {topLabel}
           </text>
@@ -228,7 +242,7 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
             y={y(rawMin) + 3}
             textAnchor="end"
             className="text-[9px]"
-            fill={tierColor(bottom.tier)}
+            fill={bottomColor}
           >
             {bottomLabel}
           </text>
@@ -254,7 +268,7 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
           cy={y(latest.ladderPosition)}
           r={2.75}
           fill="rgb(var(--canvas))"
-          stroke={tierColor(latest.tier)}
+          stroke={colorOf(latest)}
           strokeWidth="1.5"
         />
 
@@ -263,8 +277,8 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
             cx={x(active.at)}
             cy={y(active.ladderPosition)}
             r={3.75}
-            fill={tierColor(active.tier)}
-            stroke={tierColor(active.tier)}
+            fill={colorOf(active)}
+            stroke={colorOf(active)}
             strokeWidth="1.5"
           />
         )}
@@ -297,10 +311,12 @@ export function RankTrendChart({ trend }: { trend: RankTrend }): JSX.Element | n
             top: y(active.ladderPosition)
           }}
         >
-          <p className="font-medium" style={{ color: tierColor(active.tier) }}>
-            {tierLabel(active.tier, active.rank)}
+          <p className="font-medium" style={{ color: colorOf(active) }}>
+            {rated ? ratedTierLabel(band(active)) : tierLabel(active.tier, active.rank)}
           </p>
-          <p className="tabular-nums text-text-dim">{active.leaguePoints ?? 0} LP</p>
+          <p className="tabular-nums text-text-dim">
+            {rated ? `${active.ladderPosition.toLocaleString()} rating` : `${active.leaguePoints ?? 0} LP`}
+          </p>
           <p className="tabular-nums text-text-mute">
             {daysAgo(Math.round((trend.to - active.at) / DAY_MS))}
           </p>

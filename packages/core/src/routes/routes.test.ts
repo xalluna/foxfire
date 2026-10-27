@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   absoluteUrl,
+  gameOfPlayerPath,
   parseQueueParam,
   parseRangeParam,
   parseRankQueueParam,
@@ -64,6 +65,13 @@ describe('ladder params', () => {
     expect(parseRankQueueParam('flex')).toBe('RANKED_FLEX_SR')
   })
 
+  it("names TFT's ladders too", () => {
+    expect(rankQueueParam('RANKED_TFT')).toBe('tft')
+    expect(rankQueueParam('RANKED_TFT_DOUBLE_UP')).toBe('double-up')
+    expect(rankQueueParam('RANKED_TFT_TURBO')).toBe('hyper-roll')
+    expect(parseRankQueueParam('hyper-roll')).toBe('RANKED_TFT_TURBO')
+  })
+
   it('treats anything else as absent', () => {
     expect(parseRankQueueParam('RANKED_SOLO_5x5')).toBeUndefined()
     expect(parseRankQueueParam(420)).toBeUndefined()
@@ -118,6 +126,37 @@ describe('paths', () => {
     expect(paths.recording({ gameName: 'Hide on bush', tagLine: 'KR1' }, 'KR_7123')).toBe(
       '/players/Hide%20on%20bush-KR1/recordings/KR_7123'
     )
+  })
+
+  it("says when a recording is TFT's, and only then", () => {
+    expect(paths.recording(FAKER, 'KR_7123', { game: 'tft' })).toBe('/players/Faker-KR1/recordings/KR_7123?game=tft')
+    expect(paths.recording(FAKER, 'KR_7123', { game: 'lol' })).toBe('/players/Faker-KR1/recordings/KR_7123')
+  })
+
+  it('puts TFT under the same player', () => {
+    expect(paths.tft(FAKER)).toBe('/players/Faker-KR1/tft')
+    expect(paths.tft(FAKER, { queue: 1160, match: 'KR_9' })).toBe('/players/Faker-KR1/tft?queue=1160&match=KR_9')
+    expect(paths.tftRank(FAKER, { queue: 'double-up' })).toBe('/players/Faker-KR1/tft/rank?queue=double-up')
+  })
+})
+
+describe('gameOfPlayerPath', () => {
+  it('reads TFT from a player path, and League from everything else', () => {
+    expect(gameOfPlayerPath('/players/Faker-KR1/tft')).toBe('tft')
+    expect(gameOfPlayerPath('/players/Faker-KR1/tft/rank')).toBe('tft')
+    expect(gameOfPlayerPath('/players/Faker-KR1')).toBe('lol')
+    expect(gameOfPlayerPath('/players/Faker-KR1/rank')).toBe('lol')
+    expect(gameOfPlayerPath('/players/tft-KR1')).toBe('lol')
+  })
+
+  it('reads the two pages both games share off their query', () => {
+    expect(gameOfPlayerPath('/players/Faker-KR1/lp', { queue: 'double-up' })).toBe('tft')
+    expect(gameOfPlayerPath('/players/Faker-KR1/lp', { queue: 'flex' })).toBe('lol')
+    expect(gameOfPlayerPath('/players/Faker-KR1/lp')).toBe('lol')
+    expect(gameOfPlayerPath('/players/Faker-KR1/recordings/KR_1', { game: 'tft' })).toBe('tft')
+    expect(gameOfPlayerPath('/players/Faker-KR1/recordings/KR_1')).toBe('lol')
+    // Only those two: a stray query elsewhere says nothing about the game.
+    expect(gameOfPlayerPath('/players/Faker-KR1/rank', { queue: 'tft', game: 'tft' })).toBe('lol')
   })
 })
 

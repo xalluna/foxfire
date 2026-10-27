@@ -79,6 +79,7 @@ import type {
   TelemetryState,
   TelemetrySummary
 } from './telemetry'
+import type { GameId, RiotKeyScope } from '@foxfire/core'
 
 export interface ValidateResult {
   ok: boolean
@@ -245,8 +246,12 @@ export interface Api {
     get: () => Promise<AppSettingsPublic>
     setApiKey: (key: string) => Promise<ValidateResult>
     clearApiKey: () => Promise<AppSettingsPublic>
-    /** Personal or application, and for the latter the allowance it was granted. */
-    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits) => Promise<AppSettingsPublic>
+    /** Personal or application, and for the latter the allowance it was granted — the main key's, or TFT's own. */
+    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope) => Promise<AppSettingsPublic>
+    /** Gives TFT a key of its own, after checking it can reach TFT. */
+    setTftApiKey: (key: string) => Promise<ValidateResult>
+    /** Takes it away; TFT goes back to the main key. */
+    clearTftApiKey: () => Promise<AppSettingsPublic>
     /** Fires when Riot rejects the stored key (personal keys expire every 24h). */
     onKeyInvalid: (cb: () => void) => () => void
   }
@@ -283,6 +288,7 @@ export interface Api {
   }
   champions: FoxfireData['champions']
   seasons: FoxfireData['seasons']
+  tft: FoxfireData['tft']
   mastery: FoxfireData['mastery']
   rank: FoxfireData['rank'] & {
     openEditor: (accountId: string, queueType: QueueType, matchId: string) => Promise<void>
@@ -320,8 +326,8 @@ export interface Api {
     reconnect: () => Promise<CaptureStatus>
   }
   recordings: {
-    /** A page of an account's recordings, newest first, bound or not, and how many there are. */
-    list: (accountId: string, page?: PageOptions) => Promise<Page<Recording>>
+    /** A page of an account's recordings, newest first, bound or not, and how many there are — one game's, if asked. */
+    list: (accountId: string, page?: PageOptions, game?: GameId | null) => Promise<Page<Recording>>
     /**
      * Every recording of an account's that can go to YouTube — whole, not a
      * page, because "select all" has to mean all of them and the batch dialog
@@ -343,8 +349,9 @@ export interface Api {
     /** Fires when a recording is added, bound or deleted. */
     onChanged: (cb: () => void) => () => void
     /** Sent by a recording window; the main window focuses and expands that match. */
-    showMatch: (accountId: string, matchId: string) => Promise<void>
-    onShowMatch: (cb: (accountId: string, matchId: string) => void) => () => void
+    /** Opens a game in the main window's history — the TFT history for a TFT game. */
+    showMatch: (accountId: string, matchId: string, game?: GameId) => Promise<void>
+    onShowMatch: (cb: (accountId: string, matchId: string, game?: GameId) => void) => () => void
     /** Removes a recording's row once its file is gone. The YouTube video and the server's copy stay. */
     forget: (recordingId: number) => Promise<void>
     /** Opens a window for one account's recording of a game that this machine has no file of. */

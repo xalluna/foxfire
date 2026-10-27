@@ -72,6 +72,8 @@ export interface ImportTarget {
    */
   unstoredMatches(matchIds: string[]): Promise<string[] | null>
   matches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome>
+  /** TFT's payloads, which the server files apart from League's. */
+  tftMatches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome>
   rankReadings(rows: ImportReadingRow[]): Promise<ImportBatchOutcome>
   finish(): Promise<{ accounts: number; attributed: number }>
 }
@@ -151,12 +153,25 @@ async function run(
   // so a failure at this step is a reason to stop rather than to carry on with
   // rows nothing can place.
 
+  // A file from a desktop with a TFT key of its own also knows each account
+  // under that key, which is what its TFT games are filed under.
+  const scoped = await hasTable(db, 'account_scoped_puuids')
+
   const accounts = await db.all<{
     puuid: string
     game_name: string
     tag_line: string
     platform: string | null
-  }>('SELECT puuid, game_name, tag_line, platform FROM accounts ORDER BY id')
+    tft_puuid?: string | null
+  }>(
+    scoped
+      ? `SELECT a.puuid AS puuid, a.game_name AS game_name, a.tag_line AS tag_line, a.platform AS platform,
+                s.puuid AS tft_puuid
+           FROM accounts a
+           LEFT JOIN account_scoped_puuids s ON s.account_id = a.id AND s.scope = 'tft'
+          ORDER BY a.id`
+      : 'SELECT puuid, game_name, tag_line, platform FROM accounts ORDER BY id'
+  )
 
   report({ phase: 'accounts', current: 0, total: accounts.length })
 
@@ -166,7 +181,8 @@ async function run(
         gameName: row.game_name,
         tagLine: row.tag_line,
         platform: row.platform,
-        puuid: row.puuid
+        puuid: row.puuid,
+        ...(row.tft_puuid ? { tftPuuid: row.tft_puuid } : {})
       }))
     )
 
@@ -190,12 +206,20 @@ async function run(
   // readings would mean the final pass attributed across one.
 
   if (await hasTable(db, 'seasons')) {
+    // Each game's own, in a file that has more than League's.
+    const ofGame = await hasColumn(db, 'seasons', 'game')
+
     const seasons = await db.all<{
       label: string
       starts_at: number
       is_preseason: number
       resets_rank: number
-    }>('SELECT label, starts_at, is_preseason, resets_rank FROM seasons ORDER BY starts_at')
+      game?: string
+    }>(
+      ofGame
+        ? 'SELECT label, starts_at, is_preseason, resets_rank, game FROM seasons ORDER BY starts_at'
+        : 'SELECT label, starts_at, is_preseason, resets_rank FROM seasons ORDER BY starts_at'
+    )
 
     if (seasons.length > 0) {
       const batch = await target.seasons(
@@ -203,7 +227,8 @@ async function run(
           label: row.label,
           startsAt: row.starts_at,
           isPreseason: row.is_preseason === 1,
-          resetsRank: row.resets_rank === 1
+          resetsRank: row.resets_rank === 1,
+          ...(row.game ? { game: row.game } : {})
         }))
       )
 
@@ -219,37 +244,43 @@ async function run(
   // two games can start in the same millisecond and a page boundary between
   // them would otherwise be decided by whatever order the file happens to
   // return ties in.
+  //
+  // A file from a desktop that tracked TFT holds both games' in one table,
+  // and the server files them apart, so each goes to its own batch. A file
+  // from before TFT has no game column, and every game in it is League's.
 
-  const ids = (
-    await db.all<{ match_id: string }>(
-      'SELECT match_id FROM matches ORDER BY game_creation, match_id'
-    )
-  ).map((row) => row.match_id)
+  const multiGame = await hasColumn(db, 'matches', 'game')
+  const leagueIds = await matchIdsOf(db, multiGame ? 'lol' : null)
+  const tftIds = multiGame ? await matchIdsOf(db, 'tft') : []
 
-  const wanted = await unstoredIds(ids, target, report)
-  result.alreadyThere.matches = ids.length - wanted.length
+  const unstored = new Set(await unstoredIds([...leagueIds, ...tftIds], target, report))
+  result.alreadyThere.matches = leagueIds.length + tftIds.length - unstored.size
 
-  report({ phase: 'matches', current: 0, total: wanted.length })
+  const total = unstored.size
+  report({ phase: 'matches', current: 0, total })
 
   let sent = 0
-  for (const page of pages(wanted)) {
-    const rows = await db.all<{ match_id: string; raw_json: string }>(
-      `SELECT match_id, raw_json FROM matches
-        WHERE match_id IN (${page.map(() => '?').join(', ')})
-        ORDER BY game_creation, match_id`,
-      page
-    )
+  for (const [ids, send] of [
+    [leagueIds, (rows: ImportMatchRow[]) => target.matches(rows)],
+    [tftIds, (rows: ImportMatchRow[]) => target.tftMatches(rows)]
+  ] as const) {
+    for (const page of pages(ids.filter((id) => unstored.has(id)))) {
+      const rows = await db.all<{ match_id: string; raw_json: string }>(
+        `SELECT match_id, raw_json FROM matches
+          WHERE match_id IN (${page.map(() => '?').join(', ')})
+          ORDER BY game_creation, match_id`,
+        page
+      )
 
-    const batch = await target.matches(
-      rows.map((row) => ({ matchId: row.match_id, rawJson: row.raw_json }))
-    )
+      const batch = await send(rows.map((row) => ({ matchId: row.match_id, rawJson: row.raw_json })))
 
-    result.matches += batch.accepted
-    result.alreadyThere.matches += batch.skipped
-    result.matchesFailed += batch.failed
-    sent += page.length
+      result.matches += batch.accepted
+      result.alreadyThere.matches += batch.skipped
+      result.matchesFailed += batch.failed
+      sent += page.length
 
-    report({ phase: 'matches', current: sent, total: wanted.length })
+      report({ phase: 'matches', current: sent, total })
+    }
   }
 
   // ── Rank readings, keyed on ids nothing can decrypt ────────────────────────
@@ -260,6 +291,8 @@ async function run(
 
   if (await hasTable(db, 'rank_snapshots')) {
     const readingCount = await count(db, 'rank_snapshots')
+    // Hyper Roll's colour and rating, in a file that has them.
+    const rated = await hasColumn(db, 'rank_snapshots', 'rated_tier')
     report({ phase: 'readings', current: 0, total: readingCount })
 
     let read = 0
@@ -275,9 +308,11 @@ async function run(
         source: string
         captured_at: number
         match_id: string | null
+        rated_tier?: string | null
+        rated_rating?: number | null
       }>(
         `SELECT a.puuid AS puuid, s.queue_type, s.tier, s.rank, s.league_points,
-                s.wins, s.losses, s.source, s.captured_at, s.match_id
+                s.wins, s.losses, s.source, s.captured_at, s.match_id${rated ? ', s.rated_tier, s.rated_rating' : ''}
            FROM rank_snapshots s
            JOIN accounts a ON a.id = s.account_id
           ORDER BY s.captured_at, s.id
@@ -298,7 +333,8 @@ async function run(
           losses: row.losses,
           source: row.source,
           capturedAt: row.captured_at,
-          matchId: row.match_id
+          matchId: row.match_id,
+          ...(row.rated_rating != null ? { ratedTier: row.rated_tier ?? null, ratedRating: row.rated_rating } : {})
         }))
       )
 
@@ -394,6 +430,27 @@ async function newestInFile(
     matchAt: await newest('matches', 'game_creation'),
     readingAt: await newest('rank_snapshots', 'captured_at')
   }
+}
+
+/**
+ * One game's ids in the file, oldest first, or every game's when the file
+ * predates games — read in a fixed order, as the matches section says why.
+ */
+async function matchIdsOf(db: SqliteReader, game: 'lol' | 'tft' | null): Promise<string[]> {
+  const rows = await db.all<{ match_id: string }>(
+    game === null
+      ? 'SELECT match_id FROM matches ORDER BY game_creation, match_id'
+      : 'SELECT match_id FROM matches WHERE game = ? ORDER BY game_creation, match_id',
+    game === null ? [] : [game]
+  )
+  return rows.map((row) => row.match_id)
+}
+
+/** Whether a table has a column — how a file says which Foxfire wrote it. */
+async function hasColumn(db: SqliteReader, table: string, column: string): Promise<boolean> {
+  if (!(await hasTable(db, table))) return false
+  const row = await db.get('SELECT 1 AS present FROM pragma_table_info(?) WHERE name = ?', [table, column])
+  return row !== undefined
 }
 
 async function hasTable(db: SqliteReader, name: string): Promise<boolean> {

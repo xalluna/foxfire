@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using Foxfire.Api.Common;
+using Foxfire.Core;
 using Foxfire.Api.Sync;
 using Foxfire.Data;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,7 @@ namespace Foxfire.Api.Features.Sync;
 /// its history froze on the day it was added. What stops that from being an
 /// open tap on the community's Riot key is <see cref="SyncCooldown"/>.
 /// </summary>
-public sealed record StartSyncRequest(Guid RiotAccountId) : IEmptyDomainRequest;
+public sealed record StartSyncRequest(Guid RiotAccountId, string? Game = null) : IEmptyDomainRequest;
 
 internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService sync, TimeProvider time)
     : IDomainRequestHandler<StartSyncRequest>
@@ -28,6 +29,14 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
     public async Task<Response> Handle(StartSyncRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (!GameParam.IsValid(request.Game))
+        {
+            return Response.Failure(
+                new Error("unknown_game", "That is not a game this server tracks."), HttpStatusCode.BadRequest);
+        }
+
+        var game = GameParam.Parse(request.Game);
 
         var known = await db.RiotAccounts
             .AnyAsync(a => a.Id == request.RiotAccountId, cancellationToken);
@@ -46,7 +55,7 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
 
         var state = await db.SyncStates
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.RiotAccountId == request.RiotAccountId, cancellationToken);
+            .FirstOrDefaultAsync(s => s.RiotAccountId == request.RiotAccountId && s.Game == game, cancellationToken);
 
         // Clients hold the button until the same moment, so this is only met by
         // one whose clock disagrees with ours, or that pressed a moment before
@@ -66,7 +75,7 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
 
         // Deliberately not awaited. The result is delivered as progress events,
         // and a failed run has already reported itself as one.
-        _ = sync.SyncAsync(request.RiotAccountId, SyncTrigger.Manual, CancellationToken.None);
+        _ = sync.SyncAsync(request.RiotAccountId, game, SyncTrigger.Manual, CancellationToken.None);
 
         return Response.Success(HttpStatusCode.Accepted);
     }
@@ -84,7 +93,12 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
 /// everything new, so the first game is found by the second game's attempts
 /// anyway.
 /// </summary>
-public sealed record GameEndedRequest(Guid RiotAccountId) : IEmptyDomainRequest;
+/// <param name="Game">
+/// Which game ended. Absent from a desktop older than TFT — which reports a TFT
+/// game ending too, from the same League client — and read as League then, at
+/// the cost of a League ladder that finds nothing.
+/// </param>
+public sealed record GameEndedRequest(Guid RiotAccountId, string? Game = null) : IEmptyDomainRequest;
 
 internal sealed class GameEndedRequestHandler(AccountOwnership ownership, PostGameSyncScheduler scheduler)
     : IDomainRequestHandler<GameEndedRequest>
@@ -96,7 +110,13 @@ internal sealed class GameEndedRequestHandler(AccountOwnership ownership, PostGa
         var account = await ownership.MineAsync(request.RiotAccountId, cancellationToken);
         if (account is null) return Response.Failure(AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
 
-        scheduler.Schedule(request.RiotAccountId);
+        if (!GameParam.IsValid(request.Game))
+        {
+            return Response.Failure(
+                new Error("unknown_game", "That is not a game this server tracks."), HttpStatusCode.BadRequest);
+        }
+
+        scheduler.Schedule(request.RiotAccountId, GameParam.Parse(request.Game));
         return Response.Success(HttpStatusCode.Accepted);
     }
 }

@@ -1,4 +1,4 @@
-import type { RecordingEvent, YouTubePrivacy } from '@foxfire/core'
+import type { GameId, RecordingEvent, TftAccess, TftTrait, TftUnit, YouTubePrivacy } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -138,6 +138,13 @@ export interface AppSettingsPublic {
   keyType: RiotKeyType
   /** Ignored while `keyType` is personal, whose limits are Riot's fixed ones. */
   applicationLimits: RiotKeyLimits
+  /** Whether TFT has a key of its own. Without one it is asked through the main key. */
+  hasTftApiKey: boolean
+  tftKeyRejected: boolean
+  tftKeyType: RiotKeyType
+  tftApplicationLimits: RiotKeyLimits
+  /** Whether the key TFT is asked through can reach it, as last found out. */
+  tftAccess: TftAccess
 }
 
 export type ApiKeyStatus = 'valid' | 'missing' | 'expired' | 'invalid'
@@ -277,9 +284,28 @@ export interface LinkedMatchInfo {
   assists: number
 }
 
+/**
+ * The TFT game a recording belongs to: the account's own board in it, as this
+ * PC holds it. A TFT game has a place where League's has a result and a score.
+ */
+export interface LinkedTftMatchInfo {
+  matchId: string
+  gameCreation: number
+  gameDuration: number
+  queueId: number | null
+  placement: number
+  teamPlacement: number | null
+  /** Seconds — when the player went out, which is when their game ended. */
+  timeEliminated: number
+  traits: TftTrait[]
+  units: TftUnit[]
+}
+
 export interface Recording {
   /** This machine's own row id. Recordings never leave the disk they are on. */
   id: number
+  /** Which game it is of; League's for every recording from before TFT. */
+  game: GameId
 
   /** Whose account it was recorded on, as whichever store owns accounts spells it. */
   accountId: string
@@ -298,7 +324,10 @@ export interface Recording {
   endedAt: number | null
   durationSeconds: number | null
   selfChampionId: number | null
+  /** League's bound game. Null for a TFT recording, which has `tftMatch` instead. */
   match: LinkedMatchInfo | null
+  /** A TFT recording's bound game, when this PC holds its board. */
+  tftMatch: LinkedTftMatchInfo | null
 
   /**
    * The file was deleted on purpose, and the row kept because the recording
@@ -410,6 +439,8 @@ export interface YouTubeSettings {
   autoUpload: boolean
   defaultPrivacy: YouTubePrivacy
   titleTemplate: string
+  /** A TFT recording's, which says where it finished where League's says how it went. */
+  tftTitleTemplate: string
 }
 
 /** Everything a recording window needs, fetched once when it opens. */

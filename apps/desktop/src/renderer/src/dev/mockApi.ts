@@ -57,12 +57,17 @@ import {
   scenario
 } from '@foxfire/screens/dev'
 import {
+  DEFAULT_TFT_TITLE_TEMPLATE,
   DEFAULT_TITLE_TEMPLATE,
+  UNMATCHED_TFT_TITLE_TEMPLATE,
   UNMATCHED_TITLE_TEMPLATE,
   buildRecordingDescription,
-  renderRecordingTitle
+  buildTftRecordingDescription,
+  renderRecordingTitle,
+  renderTftRecordingTitle
 } from '@foxfire/core/youtube'
-import { pageOf } from '@foxfire/core'
+import { pageOf, tftDisplayName, type GameId, type RiotKeyScope } from '@foxfire/core'
+import { tftTitleFacts } from '@shared/tftRecordingTitle'
 import { canUploadRecording } from '@shared/uploadEligibility'
 import {
   RECORDINGS,
@@ -100,7 +105,8 @@ let youtubeState: YouTubeState = {
 let youtubeSettings: YouTubeSettings = {
   autoUpload: false,
   defaultPrivacy: 'unlisted',
-  titleTemplate: DEFAULT_TITLE_TEMPLATE
+  titleTemplate: DEFAULT_TITLE_TEMPLATE,
+  tftTitleTemplate: DEFAULT_TFT_TITLE_TEMPLATE
 }
 const youtubeListeners = new Set<(state: YouTubeState) => void>()
 
@@ -149,6 +155,26 @@ const keyInvalidListeners = new Set<() => void>()
 // does not exist in the browser harness.
 let keyType: RiotKeyType = 'personal'
 let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+let hasTftKey = false
+let tftKeyType: RiotKeyType = 'personal'
+let tftApplicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+
+/** The Riot key settings as they stand in the harness, both keys. */
+function mockSettings(): AppSettingsPublic {
+  return {
+    hasApiKey: scenario !== 'no-key',
+    homeAccountId: scenario === 'no-accounts' ? null : 1,
+    keyRejected: scenario === 'key-expired',
+    keyType,
+    applicationLimits,
+    hasTftApiKey: hasTftKey,
+    tftKeyRejected: false,
+    tftKeyType,
+    tftApplicationLimits,
+    // `tft-no-access` is the main key with no TFT on it, until a key of its own is added.
+    tftAccess: scenario === 'tft-no-access' && !hasTftKey ? 'denied' : 'granted'
+  }
+}
 
 /**
  * The server connection, as module state so the harness behaves like the real
@@ -574,18 +600,7 @@ export const mockApi: Api = {
     }
   },
   settings: {
-    get: (): Promise<AppSettingsPublic> =>
-      delay(
-        {
-          hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired',
-          keyType,
-          applicationLimits
-        },
-        180,
-        false
-      ),
+    get: (): Promise<AppSettingsPublic> => delay(mockSettings(), 180, false),
     setApiKey: (key: string): Promise<ValidateResult> =>
       delay(
         key.startsWith('RGAPI-')
@@ -593,21 +608,25 @@ export const mockApi: Api = {
           : { ok: false, message: 'That does not look like a Riot API key.' },
         600
       ),
-    clearApiKey: (): Promise<AppSettingsPublic> =>
-      delay({ hasApiKey: false, homeAccountId: 1, keyRejected: false, keyType, applicationLimits }),
-    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits): Promise<AppSettingsPublic> => {
-      keyType = next
-      if (limits) applicationLimits = limits
-      return delay(
-        {
-          hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired',
-          keyType,
-          applicationLimits
-        },
-        180
-      )
+    clearApiKey: (): Promise<AppSettingsPublic> => delay({ ...mockSettings(), hasApiKey: false, keyRejected: false }),
+    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope): Promise<AppSettingsPublic> => {
+      if (scope === 'tft') {
+        tftKeyType = next
+        if (limits) tftApplicationLimits = limits
+      } else {
+        keyType = next
+        if (limits) applicationLimits = limits
+      }
+      return delay(mockSettings(), 180)
+    },
+    setTftApiKey: (key: string): Promise<ValidateResult> => {
+      const ok = key.startsWith('RGAPI-')
+      if (ok) hasTftKey = true
+      return delay(ok ? { ok: true } : { ok: false, message: 'That does not look like a Riot API key.' }, 600)
+    },
+    clearTftApiKey: (): Promise<AppSettingsPublic> => {
+      hasTftKey = false
+      return delay(mockSettings())
     },
     onKeyInvalid: (cb: () => void) => {
       keyInvalidListeners.add(cb)
@@ -666,6 +685,7 @@ export const mockApi: Api = {
 
   champions: fixture.champions,
   seasons: fixture.seasons,
+  tft: fixture.tft,
   mastery: fixture.mastery,
 
   rank: {
@@ -785,8 +805,8 @@ export const mockApi: Api = {
     reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
   },
   recordings: {
-    list: (accountId: string, page?: PageOptions): Promise<Page<Recording>> =>
-      delay(pageOf(RECORDINGS[accountId] ?? [], page), 220),
+    list: (accountId: string, page?: PageOptions, game?: GameId | null): Promise<Page<Recording>> =>
+      delay(pageOf((RECORDINGS[accountId] ?? []).filter((r) => !game || r.game === game), page), 220),
     // Everything that could go up, whole — what "select all" selects, pages or no pages.
     eligible: (accountId: string): Promise<Recording[]> =>
       delay((RECORDINGS[accountId] ?? []).filter(canUploadRecording), 180),
@@ -842,6 +862,23 @@ export const mockApi: Api = {
     draft: (recordingId: number): Promise<UploadDraft> => {
       const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
       const match = recording?.match
+      if (recording?.game === 'tft') {
+        const facts = tftTitleFacts(recording, recording.tftMatch, tftDisplayName)
+        return delay(
+          {
+            recordingId,
+            title: renderTftRecordingTitle(
+              facts.placement === null ? UNMATCHED_TFT_TITLE_TEMPLATE : youtubeSettings.tftTitleTemplate,
+              facts
+            ),
+            description: buildTftRecordingDescription(),
+            privacy: youtubeSettings.defaultPrivacy,
+            durationSeconds: recording.durationSeconds
+          },
+          250,
+          false
+        )
+      }
       return delay(
         {
           recordingId,

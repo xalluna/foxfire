@@ -63,6 +63,25 @@ describe('isGameEndTransition', () => {
     expect(isGameEndTransition('InProgress', 'InProgress')).toBe(false)
     expect(isGameEndTransition('EndOfGame', 'EndOfGame')).toBe(false)
   })
+
+  it('ends a TFT game whenever the player leaves it, as "Exit now" does', () => {
+    // Knocked out, a TFT player can leave while the lobby plays on, and the
+    // client may go straight back to the lobby rather than through the end
+    // phases League's games take.
+    expect(isGameEndTransition('InProgress', 'Lobby', 'tft')).toBe(true)
+    expect(isGameEndTransition('InProgress', 'None', 'tft')).toBe(true)
+    expect(isGameEndTransition('InProgress', 'WaitingForStats', 'tft')).toBe(true)
+  })
+
+  it('still holds a TFT game open through a reconnect', () => {
+    expect(isGameEndTransition('InProgress', 'Reconnect', 'tft')).toBe(false)
+    expect(isGameEndTransition('Reconnect', 'InProgress', 'tft')).toBe(false)
+    expect(isGameEndTransition('InProgress', null, 'tft')).toBe(false)
+  })
+
+  it('keeps League’s rule for League, where leaving for the lobby is not an end', () => {
+    expect(isGameEndTransition('InProgress', 'Lobby')).toBe(false)
+  })
 })
 
 describe('isUploadQuietPhase', () => {

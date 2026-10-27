@@ -33,10 +33,13 @@ import type {
   ServerAdminSettings,
   ServerStorageUsage,
   SyncProgressEvent,
-  SyncState
+  SyncState,
+  GameId,
+  TftLadder
 } from '@foxfire/core'
 import {
   compareSearchResults,
+  ladderMovementFor,
   pageOf,
   rankMovement,
   rankTrend,
@@ -50,6 +53,17 @@ import { favoritesOver } from '@foxfire/core/server'
 import { isPlayer } from '@foxfire/core/routes'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
+import { TFT_MANIFEST } from './tftManifest'
+import {
+  TFT_SEASONS,
+  clearTftManual,
+  saveTftManual,
+  tftDashboardFor,
+  tftEditableFor,
+  tftLobbyFor,
+  tftMatchesFor,
+  tftSnapshotsFor
+} from './tftFixtures'
 import {
   ACCOUNTS,
   COMMUNITY,
@@ -181,7 +195,7 @@ function syncTooSoon(accountId: string): AdminActionResult | null {
 }
 
 /** Drives a believable progress sequence so the progress bar can be designed against motion. */
-function runFakeSync(accountId: string): void {
+function runFakeSync(accountId: string, game: GameId = 'lol'): void {
   if (scenario === 'sync-error') {
     setTimeout(() => {
       for (const cb of progressListeners) {
@@ -191,7 +205,8 @@ function runFakeSync(accountId: string): void {
           current: 0,
           total: 100,
           message: 'Riot API unreachable',
-          trigger: 'manual'
+          trigger: 'manual',
+          game
         })
       }
     }, 400)
@@ -214,6 +229,7 @@ function runFakeSync(accountId: string): void {
         // The harness exists to design the progress bar against motion, and an
         // auto-triggered sync deliberately renders nothing.
         trigger: 'manual',
+        game,
         ...(done && { cooldownUntil: cooldownUntil(accountId) })
       })
     }
@@ -586,6 +602,7 @@ function isMemberMatch(user: AdminUser, needle: string): boolean {
 let mockServerSettings: ServerAdminSettings = {
   publicSignup: true,
   backfillTarget: 200,
+  tftBackfillTarget: 200,
   replayByteCap: 0
 }
 
@@ -759,20 +776,101 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     },
 
     sync: {
-      start: (accountId: string): Promise<AdminActionResult> => {
+      start: (accountId: string, game?: GameId): Promise<AdminActionResult> => {
         const refused = syncTooSoon(accountId)
         if (refused) return delay(refused, 100)
 
-        runFakeSync(accountId)
+        runFakeSync(accountId, game)
         return delay({ ok: true, error: null }, 100)
       },
-      getState: (accountId: string): Promise<SyncState | null> => delay(syncState(accountId))
+      getState: (accountId: string, game?: GameId): Promise<SyncState | null> =>
+        delay({ ...syncState(accountId), ...(game === 'tft' ? { game } : {}) })
+    },
+
+    // The home account's set of TFT, generated once per load; see tftFixtures.
+    tft: {
+      dashboard: async (accountId: string) => {
+        const account = everyone().find((a) => a.id === accountId)
+        if (!account) return delay(null)
+        return delay(tftDashboardFor(account, scenario === 'tft-no-access' ? 'denied' : 'granted'), 260)
+      },
+
+      matchList: (accountId: string, limit: number, offset: number, queueId: number | null) => {
+        const account = everyone().find((a) => a.id === accountId)
+        const rows = account && scenario !== 'no-matches' ? tftMatchesFor(account, queueId) : []
+        return delay(pageOf(rows, { limit, offset }), 320)
+      },
+
+      matchSummary: (accountId: string, matchId: string) => {
+        const account = everyone().find((a) => a.id === accountId)
+        return delay(account ? (tftMatchesFor(account, null).find((r) => r.matchId === matchId) ?? null) : null)
+      },
+
+      lobby: (_accountId: string, matchId: string) => delay(tftLobbyFor(matchId, everyone()), 240),
+
+      rank: {
+        history: (accountId: string, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
+          const account = everyone().find((a) => a.id === accountId)
+          const { sinceMs, untilMs } = rangeBounds(range, TFT_SEASONS)
+          const series = account ? tftSnapshotsFor(account, queueType as TftLadder) : []
+          const snapshots = series.filter(
+            (s) => (sinceMs === null || s.capturedAt >= sinceMs) && (untilMs === null || s.capturedAt < untilMs)
+          )
+          const before = sinceMs === null ? null : (series.filter((s) => s.capturedAt < sinceMs).at(-1) ?? null)
+          // As League's below, on whichever scale the ladder climbs.
+          const milestones = snapshots
+            .flatMap((snapshot, i) => {
+              if (i === 0 || resetsBetween(TFT_SEASONS, snapshots[i - 1].capturedAt, snapshot.capturedAt)) return []
+              const movement = ladderMovementFor(queueType, snapshots[i - 1], snapshot)
+              if (movement === 'none') return []
+              return [
+                {
+                  queueType,
+                  movement,
+                  tier: snapshot.tier,
+                  rank: snapshot.rank,
+                  capturedAt: snapshot.capturedAt,
+                  ratedTier: snapshot.ratedTier ?? null
+                }
+              ]
+            })
+            .reverse()
+          return delay({ snapshots, milestones, before }, 280)
+        },
+
+        trend: (accountId: string, queueType: QueueType): Promise<RankTrend> => {
+          const account = everyone().find((a) => a.id === accountId)
+          const series = account ? tftSnapshotsFor(account, queueType as TftLadder) : []
+          return delay(rankTrend(series, TFT_SEASONS, Date.now()), 220)
+        },
+
+        periods: (): Promise<Season[]> => delay(TFT_SEASONS.slice().reverse(), 120),
+
+        editable: (accountId: string, queueType: QueueType) => {
+          const account = everyone().find((a) => a.id === accountId)
+          return delay(account ? tftEditableFor(account, queueType as TftLadder) : [], 200)
+        },
+
+        saveManual: (accountId: string, queueType: QueueType, edits) => {
+          const account = everyone().find((a) => a.id === accountId)
+          const fresh = account ? saveTftManual(account, queueType as TftLadder, edits) : []
+          notifyEdited(accountId)
+          return delay(fresh, 250)
+        },
+
+        clearManual: (accountId: string, queueType: QueueType, matchId: string) => {
+          const account = everyone().find((a) => a.id === accountId)
+          const fresh = account ? clearTftManual(account, queueType as TftLadder, matchId) : []
+          notifyEdited(accountId)
+          return delay(fresh, 250)
+        }
+      }
     },
 
     assets: {
       // Real Data Dragon metadata, so champion, item, spell and rune art all load
       // from the CDN exactly as it does in the app.
-      get: (): Promise<AssetManifest> => delay(DDRAGON_MANIFEST, 60, false)
+      get: (): Promise<AssetManifest> => delay({ ...DDRAGON_MANIFEST, tft: TFT_MANIFEST }, 60, false)
     },
 
     account: {
@@ -797,10 +895,10 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     // rewriting it at runtime would desync the already-stamped fixture
     // snapshots from the list the pickers are built from.
     seasons: {
-      list: (): Promise<Season[]> => delay(DEV_SEASONS, 120),
-      save: (seasons: SeasonInput[]): Promise<Season[]> =>
+      list: (game?: GameId): Promise<Season[]> => delay(game === 'tft' ? TFT_SEASONS : DEV_SEASONS, 120),
+      save: (seasons: SeasonInput[], game?: GameId): Promise<Season[]> =>
         delay(
-          seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i })),
+          seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i, ...(game === 'tft' ? { game } : {}) })),
           200
         )
     },

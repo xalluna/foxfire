@@ -53,6 +53,12 @@ public static class ServerSettingKeys
     public const string PublicSignup = "signup.public";
 
     /// <summary>
+    /// How many TFT matches to fetch when an account is first linked. League's
+    /// <see cref="BackfillTarget"/> is its own, under the key it always had.
+    /// </summary>
+    public const string TftBackfillTarget = "sync.tftBackfillTarget";
+
+    /// <summary>
     /// How many matches to fetch when an account is first linked.
     ///
     /// Configurable because one personal Riot key is roughly 100 requests every

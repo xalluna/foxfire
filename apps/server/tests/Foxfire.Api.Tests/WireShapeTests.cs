@@ -214,6 +214,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         [
             "/api/search?q=",
             $"/api/riot-accounts/{accountId}/matches",
+            $"/api/riot-accounts/{accountId}/tft/matches",
             "/api/admin/users/",
             "/api/admin/invites/used",
             "/api/admin/storage/replays",
@@ -546,7 +547,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/seasons", UriKind.Relative));
         var season = seasons.EnumerateArray().First();
 
-        AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank");
+        AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank", "game");
     }
 
     [Fact]

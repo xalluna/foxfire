@@ -104,6 +104,23 @@ export { LpEditorPage } from './pages/LpEditorPage'
 export { MatchPage } from './pages/MatchPage'
 export { RankPage } from './pages/RankPage'
 export { RankInput, RankLabel, isApexTier } from './pages/RankInput'
+export { TftProfilePage, type TftProfilePageProps } from './pages/TftProfilePage'
+
+// TFT
+export {
+  PlacementBadge,
+  PlacementCell,
+  TraitBadge,
+  TraitStrip,
+  UnitStrip,
+  UnitTile
+} from './components/tft/TftBoard'
+export { TftLobbyTable } from './components/tft/TftLobbyTable'
+export { TftMatchListRow } from './components/tft/TftMatchListRow'
+export { PlacementSpread, TftRankCard } from './components/tft/TftRankCard'
+export { TftRecentSummary } from './components/tft/TftRecentSummary'
+export { costColor, formatStage, placementTone, tftAsset, tftName, tftUnitCost, traitStyle } from './lib/tft'
+export { summariseTftRecent, type TftRecentSummary as TftRecentFigures } from './lib/tftRecent'
 export { ServerDataPage, type ServerDataPageProps } from './admin/ServerData'
 export { InvitesPage, type InvitesPageProps } from './admin/Invites'
 export { LeagueAccountsPage, type LeagueAccountsPageProps } from './admin/LeagueAccounts'
@@ -165,6 +182,8 @@ export {
   isTier,
   queueLabel,
   rankRecord,
+  ratedTierColor,
+  ratedTierLabel,
   tierColor,
   tierCrest,
   tierLabel,

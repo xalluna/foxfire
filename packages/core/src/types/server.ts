@@ -368,6 +368,8 @@ export interface AdminInvite {
 export interface ServerAdminSettings {
   publicSignup: boolean
   backfillTarget: number
+  /** How far back a new account's TFT goes, separately from League's. Absent from a server older than TFT. */
+  tftBackfillTarget?: number
 
   /**
    * How many bytes of blob storage replays may take. Zero means no cap.

@@ -29,20 +29,25 @@ public static class SyncEndpoints
 
         // The one route that answers with a Location as well as a status, which
         // is an HTTP detail rather than anything the handler has an opinion on.
+        // ?game=tft for TFT's history; no game is League's, as it always was.
         group.MapPost("/{riotAccountId:guid}", async (
             Guid riotAccountId,
+            string? game,
             ISender sender,
             CancellationToken cancellationToken) =>
         {
-            var started = await sender.Send(new StartSyncRequest(riotAccountId), cancellationToken);
-            return started.Errors.Count > 0 ? started.ToResult() : Results.Accepted($"{ApiPaths.Base}/sync/{riotAccountId}");
+            var started = await sender.Send(new StartSyncRequest(riotAccountId, game), cancellationToken);
+            return started.Errors.Count > 0
+                ? started.ToResult()
+                : Results.Accepted($"{ApiPaths.Base}/sync/{riotAccountId}{(game is null ? "" : $"?game={game}")}");
         });
 
         group.MapGet("/{riotAccountId:guid}", (
                 Guid riotAccountId,
+                string? game,
                 ISender sender,
                 CancellationToken cancellationToken) =>
-            sender.SendAsync(new GetSyncStateRequest(riotAccountId), cancellationToken));
+            sender.SendAsync(new GetSyncStateRequest(riotAccountId, game), cancellationToken));
 
         group.MapPost("/game-ended", (
                 [FromBody] GameEndedRequest request,

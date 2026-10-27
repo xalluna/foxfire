@@ -37,8 +37,31 @@ describe('invalidationsFor', () => {
       queryKeys.rankHistory('acc-2'),
       queryKeys.rankTrend('acc-2'),
       queryKeys.matchList('acc-2'),
-      queryKeys.dashboard('acc-2')
+      queryKeys.dashboard('acc-2'),
+      queryKeys.tftMatchList('acc-2'),
+      queryKeys.tftDashboard('acc-2')
     ])
+  })
+
+  it("refreshes a finished TFT sync's TFT history and the shared rank keys, and leaves League's alone", () => {
+    const keys = invalidationsFor({ kind: 'syncProgress', event: { ...progress('complete'), game: 'tft' } })
+
+    expect(keys).toEqual([
+      queryKeys.tftMatchList('acc-1'),
+      queryKeys.tftDashboard('acc-1'),
+      queryKeys.rankHistory('acc-1'),
+      queryKeys.rankTrend('acc-1'),
+      queryKeys.rankPeriods('acc-1')
+    ])
+    expect(keys).not.toContainEqual(queryKeys.matchList('acc-1'))
+    expect(keys).not.toContainEqual(queryKeys.championStats('acc-1'))
+  })
+
+  it('reads a sync that names no game as League, as every one from before TFT is', () => {
+    expect(invalidationsFor({ kind: 'syncProgress', event: progress('complete') })[0]).toEqual(queryKeys.matchList('acc-1'))
+    expect(
+      invalidationsFor({ kind: 'syncProgress', event: { ...progress('complete'), game: 'lol' } })[0]
+    ).toEqual(queryKeys.matchList('acc-1'))
   })
 
   it('refreshes every account when the League client reports a rank', () => {
@@ -46,7 +69,9 @@ describe('invalidationsFor', () => {
       queryKeys.rankHistory(),
       queryKeys.rankTrend(),
       queryKeys.matchLists(),
-      queryKeys.dashboard()
+      queryKeys.dashboard(),
+      queryKeys.tftMatchLists(),
+      queryKeys.tftDashboard()
     ])
   })
 
@@ -56,7 +81,9 @@ describe('invalidationsFor', () => {
       queryKeys.rankHistory(),
       queryKeys.rankTrend(),
       queryKeys.championStats(),
-      queryKeys.matchLists()
+      queryKeys.matchLists(),
+      queryKeys.tftMatchLists(),
+      queryKeys.tftDashboard()
     ])
   })
 
@@ -68,7 +95,10 @@ describe('invalidationsFor', () => {
 describe('a recording changing', () => {
   it('refreshes that account’s history and the recording under it, and nobody else’s', () => {
     const keys = invalidationsFor({ kind: 'recordingChanged', accountId: 'acc-1', matchId: 'NA1_1' })
-    expect(keys).toEqual([queryKeys.matchList('acc-1')])
+    expect(keys).toEqual([queryKeys.matchList('acc-1'), queryKeys.tftMatchList('acc-1')])
+
+    const tftRow = queryKeys.tftMatchSummary('acc-1', 'NA1_1')
+    expect(tftRow.slice(0, keys[1]!.length)).toEqual(keys[1])
 
     const recording = queryKeys.matchRecording('acc-1', 'NA1_1')
     expect(recording.slice(0, keys[0]!.length)).toEqual(keys[0])
@@ -97,6 +127,19 @@ describe('queryKeys', () => {
     // Its own prefix: refreshing the Rank page's history must not be what
     // keeps the profile's graph current, or one could be forgotten.
     expect(solo[0]).not.toEqual(queryKeys.rankHistory()[0])
+  })
+
+  it("keeps League's keys exactly as they were, and nests TFT's beneath the same refreshes", () => {
+    expect(queryKeys.rankPeriods('acc-1')).toEqual(['rankPeriods', 'acc-1'])
+    expect(queryKeys.seasons()).toEqual(['seasons'])
+
+    const tftPeriods = queryKeys.rankPeriods('acc-1', 'tft')
+    expect(tftPeriods.slice(0, 2)).toEqual(queryKeys.rankPeriods('acc-1'))
+    expect(queryKeys.seasons('tft').slice(0, 1)).toEqual(queryKeys.seasons())
+
+    const row = queryKeys.tftMatchSummary('acc-1', 'NA1_9')
+    expect(row.slice(0, queryKeys.tftMatchList('acc-1').length)).toEqual(queryKeys.tftMatchList('acc-1'))
+    expect(row[0]).not.toEqual(queryKeys.matchLists()[0])
   })
 
   it('keeps the admin settings under one key, whichever page reads them', () => {

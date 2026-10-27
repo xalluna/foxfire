@@ -18,6 +18,7 @@ import { DashboardScreen } from '../screens/DashboardScreen'
 import { LpEditorScreen } from '../screens/LpEditorScreen'
 import { RankScreen } from '../screens/RankScreen'
 import { RecordingScreen } from '../screens/RecordingScreen'
+import { TftProfileScreen } from '../screens/TftProfileScreen'
 import {
   DEFAULT_RANK_RANGE,
   queueIdFrom,
@@ -29,10 +30,20 @@ import {
   validateDashboardSearch,
   validateLpEditorSearch,
   validateRankSearch,
+  validateRecordingSearch,
+  validateTftRankSearch,
+  validateTftSearch,
+  tftLadderFrom,
+  tftQueueIdFrom,
+  tftQueueSearchFor,
+  tftRankQueueSearchFor,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
-  type RankSearch
+  type RankSearch,
+  type RecordingSearch,
+  type TftRankSearch,
+  type TftSearch
 } from './params'
 import { rememberSearch } from './rememberSearch'
 import { useRouteSearch } from './useRouteSearch'
@@ -92,6 +103,7 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   // never share what somebody last picked.
   const dashboardMemory = rememberSearch<DashboardSearch>(['queue'])
   const championsMemory = rememberSearch<ChampionsSearch>(['queue'])
+  const tftMemory = rememberSearch<TftSearch>(['queue'])
 
   const player = createRoute({
     getParentRoute: () => parent,
@@ -143,10 +155,36 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   const recording = createRoute({
     getParentRoute: () => player,
     path: 'recordings/$matchId',
+    validateSearch: validateRecordingSearch,
     component: RecordingRoute
   })
 
-  return { player, dashboard, champions, rank, lpEditor, recording }
+  // TFT, under the same player: the Riot ID is shared, so its pages sit
+  // beside League's rather than under a game of their own.
+  const tft = createRoute({
+    getParentRoute: () => player,
+    path: 'tft',
+    component: Outlet
+  })
+
+  const tftProfile = createRoute({
+    getParentRoute: () => tft,
+    path: '/',
+    validateSearch: validateTftSearch,
+    search: { middlewares: [tftMemory.middleware as never] },
+    onEnter: (match) => tftMemory.record(match.search as TftSearch),
+    onStay: (match) => tftMemory.record(match.search as TftSearch),
+    component: TftProfileRoute
+  })
+
+  const tftRank = createRoute({
+    getParentRoute: () => tft,
+    path: 'rank',
+    validateSearch: validateTftRankSearch,
+    component: TftRankRoute
+  })
+
+  return { player, dashboard, champions, rank, lpEditor, recording, tft, tftProfile, tftRank }
 }
 
 /**
@@ -263,6 +301,29 @@ function DashboardRoute(): JSX.Element {
   )
 }
 
+function TftProfileRoute(): JSX.Element {
+  const account = usePlayer()
+  const [search, setSearch] = useRouteSearch<TftSearch>()
+  const [focus, setFocus] = useState<MatchFocus | null>(null)
+
+  // A game asked for from elsewhere, opened and then taken out of the URL, as
+  // on League's profile.
+  useEffect(() => {
+    if (search.match === undefined) return
+    setFocus({ matchId: search.match })
+    setSearch({ match: undefined }, { replace: true })
+  }, [search.match, setSearch])
+
+  return (
+    <TftProfileScreen
+      account={account}
+      queueId={tftQueueIdFrom(search.queue)}
+      onQueueChange={(queueId) => setSearch({ queue: tftQueueSearchFor(queueId) })}
+      focus={focus}
+    />
+  )
+}
+
 function ChampionsRoute(): JSX.Element {
   const account = usePlayer()
   const [search, setSearch] = useRouteSearch<ChampionsSearch>()
@@ -295,15 +356,35 @@ function RankRoute(): JSX.Element {
   )
 }
 
+function TftRankRoute(): JSX.Element {
+  const account = usePlayer()
+  const [search, setSearch] = useRouteSearch<TftRankSearch>()
+
+  return (
+    <RankScreen
+      account={account}
+      game="tft"
+      queueType={tftLadderFrom(search.queue)}
+      onQueueTypeChange={(queueType) => setSearch({ queue: tftRankQueueSearchFor(queueType) })}
+      range={search.range ?? DEFAULT_RANK_RANGE}
+      onRangeChange={(range) => setSearch({ range: rankRangeSearchFor(range) })}
+      back={<PlayerBackLink account={account} label="profile" game="tft" />}
+    />
+  )
+}
+
 function RecordingRoute(): JSX.Element {
   const account = usePlayer()
   const { matchId } = useParams({ strict: false }) as { matchId: string }
+  const [search] = useRouteSearch<RecordingSearch>()
+  const game = search.game ?? 'lol'
 
   return (
     <RecordingScreen
       account={account}
       matchId={matchId}
-      back={<PlayerBackLink account={account} label="history" match={matchId} />}
+      game={game}
+      back={<PlayerBackLink account={account} label="history" match={matchId} game={game} />}
     />
   )
 }

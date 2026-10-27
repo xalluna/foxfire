@@ -13,6 +13,7 @@ export type RiotOutcome =
   | 'parse_error'
   | 'network_error'
   | 'key_invalid'
+  | 'no_access'
   | 'never_ran'
 
 export interface RiotRequestRow {

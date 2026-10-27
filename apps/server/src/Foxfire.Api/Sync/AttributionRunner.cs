@@ -37,8 +37,22 @@ public sealed class AttributionRunner(FoxfireDbContext db)
     /// <param name="sinceMs">
     /// Epoch milliseconds, or null for everything ever recorded.
     /// </param>
+    public Task<int> ReplayAsync(
+        Guid riotAccountId,
+        string puuid,
+        long? sinceMs,
+        CancellationToken cancellationToken = default) =>
+        ReplayAsync(riotAccountId, Game.Lol, puuid, sinceMs, cancellationToken);
+
+    /// <summary>
+    /// One game's replay: its ladders, its seasons, and its own games as the
+    /// candidates — League's from its participants, TFT's from its boards,
+    /// placed at the player's elimination.
+    /// </summary>
+    /// <param name="puuid">The account's puuid under the key that game is fetched with.</param>
     public async Task<int> ReplayAsync(
         Guid riotAccountId,
+        Game game,
         string puuid,
         long? sinceMs,
         CancellationToken cancellationToken = default)
@@ -46,12 +60,14 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         // Loaded once rather than per interval: this walks every stored pair for
         // both ladders, and the list is a handful of rows that cannot change
         // underneath it.
-        var seasons = await LoadSeasonsAsync(cancellationToken);
-        var candidates = await LoadCandidatesAsync(puuid, sinceMs, cancellationToken);
+        var seasons = await LoadSeasonsAsync(game, cancellationToken);
+        var candidates = game == Game.Tft
+            ? await LoadTftCandidatesAsync(puuid, sinceMs, cancellationToken)
+            : await LoadCandidatesAsync(puuid, sinceMs, cancellationToken);
 
         var written = 0;
 
-        foreach (var queue in RankedQueues.All)
+        foreach (var queue in RankedQueues.Of(game))
         {
             var readings = await LoadReadingsAsync(riotAccountId, queue, sinceMs, cancellationToken);
             if (readings.Count < 2) continue;
@@ -80,12 +96,12 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         RankedQueue queue,
         CancellationToken cancellationToken = default)
     {
-        await DeleteAsync(riotAccountId, queue.RiotName(), cancellationToken);
+        await DeleteAsync(riotAccountId, [queue.RiotName()], cancellationToken);
 
         // Unbounded, because the rows just deleted reach as far back as the
         // history does and a windowed replay would leave the older ones gone
         // rather than rebuilt.
-        await ReplayAsync(riotAccountId, puuid, null, cancellationToken);
+        await ReplayAsync(riotAccountId, queue.Game(), puuid, null, cancellationToken);
     }
 
     /// <summary>
@@ -94,13 +110,21 @@ public sealed class AttributionRunner(FoxfireDbContext db)
     ///
     /// Returns how many rows the rebuild wrote.
     /// </summary>
+    public Task<int> RebuildAllAsync(
+        Guid riotAccountId,
+        string puuid,
+        CancellationToken cancellationToken = default) =>
+        RebuildAllAsync(riotAccountId, Game.Lol, puuid, cancellationToken);
+
+    /// <summary>Every one of one game's figures for an account, from scratch.</summary>
     public async Task<int> RebuildAllAsync(
         Guid riotAccountId,
+        Game game,
         string puuid,
         CancellationToken cancellationToken = default)
     {
-        await DeleteAsync(riotAccountId, null, cancellationToken);
-        return await ReplayAsync(riotAccountId, puuid, null, cancellationToken);
+        await DeleteAsync(riotAccountId, [.. RankedQueues.Of(game).Select(q => q.RiotName())], cancellationToken);
+        return await ReplayAsync(riotAccountId, game, puuid, null, cancellationToken);
     }
 
     /// <summary>
@@ -113,24 +137,24 @@ public sealed class AttributionRunner(FoxfireDbContext db)
     /// table rebuilds one ladder after the other in one scope, which is exactly
     /// that.
     /// </summary>
-    private async Task DeleteAsync(Guid riotAccountId, string? queueName, CancellationToken cancellationToken)
+    private async Task DeleteAsync(Guid riotAccountId, IReadOnlyList<string> queueNames, CancellationToken cancellationToken)
     {
         await db.MatchRanks
-            .Where(r => r.RiotAccountId == riotAccountId && (queueName == null || r.QueueType == queueName))
+            .Where(r => r.RiotAccountId == riotAccountId && queueNames.Contains(r.QueueType))
             .ExecuteDeleteAsync(cancellationToken);
 
         var stale = db.ChangeTracker.Entries<MatchRank>()
-            .Where(e => e.Entity.RiotAccountId == riotAccountId
-                && (queueName == null || e.Entity.QueueType == queueName))
+            .Where(e => e.Entity.RiotAccountId == riotAccountId && queueNames.Contains(e.Entity.QueueType))
             .ToList();
 
         foreach (var entry in stale) entry.State = EntityState.Detached;
     }
 
-    private async Task<IReadOnlyList<Season>> LoadSeasonsAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<Season>> LoadSeasonsAsync(Game game, CancellationToken cancellationToken)
     {
         var seasons = await db.Seasons
             .AsNoTracking()
+            .Where(s => s.Game == game)
             .OrderBy(s => s.StartsAt)
             .ToListAsync(cancellationToken);
 
@@ -186,6 +210,41 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         ];
     }
 
+    /// <summary>
+    /// A TFT player's ranked games, each placed where its LP moved: at the
+    /// player's own elimination, which is earlier than the lobby's end by as
+    /// much as twenty minutes. TFT has no remakes.
+    /// </summary>
+    private async Task<IReadOnlyList<RankedMatch>> LoadTftCandidatesAsync(
+        string puuid,
+        long? sinceMs,
+        CancellationToken cancellationToken)
+    {
+        var floor = sinceMs is { } since ? since - LookBackMs : long.MinValue;
+
+        var rows = await db.TftParticipants
+            .AsNoTracking()
+            .Where(p => p.Puuid == puuid)
+            .Join(
+                db.Matches.AsNoTracking(),
+                p => p.MatchId,
+                m => m.MatchId,
+                (p, m) => new { m.MatchId, m.GameCreation, m.GameDuration, m.QueueId, p.TimeEliminated })
+            .Where(x => x.QueueId != null && x.GameCreation >= floor)
+            .ToListAsync(cancellationToken);
+
+        return
+        [
+            .. rows.Select(x => new RankedMatch(
+                x.MatchId,
+                x.GameCreation,
+                x.GameDuration,
+                x.QueueId!.Value,
+                EndedInEarlySurrender: false,
+                EndedAt: TftPlacements.GameEnd(x.GameCreation, x.TimeEliminated, x.GameDuration)))
+        ];
+    }
+
     /// <summary>Longer than any game lasts, which is all the candidate floor needs.</summary>
     private const long LookBackMs = 86_400_000L;
 
@@ -233,7 +292,9 @@ public sealed class AttributionRunner(FoxfireDbContext db)
                 LpAfter = attribution.LpAfter,
                 LpDelta = attribution.LpDelta,
                 IsPromotion = attribution.IsPromotion,
-                IsDemotion = attribution.IsDemotion
+                IsDemotion = attribution.IsDemotion,
+                RatedTierBefore = attribution.RatedTierBefore,
+                RatedTierAfter = attribution.RatedTierAfter
             });
 
             return true;
@@ -249,6 +310,8 @@ public sealed class AttributionRunner(FoxfireDbContext db)
         existing.LpDelta = attribution.LpDelta;
         existing.IsPromotion = attribution.IsPromotion;
         existing.IsDemotion = attribution.IsDemotion;
+        existing.RatedTierBefore = attribution.RatedTierBefore;
+        existing.RatedTierAfter = attribution.RatedTierAfter;
 
         // An unchanged row is the ordinary outcome of a replay and should not be
         // counted as work done — otherwise every sync reports attributing games

@@ -42,7 +42,9 @@ import {
 } from './captureState'
 import { selfNameSet, toRecordingEvents, type LiveEventDto } from './eventMapping'
 import { recordSignalFor, resolveOutputPath } from './recordEvents'
-import { containsGameStart, gameReadiness } from './gameClock'
+import { containsGameStart, gameReadiness, isTftReady } from './gameClock'
+import { fileFinishedRecording } from './fileRecording'
+import type { GameId } from '@foxfire/core'
 import type { CaptureStatus } from '@shared/types'
 
 /**
@@ -71,7 +73,7 @@ let timer: NodeJS.Timeout | null = null
 let running = false
 
 /** Set between asking OBS to record and OBS confirming it started. */
-let awaitingStart: { accountId: string; queueId: number | null } | null = null
+let awaitingStart: { accountId: string; queueId: number | null; game: GameId; gameId: number | null } | null = null
 
 /** Last moment the game answered on loopback, so a crash can be told from a stall. */
 let gameLastSeen = 0
@@ -161,7 +163,12 @@ async function runEffect(effect: SessionEffect): Promise<void> {
 
     case 'beginRecording': {
       if (awaitingStart) return
-      awaitingStart = { accountId: effect.accountId, queueId: effect.queueId }
+      awaitingStart = {
+        accountId: effect.accountId,
+        queueId: effect.queueId,
+        game: effect.game,
+        gameId: effect.gameId
+      }
       try {
         await beginRecording()
       } catch (err) {
@@ -234,7 +241,9 @@ async function onRecordingStarted(): Promise<void> {
   awaitingStart = null
   if (!pending) return
 
-  const board = await readScoreboard(pending.accountId)
+  // A TFT game serves no scoreboard, clock or events: its recording keeps no
+  // markers to offset, and its match is found by its id rather than a roster.
+  const board = pending.game === 'tft' ? null : await readScoreboard(pending.accountId)
   gameTimeOffset = board?.gameTime ?? 0
   selfNames = selfNameSet(
     board?.players
@@ -258,10 +267,13 @@ async function onRecordingStarted(): Promise<void> {
     startedAt: Date.now(),
     gameTimeOffset,
     selfChampionId: board?.players.find((player) => player.isSelf)?.championId ?? null,
-    roster: board?.players.map((player) => player.championId ?? -1) ?? []
+    roster: board?.players.map((player) => player.championId ?? -1) ?? [],
+    game: pending.game,
+    gameId: pending.gameId,
+    platformId: account.platformId ?? null
   })
 
-  log.info('Recording started', { recordingId, gameTimeOffset })
+  log.info('Recording started', { recordingId, game: pending.game, gameId: pending.gameId, gameTimeOffset })
   dispatch({ type: 'recordingStarted', recordingId, at: Date.now() })
   broadcastRecordingsChanged()
 }
@@ -285,8 +297,14 @@ function finalizeRecording(recordingId: number, eventPath: string | null): void 
     }
   }
 
-  finishRecording(db, recordingId, endedAt, path ?? `unknown-${recordingId}`, bytes)
-  log.info('Recording finished', { recordingId, path, bytes })
+  // Into its place under the folder — player, game, mode — now that OBS has
+  // closed it. See recordingLayout.ts.
+  const filed = path
+    ? fileFinishedRecording(db, recordingId, path, getCaptureSettings().folder, broadcastRecordingsChanged)
+    : null
+
+  finishRecording(db, recordingId, endedAt, filed ?? `unknown-${recordingId}`, bytes)
+  log.info('Recording finished', { recordingId, path: filed, bytes })
 
   void leaveManagedMode().catch(() => undefined)
   dispatch({ type: 'recordingStopped', at: endedAt })
@@ -301,6 +319,21 @@ function finalizeRecording(recordingId: number, eventPath: string | null): void 
   // actually pair it. This is only the free attempt in case the match was
   // already there.
   if (accountId !== null) void bindPendingRecordings(accountId).catch(() => undefined)
+}
+
+/**
+ * One tick of a TFT game, which only ever starts the recording.
+ *
+ * TFT's game serves nothing on loopback to read (see TFT_START_DELAY_MS), so it
+ * records on time alone and stops when the League client says the game is
+ * over — there is no clock whose silence could say it is gone sooner.
+ */
+function tickTft(now: number): void {
+  if (state.phase !== 'armed') return
+  const armedForMs = now - (state.armedAt ?? now)
+  if (!isTftReady(armedForMs)) return
+  log.info('TFT game is live; starting the recording', { armedForMs })
+  dispatch({ type: 'gameReady', gameTime: 0, at: now })
 }
 
 async function readScoreboard(accountId: string): Promise<Scoreboard | null> {
@@ -344,6 +377,11 @@ async function pollEvents(recordingId: number): Promise<void> {
 async function tick(): Promise<void> {
   const now = Date.now()
   dispatch({ type: 'tick', at: now })
+
+  if (state.game === 'tft') {
+    tickTft(now)
+    return
+  }
 
   if (state.phase === 'armed' && state.accountId !== null) {
     // The 404 that lasts from champion select until the game process is up is
@@ -414,12 +452,20 @@ function scheduleNextPoll(): void {
  * The watcher polls every ten seconds, which is far too slow to time a
  * recording by — but arming does not need to be quick. It only has to happen
  * before the loading screen ends, and that takes at least a minute.
+ *
+ * `session` is what the client's session said about the game: which game it
+ * is, and Riot's id for it.
  */
-export function onGamePhase(accountId: string, queueId: number | null, playing: boolean): void {
+export function onGamePhase(
+  accountId: string,
+  queueId: number | null,
+  playing: boolean,
+  session: { game: GameId; gameId: number | null } = { game: 'lol', gameId: null }
+): void {
   if (!running) return
   if (playing) {
     const wasIdle = state.phase === 'idle'
-    dispatch({ type: 'gameStarted', accountId, queueId, at: Date.now() })
+    dispatch({ type: 'gameStarted', accountId, queueId, game: session.game, gameId: session.gameId, at: Date.now() })
     if (wasIdle && state.phase === 'armed') {
       // Forgotten between games, or the previous game's final reading would
       // look like an advance against the next game's first one.

@@ -380,6 +380,13 @@ namespace Foxfire.Data.Migrations
                     b.Property<int?>("Losses")
                         .HasColumnType("int");
 
+                    b.Property<int?>("RatedRating")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RatedTier")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("Tier")
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
@@ -400,6 +407,11 @@ namespace Foxfire.Data.Migrations
 
                     b.Property<DateTimeOffset>("FetchedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Game")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
 
                     b.Property<long>("GameCreation")
                         .HasColumnType("bigint");
@@ -425,6 +437,13 @@ namespace Foxfire.Data.Migrations
                     b.Property<string>("RawJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TftSetCoreName")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("TftSetNumber")
+                        .HasColumnType("int");
 
                     b.HasKey("MatchId");
 
@@ -567,6 +586,14 @@ namespace Foxfire.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("RatedTierAfter")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("RatedTierBefore")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("TierAfter")
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
@@ -701,6 +728,13 @@ namespace Foxfire.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<int?>("RatedRating")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RatedTier")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<Guid>("RiotAccountId")
                         .HasColumnType("uniqueidentifier");
 
@@ -733,6 +767,11 @@ namespace Foxfire.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Game")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
                     b.Property<bool>("IsPreseason")
                         .HasColumnType("bit");
 
@@ -749,7 +788,7 @@ namespace Foxfire.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StartsAt")
+                    b.HasIndex("Game", "StartsAt")
                         .IsUnique();
 
                     b.ToTable("Seasons");
@@ -806,6 +845,11 @@ namespace Foxfire.Data.Migrations
 
                     b.Property<DateTimeOffset>("RetiredAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
 
                     b.HasKey("RiotAccountId", "Puuid");
 
@@ -878,6 +922,31 @@ namespace Foxfire.Data.Migrations
                     b.ToTable("RiotAccounts");
                 });
 
+            modelBuilder.Entity("Foxfire.Data.Entities.ScopedPuuid", b =>
+                {
+                    b.Property<Guid>("RiotAccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("Puuid")
+                        .IsRequired()
+                        .HasMaxLength(78)
+                        .HasColumnType("nvarchar(78)");
+
+                    b.Property<DateTimeOffset>("ResolvedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("RiotAccountId", "Scope");
+
+                    b.HasIndex("Scope", "Puuid")
+                        .IsUnique();
+
+                    b.ToTable("ScopedPuuids");
+                });
+
             modelBuilder.Entity("Foxfire.Data.Entities.ServerSetting", b =>
                 {
                     b.Property<string>("Key")
@@ -944,6 +1013,10 @@ namespace Foxfire.Data.Migrations
                     b.Property<Guid>("RiotAccountId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Game")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
                     b.Property<bool>("BackfillComplete")
                         .HasColumnType("bit");
 
@@ -960,7 +1033,7 @@ namespace Foxfire.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.HasKey("RiotAccountId");
+                    b.HasKey("RiotAccountId", "Game");
 
                     b.ToTable("SyncStates");
                 });
@@ -1020,6 +1093,73 @@ namespace Foxfire.Data.Migrations
                         .HasFilter("[Resolution] = 2");
 
                     b.ToTable("TelemetryRollups");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.TftParticipant", b =>
+                {
+                    b.Property<string>("MatchId")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Puuid")
+                        .HasMaxLength(78)
+                        .HasColumnType("nvarchar(78)");
+
+                    b.Property<string>("AugmentsJson")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("GameName")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("GoldLeft")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LastRound")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PartnerGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Placement")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlayersEliminated")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TagLine")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int?>("TeamPlacement")
+                        .HasColumnType("int");
+
+                    b.Property<double>("TimeEliminated")
+                        .HasColumnType("float");
+
+                    b.Property<int>("TotalDamageToPlayers")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TraitsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UnitsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Win")
+                        .HasColumnType("bit");
+
+                    b.HasKey("MatchId", "Puuid");
+
+                    b.HasIndex("Puuid");
+
+                    b.ToTable("TftParticipants");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -1322,6 +1462,17 @@ namespace Foxfire.Data.Migrations
                     b.Navigation("Owner");
                 });
 
+            modelBuilder.Entity("Foxfire.Data.Entities.ScopedPuuid", b =>
+                {
+                    b.HasOne("Foxfire.Data.Entities.RiotAccount", "RiotAccount")
+                        .WithMany()
+                        .HasForeignKey("RiotAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RiotAccount");
+                });
+
             modelBuilder.Entity("Foxfire.Data.Entities.SharedReplay", b =>
                 {
                     b.HasOne("Foxfire.Data.Entities.FoxfireUser", "UploadedBy")
@@ -1341,6 +1492,17 @@ namespace Foxfire.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("RiotAccount");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.TftParticipant", b =>
+                {
+                    b.HasOne("Foxfire.Data.Entities.Match", "Match")
+                        .WithMany("TftParticipants")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -1402,6 +1564,8 @@ namespace Foxfire.Data.Migrations
             modelBuilder.Entity("Foxfire.Data.Entities.Match", b =>
                 {
                     b.Navigation("Participants");
+
+                    b.Navigation("TftParticipants");
                 });
 #pragma warning restore 612, 618
         }

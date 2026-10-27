@@ -85,3 +85,23 @@ export function containsGameStart(
 ): boolean {
   return events.some((event) => event.EventName === 'GameStart' || event.EventID === 0)
 }
+
+/**
+ * How long after the client says a TFT game is on to start recording it.
+ *
+ * TFT's game is not League's. It is Riot's own Unreal client,
+ * `TFTClient-Win64-Shipping.exe`, and it serves no Live Client Data API — no
+ * clock, no events, nothing on loopback to say that play has begun — so a TFT
+ * recording starts on time alone. Measured on a real game: the client was
+ * drawing the board about ten seconds after it was launched, which is when the
+ * League client says the game is on, and the watcher notices that up to ten
+ * seconds later still. Ten seconds from arming starts on the board or just
+ * after it; a slower machine records a little of the loading screen first,
+ * which loses nothing.
+ */
+export const TFT_START_DELAY_MS = 10_000
+
+/** Whether a TFT game the client has said is on for this long is ready to record. */
+export function isTftReady(inProgressForMs: number): boolean {
+  return inProgressForMs >= TFT_START_DELAY_MS
+}

@@ -51,6 +51,7 @@ export function createIpcClient(api: Api): FoxfireClient {
     },
 
     seasons: api.seasons,
+    tft: api.tft,
     search: api.search,
     favorites: api.favorites,
 

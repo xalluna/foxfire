@@ -14,6 +14,8 @@
  * Pure — no DB — so all of that is testable without playing anything.
  */
 
+import { GAMES, tftGameEndMs, type GameId } from '@foxfire/core'
+
 /** A stored match a recording could belong to. */
 export interface MatchCandidate {
   matchId: string
@@ -139,15 +141,86 @@ export function findMatchForRecording(
 }
 
 /**
- * How long to keep trying before calling a recording unmatched.
+ * How long to keep trying before calling a League recording unmatched.
  *
  * Comfortably past the last postGameSync retry at ten minutes, so giving up is
  * a real conclusion rather than a race with the sync that would have bound it.
+ * The registry holds it, beside TFT's.
  */
-export const BIND_GIVE_UP_MS = 30 * 60 * 1000
+export const BIND_GIVE_UP_MS = GAMES.lol.bindGiveUpMs
 
-export function shouldGiveUpBinding(recording: RecordingFingerprint, now: number): boolean {
-  return now - recordingEnd(recording) > BIND_GIVE_UP_MS
+/**
+ * Whether to stop trying, by each game's own time from the registry: TFT's is
+ * longer, because a TFT match is published only once its whole lobby is done,
+ * which can be twenty minutes after the recording stopped.
+ */
+export function shouldGiveUpBinding(
+  recording: Pick<RecordingFingerprint, 'startedAt' | 'endedAt'>,
+  now: number,
+  game: GameId = 'lol'
+): boolean {
+  return now - (recording.endedAt ?? recording.startedAt) > GAMES[game].bindGiveUpMs
+}
+
+/** A TFT game a recording might be of: when it ran, and when the player went out. */
+export interface TftMatchCandidate {
+  matchId: string
+  /** Epoch milliseconds. */
+  gameCreation: number
+  /** Seconds — the lobby's. */
+  gameDuration: number
+  /** Seconds from the start until the player was knocked out, when known. */
+  timeEliminated: number | null
+  taken: boolean
+}
+
+/** What a TFT recording knows about its game: its own span, and the game's id from the client. */
+export interface TftRecordingFingerprint {
+  startedAt: number
+  endedAt: number | null
+  gameId: number | null
+  /** NA1, KR, EUW1 … — the prefix of the account's match ids. */
+  platformId: string | null
+}
+
+/** How far either side of a TFT game a recording may run and still be of it. */
+const TFT_SPAN_SLACK_MS = 5 * 60 * 1000
+
+/**
+ * Which stored TFT game a recording is of.
+ *
+ * By its id, when it has one: the client said which game it was while it was
+ * being played, and `${platform}_${gameId}` is its match id — exact, and true
+ * however many games were played that evening. That match not being stored
+ * yet only means Riot has not published it, so the answer is to wait, never to
+ * guess: placed by time, a short recording made just after an early exit
+ * could land on the game before it.
+ *
+ * A recording that did not get an id is placed by time instead, and only when
+ * exactly one game's span, from its start to the player's elimination give or
+ * take five minutes, holds the whole recording. Two that could be it are no
+ * answer: TFT has no roster to tell them apart, and a wrong binding is worse
+ * than none.
+ */
+export function findTftMatchForRecording(
+  recording: TftRecordingFingerprint,
+  candidates: readonly TftMatchCandidate[]
+): BindingResult | null {
+  if (recording.gameId !== null && recording.platformId) {
+    const id = `${recording.platformId}_${recording.gameId}`
+    const exact = candidates.find((candidate) => candidate.matchId === id)
+    return exact && !exact.taken ? { matchId: exact.matchId, confidence: 1 } : null
+  }
+
+  const end = recording.endedAt ?? recording.startedAt
+  const covering = candidates.filter(
+    (candidate) =>
+      !candidate.taken &&
+      recording.startedAt >= candidate.gameCreation - TFT_SPAN_SLACK_MS &&
+      end <= tftGameEndMs(candidate.gameCreation, candidate.timeEliminated, candidate.gameDuration) + TFT_SPAN_SLACK_MS
+  )
+
+  return covering.length === 1 ? { matchId: covering[0].matchId, confidence: 0.5 } : null
 }
 
 /**

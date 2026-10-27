@@ -1,6 +1,7 @@
 using FluentValidation;
 using Foxfire.Api.Common;
 using Foxfire.Api.Sync;
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Riot;
@@ -14,7 +15,11 @@ namespace Foxfire.Api.Features.Import;
 /// key every other row in that file is joined on, and the only way to know which
 /// imported rows belong to which account.
 /// </param>
-public sealed record ImportAccount(string GameName, string TagLine, string? Platform, string Puuid);
+/// <param name="TftPuuid">
+/// The account's puuid under the desktop's TFT key, when it had one of its own;
+/// its TFT games are filed under it. Absent from a file older than TFT.
+/// </param>
+public sealed record ImportAccount(string GameName, string TagLine, string? Platform, string Puuid, string? TftPuuid = null);
 
 /// <summary>What became of one imported account.</summary>
 /// <param name="HealedMatches">
@@ -171,6 +176,24 @@ internal sealed class ImportAccountsRequestHandler(
                     // stored under it went in untranslated.
                     heals.Add((results.Count, incoming.Puuid, resolved.Puuid));
                 }
+            }
+
+            // A desktop with a TFT key of its own filed its TFT games under a
+            // second id. Recorded the same way, so the TFT import can translate
+            // it onto whichever id this server files TFT under.
+            if (incoming.TftPuuid is { } tftPuuid
+                && tftPuuid != incoming.Puuid
+                && tftPuuid != resolved.Puuid
+                && !await db.RetiredPuuids.AnyAsync(
+                    r => r.RiotAccountId == account.Id && r.Puuid == tftPuuid, cancellationToken))
+            {
+                db.RetiredPuuids.Add(new RetiredPuuid
+                {
+                    RiotAccountId = account.Id,
+                    Puuid = tftPuuid,
+                    Scope = RiotKeyScope.Tft,
+                    RetiredAt = now
+                });
             }
 
             results.Add(new ImportAccountResult(riotId, account.Id, true, null));

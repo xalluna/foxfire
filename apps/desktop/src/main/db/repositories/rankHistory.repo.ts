@@ -7,7 +7,15 @@ import type {
   Season,
   SnapshotSource
 } from '@shared/types'
-import { ladderPosition, rankMovement, resetsBetween, seasonAt } from '@foxfire/core'
+import {
+  gameOfQueueId,
+  ladderMovementFor,
+  ladderPositionFor,
+  laddersOf,
+  resetsBetween,
+  seasonAt,
+  type GameId
+} from '@foxfire/core'
 
 /**
  * Where a game sits among rank readings, as SQL over `matches m`: its end, the
@@ -17,6 +25,30 @@ import { ladderPosition, rankMovement, resetsBetween, seasonAt } from '@foxfire/
  * its result. rankHistory.repo.test.ts holds this to gameEndMs.
  */
 const GAME_END_SQL = '(m.game_creation + m.game_duration * 1000)'
+
+/**
+ * The same for a TFT board `p`: its player's elimination, which is when TFT
+ * moves their LP — the lobby can play on for twenty minutes after. Rounded as
+ * tftGameEndMs rounds it.
+ */
+const TFT_GAME_END_SQL = '(m.game_creation + CAST(p.time_eliminated * 1000 + 0.5 AS INTEGER))'
+
+/**
+ * Where one queue's boards are, and where a game on one ends.
+ *
+ * League's in match_participants, ending with the game, with remakes left out
+ * because they move no LP. TFT's in tft_participants, ending at the player's
+ * elimination; TFT has no remakes. The puuid that finds a board is that game's
+ * — for TFT, whatever id TFT files the account under.
+ */
+function boardsOf(queueId: number): { table: string; end: string; counts: string } {
+  return gameOfQueueId(queueId) === 'tft'
+    ? { table: 'tft_participants', end: TFT_GAME_END_SQL, counts: '1 = 1' }
+    : { table: 'match_participants', end: GAME_END_SQL, counts: 'p.game_ended_in_early_surrender = 0' }
+}
+
+const SNAPSHOT_COLUMNS = `queue_type, tier, rank, league_points, wins, losses,
+              ladder_position, source, captured_at, rated_tier, rated_rating`
 
 interface SnapshotRow {
   queue_type: string
@@ -28,6 +60,8 @@ interface SnapshotRow {
   ladder_position: number | null
   source: string
   captured_at: number
+  rated_tier: string | null
+  rated_rating: number | null
 }
 
 function toSnapshot(row: SnapshotRow, seasons: Season[] = []): RankSnapshot {
@@ -43,7 +77,9 @@ function toSnapshot(row: SnapshotRow, seasons: Season[] = []): RankSnapshot {
     capturedAt: row.captured_at,
     // Stamped here so the renderer never needs the season table to know where
     // one climb ends and the next begins.
-    seasonId: seasonAt(seasons, row.captured_at)?.id ?? null
+    seasonId: seasonAt(seasons, row.captured_at)?.id ?? null,
+    // Hyper Roll's colour and rating, on the one ladder that has them.
+    ...(row.rated_rating !== null ? { ratedTier: row.rated_tier, ratedRating: row.rated_rating } : {})
   }
 }
 
@@ -54,6 +90,9 @@ export interface SnapshotInput {
   leaguePoints: number | null
   wins: number | null
   losses: number | null
+  /** Hyper Roll's, where tier, rank and LP are null. */
+  ratedTier?: string | null
+  ratedRating?: number | null
 }
 
 /** The most recent reading for one ladder, or null before anything is recorded. */
@@ -64,8 +103,7 @@ export function getLatestSnapshot(
 ): RankSnapshot | null {
   const row = db
     .prepare(
-      `SELECT queue_type, tier, rank, league_points, wins, losses,
-              ladder_position, source, captured_at
+      `SELECT ${SNAPSHOT_COLUMNS}
          FROM rank_snapshots
         WHERE account_id = ? AND queue_type = ?
         ORDER BY captured_at DESC, id DESC
@@ -106,7 +144,8 @@ export function insertRankSnapshot(
     previous &&
     previous.tier === input.tier &&
     previous.rank === input.rank &&
-    previous.leaguePoints === input.leaguePoints
+    previous.leaguePoints === input.leaguePoints &&
+    (previous.ratedRating ?? null) === (input.ratedRating ?? null)
   ) {
     return null
   }
@@ -115,8 +154,8 @@ export function insertRankSnapshot(
     .prepare(
       `INSERT INTO rank_snapshots
          (account_id, queue_type, tier, rank, league_points, wins, losses,
-          ladder_position, source, captured_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ladder_position, source, captured_at, rated_tier, rated_rating)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       accountId,
@@ -126,9 +165,11 @@ export function insertRankSnapshot(
       input.leaguePoints,
       input.wins,
       input.losses,
-      ladderPosition(input),
+      ladderPositionFor(input.queueType, input),
       source,
-      capturedAt
+      capturedAt,
+      input.ratedTier ?? null,
+      input.ratedRating ?? null
     )
 
   return Number(result.lastInsertRowid)
@@ -152,8 +193,7 @@ export function getRankSnapshots(
 ): RankSnapshot[] {
   const rows = db
     .prepare(
-      `SELECT queue_type, tier, rank, league_points, wins, losses,
-              ladder_position, source, captured_at
+      `SELECT ${SNAPSHOT_COLUMNS}
          FROM rank_snapshots
         WHERE account_id = ? AND queue_type = ?
           AND (? IS NULL OR captured_at >= ?)
@@ -194,14 +234,15 @@ export function getRankMilestones(
 
   for (let i = 1; i < snapshots.length; i++) {
     if (resetsBetween(seasons, snapshots[i - 1].capturedAt, snapshots[i].capturedAt)) continue
-    const movement = rankMovement(snapshots[i - 1], snapshots[i])
+    const movement = ladderMovementFor(queueType, snapshots[i - 1], snapshots[i])
     if (movement === 'none') continue
     milestones.push({
       queueType,
       movement,
       tier: snapshots[i].tier,
       rank: snapshots[i].rank,
-      capturedAt: snapshots[i].capturedAt
+      capturedAt: snapshots[i].capturedAt,
+      ...(snapshots[i].ratedTier != null ? { ratedTier: snapshots[i].ratedTier } : {})
     })
   }
 
@@ -228,22 +269,31 @@ export function getRankMilestones(
 export function getHistorySpan(
   db: DatabaseSync,
   accountId: number,
-  puuid: string
+  puuid: string,
+  game: GameId = 'lol'
 ): { oldestMs: number; newestMs: number } | null {
+  // One game's span: its own ladders' readings, and its own boards — League's
+  // participants, or TFT's under whichever id TFT files this account by.
+  const ladders = laddersOf(game)
+  const queues = ladders.map(() => '?').join(', ')
+  const boards = game === 'tft' ? 'tft_participants' : 'match_participants'
+
   const row = db
     .prepare(
-      `SELECT (SELECT MIN(captured_at) FROM rank_snapshots WHERE account_id = ?) AS snap_min,
-              (SELECT MAX(captured_at) FROM rank_snapshots WHERE account_id = ?) AS snap_max,
+      `SELECT (SELECT MIN(captured_at) FROM rank_snapshots
+                WHERE account_id = ? AND queue_type IN (${queues}))             AS snap_min,
+              (SELECT MAX(captured_at) FROM rank_snapshots
+                WHERE account_id = ? AND queue_type IN (${queues}))             AS snap_max,
               (SELECT MIN(m.game_creation)
                  FROM matches m
-                 JOIN match_participants p ON p.match_id = m.match_id
+                 JOIN ${boards} p ON p.match_id = m.match_id
                 WHERE p.puuid = ?)                                              AS match_min,
               (SELECT MAX(m.game_creation)
                  FROM matches m
-                 JOIN match_participants p ON p.match_id = m.match_id
+                 JOIN ${boards} p ON p.match_id = m.match_id
                 WHERE p.puuid = ?)                                              AS match_max`
     )
-    .get(accountId, accountId, puuid, puuid) as unknown as {
+    .get(accountId, ...ladders, accountId, ...ladders, puuid, puuid) as unknown as {
     snap_min: number | null
     snap_max: number | null
     match_min: number | null
@@ -270,6 +320,9 @@ export interface MatchRankInput {
   lpDelta: number | null
   isPromotion: boolean
   isDemotion: boolean
+  /** Hyper Roll's colours either side of the game, where its delta is in rating. */
+  ratedTierBefore?: string | null
+  ratedTierAfter?: string | null
 }
 
 /**
@@ -283,10 +336,13 @@ export function upsertMatchRank(db: DatabaseSync, input: MatchRankInput): void {
   db.prepare(
     `INSERT INTO match_rank
        (match_id, account_id, queue_type, tier_before, rank_before, lp_before,
-        tier_after, rank_after, lp_after, lp_delta, is_promotion, is_demotion)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        tier_after, rank_after, lp_after, lp_delta, is_promotion, is_demotion,
+        rated_tier_before, rated_tier_after)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(match_id, account_id) DO UPDATE SET
        queue_type = excluded.queue_type,
+       rated_tier_before = excluded.rated_tier_before,
+       rated_tier_after = excluded.rated_tier_after,
        tier_before = excluded.tier_before,
        rank_before = excluded.rank_before,
        lp_before = excluded.lp_before,
@@ -308,7 +364,9 @@ export function upsertMatchRank(db: DatabaseSync, input: MatchRankInput): void {
     input.lpAfter,
     input.lpDelta,
     input.isPromotion ? 1 : 0,
-    input.isDemotion ? 1 : 0
+    input.isDemotion ? 1 : 0,
+    input.ratedTierBefore ?? null,
+    input.ratedTierAfter ?? null
   )
 }
 
@@ -325,8 +383,7 @@ export function getSnapshotBefore(
 ): RankSnapshot | null {
   const row = db
     .prepare(
-      `SELECT queue_type, tier, rank, league_points, wins, losses,
-              ladder_position, source, captured_at
+      `SELECT ${SNAPSHOT_COLUMNS}
          FROM rank_snapshots
         WHERE account_id = ? AND queue_type = ? AND captured_at < ?
         ORDER BY captured_at DESC, id DESC
@@ -389,7 +446,7 @@ export function insertManualSnapshot(
     input.leaguePoints,
     input.wins,
     input.losses,
-    ladderPosition(input),
+    ladderPositionFor(input.queueType, input),
     capturedAt,
     matchId
   )
@@ -487,6 +544,7 @@ export function deleteSupersededManualSnapshots(
   queueId: number,
   atMs: number
 ): number {
+  const boards = boardsOf(queueId)
   const result = db
     .prepare(
       `DELETE FROM rank_snapshots
@@ -494,13 +552,13 @@ export function deleteSupersededManualSnapshots(
           AND captured_at <= ?
           AND NOT EXISTS (
                 SELECT 1
-                  FROM match_participants p
+                  FROM ${boards.table} p
                   JOIN matches m ON m.match_id = p.match_id
                  WHERE p.puuid = ?
-                   AND p.game_ended_in_early_surrender = 0
+                   AND ${boards.counts}
                    AND m.queue_id = ?
-                   AND ${GAME_END_SQL} > rank_snapshots.captured_at
-                   AND ${GAME_END_SQL} <= ?
+                   AND ${boards.end} > rank_snapshots.captured_at
+                   AND ${boards.end} <= ?
               )`
     )
     .run(accountId, queueType, atMs, puuid, queueId, atMs)
@@ -626,17 +684,18 @@ export function getRankedMatchesBetween(
   afterMs: number,
   upToMs: number
 ): Array<{ matchId: string; gameCreation: number }> {
+  const boards = boardsOf(queueId)
   const rows = db
     .prepare(
       `SELECT m.match_id, m.game_creation
-         FROM match_participants p
+         FROM ${boards.table} p
          JOIN matches m ON m.match_id = p.match_id
         WHERE p.puuid = ?
-          AND p.game_ended_in_early_surrender = 0
+          AND ${boards.counts}
           AND m.queue_id = ?
-          AND ${GAME_END_SQL} > ?
-          AND ${GAME_END_SQL} <= ?
-        ORDER BY ${GAME_END_SQL} ASC`
+          AND ${boards.end} > ?
+          AND ${boards.end} <= ?
+        ORDER BY ${boards.end} ASC`
     )
     .all(puuid, queueId, afterMs, upToMs) as unknown as Array<{
     match_id: string

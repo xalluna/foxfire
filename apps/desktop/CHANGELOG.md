@@ -7,6 +7,107 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.17.0] — 2026-10-23
+
+Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
+and the LP each game moved, and recordings of it — tracked the way League always has been, on a
+server or on its own. And every new recording is filed by player, game and mode.
+
+### Added
+
+- **A TFT profile for every player.** A League | TFT switch sits at the top of a player's page, and
+  the TFT side has a card for each ladder — Ranked, Double Up and Hyper Roll — with your rank (Hyper
+  Roll's colour and rating), the set's games, your average place and how often you made the top
+  half, laid out as a bar for each place you finished. Double Up counts your team's place, #1 to #4,
+  because that is what moved your LP. Ranked has a 30-day graph. Above the history, your last 20
+  games: top-4 rate, firsts, average place, the run of finishes and the traits you played most.
+- **TFT match history.** Each game shows your place, its queue, the stage you reached, your traits
+  and your board — every unit with its stars and items — and the LP it moved. Open one to see all
+  eight boards in that lobby, with anybody Foxfire tracks a link to their own TFT profile. The
+  history filters by queue, as League's does.
+- **TFT rank history.** "Rank history" on any TFT card opens that ladder's climb over 7 days, 30
+  days, a set or all of it, with its promotions and demotions. Hyper Roll is drawn by its rating,
+  banded by its colours — Gray to Orange — and its milestones are the colours you crossed.
+- **Edit LP for TFT.** Right-click a Ranked or Double Up game whose LP could not be worked out to
+  enter the rank you finished at, as you can for League. Double Up rows show your team's place.
+  Hyper Roll has a rating and no LP, and the menu says so.
+- **TFT sets in Settings › Rank tracking.** The seasons card has a League | TFT switch: TFT's sets
+  have dates of their own, Set 13 to Set 18 already filled in, and saving one game's list never
+  touches the other's.
+- **A TFT key of its own, if you need one.** Riot grants each key its games, and a key registered
+  for League alone cannot reach TFT. Settings › Riot API key says whether yours can, and takes a
+  second key for TFT when it cannot — or when you would rather TFT's backfill had a budget of its
+  own. Without one, TFT uses the key you already have.
+- **All of it without a server, too.** On its own, Foxfire backfills each account's TFT history
+  beside its League history, reads TFT's ladders, works out the LP each game moved and lets you
+  type the ones it cannot, exactly as it does for League. A game ending starts the search for it,
+  waiting longer for TFT, whose games Riot publishes only once the whole lobby is done.
+- **TFT's LP from the League client.** With the client open, Foxfire reads your TFT ranks the
+  way it reads League's — Hyper Roll's colour and rating too — so each TFT game's LP lands as you
+  finish, connected to a server or not. Leaving a TFT game early with "Exit now" counts as
+  finishing it.
+- **Record your TFT games.** Settings › Game capture lists TFT's queues under their own heading —
+  unticked, so nothing changes until you tick one. A TFT recording finds its game by the id the
+  League client gave it, shows up on its TFT history row, and goes to YouTube like a League one,
+  titled by its own template — `{placement} · {queue} · {trait}` to start with, in Settings ›
+  YouTube. The Recordings tab can show all of them, or just League's or TFT's, and "View match
+  history" on a TFT recording opens its game on the TFT profile. TFT is a program of its own now,
+  not League's: Foxfire's own OBS setup captures both, and a scene of your own needs a game capture
+  of `TFTClient-Win64-Shipping.exe` beside League's.
+
+### Changed
+
+- **Recordings are filed by player, game and mode.** A new recording lands in your recording
+  folder as `Faker-KR1\LoL\Solo-Duo\2026-10-23 21-04-17.mp4` — or `TFT\Ranked`, `TFT\Double-Up`
+  and so on — rather than loose beside every other. A recording that never learnt whose it was goes
+  under `Unknown`, and a mode Foxfire does not know under `Other`. Recordings you already have
+  stay where they are, and so does anything OBS was set to write somewhere else. Deleting the last
+  recording in a folder removes the folder too.
+
+### Under the hood
+
+- Games are a first-class idea. `@foxfire/core` holds a registry of the Riot titles Foxfire tracks
+  — League and TFT — with each one's queues, ladders, recording folders and Riot key, and every list
+  of queues League used to keep for itself is now read from it, with League's answers pinned by a
+  test so the move changed nothing. The server keeps its own copy, and `fixtures/game-registry.json`
+  holds the two together.
+- A ladder that is not Solo/Duo no longer reads as Flex wherever it becomes a queue id or a label,
+  which every ladder did while League's two were the only ones.
+- The client contract every screen reads through has a `tft` namespace — the TFT profile, a paged
+  history, a game's lobby, and rank on TFT's ladders — and syncs and seasons take a game. A server
+  answers it under `/api/riot-accounts/{id}/tft`; Data Dragon's TFT files join the asset manifest,
+  and a TFT file Data Dragon will not give costs TFT its icons rather than League its manifest.
+  What a finished sync refreshes depends on which game it was, and sync progress is kept per game.
+- Linking an account on a server starts its TFT backfill as well as its League one.
+- Migration 016. Matches, seasons, sync state and recordings say which game they are, and
+  everything already stored reads as League's. A TFT board has a table of its own
+  (`tft_participants`); Hyper Roll's colour and rating have columns on entries, readings and LP
+  rows; an account can hold an id under a TFT key (`account_scoped_puuids`). Seasons and sync
+  state were rebuilt to be one game's at a time, with every season keeping its id, so a picked
+  period or a link still names the same one. TFT's sets from Set 13 are seeded.
+- Each Riot key has a queue of its own. A 403 from TFT on the main key is read as "this key has
+  no TFT" — telemetry calls it `no_access` — and no longer stops League's queue the way a refused
+  key does.
+- Importing a stats.db into a server brings its TFT games, sets, TFT ids and Hyper Roll ratings
+  across. A file from before TFT imports exactly as it did.
+- A TFT game is placed among rank readings at your own elimination, not the end of its lobby:
+  TFT moves your LP the moment you are knocked out, and the lobby can play on for twenty minutes.
+- With a TFT key of its own, every account's TFT id is learnt from its Riot ID the first time TFT
+  syncs, and its games move with it; taking the key away moves them back. League's identity
+  repair after a new main key carries TFT's games along too while the two share it.
+- League's rank refresh keeps League's ladders, and TFT's keeps TFT's.
+- The League client watcher tells TFT from League by the gameflow session's mode and map, and
+  logs each game's session once, with the ranked readings after it, at debug level. A rank reading
+  that cannot be recorded is skipped on its own, rather than taking the poll's other readings and
+  its game end with it — and showing the League client as disconnected while it was not.
+- TFT's game serves nothing on loopback for a recording to read — no clock, no events — so a TFT
+  game starts recording ten seconds after the League client says it is on, and stops when the
+  client says it is over. A recording keeps the game's id and platform, which name its match
+  exactly; one without them is bound only when a single game's
+  span — its start to your elimination, give or take five minutes — holds it. TFT recordings wait
+  90 minutes for their game before being written off, League's 30. "Other and rotating modes" is
+  League's: it does not record a TFT event queue.
+
 ## [0.16.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP. Needs Foxfire Server 0.5.1, which is
@@ -1356,6 +1457,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.17.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.1...desktop-v0.17.0
 [0.16.1]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.0...desktop-v0.16.1
 [0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0

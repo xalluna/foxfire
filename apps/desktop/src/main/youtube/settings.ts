@@ -1,4 +1,4 @@
-import { DEFAULT_TITLE_TEMPLATE } from '@foxfire/core/youtube'
+import { DEFAULT_TFT_TITLE_TEMPLATE, DEFAULT_TITLE_TEMPLATE } from '@foxfire/core/youtube'
 import { getDb } from '../db'
 import { getBoolSetting, getSetting, setBoolSetting, setSetting } from '../db/repositories/appSettings.repo'
 import type { YouTubePrivacy, YouTubeSettings } from '@shared/types'
@@ -14,6 +14,7 @@ const KEY = {
   autoUpload: 'youtube.autoUpload',
   defaultPrivacy: 'youtube.defaultPrivacy',
   titleTemplate: 'youtube.titleTemplate',
+  tftTitleTemplate: 'youtube.tftTitleTemplate',
   email: 'youtube.email',
   quotaResumesAt: 'youtube.quotaResumesAt'
 } as const
@@ -28,7 +29,8 @@ export function getYouTubeSettings(): YouTubeSettings {
     // not a thing to do on anybody's behalf.
     autoUpload: getBoolSetting(db, KEY.autoUpload, false),
     defaultPrivacy: privacy && PRIVACIES.includes(privacy) ? privacy : 'unlisted',
-    titleTemplate: getSetting(db, KEY.titleTemplate)?.trim() || DEFAULT_TITLE_TEMPLATE
+    titleTemplate: getSetting(db, KEY.titleTemplate)?.trim() || DEFAULT_TITLE_TEMPLATE,
+    tftTitleTemplate: getSetting(db, KEY.tftTitleTemplate)?.trim() || DEFAULT_TFT_TITLE_TEMPLATE
   }
 }
 
@@ -41,6 +43,9 @@ export function setYouTubeSettings(patch: Partial<YouTubeSettings>): YouTubeSett
   if (patch.titleTemplate !== undefined) {
     // Blank means the default, so clearing the box is how to get it back.
     setSetting(db, KEY.titleTemplate, patch.titleTemplate.trim() || null)
+  }
+  if (patch.tftTitleTemplate !== undefined) {
+    setSetting(db, KEY.tftTitleTemplate, patch.tftTitleTemplate.trim() || null)
   }
   return getYouTubeSettings()
 }

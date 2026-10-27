@@ -1,4 +1,12 @@
-import { DEFAULT_QUEUE_FILTER, type QueueType, type RankRange } from '@foxfire/core'
+import {
+  DEFAULT_QUEUE_FILTER,
+  GAMES,
+  LADDERS,
+  parseGameId,
+  type GameId,
+  type QueueType,
+  type RankRange
+} from '@foxfire/core'
 import {
   parseQueueParam,
   parseRangeParam,
@@ -52,6 +60,23 @@ export interface MatchSearch {
   player?: string
 }
 
+/** The TFT profile's: a queue filter, and a game to open — as League's profile has. */
+export interface TftSearch {
+  queue?: QueueSearch
+  match?: string
+}
+
+/** The TFT rank page's: a TFT ladder, and a period. */
+export interface TftRankSearch {
+  queue?: RankQueue
+  range?: RankRange
+}
+
+/** The recording page's hint that its game is TFT's. */
+export interface RecordingSearch {
+  game?: GameId
+}
+
 type RawSearch = Record<string, unknown>
 
 /** The period the rank page opens on. */
@@ -63,10 +88,23 @@ function readQueue(raw: unknown): QueueSearch | undefined {
   return queueId === null ? 'all' : queueId
 }
 
-function readRankQueue(raw: unknown): RankQueue | undefined {
+/**
+ * A ladder from a URL, if it is one this page can show.
+ *
+ * A TFT ladder in a League page's URL reads as absent rather than as a ladder,
+ * so the page opens on its own default instead of asking for a history it
+ * does not draw.
+ */
+function readRankQueue(raw: unknown, accept: (queueType: QueueType) => boolean): RankQueue | undefined {
   const queueType = parseRankQueueParam(raw)
-  return queueType === undefined ? undefined : rankQueueParam(queueType)
+  return queueType === undefined || !accept(queueType) ? undefined : rankQueueParam(queueType)
 }
+
+const isLeagueLadder = (queueType: QueueType): boolean => LADDERS[queueType].game === 'lol'
+
+const isEditableLadder = (queueType: QueueType): boolean => LADDERS[queueType].lpEditable
+
+const isTftLadder = (queueType: QueueType): boolean => LADDERS[queueType].game === 'tft'
 
 function readText(raw: unknown): string | undefined {
   // A query value that looks like a number arrives as one. An id is text
@@ -88,15 +126,50 @@ export function validateChampionsSearch(raw: RawSearch): ChampionsSearch {
 }
 
 export function validateRankSearch(raw: RawSearch): RankSearch {
-  return present({ queue: readRankQueue(raw.queue), range: parseRangeParam(raw.range) })
+  return present({ queue: readRankQueue(raw.queue, isLeagueLadder), range: parseRangeParam(raw.range) })
 }
 
 export function validateLpEditorSearch(raw: RawSearch): LpEditorSearch {
-  return present({ queue: readRankQueue(raw.queue), match: readText(raw.match) })
+  return present({ queue: readRankQueue(raw.queue, isEditableLadder), match: readText(raw.match) })
 }
 
 export function validateMatchSearch(raw: RawSearch): MatchSearch {
   return present({ player: readText(raw.player) })
+}
+
+export function validateTftSearch(raw: RawSearch): TftSearch {
+  return present({ queue: readQueue(raw.queue), match: readText(raw.match) })
+}
+
+export function validateTftRankSearch(raw: RawSearch): TftRankSearch {
+  return present({ queue: readRankQueue(raw.queue, isTftLadder), range: parseRangeParam(raw.range) })
+}
+
+export function validateRecordingSearch(raw: RawSearch): RecordingSearch {
+  return present({ game: parseGameId(raw.game) })
+}
+
+/** The TFT history's queue filter for what its URL says: every queue unless it says otherwise. */
+export function tftQueueIdFrom(queue: QueueSearch | undefined): number | null {
+  if (queue === undefined) return GAMES.tft.defaultQueueFilter
+  return queue === 'all' ? null : queue
+}
+
+/** What a TFT profile's URL should say for a queue somebody picked — nothing for every queue. */
+export function tftQueueSearchFor(queueId: number | null): QueueSearch | undefined {
+  if (queueId === GAMES.tft.defaultQueueFilter) return undefined
+  return queueId === null ? 'all' : queueId
+}
+
+/** The TFT ladder a page shows for what its URL says: Ranked unless it says otherwise. */
+export function tftLadderFrom(queue: RankQueue | undefined): QueueType {
+  const ladder = parseRankQueueParam(queue)
+  return ladder && isTftLadder(ladder) ? ladder : 'RANKED_TFT'
+}
+
+/** What a URL should say for a TFT ladder somebody picked. */
+export function tftRankQueueSearchFor(queueType: QueueType): RankQueue | undefined {
+  return queueType === 'RANKED_TFT' ? undefined : rankQueueParam(queueType)
 }
 
 /** The queue filter a page shows for what its URL says. */

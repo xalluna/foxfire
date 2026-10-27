@@ -1,3 +1,4 @@
+using Foxfire.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -27,8 +28,26 @@ public sealed class Match
     public string? GameMode { get; set; }
     public string? GameType { get; set; }
 
-    /// <summary>Null when Riot did not say. 420 and 440 are the ranked ladders.</summary>
+    /// <summary>
+    /// Which game it was. League for every row written before TFT, which is
+    /// what the column defaults to.
+    ///
+    /// The two share this table because a match id is unique across them and
+    /// three tables already point here by it — LP, hand-entered LP and
+    /// recordings — so a TFT game gets all three with no parallel keys. Who
+    /// played it is in <see cref="Participants"/> for League and
+    /// <see cref="TftParticipants"/> for TFT, never both.
+    /// </summary>
+    public Game Game { get; set; }
+
+    /// <summary>Null when Riot did not say. See <see cref="RankedQueues"/> for the ladders.</summary>
     public int? QueueId { get; set; }
+
+    /// <summary>The TFT set the game was played in. Null for League.</summary>
+    public int? TftSetNumber { get; set; }
+
+    /// <summary>Riot's name for the set, e.g. TFTSet18. Null for League.</summary>
+    public string? TftSetCoreName { get; set; }
 
     public string? PlatformId { get; set; }
 
@@ -60,6 +79,8 @@ public sealed class Match
     public DateTimeOffset FetchedAt { get; set; }
 
     public ICollection<MatchParticipant> Participants { get; } = [];
+
+    public ICollection<TftParticipant> TftParticipants { get; } = [];
 }
 
 internal sealed class MatchConfiguration : IEntityTypeConfiguration<Match>
@@ -71,6 +92,8 @@ internal sealed class MatchConfiguration : IEntityTypeConfiguration<Match>
         builder.Property(m => m.GameMode).HasMaxLength(32);
         builder.Property(m => m.GameType).HasMaxLength(32);
         builder.Property(m => m.PlatformId).HasMaxLength(8);
+        builder.Property(m => m.Game).HasConversion(GameConverters.Game).HasMaxLength(8);
+        builder.Property(m => m.TftSetCoreName).HasMaxLength(32);
 
         // nvarchar(max). A match payload is 100-200 KB of UTF-16 once SQL
         // Server has it, and there is no length short of max that would not

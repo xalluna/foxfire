@@ -410,7 +410,7 @@ public class GameSchemaTests(FoxfireServerFixture server)
                 p.GameEndedInEarlySurrender))
             .ToListAsync();
 
-        var seasons = await db.Seasons.OrderBy(s => s.StartsAt)
+        var seasons = await db.Seasons.Where(s => s.Game == Game.Lol).OrderBy(s => s.StartsAt)
             .Select(s => s.ToDomain())
             .ToListAsync();
 

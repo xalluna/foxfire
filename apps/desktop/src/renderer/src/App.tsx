@@ -183,7 +183,7 @@ function useShowMatchRequests(): void {
 
   useEffect(
     () =>
-      window.api.recordings.onShowMatch((accountId, matchId) => {
+      window.api.recordings.onShowMatch((accountId, matchId, game) => {
         void queryClient
           .ensureQueryData({
             queryKey: queryKeys.account(accountId),
@@ -192,7 +192,7 @@ function useShowMatchRequests(): void {
           .then((account) => {
             if (!account) return
             void navigate({
-              to: '/players/$slug',
+              to: game === 'tft' ? '/players/$slug/tft' : '/players/$slug',
               params: { slug: playerSlug(account) },
               search: { match: matchId }
             })

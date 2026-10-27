@@ -4,7 +4,9 @@ import {
   containsGameStart,
   gameReadiness,
   isClockRunning,
+  isTftReady,
   READY_FALLBACK_MS,
+  TFT_START_DELAY_MS,
   type ReadinessInput
 } from './gameClock'
 
@@ -105,5 +107,13 @@ describe('containsGameStart', () => {
 
   it('copes with an empty feed, which is what loading returns', () => {
     expect(containsGameStart([])).toBe(false)
+  })
+})
+
+describe('isTftReady', () => {
+  it('waits out the start delay, then records', () => {
+    expect(isTftReady(0)).toBe(false)
+    expect(isTftReady(TFT_START_DELAY_MS - 1)).toBe(false)
+    expect(isTftReady(TFT_START_DELAY_MS)).toBe(true)
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadBlockedReason, matchContextItems, withoutServerRecording } from './matchMenu'
+import { downloadBlockedReason, lpEditBlockedReason, matchContextItems, withoutServerRecording } from './matchMenu'
 import type { MatchSummary } from '@foxfire/core'
 
 /**
@@ -137,6 +137,18 @@ describe('LP editing and whose account it is', () => {
     const items = matchContextItems(RANKED_UNATTRIBUTED, NOTHING)
 
     expect(labelled(items, 'Edit LP gain')?.disabledReason).toBeUndefined()
+  })
+
+  it('offers the edit on TFT Ranked and Double Up, which move LP like League does', () => {
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1100 }, true)).toBeNull()
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1160 }, true)).toBeNull()
+  })
+
+  it('refuses the edit on Hyper Roll, and says it is a rating rather than an unranked game', () => {
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1130 }, true)).toBe(
+      'Hyper Roll has a rating, not LP'
+    )
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1090 }, true)).toBe('Only ranked games move LP')
   })
 
   it('refuses the edit on somebody else account, and says why', () => {

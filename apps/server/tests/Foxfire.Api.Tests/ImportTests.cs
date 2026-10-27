@@ -629,6 +629,94 @@ public class ImportTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task A_season_is_matched_within_its_own_game()
+    {
+        // A TFT set and a League season can open on the same day and are not
+        // the same boundary. A season with no game is League's, which is all a
+        // file from before TFT has; one naming a game nobody tracks is skipped.
+        var (host, client) = await RiggedAsync(new FakeRiot());
+        await using var _host = host;
+        using var _client = client;
+
+        var league = await client.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/api/seasons", UriKind.Relative));
+        var seeded = league!.First();
+        var novel = 1_802_000_000_000L + Random.Shared.Next(1, 1_000_000);
+
+        var response = await client.PostAsJsonAsync(
+            new Uri("/api/admin/import/seasons", UriKind.Relative),
+            new[]
+            {
+                new { label = "Set Twin", startsAt = seeded.StartsAt, isPreseason = false, resetsRank = true, game = "tft" },
+                new { label = "Set Novel", startsAt = novel, isPreseason = false, resetsRank = true, game = "tft" },
+                new { label = "Opening", startsAt = novel + 1, isPreseason = false, resetsRank = true, game = "chess" }
+            });
+
+        var batch = await response.Content.ReadFromJsonAsync<ImportBatchResult>();
+        Assert.Equal(2, batch!.Accepted);
+        Assert.Equal(1, batch.Skipped);
+
+        var tft = await client.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/api/seasons?game=tft", UriKind.Relative));
+        Assert.Contains(tft!, s => s.StartsAt == seeded.StartsAt && s.Label == "Set Twin");
+        Assert.Contains(tft!, s => s.StartsAt == novel);
+
+        var leagueAfter = await client.GetFromJsonAsync<List<SeasonResponse>>(new Uri("/api/seasons", UriKind.Relative));
+        Assert.Equal(seeded.Label, leagueAfter!.First(s => s.StartsAt == seeded.StartsAt).Label);
+        Assert.DoesNotContain(leagueAfter!, s => s.StartsAt == novel || s.StartsAt == novel + 1);
+    }
+
+    [Fact]
+    public async Task A_hyper_roll_reading_arrives_with_its_rating()
+    {
+        // A desktop that tracked TFT holds its readings beside League's, and
+        // Hyper Roll's is a colour and a rating rather than a rank: the rating
+        // is where it stands on its ladder.
+        var deadPuuid = UniquePuuid();
+        var gameName = $"Roller{Guid.NewGuid().ToString("N")[..8]}";
+
+        var (host, client) = await RiggedAsync(new FakeRiot().WithAccount(gameName, "NA1", UniquePuuid()));
+        await using var _host = host;
+        using var _client = client;
+
+        var created = await client.PostAsJsonAsync(
+            new Uri("/api/admin/import/accounts", UriKind.Relative),
+            new[] { new { gameName, tagLine = "NA1", platform = "na1", puuid = deadPuuid } });
+        var accountId = (await created.Content.ReadFromJsonAsync<List<ImportAccountResult>>())![0].AccountId!.Value;
+
+        var response = await client.PostAsJsonAsync(
+            new Uri("/api/admin/import/rank-readings", UriKind.Relative),
+            new[]
+            {
+                new
+                {
+                    puuid = deadPuuid,
+                    queueType = "RANKED_TFT_TURBO",
+                    tier = (string?)null,
+                    division = (string?)null,
+                    leaguePoints = (int?)null,
+                    wins = 12,
+                    losses = 0,
+                    source = "lcu",
+                    capturedAt = T0 - 30_000,
+                    matchId = (string?)null,
+                    ratedTier = "BLUE",
+                    ratedRating = 2_904
+                }
+            });
+
+        Assert.Equal(1, (await response.Content.ReadFromJsonAsync<ImportBatchResult>())!.Accepted);
+
+        await using var scope = server.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var reading = await db.RankSnapshots.AsNoTracking()
+            .FirstAsync(r => r.RiotAccountId == accountId && r.CapturedAt == T0 - 30_000);
+
+        Assert.Equal(RatedTier.Blue, reading.RatedTier);
+        Assert.Equal(2_904, reading.RatedRating);
+        Assert.Equal(2_904, reading.LadderPosition);
+    }
+
+    [Fact]
     public async Task Only_a_head_admin_can_import()
     {
         // The import writes everybody's history, and anybody but the few

@@ -122,3 +122,94 @@ export const ChampionMasteryDtoSchema = z.object({
   lastPlayTime: z.number()
 })
 export type ChampionMasteryDto = z.infer<typeof ChampionMasteryDtoSchema>
+
+// ── TFT ──────────────────────────────────────────────────────────────────────
+//
+// Lenient where League's are strict. TFT's payload has changed shape set to set
+// — fields renamed, others added each set — and the raw JSON is stored anyway,
+// so only what a row is drawn from is required and everything else passes
+// through. Riot spells TFT's in snake_case.
+
+/** A TFT ladder: tier, division and LP, or Hyper Roll's colour and rating instead. */
+export const TftLeagueEntryDtoSchema = z
+  .object({
+    queueType: z.string(),
+    tier: z.string().optional(),
+    rank: z.string().optional(),
+    leaguePoints: z.number().optional(),
+    wins: z.number().optional(),
+    losses: z.number().optional(),
+    ratedTier: z.string().optional(),
+    ratedRating: z.number().optional()
+  })
+  .passthrough()
+export type TftLeagueEntryDto = z.infer<typeof TftLeagueEntryDtoSchema>
+
+const TftTraitDtoSchema = z
+  .object({
+    name: z.string(),
+    num_units: z.number().default(0),
+    style: z.number().default(0),
+    tier_current: z.number().default(0),
+    tier_total: z.number().default(0)
+  })
+  .passthrough()
+
+const TftUnitDtoSchema = z
+  .object({
+    character_id: z.string(),
+    tier: z.number().default(1),
+    rarity: z.number().default(0),
+    itemNames: z.array(z.string()).optional()
+  })
+  .passthrough()
+
+export const TftParticipantDtoSchema = z
+  .object({
+    puuid: z.string(),
+    riotIdGameName: z.string().optional(),
+    riotIdTagline: z.string().optional(),
+    placement: z.number(),
+    level: z.number().default(0),
+    last_round: z.number().default(0),
+    // Left absent rather than defaulted: a missing time is not "out at the first
+    // second", and the board is stored with the lobby's length instead.
+    time_eliminated: z.number().optional(),
+    players_eliminated: z.number().default(0),
+    total_damage_to_players: z.number().default(0),
+    gold_left: z.number().default(0),
+    win: z.boolean().optional(),
+    partner_group_id: z.number().optional(),
+    traits: z.array(TftTraitDtoSchema).default([]),
+    units: z.array(TftUnitDtoSchema).default([]),
+    augments: z.array(z.string()).optional()
+  })
+  .passthrough()
+export type TftParticipantDto = z.infer<typeof TftParticipantDtoSchema>
+
+export const TftMatchDtoSchema = z.object({
+  metadata: z
+    .object({
+      match_id: z.string(),
+      participants: z.array(z.string()).default([])
+    })
+    .passthrough(),
+  info: z
+    .object({
+      gameCreation: z.number().optional(),
+      gameId: z.number().optional(),
+      game_datetime: z.number(),
+      game_length: z.number(),
+      game_version: z.string().optional(),
+      mapId: z.number().optional(),
+      queueId: z.number().optional(),
+      // The older spelling, still on payloads from before the rename.
+      queue_id: z.number().optional(),
+      tft_game_type: z.string().optional(),
+      tft_set_core_name: z.string().optional(),
+      tft_set_number: z.number().optional(),
+      participants: z.array(TftParticipantDtoSchema)
+    })
+    .passthrough()
+})
+export type TftMatchDto = z.infer<typeof TftMatchDtoSchema>

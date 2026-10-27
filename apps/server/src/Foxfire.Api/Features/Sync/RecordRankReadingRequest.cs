@@ -21,7 +21,10 @@ public sealed record RecordRankReadingRequest(
     int? LeaguePoints,
     int? Wins,
     int? Losses,
-    bool Force) : IValidatedRequest<RankReadingResponse>;
+    bool Force,
+    string? RatedTier = null,
+    int? RatedRating = null,
+    string? Game = null) : IValidatedRequest<RankReadingResponse>;
 
 /// <summary>
 /// Whether the reading was actually filed.
@@ -35,11 +38,25 @@ public sealed record RankReadingResponse(bool Recorded);
 
 internal sealed class RecordRankReadingRequestValidator : AbstractValidator<RecordRankReadingRequest>
 {
-    public RecordRankReadingRequestValidator() =>
+    public RecordRankReadingRequestValidator()
+    {
+        ClassLevelCascadeMode = CascadeMode.Stop;
+
+        // Any game's ladder: the League client reports TFT's ladders beside
+        // League's, and the queue type alone says which game a reading is of.
         RuleFor(x => x.QueueType)
             .Must(queue => RankedQueues.FromRiotName(queue) is not null)
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue this server tracks.");
+
+        RuleFor(x => x.Game).MustNameAGame();
+
+        // A game named alongside it must agree, or one of the two is wrong.
+        RuleFor(x => x)
+            .Must(x => x.Game is null || RankedQueues.FromRiotName(x.QueueType)?.Game().Slug() == x.Game)
+            .WithErrorCode("game_mismatch")
+            .WithMessage(x => $"{x.QueueType} is not one of {x.Game}'s ladders.");
+    }
 }
 
 /// <summary>
@@ -55,6 +72,7 @@ internal sealed class RecordRankReadingRequestHandler(
     FoxfireDbContext db,
     RankRecorder ranks,
     AttributionRunner attribution,
+    TftIdentity tftIdentity,
     IServerEvents events,
     TimeProvider time)
     : IValidatedRequestHandler<RecordRankReadingRequest, RankReadingResponse>
@@ -84,7 +102,9 @@ internal sealed class RecordRankReadingRequestHandler(
                 RankDivisions.FromRiotName(request.Division),
                 request.LeaguePoints,
                 request.Wins,
-                request.Losses),
+                request.Losses,
+                RatedTiers.FromRiotName(request.RatedTier),
+                request.RatedRating),
             RankSources.Lcu,
             time.GetUtcNow().ToUnixTimeMilliseconds(),
             request.Force,
@@ -95,7 +115,19 @@ internal sealed class RecordRankReadingRequestHandler(
         await db.SaveChangesAsync(cancellationToken);
 
         var since = time.GetUtcNow().ToUnixTimeMilliseconds() - AttributionRunner.ReplayWindowMs;
-        await attribution.ReplayAsync(account.Id, account.Puuid, since, cancellationToken);
+        var game = RankedQueues.FromRiotName(request.QueueType)!.Value.Game();
+
+        // TFT's games are filed under the account's TFT puuid, which differs
+        // from League's when the server has a TFT key of its own. As far as it
+        // is already known, and never learnt here: that is a Riot call and a
+        // move of boards, which a sync makes and a client's reading must not
+        // wait on or fail over. An account TFT has never resolved has no TFT
+        // games here for the reading to settle.
+        var puuid = game == Game.Tft
+            ? await tftIdentity.KnownPuuidAsync(account, cancellationToken)
+            : account.Puuid;
+
+        if (puuid is not null) await attribution.ReplayAsync(account.Id, game, puuid, since, cancellationToken);
 
         // Everybody's rank views, not just this machine's. A game that just
         // ended moved somebody's LP, and a member watching the shared history

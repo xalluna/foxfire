@@ -337,7 +337,125 @@ function RiotKeySettings(): JSX.Element {
           />
         )}
       </SettingsCard>
+
+      <TftKeyCard />
     </SettingsPage>
+  )
+}
+
+/**
+ * TFT's key, which is optional.
+ *
+ * Without one TFT is asked through the key above, which works whenever that key
+ * was granted TFT — so the card leads with whether it can, which is the thing
+ * that decides whether anybody needs to be here at all.
+ */
+function TftKeyCard(): JSX.Element {
+  const queryClient = useQueryClient()
+  const [key, setKey] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const settings = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => window.api.settings.get()
+  })
+
+  const refresh = (): void => void queryClient.invalidateQueries({ queryKey: ['settings'] })
+
+  const save = useMutation({
+    mutationFn: (value: string) => window.api.settings.setTftApiKey(value),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setKey('')
+        setError(null)
+        refresh()
+      } else {
+        setError(result.message ?? 'Could not save key')
+      }
+    }
+  })
+
+  const clear = useMutation({
+    mutationFn: () => window.api.settings.clearTftApiKey(),
+    onSuccess: refresh
+  })
+
+  const setKeyType = useMutation({
+    mutationFn: ({ keyType, limits }: { keyType: RiotKeyType; limits?: RiotKeyLimits }) =>
+      window.api.settings.setKeyType(keyType, limits, 'tft'),
+    onSuccess: refresh
+  })
+
+  const data = settings.data
+  const own = data?.hasTftApiKey ?? false
+
+  const status: { tone: 'good' | 'warn' | 'mute'; text: string } = own
+    ? data?.tftKeyRejected
+      ? { tone: 'warn', text: 'Riot rejected TFT’s key — paste a fresh one' }
+      : { tone: 'good', text: 'TFT has a key of its own' }
+    : data?.tftAccess === 'denied'
+      ? { tone: 'warn', text: 'The key above cannot reach TFT, so TFT is not synced. Add a key that can.' }
+      : data?.tftAccess === 'granted'
+        ? { tone: 'good', text: 'TFT is synced through the key above' }
+        : { tone: 'mute', text: 'TFT is synced through the key above' }
+
+  return (
+    <SettingsCard
+      title="TFT key"
+      description="Optional. Riot grants each key its games, and a key registered for League alone cannot reach TFT. A key of its own also gives TFT's backfill a budget that League's does not share. Replacing it re-learns every account's TFT id, since Riot encrypts those per key."
+    >
+      <StatusRow tone={status.tone}>{status.text}</StatusRow>
+
+      <SettingsBlock label={own ? 'Replace TFT’s key' : 'Paste a key for TFT'}>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setError(null)
+            save.mutate(key)
+          }}
+        >
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="RGAPI-..."
+            aria-label="TFT API key"
+            autoComplete="off"
+            spellCheck={false}
+            className={clsx(inputClass, 'flex-1 font-mono')}
+          />
+          <button type="submit" disabled={!key.trim() || save.isPending} className={primaryButtonClass}>
+            {save.isPending ? 'Checking…' : 'Save'}
+          </button>
+        </form>
+
+        {error && <p className="mt-3 text-sm text-red">{error}</p>}
+        {save.isSuccess && save.data.ok && !error && (
+          <p className="mt-3 text-sm text-teal">Key checked against TFT and saved.</p>
+        )}
+      </SettingsBlock>
+
+      {own && (
+        <KeyTypeControl
+          name="riot-tft-key-type"
+          keyType={data?.tftKeyType ?? 'personal'}
+          limits={data?.tftApplicationLimits ?? DEFAULT_APPLICATION_LIMITS}
+          disabled={setKeyType.isPending}
+          onChange={(next, limits) => setKeyType.mutate({ keyType: next, limits })}
+        />
+      )}
+
+      {own && (
+        <DangerRow
+          label="Remove TFT’s key"
+          description="TFT goes back to the key above. Nothing already synced is lost."
+          action="Remove"
+          disabled={clear.isPending}
+          onClick={() => clear.mutate()}
+        />
+      )}
+    </SettingsCard>
   )
 }
 
@@ -413,11 +531,14 @@ function relinkSummary(identities?: IdentityReport[]): { note?: string; warning?
  * offered.
  */
 function KeyTypeControl({
+  name = 'riot-key-type',
   keyType,
   limits,
   disabled,
   onChange
 }: {
+  /** The radio group's name, which two controls on one page cannot share. */
+  name?: string
   keyType: RiotKeyType
   limits: RiotKeyLimits
   disabled: boolean
@@ -444,7 +565,7 @@ function KeyTypeControl({
           <label key={option} className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="radio"
-              name="riot-key-type"
+              name={name}
               disabled={disabled}
               checked={keyType === option}
               onChange={() => onChange(option, option === 'application' ? draft : undefined)}

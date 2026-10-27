@@ -48,6 +48,8 @@ services:
       RateLimit__SearchPerMinute: "${RATE_LIMIT_SEARCH_PER_MINUTE:-120}"
       Riot__ApiKey: "${RIOT_API_KEY}"
       Riot__KeyType: "${RIOT_KEY_TYPE:-personal}"
+      Riot__Tft__ApiKey: "${RIOT_TFT_API_KEY:-}"
+      Riot__Tft__KeyType: "${RIOT_TFT_KEY_TYPE:-personal}"
       Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"
       Auth__InviteSigningKey: "${INVITE_SIGNING_KEY}"
       Admin__Email: "${ADMIN_EMAIL}"

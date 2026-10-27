@@ -18,7 +18,8 @@
     "lint": "eslint . --ext .ts",
     "test": "vitest run",
     "generate-corpus": "vite-node scripts/generate-ladder-corpus.ts",
-    "generate-trend-corpus": "vite-node scripts/generate-rank-trend-corpus.ts"
+    "generate-trend-corpus": "vite-node scripts/generate-rank-trend-corpus.ts",
+    "generate-game-registry": "vite-node scripts/generate-game-registry.ts"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11"

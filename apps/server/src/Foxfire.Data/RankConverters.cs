@@ -35,4 +35,28 @@ internal static class RankConverters
     public static readonly ValueConverter<RankDivision?, string?> Division = new(
         division => division == null ? null : division.Value.RiotName(),
         stored => RankDivisions.FromRiotName(stored));
+
+    /// <summary>Hyper Roll's colour, total in the same way as a tier.</summary>
+    public static readonly ValueConverter<RatedTier?, string?> RatedTier = new(
+        tier => tier == null ? null : tier.Value.RiotName(),
+        stored => RatedTiers.FromRiotName(stored));
+}
+
+/// <summary>
+/// How a game and a key scope cross into SQL Server and back: as their slugs,
+/// `lol` and `tft`, `main` and `tft`, which is also how the wire spells them.
+///
+/// Total on read for the reasons above. A slug this build has never heard of —
+/// a row written by a newer server, then rolled back — reads as League's and
+/// main, which is what every row was before the column existed.
+/// </summary>
+internal static class GameConverters
+{
+    public static readonly ValueConverter<Game, string> Game = new(
+        game => game.Slug(),
+        stored => Games.FromSlug(stored) ?? Core.Game.Lol);
+
+    public static readonly ValueConverter<RiotKeyScope, string> Scope = new(
+        scope => scope.Slug(),
+        stored => stored == "tft" ? RiotKeyScope.Tft : RiotKeyScope.Main);
 }

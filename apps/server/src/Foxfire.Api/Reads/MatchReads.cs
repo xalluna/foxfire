@@ -328,8 +328,10 @@ public sealed class MatchReads(FoxfireDbContext db)
         string matchId,
         CancellationToken cancellationToken = default)
     {
+        // League's alone. A TFT game is a Match too, and read here it would
+        // come back as a League game with nobody in it.
         var match = await db.Matches.AsNoTracking()
-            .FirstOrDefaultAsync(m => m.MatchId == matchId, cancellationToken);
+            .FirstOrDefaultAsync(m => m.MatchId == matchId && m.Game == Game.Lol, cancellationToken);
 
         if (match is null) return null;
 

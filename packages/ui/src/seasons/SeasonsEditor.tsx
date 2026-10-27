@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import type { Season, SeasonInput } from '@foxfire/core'
+import type { GameId, Season, SeasonInput } from '@foxfire/core'
 import { SettingsCard } from '../components/settings/SettingsCard'
 import { SettingsBlock } from '../components/settings/SettingsRow'
 import { checkboxClass, ghostButtonClass, inputClass, primaryButtonClass } from '../components/settings/controls'
@@ -60,6 +60,35 @@ function problemWith(rows: Draft[]): string | null {
   return null
 }
 
+const DAY_MS = 86_400_000
+
+/**
+ * The row "Add" starts from: a plausible guess that is nearly always wrong by
+ * a few days, which is exactly the thing being edited.
+ *
+ * League's is next January at noon. TFT's is the set after the newest one,
+ * about seventeen weeks on, which is how far apart Riot has been putting them.
+ */
+function nextSeason(game: GameId, rows: Draft[]): SeasonInput {
+  if (game === 'tft') {
+    const newest = rows.reduce<Draft | null>((a, b) => (a === null || b.startsAt > a.startsAt ? b : a), null)
+    const number = newest ? Number(/(\d+)/.exec(newest.label)?.[1]) : NaN
+    return {
+      label: Number.isFinite(number) ? `Set ${number + 1}` : 'Set',
+      startsAt: newest && Number.isFinite(newest.startsAt) ? newest.startsAt + 119 * DAY_MS : Date.now(),
+      isPreseason: false,
+      resetsRank: true
+    }
+  }
+
+  return {
+    label: `Season ${new Date().getFullYear() + 1}`,
+    startsAt: new Date(new Date().getFullYear() + 1, 0, 1, 12).getTime(),
+    isPreseason: false,
+    resetsRank: true
+  }
+}
+
 const sameAsSaved = (rows: Draft[], saved: Season[]): boolean =>
   rows.length === saved.length &&
   rows.every((r, i) => {
@@ -74,9 +103,18 @@ const sameAsSaved = (rows: Draft[], saved: Season[]): boolean =>
   })
 
 export function SeasonsEditor({
+  game = 'lol',
+  picker,
   seasons,
   onSave
 }: {
+  /**
+   * Whose seasons these are. Each game has its own list — League's ranked
+   * seasons, TFT's sets — and a save replaces that game's alone.
+   */
+  game?: GameId
+  /** Above the rows: the choice of game, where there is one. */
+  picker?: ReactNode
   /** Undefined while the list is loading. */
   seasons: Season[] | undefined
   /** Replaces the whole list. Resolves with it as stored, which is the new starting point. */
@@ -111,33 +149,30 @@ export function SeasonsEditor({
   const patch = (key: string, change: Partial<SeasonInput>): void =>
     setRows((current) => (current ?? []).map((r) => (r.key === key ? { ...r, ...change } : r)))
 
-  const addSeason = (): void =>
-    setRows((current) => [
-      ...(current ?? []),
-      toDraft({
-        label: `Season ${new Date().getFullYear() + 1}`,
-        // Next January at noon: a plausible default that is nearly always
-        // wrong by a few days, which is exactly the thing being edited.
-        startsAt: new Date(new Date().getFullYear() + 1, 0, 1, 12).getTime(),
-        isPreseason: false,
-        resetsRank: true
-      })
-    ])
+  const addSeason = (): void => setRows((current) => [...(current ?? []), toDraft(nextSeason(game, current ?? []))])
+
+  const tft = game === 'tft'
 
   return (
     <SettingsCard
-      title="Ranked seasons"
-      description="Riot offers no way to ask when a season started, so the dates live here. Each season runs until the next one begins and the newest never ends, so nothing breaks if you add January late — add the next one once Riot announces the date."
+      title={tft ? 'TFT sets' : 'Ranked seasons'}
+      description={
+        tft
+          ? 'Riot offers no way to ask when a set began, so the dates live here, apart from League’s. Each set runs until the next one begins and the newest never ends — add the next one once Riot announces the patch it lands in.'
+          : 'Riot offers no way to ask when a season started, so the dates live here. Each season runs until the next one begins and the newest never ends, so nothing breaks if you add January late — add the next one once Riot announces the date.'
+      }
     >
+      {picker && <SettingsBlock>{picker}</SettingsBlock>}
+
       {draft.map((row) => (
         <SettingsBlock key={row.key}>
           <div className="flex gap-2">
             <input
               value={row.label}
               onChange={(e) => patch(row.key, { label: e.target.value })}
-              placeholder="Season 2027"
+              placeholder={tft ? 'Set 19' : 'Season 2027'}
               spellCheck={false}
-              aria-label="Season name"
+              aria-label={tft ? 'Set name' : 'Season name'}
               className={clsx(inputClass, 'flex-1')}
             />
             <input
@@ -196,7 +231,7 @@ export function SeasonsEditor({
         <div className="flex items-center gap-2">
           <button onClick={addSeason} className={clsx(ghostButtonClass, 'flex items-center gap-1.5')}>
             <Icon.Plus width={12} height={12} />
-            Add season
+            {tft ? 'Add set' : 'Add season'}
           </button>
 
           <button
@@ -204,12 +239,14 @@ export function SeasonsEditor({
             disabled={problem !== null || unchanged || save.isPending}
             className={clsx(primaryButtonClass, 'ml-auto')}
           >
-            {save.isPending ? 'Saving…' : 'Save seasons'}
+            {save.isPending ? 'Saving…' : tft ? 'Save sets' : 'Save seasons'}
           </button>
         </div>
 
         {problem && !unchanged && <p className="mt-3 text-sm text-red">{problem}</p>}
-        {save.isError && <p className="mt-3 text-sm text-red">Could not save the seasons.</p>}
+        {save.isError && (
+          <p className="mt-3 text-sm text-red">Could not save the {tft ? 'sets' : 'seasons'}.</p>
+        )}
       </SettingsBlock>
     </SettingsCard>
   )

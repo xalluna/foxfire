@@ -27,6 +27,7 @@ const OUTCOMES: TelemetryOutcome[] = [
   'parse_error',
   'network_error',
   'key_invalid',
+  'no_access',
   'never_ran'
 ]
 

@@ -46,6 +46,15 @@ export interface ServerDataPageProps {
   replayCap: number | undefined
   onSaveReplayCap: (bytes: number) => Promise<void>
 
+  /**
+   * How many games a newly added account's history goes back, per game.
+   * Undefined while the settings are loading; TFT's is absent from a server
+   * older than it.
+   */
+  backfill?: { league: number; tft: number | undefined }
+  /** Rejects with why not — the server keeps both between 1 and 1000. */
+  onSaveBackfill?: (patch: { backfillTarget?: number; tftBackfillTarget?: number }) => Promise<void>
+
   /** The pages of the replay library fetched so far, biggest first. Undefined while the first loads. */
   replays: AdminReplay[] | undefined
   /** Whether there is another page of the library after `replays`. */
@@ -79,6 +88,8 @@ export function ServerDataPage({
   storage,
   replayCap,
   onSaveReplayCap,
+  backfill,
+  onSaveBackfill,
   replays,
   hasMoreReplays,
   loadingMoreReplays,
@@ -149,6 +160,7 @@ export function ServerDataPage({
       {storage !== undefined && (
         <StorageCard storage={storage} replayCap={replayCap} onSaveReplayCap={onSaveReplayCap} />
       )}
+      {backfill && onSaveBackfill && <BackfillCard backfill={backfill} onSave={onSaveBackfill} />}
       <ReplayLibraryCard
         replays={replays}
         hasMore={hasMoreReplays}
@@ -303,6 +315,100 @@ function ReplayCapRow({
 }
 
 const GIGABYTE = 1024 * 1024 * 1024
+
+/**
+ * How far back a newly added account's history goes, per game.
+ *
+ * Each game backfills on its own and both draw on the one Riot budget — a
+ * request a game, about a hundred every two minutes for the whole server — so
+ * a host with a busy community, or a key with TFT on it that League also
+ * needs, can keep one short without the other.
+ */
+function BackfillCard({
+  backfill,
+  onSave
+}: {
+  backfill: { league: number; tft: number | undefined }
+  onSave: (patch: { backfillTarget?: number; tftBackfillTarget?: number }) => Promise<void>
+}): JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+
+  const save = (patch: { backfillTarget?: number; tftBackfillTarget?: number }): Promise<void> =>
+    onSave(patch).then(
+      () => setError(null),
+      (err: unknown) => setError(err instanceof Error ? err.message : String(err))
+    )
+
+  return (
+    <SettingsCard
+      title="History backfill"
+      description={
+        'How many games back a newly added account’s history goes. Each costs about one Riot request, '
+        + 'from the budget every sync on this server shares, so a long backfill for a big community '
+        + 'is minutes of everybody waiting. Games after that are fetched as they are played.'
+      }
+    >
+      {error !== null && <StatusRow tone="error">{error}</StatusRow>}
+      <TargetRow
+        label="League games"
+        value={backfill.league}
+        onSave={(games) => save({ backfillTarget: games })}
+      />
+      {backfill.tft !== undefined && (
+        <TargetRow
+          label="TFT games"
+          value={backfill.tft}
+          onSave={(games) => save({ tftBackfillTarget: games })}
+        />
+      )}
+    </SettingsCard>
+  )
+}
+
+/** One game's backfill target, saved when the field is left or Enter is pressed. */
+function TargetRow({
+  label,
+  value,
+  onSave
+}: {
+  label: string
+  value: number
+  onSave: (games: number) => Promise<void>
+}): JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? String(value)
+
+  function commit(): void {
+    const games = Number(shown.trim())
+    if (!Number.isInteger(games) || games === value) {
+      setDraft(null)
+      return
+    }
+    void onSave(games).then(() => setDraft(null))
+  }
+
+  return (
+    <SettingsRow
+      label={label}
+      control={
+        <div className="flex items-center gap-2">
+          <input
+            value={shown}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+            }}
+            inputMode="numeric"
+            aria-label={label}
+            className={clsx(inputClass, 'w-20 text-right tabular-nums')}
+          />
+          <span className="text-sm text-text-mute">games</span>
+        </div>
+      }
+    />
+  )
+}
 
 /**
  * The library, biggest first, a page at a time, with a way to remove one.

@@ -67,7 +67,11 @@ export { DashboardScreen } from './screens/DashboardScreen'
 export { LpEditorScreen } from './screens/LpEditorScreen'
 export { MatchScreen } from './screens/MatchScreen'
 export { RankScreen } from './screens/RankScreen'
-export { RecordingScreen, headerFactsFor } from './screens/RecordingScreen'
+export { TftProfileScreen } from './screens/TftProfileScreen'
+export { TftLobbyPanel } from './match/TftLobbyPanel'
+export { GameSwitch } from './routes/GameSwitch'
+export { RecordingScreen } from './screens/RecordingScreen'
+export { headerFactsFor, tftHeaderFactsFor } from './match/recordingFacts'
 export { SeasonsCard } from './screens/SeasonsCard'
 export { ServerDataScreen } from './screens/ServerDataScreen'
 export { InvitesScreen } from './screens/InvitesScreen'
@@ -100,7 +104,17 @@ export {
   type LpEditorSearch,
   type MatchSearch,
   type QueueSearch,
-  type RankSearch
+  type RankSearch,
+  tftLadderFrom,
+  tftQueueIdFrom,
+  tftQueueSearchFor,
+  tftRankQueueSearchFor,
+  validateRecordingSearch,
+  validateTftRankSearch,
+  validateTftSearch,
+  type RecordingSearch,
+  type TftRankSearch,
+  type TftSearch
 } from './routes/params'
 export { rememberSearch, type SearchMemory } from './routes/rememberSearch'
 export { parseSearch, stringifySearch } from './routes/serialize'

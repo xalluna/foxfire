@@ -205,6 +205,8 @@ builder.Services.AddScoped<ServerSettingsService>();
 // little logic on top of it; the engine that drives them is not, because a
 // sync outlives the request that asked for it.
 builder.Services.AddScoped<MatchIngestion>();
+builder.Services.AddScoped<TftMatchIngestion>();
+builder.Services.AddScoped<TftIdentity>();
 builder.Services.AddScoped<RankRecorder>();
 builder.Services.AddScoped<AccountProfile>();
 builder.Services.AddScoped<AttributionRunner>();
@@ -215,6 +217,7 @@ builder.Services.AddScoped<IdentityRepair>();
 // through one of these.
 builder.Services.AddScoped<MatchReads>();
 builder.Services.AddScoped<RankReads>();
+builder.Services.AddScoped<TftReads>();
 builder.Services.AddScoped<ManualRankEditor>();
 
 builder.Services.AddSingleton<IServerEvents, SignalRServerEvents>();
@@ -238,6 +241,42 @@ builder.Services.AddSingleton(sp => new RiotClient(
     riotOptions.ApiKey,
     sp.GetRequiredService<ILogger<RiotClient>>(),
     sp.GetRequiredService<RiotMetrics>()));
+
+// TFT's client: its own key and its own queue when the host has given it one,
+// and otherwise the main key through the main queue — where a 403 from a TFT
+// endpoint means "this key has no TFT", not "this key is dead". The main
+// RiotClient and RiotRateLimiter are registered exactly as they were, so
+// nothing that injects them changes.
+builder.Services.AddSingleton<TftAccess>();
+builder.Services.AddSingleton(sp =>
+{
+    var http = sp.GetRequiredService<IHttpClientFactory>();
+    var metrics = sp.GetRequiredService<RiotMetrics>();
+    var logger = sp.GetRequiredService<ILogger<RiotClient>>();
+
+    // Read when the client is first asked for rather than from the options
+    // bound above, so a test host can give TFT a key of its own.
+    var tftOptions = sp.GetRequiredService<IConfiguration>()
+        .GetSection($"{RiotOptions.Section}:Tft").Get<TftRiotOptions>() ?? new();
+
+    if (!tftOptions.IsSet)
+    {
+        return new TftRiot(
+            new RiotClient(http, sp.GetRequiredService<RiotRateLimiter>(), riotOptions.ApiKey, logger, metrics,
+                tftForbiddenMeansNoAccess: true),
+            HasOwnKey: false);
+    }
+
+    var limiter = new RiotRateLimiter(
+        tftOptions.KeyType == "application" ? RiotRateLimits.ApplicationKey : RiotRateLimits.PersonalKey,
+        sp.GetRequiredService<TimeProvider>(),
+        sp.GetRequiredService<ILogger<RiotRateLimiter>>());
+
+    var access = sp.GetRequiredService<TftAccess>();
+    limiter.KeyRejectedOnce += () => access.Deny("Riot rejected this server's TFT key.");
+
+    return new TftRiot(new RiotClient(http, limiter, tftOptions.ApiKey, logger, metrics), HasOwnKey: true);
+});
 
 // Optional, and the server says so rather than refusing to start: a
 // community that never uploads a replay needs no blob store, and everything
@@ -323,6 +362,7 @@ api.MapRiotLinkEndpoints();
 api.MapSyncEndpoints();
 api.MapDashboardEndpoints();
 api.MapRankEndpoints();
+api.MapTftEndpoints();
 api.MapSearchEndpoints();
 api.MapReplayEndpoints();
 
@@ -483,6 +523,28 @@ _ = Task.Run(async () =>
         startup.LogError(
             "Riot rejected this server's API key. Stored data still reads, but nothing new will be "
             + "fetched. Personal keys expire every 24 hours — replace Riot__ApiKey and restart.");
+    }
+});
+
+// The same for TFT, whose answer is a different question: not whether the key
+// works, but whether it reaches TFT at all.
+_ = Task.Run(async () =>
+{
+    var tft = app.Services.GetRequiredService<TftRiot>();
+    var access = app.Services.GetRequiredService<TftAccess>();
+    var reached = await tft.Client.ValidateTftAccessAsync(app.Lifetime.ApplicationStopping);
+
+    if (reached is true)
+    {
+        access.Grant();
+        startup.LogInformation(
+            tft.HasOwnKey ? "Riot accepted this server's TFT key." : "This server's Riot key reaches TFT.");
+    }
+    else if (reached is false)
+    {
+        access.Deny(tft.HasOwnKey
+            ? "Riot rejected this server's TFT key."
+            : "This server's Riot key has no TFT access. Set Riot__Tft__ApiKey to a key registered for TFT.");
     }
 });
 

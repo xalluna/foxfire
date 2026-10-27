@@ -35,9 +35,16 @@ namespace Foxfire.Api.Sync;
 public sealed class IdentityRepair(
     FoxfireDbContext db,
     RiotClient riot,
+    TftRiot tft,
     TimeProvider time,
     ILogger<IdentityRepair> log)
 {
+    /// <summary>
+    /// The tables a main-key puuid is filed in: League's always, and TFT's too
+    /// while TFT is fetched with the main key.
+    /// </summary>
+    private ParticipantTables MainKeyTables => tft.HasOwnKey ? ParticipantTables.Lol : ParticipantTables.Both;
+
     /// <summary>
     /// Re-resolves one account and, when the puuid moved, rewrites its history
     /// onto the new one.
@@ -108,7 +115,7 @@ public sealed class IdentityRepair(
                 $"Cannot re-key {account.RiotId}: Riot account {takenBy} already holds that puuid.");
         }
 
-        var collisions = (await PuuidHistory.CollidingMatchesAsync(db, oldPuuid, newPuuid, cancellationToken)).Count;
+        var collisions = (await PuuidHistory.CollidingMatchesAsync(db, oldPuuid, newPuuid, cancellationToken, MainKeyTables)).Count;
 
         if (collisions > 0)
         {
@@ -124,7 +131,7 @@ public sealed class IdentityRepair(
         {
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-            var moved = await PuuidHistory.MoveAsync(db, oldPuuid, newPuuid, cancellationToken);
+            var moved = await PuuidHistory.MoveAsync(db, oldPuuid, newPuuid, cancellationToken, MainKeyTables);
 
             await db.RiotAccounts
                 .Where(a => a.Id == account.Id)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
-import { usePlatform } from '@foxfire/screens'
+import { tftHeaderFactsFor, usePlatform } from '@foxfire/screens'
 import { youtubeWatchUrl } from '@foxfire/core/youtube'
 import {
   AttachLinkDialog,
@@ -158,10 +158,16 @@ export function RecordingApp(): JSX.Element {
                 Open on YouTube
               </a>
             )}
-            {recording.match && (
+            {(recording.match ?? recording.tftMatch) && (
               <button
                 type="button"
-                onClick={() => void window.api.recordings.showMatch(recording.accountId, recording.match!.matchId)}
+                onClick={() =>
+                  void window.api.recordings.showMatch(
+                    recording.accountId,
+                    (recording.match ?? recording.tftMatch)!.matchId,
+                    recording.game
+                  )
+                }
                 className={recordingPrimaryActionClass}
               >
                 View match history
@@ -200,6 +206,25 @@ function Shell({ children }: { children: React.ReactNode }): JSX.Element {
 }
 
 function factsFor(recording: Recording): RecordingHeaderFacts {
+  // A TFT game's place and board where League's has a champion and a score;
+  // one not yet found says only that it is TFT, and when.
+  if (recording.game === 'tft') {
+    return recording.tftMatch
+      ? tftHeaderFactsFor(recording.tftMatch, recording.durationSeconds)
+      : {
+          championId: null,
+          championName: 'TFT recording',
+          queueId: recording.queueId,
+          gameMode: 'TFT',
+          durationSeconds: recording.durationSeconds,
+          playedAt: recording.startedAt,
+          win: null,
+          kills: null,
+          deaths: null,
+          assists: null
+        }
+  }
+
   const match = recording.match
   return {
     championId: match?.championId ?? recording.selfChampionId,

@@ -12,7 +12,17 @@
  * machine is `MatchSummary.local`, which only the desktop fills.
  */
 
-export type QueueType = 'RANKED_SOLO_5x5' | 'RANKED_FLEX_SR'
+import type { GameId } from '../games/registry'
+import type { LadderId } from '../games/ladders'
+
+/**
+ * A ranked ladder, by Riot's own name for it.
+ *
+ * League's two until TFT arrived, and still called a queue type because that
+ * is what Riot calls the field and what sixty files say. Every game's ladders
+ * are here now; see games/ladders.ts for what each one is.
+ */
+export type QueueType = LadderId
 
 export interface Account {
   /**
@@ -61,6 +71,14 @@ export interface LeagueEntry {
   wins: number | null
   losses: number | null
   fetchedAt: string
+  /**
+   * Hyper Roll's colour — GRAY to ORANGE — on a rated ladder, where tier,
+   * rank and LP are null. Absent on every other ladder, and from a server or
+   * desktop older than TFT.
+   */
+  ratedTier?: string | null
+  /** Hyper Roll's rating, beside ratedTier. */
+  ratedRating?: number | null
 }
 
 /**
@@ -296,6 +314,12 @@ export interface MatchRankInfo {
   rankAfter: string | null
   isPromotion: boolean
   isDemotion: boolean
+  /**
+   * On a rated ladder, the colour either side of the game — the rating itself
+   * is the delta. Absent everywhere else.
+   */
+  ratedTierBefore?: string | null
+  ratedTierAfter?: string | null
 }
 
 /** One reading of a ladder position, appended rather than overwritten. */
@@ -325,6 +349,9 @@ export interface RankSnapshot {
   source: SnapshotSource
   /** Epoch milliseconds, the same units as MatchSummary.gameCreation. */
   capturedAt: number
+  /** On a rated ladder, as LeagueEntry carries them; ladderPosition is the rating. */
+  ratedTier?: string | null
+  ratedRating?: number | null
 }
 
 export type SnapshotSource = 'lcu' | 'league_v4' | 'manual'
@@ -338,21 +365,17 @@ export interface ManualRank {
 }
 
 /**
- * A ranked game with no attributed LP, offered for hand-entry.
+ * A ranked game with no attributed LP, offered for hand-entry — whichever game.
  *
- * Carries enough of the match to recognise it in a list, plus the rank going
- * in, so the editor can show what the game moved from without a second query.
+ * What the editor needs of any ranked game: when it was, and the rank going
+ * in, so it can show what the game moved from without a second query. League's
+ * rows add the champion and KDA (EditableMatch), TFT's the placement
+ * (TftEditableMatch).
  */
-export interface EditableMatch {
+export interface EditableMatchBase {
   matchId: string
   gameCreation: number
   gameDuration: number
-  win: boolean
-  championId: number
-  championName: string | null
-  kills: number
-  deaths: number
-  assists: number
   /**
    * The most recent reading before this game ended, or null if there is none.
    *
@@ -381,6 +404,16 @@ export interface EditableMatch {
   manual: ManualRank | null
 }
 
+/** A ranked League game with no attributed LP, offered for hand-entry. */
+export interface EditableMatch extends EditableMatchBase {
+  win: boolean
+  championId: number
+  championName: string | null
+  kills: number
+  deaths: number
+  assists: number
+}
+
 /** One row of the editor, as submitted. */
 export interface ManualRankEdit {
   matchId: string
@@ -396,6 +429,8 @@ export interface RankMilestone {
   tier: string | null
   rank: string | null
   capturedAt: number
+  /** On a rated ladder, the colour crossed into; tier and rank are null there. */
+  ratedTier?: string | null
 }
 
 export interface RankHistory {
@@ -499,6 +534,12 @@ export interface Season {
    * keep attributing LP across its own start, and only a reset may suppress it.
    */
   resetsRank: boolean
+  /**
+   * Which game's calendar it belongs to. TFT's sets reset on their own dates,
+   * so each game keeps its own list. Absent means League, which is what every
+   * season was before there were two games and what an older server sends.
+   */
+  game?: GameId
 }
 
 /** A season on its way back from the editor. No id means a row being added. */
@@ -593,6 +634,8 @@ export interface SyncState {
    * wait is over, rather than null.
    */
   cooldownUntil: string | null
+  /** Which game's history this is the state of. Absent means League. */
+  game?: GameId
 }
 
 /**
@@ -617,6 +660,11 @@ export interface SyncProgressEvent {
    * until then "Sync now" would come back pressable. Never on this PC's own.
    */
   cooldownUntil?: string | null
+  /**
+   * Which game's history the sync is of. Absent means League — which is what
+   * every sync was until there were two games, and what an older server sends.
+   */
+  game?: GameId
 }
 
 /**
@@ -705,6 +753,25 @@ export interface AssetManifest {
   championById: Record<number, { id: string; name: string }>
   spellById: Record<number, { id: string; name: string }>
   runeById: Record<number, { icon: string; name: string }>
+  /** TFT's, when Data Dragon gave them. A client draws names where this has nothing. */
+  tft?: TftAssets
+}
+
+/** One TFT unit, trait, item or augment, as Data Dragon names and draws it. */
+export interface TftAsset {
+  name: string
+  /** The whole URL, on the Data Dragon host every CSP already allows. Null when Data Dragon has no image. */
+  image: string | null
+  /** A unit's cost, 1 to 5. Units only, and only when Data Dragon says. */
+  cost?: number
+}
+
+/** TFT's lookups, each keyed by Riot's id lower-cased: `tft18_jinx`. */
+export interface TftAssets {
+  units: Record<string, TftAsset>
+  traits: Record<string, TftAsset>
+  items: Record<string, TftAsset>
+  augments: Record<string, TftAsset>
 }
 
 /** Everything the dashboard header needs, in one answer. */

@@ -30,6 +30,20 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
       // Scoped to the account the event is about. The bare prefix matched every
       // account's cached list and refetched all of them.
       const { accountId } = event.event
+
+      // And to the game: a TFT sync brought TFT games and TFT readings, and
+      // League's history, champions and dashboard have not changed. The rank
+      // keys are shared by both games, scoped beneath by ladder.
+      if (event.event.game === 'tft') {
+        return [
+          queryKeys.tftMatchList(accountId),
+          queryKeys.tftDashboard(accountId),
+          queryKeys.rankHistory(accountId),
+          queryKeys.rankTrend(accountId),
+          queryKeys.rankPeriods(accountId)
+        ]
+      }
+
       return [
         queryKeys.matchList(accountId),
         queryKeys.dashboard(accountId),
@@ -51,7 +65,9 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
         queryKeys.rankHistory(event.accountId),
         queryKeys.rankTrend(event.accountId),
         queryKeys.matchList(event.accountId),
-        queryKeys.dashboard(event.accountId)
+        queryKeys.dashboard(event.accountId),
+        queryKeys.tftMatchList(event.accountId),
+        queryKeys.tftDashboard(event.accountId)
       ]
 
     case 'rankChanged':
@@ -64,14 +80,16 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
         queryKeys.rankHistory(),
         queryKeys.rankTrend(),
         queryKeys.matchLists(),
-        queryKeys.dashboard()
+        queryKeys.dashboard(),
+        queryKeys.tftMatchLists(),
+        queryKeys.tftDashboard()
       ]
 
     case 'recordingChanged':
       // One account's row for one game, and the recording page if it is open.
       // Both live under that account's match list; the same game in anybody
       // else's history is somebody else's view of it and has not changed.
-      return [queryKeys.matchList(event.accountId)]
+      return [queryKeys.matchList(event.accountId), queryKeys.tftMatchList(event.accountId)]
 
     case 'seasonsSaved':
       // Every picker, every scoped aggregate and every LP chip is derived from
@@ -81,7 +99,10 @@ export function invalidationsFor(event: DataEvent): QueryKey[] {
         queryKeys.rankHistory(),
         queryKeys.rankTrend(),
         queryKeys.championStats(),
-        queryKeys.matchLists()
+        queryKeys.matchLists(),
+        // TFT's placement spreads are counted over the current set.
+        queryKeys.tftMatchLists(),
+        queryKeys.tftDashboard()
       ]
 
     case 'connectionChanged':

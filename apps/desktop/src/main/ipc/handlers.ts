@@ -1,6 +1,13 @@
 import { app, dialog, ipcMain } from 'electron'
 import { CH } from './channels'
-import { getSettings, removeApiKey, setAndValidateApiKey, setKeyType } from '../services/settingsService'
+import {
+  getSettings,
+  removeApiKey,
+  removeTftApiKey,
+  setAndValidateApiKey,
+  setAndValidateTftApiKey,
+  setKeyType
+} from '../services/settingsService'
 import { getAssetManifest } from '../services/ddragonService'
 import {
   accountEmail,
@@ -141,6 +148,8 @@ import type {
   ServerRegistration,
   SeasonInput
 } from '@shared/types'
+import { GAME_IDS, type GameId, type RiotKeyScope } from '@foxfire/core'
+import { puuidForGame } from '../services/tftIdentity'
 import type { TelemetryRequestQuery } from '@shared/telemetry'
 import {
   isInsightsSection,
@@ -239,11 +248,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(CH.settings.get, () => getSettings())
   ipcMain.handle(CH.settings.setApiKey, (_e, key: string) => setAndValidateApiKey(key))
-  ipcMain.handle(CH.settings.setKeyType, (_e, keyType: RiotKeyType, limits?: RiotKeyLimits) =>
-    setKeyType(keyType, limits)
+  ipcMain.handle(
+    CH.settings.setKeyType,
+    (_e, keyType: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope) =>
+      setKeyType(keyType, limits, scope === 'tft' ? 'tft' : 'main')
   )
   ipcMain.handle(CH.settings.clearApiKey, () => {
     removeApiKey()
+    return getSettings()
+  })
+  ipcMain.handle(CH.settings.setTftApiKey, (_e, key: string) => setAndValidateTftApiKey(key))
+  ipcMain.handle(CH.settings.clearTftApiKey, () => {
+    removeTftApiKey()
     return getSettings()
   })
 
@@ -275,9 +291,40 @@ export function registerIpcHandlers(): void {
     serverBacked().dashboard.matchSummary?.(accountId, matchId) ?? null
   )
 
-  ipcMain.handle(CH.sync.start, (_e, accountId: string) => serverBacked().sync.start(accountId))
-  ipcMain.handle(CH.sync.getState, (_e, accountId: string) =>
-    serverBacked().sync.getState(accountId)
+  ipcMain.handle(CH.sync.start, (_e, accountId: string, game?: GameId) =>
+    serverBacked().sync.start(accountId, game)
+  )
+  ipcMain.handle(CH.sync.getState, (_e, accountId: string, game?: GameId) =>
+    serverBacked().sync.getState(accountId, game)
+  )
+
+  ipcMain.handle(CH.tft.dashboard, (_e, accountId: string) => serverBacked().tft.dashboard(accountId))
+  ipcMain.handle(
+    CH.tft.matchList,
+    (_e, accountId: string, limit: number, offset: number, queueId: number | null) =>
+      serverBacked().tft.matchList(accountId, limit, offset, queueId)
+  )
+  ipcMain.handle(CH.tft.matchSummary, (_e, accountId: string, matchId: string) =>
+    serverBacked().tft.matchSummary(accountId, matchId)
+  )
+  ipcMain.handle(CH.tft.lobby, (_e, accountId: string, matchId: string) =>
+    serverBacked().tft.lobby(accountId, matchId)
+  )
+  ipcMain.handle(CH.tft.rankHistory, (_e, accountId: string, queueType: QueueType, range: RankRange) =>
+    serverBacked().tft.rank.history(accountId, queueType, range)
+  )
+  ipcMain.handle(CH.tft.rankTrend, (_e, accountId: string, queueType: QueueType) =>
+    serverBacked().tft.rank.trend(accountId, queueType)
+  )
+  ipcMain.handle(CH.tft.rankPeriods, (_e, accountId: string) => serverBacked().tft.rank.periods(accountId))
+  ipcMain.handle(CH.tft.editable, (_e, accountId: string, queueType: QueueType) =>
+    serverBacked().tft.rank.editable(accountId, queueType)
+  )
+  ipcMain.handle(CH.tft.saveManual, (_e, accountId: string, queueType: QueueType, edits: ManualRankEdit[]) =>
+    serverBacked().tft.rank.saveManual(accountId, queueType, edits)
+  )
+  ipcMain.handle(CH.tft.clearManual, (_e, accountId: string, queueType: QueueType, matchId: string) =>
+    serverBacked().tft.rank.clearManual(accountId, queueType, matchId)
   )
 
   ipcMain.handle(CH.assets.get, () => getAssetManifest())
@@ -308,9 +355,9 @@ export function registerIpcHandlers(): void {
     serverBacked().rank.periods(accountId)
   )
 
-  ipcMain.handle(CH.seasons.list, () => serverBacked().seasons.list())
-  ipcMain.handle(CH.seasons.save, (_e, seasons: SeasonInput[]) =>
-    serverBacked().seasons.save(seasons)
+  ipcMain.handle(CH.seasons.list, (_e, game?: GameId) => serverBacked().seasons.list(game))
+  ipcMain.handle(CH.seasons.save, (_e, seasons: SeasonInput[], game?: GameId) =>
+    serverBacked().seasons.save(seasons, game)
   )
 
   ipcMain.handle(CH.rank.editable, (_e, accountId: string, queueType: QueueType) =>
@@ -409,7 +456,9 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions) => listRecordings(accountId, page))
+  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions, game?: GameId | null) =>
+    listRecordings(accountId, page, game === 'lol' || game === 'tft' ? game : null)
+  )
   ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
   ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
   ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
@@ -474,13 +523,13 @@ export function registerIpcHandlers(): void {
 
   // Sent by a recording window, delivered to the main one: the match list it wants
   // opened lives in a different renderer process with its own state.
-  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: string, matchId: string) => {
+  ipcMain.handle(CH.recordings.showMatch, (_e, accountId: string, matchId: string, game?: GameId) => {
     const main = getMainWindow()
     if (!main) return
     if (main.isMinimized()) main.restore()
     main.show()
     main.focus()
-    main.webContents.send(CH.recordings.showMatch, accountId, matchId)
+    main.webContents.send(CH.recordings.showMatch, accountId, matchId, game === 'tft' ? 'tft' : 'lol')
   })
 
   ipcMain.handle(CH.search.players, (_e, query: string, options?: PlayerSearchOptions) =>
@@ -515,7 +564,9 @@ export function registerIpcHandlers(): void {
     const db = getDb()
     let attributed = 0
     for (const account of listAccounts(db)) {
-      attributed += replayAttribution(db, account.id, account.puuid)
+      for (const game of GAME_IDS) {
+        attributed += replayAttribution(db, account.id, puuidForGame(db, account, game), null, game)
+      }
     }
     return attributed
   })

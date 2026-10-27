@@ -1,9 +1,14 @@
 import {
   buildRecordingDescription,
+  buildTftRecordingDescription,
   renderRecordingTitle,
+  renderTftRecordingTitle,
+  UNMATCHED_TFT_TITLE_TEMPLATE,
   UNMATCHED_TITLE_TEMPLATE,
   type RecordingTitleFacts
 } from '@foxfire/core/youtube'
+import { tftDisplayName, type TftMatchSummary } from '@foxfire/core'
+import { tftTitleFacts } from '@shared/tftRecordingTitle'
 import { serverBacked } from '../api'
 import { getDb } from '../db'
 import { getRecording, getRecordingEvents } from '../db/repositories/recordings.repo'
@@ -26,6 +31,23 @@ export async function draftFor(recordingId: number): Promise<UploadDraft> {
   if (!recording) throw new Error('That recording is no longer on this machine.')
 
   const settings = getYouTubeSettings()
+
+  // TFT's own template, from its place and board; and no chapters, since a
+  // TFT recording keeps no events to make them from.
+  if (recording.game === 'tft') {
+    const facts = await tftFacts(recording)
+    return {
+      recordingId,
+      title: renderTftRecordingTitle(
+        facts.placement === null ? UNMATCHED_TFT_TITLE_TEMPLATE : settings.tftTitleTemplate,
+        facts
+      ),
+      description: buildTftRecordingDescription(),
+      privacy: settings.defaultPrivacy,
+      durationSeconds: recording.durationSeconds
+    }
+  }
+
   const facts = await titleFacts(recording)
   const template = facts.win === null ? UNMATCHED_TITLE_TEMPLATE : settings.titleTemplate
 
@@ -77,6 +99,31 @@ async function titleFacts(recording: Recording): Promise<RecordingTitleFacts> {
     assists: match?.assists ?? null,
     playedAt: match?.gameCreation ?? recording.startedAt
   }
+}
+
+/**
+ * A TFT game as far as it is known here: the recording's own board, or —
+ * connected to a server, where the board lives — the server's row for it.
+ */
+async function tftFacts(recording: Recording) {
+  let board: Pick<TftMatchSummary, 'queueId' | 'placement' | 'teamPlacement' | 'traits'> | null = recording.tftMatch
+
+  if (!board && recording.matchId && isServerMode()) {
+    try {
+      board = await serverBacked().tft.matchSummary(recording.accountId, recording.matchId)
+    } catch {
+      board = null
+    }
+  }
+
+  let manifest: Awaited<ReturnType<typeof getAssetManifest>> | null = null
+  try {
+    manifest = await getAssetManifest()
+  } catch {
+    manifest = null
+  }
+
+  return tftTitleFacts(recording, board, (id) => manifest?.tft?.traits[id.toLowerCase()]?.name ?? tftDisplayName(id))
 }
 
 async function championNameFor(championId: number | null): Promise<string | null> {

@@ -13,11 +13,14 @@
  * an old stats.db onto a server).
  */
 export type * from './types'
-export type { ConnectionState, FoxfireClient, FoxfireData, Unsubscribe } from './client'
+export type { ConnectionState, FoxfireClient, FoxfireData, RankReader, TftRank, Unsubscribe } from './client'
 export type { Logger } from './log'
 export { silentLogger } from './log'
 export * from './paging'
+export * from './games'
 export * from './rules/ladder'
+export * from './rules/ratedLadder'
+export * from './rules/tft'
 export * from './rules/seasons'
 export * from './rules/gameEnd'
 export * from './rules/rankTrend'

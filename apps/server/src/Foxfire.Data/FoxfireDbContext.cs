@@ -43,12 +43,14 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     // query that was observed to be doing something worse.
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<MatchParticipant> MatchParticipants => Set<MatchParticipant>();
+    public DbSet<TftParticipant> TftParticipants => Set<TftParticipant>();
     public DbSet<LeagueEntry> LeagueEntries => Set<LeagueEntry>();
     public DbSet<RankSnapshot> RankSnapshots => Set<RankSnapshot>();
     public DbSet<MatchRank> MatchRanks => Set<MatchRank>();
     public DbSet<ChampionMastery> ChampionMasteries => Set<ChampionMastery>();
     public DbSet<SyncState> SyncStates => Set<SyncState>();
     public DbSet<RetiredPuuid> RetiredPuuids => Set<RetiredPuuid>();
+    public DbSet<ScopedPuuid> ScopedPuuids => Set<ScopedPuuid>();
     public DbSet<RankedSeason> Seasons => Set<RankedSeason>();
     public DbSet<SharedReplay> SharedReplays => Set<SharedReplay>();
     public DbSet<MatchRecording> MatchRecordings => Set<MatchRecording>();

@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { youtubeWatchUrl } from '@foxfire/core/youtube'
-import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, ShowMoreButton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, queueName } from '@foxfire/ui'
+import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, PlacementBadge, Segmented, ShowMoreButton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, placementTone, queueName, tftName } from '@foxfire/ui'
+import { DOUBLE_UP_QUEUE_ID, countedPlacement, isTopHalf, strongestTrait, type GameId } from '@foxfire/core'
 import { BulkUploadDialog } from '../../youtube/BulkUploadDialog'
 import { openUploadDialog } from '../../youtube/uploadDialog'
 import { uploadPending, uploadStatusText } from '../../youtube/uploadStatus'
@@ -50,14 +51,27 @@ function formatBytes(bytes: number | null): string {
   return `${Math.round(bytes / (1024 * 1024))} MB`
 }
 
+/** The list's filter: both games, or one. */
+type GameFilter = 'all' | GameId
+
+const GAME_FILTERS: Array<[GameFilter, string]> = [
+  ['all', 'All'],
+  ['lol', 'League'],
+  ['tft', 'TFT']
+]
+
 export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   const queryClient = useQueryClient()
+  const [game, setGame] = useState<GameFilter>('all')
 
   // A page at a time: nothing is ever deleted automatically, so a PC that
-  // records every game has a list that only grows.
+  // records every game has a list that only grows. Filtered where the rows
+  // are, so a page of TFT is a page of TFT rather than whatever TFT was in a
+  // page of both.
   const recordings = useInfiniteQuery({
-    queryKey: ['recordings', account.id],
-    queryFn: ({ pageParam }) => window.api.recordings.list(account.id, { limit: PAGE_SIZE, offset: pageParam }),
+    queryKey: ['recordings', account.id, 'list', game],
+    queryFn: ({ pageParam }) =>
+      window.api.recordings.list(account.id, { limit: PAGE_SIZE, offset: pageParam }, game === 'all' ? null : game),
     initialPageParam: 0,
     getNextPageParam: nextOffset
   })
@@ -134,7 +148,8 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
 
   return (
     <div>
-      <div className="flex items-baseline justify-end gap-4">
+      <div className="flex items-center justify-between gap-4">
+        <Segmented options={GAME_FILTERS} value={game} onChange={setGame} size="sm" />
         {usage.data && usage.data.count > 0 && (
           <p className="text-sm tabular-nums text-text-dim">
             {formatBytes(usage.data.totalBytes)} across {usage.data.count}{' '}
@@ -226,7 +241,7 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Icon.Film />}
-            title="No recordings yet"
+            title={game === 'tft' ? 'No TFT recordings yet' : game === 'lol' ? 'No League recordings yet' : 'No recordings yet'}
             description="Turn on game capture in Settings and play a game in one of the queues you enabled. Recording starts once the game finishes loading."
           />
         ) : (
@@ -332,7 +347,11 @@ function RecordingRow({
 }): JSX.Element {
   const assets = useAssetManifest()
   const match = recording.match
+  const tft = recording.game === 'tft'
+  const board = recording.tftMatch
   const championId = match?.championId ?? recording.selfChampionId
+  // A TFT game went well in the top half — the team's top two, in Double Up.
+  const wentWell = tft ? (board ? isTopHalf(board, board.queueId) : null) : (match?.win ?? null)
   const onDisk = recording.fileExists
   // A recording on YouTube still plays after its file has gone — in a build
   // that has YouTube to play it from.
@@ -345,9 +364,9 @@ function RecordingRow({
         'flex items-center gap-3 border-l-2 px-4 py-3',
         !playable
           ? 'border-l-hairline bg-surface/30'
-          : match?.win === true
+          : wentWell === true
             ? 'border-l-teal bg-teal/[0.04]'
-            : match?.win === false
+            : wentWell === false
               ? 'border-l-red bg-red/[0.04]'
               : 'border-l-hairline'
       )}
@@ -364,19 +383,27 @@ function RecordingRow({
         ) : (
           <span className="w-4 shrink-0" />
         ))}
-      <Asset
-        src={assets && championId !== null ? championIconUrl(assets, championId) : null}
-        className="h-9 w-9"
-        rounded="rounded-md"
-      />
+      {tft ? (
+        <TftBadge recording={recording} />
+      ) : (
+        <Asset
+          src={assets && championId !== null ? championIconUrl(assets, championId) : null}
+          className="h-9 w-9"
+          rounded="rounded-md"
+        />
+      )}
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-text">
-          {assets && championId !== null
-            ? championName(assets, championId, match?.championName)
-            : (match?.championName ?? 'Recording')}
+          {tft
+            ? tftTitle(assets, recording)
+            : assets && championId !== null
+              ? championName(assets, championId, match?.championName)
+              : (match?.championName ?? 'Recording')}
           <span className="ml-2 text-2xs text-text-mute">
-            {match ? queueName(match.queueId, match.gameMode) : queueName(recording.queueId, null)}
+            {match
+              ? queueName(match.queueId, match.gameMode)
+              : queueName(board?.queueId ?? recording.queueId, tft ? 'TFT' : null)}
           </span>
         </p>
         <p className="mt-0.5 text-2xs text-text-mute">
@@ -388,6 +415,18 @@ function RecordingRow({
         </p>
         {YOUTUBE_ENABLED && <YouTubeLine recording={recording} onAttachLink={onAttachLink} />}
       </div>
+
+      {board && (
+        <span className="w-24 shrink-0 text-sm">
+          <PlacementBadge
+            placement={countedPlacement(board, board.queueId)}
+            top={board.queueId === DOUBLE_UP_QUEUE_ID ? 2 : 4}
+          />
+          {board.queueId === DOUBLE_UP_QUEUE_ID && board.teamPlacement !== null && (
+            <span className="ml-1 text-2xs text-text-mute">team</span>
+          )}
+        </span>
+      )}
 
       {match && (
         <span className="w-24 shrink-0 text-sm tabular-nums text-text-dim">
@@ -448,6 +487,31 @@ function RecordingRow({
  * for a Practice Tool game, and a user who sees it on a ranked game learns
  * something real about their sync.
  */
+/** A TFT row's name: the trait its board is remembered by, as League's is by its champion. */
+function tftTitle(assets: ReturnType<typeof useAssetManifest>, recording: Recording): string {
+  const trait = recording.tftMatch ? strongestTrait(recording.tftMatch.traits) : null
+  return trait ? tftName(assets, 'traits', trait.name) : 'TFT recording'
+}
+
+/** A TFT row's square: the place it finished, in the colour of how that went, or just "TFT" until its game is found. */
+function TftBadge({ recording }: { recording: Recording }): JSX.Element {
+  const board = recording.tftMatch
+  const place = board ? countedPlacement(board, board.queueId) : null
+  const tone = place === null ? null : placementTone(place, board?.queueId === DOUBLE_UP_QUEUE_ID ? 2 : 4)
+
+  return (
+    <span
+      className={clsx(
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-hairline bg-surface-2 font-display tabular-nums',
+        place === null ? 'text-2xs text-text-mute' : 'text-base',
+        tone === 'first' ? 'text-gold' : tone === 'top' ? 'text-teal' : tone === 'bottom' ? 'text-text-dim' : null
+      )}
+    >
+      {place ?? 'TFT'}
+    </span>
+  )
+}
+
 function BindBadge({ recording }: { recording: Recording }): JSX.Element | null {
   if (!recording.fileExists && !recording.fileDeleted) {
     return <Badge tone="warning">File missing</Badge>

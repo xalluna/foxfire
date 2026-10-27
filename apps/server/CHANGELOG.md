@@ -11,6 +11,107 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.6.0] — 2026-10-23
+
+Teamfight Tactics, beside League. The server syncs every account's TFT — history, boards, its three
+ladders and the LP each game moved — on its Riot key or one of TFT's own, and the web client gains a
+TFT profile and rank page for every player. Everything League had stays as it was: the API is
+version 3 still, and a desktop from before TFT is served as it always was.
+
+### Added
+
+- **A TFT profile for every player, in the web client.** `/players/{name}/tft`,
+  reached by a League | TFT switch beside a player's tabs: a card for each of
+  TFT's ladders — Ranked, Double Up and Hyper Roll — with the set's games,
+  average place, top-half rate and a bar for each place (by team in Double Up),
+  the last 20 games at a glance, and a history of every game's board that opens
+  onto all eight in its lobby. A link to somebody's TFT profile opens on it, so
+  it can be shared like any other page.
+- **TFT rank history in the web client**, at `/players/{name}/tft/rank`: each
+  ladder's climb with its milestones, Hyper Roll drawn by its rating and banded
+  by its colours. **Edit LP** takes TFT's Ranked and Double Up games too.
+- **A recording of a TFT game** plays like League's, under a header with the
+  place it finished, its strongest trait and its carry.
+- **History backfill on Data & storage.** How many games a newly added
+  account's history goes back is now set from the page, for League and TFT
+  separately, where it used to be an API call. Both share the server's one
+  Riot budget.
+
+### Under the hood
+
+- Games are a first-class idea. `Foxfire.Core` has `Game` and the ladders of
+  both — `RankedQueue` gains TFT's Ranked, Double Up and Hyper Roll, and Hyper
+  Roll's rating has a scale of its own — kept in step with `@foxfire/core`'s
+  registry by `fixtures/game-registry.json`. Everything that meant League's two
+  ladders asks for League's by name.
+- A rank reading on a queue no ladder answers to is an error rather than a
+  Solo/Duo reading. Nothing writes one.
+- Migration `Games`. Matches, seasons and sync state say which game they are
+  of, and everything already stored reads as League's. A TFT board has a table
+  of its own (`TftParticipants`) beside a match like any other, so LP,
+  hand-entered LP and recordings reach a TFT game by the keys they already use.
+  Hyper Roll's colour and rating have columns on entries, readings and LP rows,
+  and an account can hold a puuid under a TFT key (`ScopedPuuids`). TFT's sets
+  from Set 13 to Set 18 are seeded as seasons that reset rank.
+- Seasons are one game's at a time. `GET` and `PUT /api/seasons` take an
+  optional `?game=`, and without one they mean League — so a desktop from
+  before TFT saving its season list replaces League's and never touches TFT's.
+- League's dashboard, match page, season periods and sync state read League's
+  rows alone.
+- The server talks to Riot's TFT API — matches, league entries and status —
+  with its main key, or with `Riot__Tft__ApiKey` when a host sets one, on a
+  queue of its own under `Riot__Tft__KeyType`'s limits. A key registered for
+  League alone gets a 403 from every TFT endpoint, the same status an expired
+  key gets; on the main key that is read as "no TFT here" rather than a refused
+  key, so it never stops League syncing. The server probes TFT at boot, logs a
+  warning once when it cannot reach it, and `/health` says `tftAccess`. A TFT
+  sync on such a key completes with nothing fetched and says why, rather than
+  failing — a League-only server is a healthy one, and its log should not say
+  otherwise for every account at every launch. Both settings are in
+  docker-compose and `.env.example`.
+- Syncs are per account and per game. A TFT sync fetches TFT's games and
+  boards, reads TFT's ladders (Hyper Roll's colour and rating included),
+  attributes LP and reads co-players, on its own sync state, its own cooldown
+  and its own post-game ladder — a longer one, since Riot publishes a TFT match
+  only when its whole lobby is done. `POST /api/sync/{id}` and `GET` take
+  `?game=tft`; `POST /api/sync/game-ended` and `/api/rank-readings` take a
+  `game`, and without one mean League, which is what a desktop from before TFT
+  sends. Progress events carry the game.
+- A TFT game is placed at its player's own elimination, not the end of its
+  lobby. TFT moves LP the moment somebody is knocked out, and the lobby can play
+  on for twenty minutes.
+- With a TFT key of its own, every account gets a puuid under that key, and TFT
+  games are filed under it; taking the key away moves them back. A dead TFT
+  puuid is re-resolved like a dead League one.
+- An admin-added account backfills TFT as well as League. The TFT backfill
+  target is a setting of its own (`tftBackfillTarget`, default 200).
+- League's rank refresh keeps League's ladders. It used to store whatever
+  league-v4 answered with.
+- The insights page's recent syncs say which game each was.
+- TFT's reads, under `/api/riot-accounts/{id}/tft`: the dashboard (TFT's
+  ladders, its sync state, and each ladder's placements over the current set —
+  by team in Double Up), a paged history (`/matches`, 20 a page, in
+  `WireShapeTests`' list of lists that grow), one game, its eight-board lobby,
+  rank history, trend and periods on TFT's seasons, and the LP editor's list,
+  save and clear for Ranked and Double Up — Hyper Roll has a rating and nothing
+  to type. Rank history carries Hyper Roll's colour and rating. League's routes
+  refuse a TFT ladder, and TFT's a League one.
+- A recording attaches to a TFT game as it does to League's, and rides on its
+  TFT history row.
+- A stats.db's TFT games import through `/api/admin/import/tft-matches`,
+  rewritten onto whichever id this server files TFT under; an account can
+  bring its TFT id along, and finishing an import works out TFT's LP too.
+  Imported seasons say whose they are, and are matched within their game —
+  a TFT set and a League season can open on the same day — and an imported
+  reading can be on any game's ladder, Hyper Roll's arriving with its colour
+  and rating.
+- The web client reads TFT through the same contract the desktop does, and its
+  asset manifest carries Data Dragon's TFT units, traits, items and augments
+  when Data Dragon gives them.
+- `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
+  `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
+  advisories, and with warnings as errors a restore refused to start.
+
 ## [0.5.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP, and for games played
@@ -970,6 +1071,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.6.0]: https://github.com/xalluna/foxfire/compare/server-v0.5.1...server-v0.6.0
 [0.5.1]: https://github.com/xalluna/foxfire/compare/server-v0.5.0...server-v0.5.1
 [0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0

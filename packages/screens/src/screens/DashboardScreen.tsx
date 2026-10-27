@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import {
   DEFAULT_QUEUE_FILTER,
   queueTypeForQueueId,
@@ -10,13 +9,7 @@ import {
   type QueueType
 } from '@foxfire/core'
 import { paths, playerSlug } from '@foxfire/core/routes'
-import {
-  DashboardPage,
-  Icon,
-  cardFooterLinkClass,
-  type ContextMenuState,
-  type MatchFocus
-} from '@foxfire/ui'
+import { DashboardPage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useIsHeadAdmin } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
@@ -30,31 +23,11 @@ import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 import { queueSearchFor, rankQueueSearchFor } from '../routes/params'
 import { isSyncing, syncCooldownUntil, useSyncProgress } from '../store/syncProgress'
+import { MoreLink } from './MoreLink'
 
 const PAGE_SIZE = 20
 
 const SOLO: QueueType = 'RANKED_SOLO_5x5'
-
-/** The "More" that ends a card in the rail, leading to the page it summarises. */
-function MoreLink({
-  to,
-  slug,
-  search,
-  label
-}: {
-  to: '/players/$slug/rank' | '/players/$slug/champions'
-  slug: string
-  search: Record<string, unknown>
-  label: string
-}): JSX.Element {
-  return (
-    // The router's types are registered by each app, not here.
-    <Link to={to} params={{ slug }} search={search as never} className={cardFooterLinkClass}>
-      {label}
-      <Icon.ChevronDown width={14} height={14} className="-rotate-90" />
-    </Link>
-  )
-}
 
 /**
  * One account's profile: rank, recent form, and its match history.

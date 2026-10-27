@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BIND_GIVE_UP_MS,
   findMatchForRecording,
+  findTftMatchForRecording,
   shouldGiveUpBinding,
   type MatchCandidate,
   type RecordingFingerprint
@@ -118,6 +119,69 @@ describe('findMatchForRecording', () => {
 
     // Nine of ten still clears the bar, but the duplicate must not be counted twice.
     expect(findMatchForRecording(mirrored, [onlyOne])?.confidence).toBeCloseTo(0.9)
+  })
+})
+
+describe('findTftMatchForRecording', () => {
+  const MIN = 60_000
+  const tftGame = (matchId: string, createdAt: number, eliminatedS: number | null = 20 * 60) => ({
+    matchId,
+    gameCreation: createdAt,
+    gameDuration: 35 * 60,
+    timeEliminated: eliminatedS,
+    taken: false
+  })
+  const tftRecording = (over: Partial<{ startedAt: number; endedAt: number | null; gameId: number | null; platformId: string | null }> = {}) => ({
+    startedAt: T0 + MIN,
+    endedAt: T0 + 19 * MIN,
+    gameId: null,
+    platformId: null,
+    ...over
+  })
+
+  it('takes the game the client named, however many others were played around it', () => {
+    const candidates = [tftGame('NA1_7', T0), tftGame('NA1_8', T0 + 2 * MIN)]
+
+    expect(findTftMatchForRecording(tftRecording({ gameId: 8, platformId: 'NA1' }), candidates)).toEqual({
+      matchId: 'NA1_8',
+      confidence: 1
+    })
+  })
+
+  it('will not take a named game another recording already has', () => {
+    const candidates = [{ ...tftGame('NA1_8', T0), taken: true }, tftGame('NA1_9', T0)]
+
+    expect(findTftMatchForRecording(tftRecording({ gameId: 8, platformId: 'NA1' }), candidates)).toBeNull()
+  })
+
+  it('waits for a named game that is not stored yet rather than placing it by time', () => {
+    // Its own game unpublished, the recording sits inside the one before it.
+    const candidates = [tftGame('NA1_7', T0)]
+
+    expect(findTftMatchForRecording(tftRecording({ gameId: 8, platformId: 'NA1' }), candidates)).toBeNull()
+  })
+
+  it('places a recording with no id by the one game whose span holds it', () => {
+    // The player went out at 20 minutes; the recording stopped at 19.
+    const candidates = [tftGame('NA1_1', T0), tftGame('NA1_2', T0 + 60 * MIN)]
+
+    expect(findTftMatchForRecording(tftRecording(), candidates)?.matchId).toBe('NA1_1')
+  })
+
+  it('gives no answer when two games could be it', () => {
+    const candidates = [tftGame('NA1_1', T0), tftGame('NA1_2', T0 + MIN)]
+
+    expect(findTftMatchForRecording(tftRecording({ startedAt: T0 + 2 * MIN }), candidates)).toBeNull()
+  })
+
+  it('gives no answer when no game holds the recording', () => {
+    expect(findTftMatchForRecording(tftRecording({ endedAt: T0 + 40 * MIN }), [tftGame('NA1_1', T0)])).toBeNull()
+  })
+
+  it('waits longer before writing off a TFT recording, whose game is published late', () => {
+    const ended = { startedAt: T0, endedAt: T0 }
+    expect(shouldGiveUpBinding(ended, T0 + 45 * MIN, 'tft')).toBe(false)
+    expect(shouldGiveUpBinding(ended, T0 + 45 * MIN, 'lol')).toBe(true)
   })
 })
 

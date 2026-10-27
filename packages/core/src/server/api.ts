@@ -42,9 +42,14 @@ import type {
   ServerLogEntry,
   ServerLogQuery,
   ServerStorageUsage,
+  TftDashboard,
+  TftEditableMatch,
+  TftLobby,
+  TftMatchSummary,
   SyncState
 } from '../types'
 import { silentLogger, type Logger } from '../log'
+import type { GameId } from '../games/registry'
 import type {
   ImportAccountResult,
   ImportAccountRow,
@@ -155,6 +160,13 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
   const editable = (accountId: string, queueType: QueueType): Promise<EditableMatch[]> =>
     request<EditableMatch[]>(`/riot-accounts/${accountId}/rank/editable?queueType=${queueType}`)
 
+  const tftEditable = (accountId: string, queueType: QueueType): Promise<TftEditableMatch[]> =>
+    request<TftEditableMatch[]>(`/riot-accounts/${accountId}/tft/rank/editable?queueType=${queueType}`)
+
+  /** `?game=tft`, or nothing for League — which is what a server older than TFT understands. */
+  const gameQuery = (game: GameId | undefined, joiner: '?' | '&' = '?'): string =>
+    game && game !== 'lol' ? `${joiner}game=${game}` : ''
+
   /**
    * One page of an import, answered in all four counts.
    *
@@ -253,8 +265,58 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     sync: {
-      start: (accountId: string) => attempt(() => request<void>(`/sync/${accountId}`, { method: 'POST' })),
-      getState: (accountId: string) => request<SyncState | null>(`/sync/${accountId}`)
+      start: (accountId: string, game?: GameId) =>
+        attempt(() => request<void>(`/sync/${accountId}${gameQuery(game)}`, { method: 'POST' })),
+      getState: (accountId: string, game?: GameId) =>
+        request<SyncState | null>(`/sync/${accountId}${gameQuery(game)}`)
+    },
+
+    /** One account's TFT, under /riot-accounts/{id}/tft on a server from 0.6. */
+    tft: {
+      dashboard: (accountId: string) => orNull<TftDashboard>(`/riot-accounts/${accountId}/tft/dashboard`),
+
+      matches: (accountId: string, limit: number, offset: number, queueId: number | null) => {
+        const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+        if (queueId !== null) query.set('queueId', String(queueId))
+
+        return request<Page<TftMatchSummary>>(`/riot-accounts/${accountId}/tft/matches?${query}`)
+      },
+
+      matchSummary: (accountId: string, matchId: string) =>
+        orNull<TftMatchSummary>(`/riot-accounts/${accountId}/tft/matches/${encodeURIComponent(matchId)}`),
+
+      lobby: (accountId: string, matchId: string) =>
+        orNull<TftLobby>(`/riot-accounts/${accountId}/tft/matches/${encodeURIComponent(matchId)}/lobby`),
+
+      rank: {
+        history: (accountId: string, queueType: QueueType, range: RankRange) =>
+          request<RankHistory>(`/riot-accounts/${accountId}/tft/rank/history?queueType=${queueType}&range=${range}`),
+
+        trend: (accountId: string, queueType: QueueType) =>
+          request<RankTrend>(`/riot-accounts/${accountId}/tft/rank/trend?queueType=${queueType}`),
+
+        periods: (accountId: string) => request<Season[]>(`/riot-accounts/${accountId}/tft/rank/periods`),
+
+        editable: tftEditable,
+
+        saveManual: async (accountId: string, queueType: QueueType, edits: ManualRankEdit[]) => {
+          await request<void>(`/riot-accounts/${accountId}/tft/rank/manual`, {
+            method: 'POST',
+            body: { queueType, edits }
+          })
+
+          return tftEditable(accountId, queueType)
+        },
+
+        clearManual: async (accountId: string, queueType: QueueType, matchId: string) => {
+          await request<void>(
+            `/riot-accounts/${accountId}/tft/rank/manual/${encodeURIComponent(matchId)}`,
+            { method: 'DELETE' }
+          )
+
+          return tftEditable(accountId, queueType)
+        }
+      }
     },
 
     champions: {
@@ -312,11 +374,11 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     seasons: {
-      list: () => request<Season[]>('/seasons'),
+      list: (game?: GameId) => request<Season[]>(`/seasons${gameQuery(game)}`),
 
-      save: async (seasons: SeasonInput[]) => {
-        await request<void>('/seasons', { method: 'PUT', body: seasons })
-        return request<Season[]>('/seasons')
+      save: async (seasons: SeasonInput[], game?: GameId) => {
+        await request<void>(`/seasons${gameQuery(game)}`, { method: 'PUT', body: seasons })
+        return request<Season[]>(`/seasons${gameQuery(game)}`)
       }
     },
 
@@ -597,6 +659,9 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       },
 
       matches: (rows: ImportMatchRow[]) => importBatch('/admin/import/matches', rows),
+
+      /** TFT's payloads, on a server from 0.6. */
+      tftMatches: (rows: ImportMatchRow[]) => importBatch('/admin/import/tft-matches', rows),
 
       rankReadings: (rows: ImportReadingRow[]) => importBatch('/admin/import/rank-readings', rows),
 

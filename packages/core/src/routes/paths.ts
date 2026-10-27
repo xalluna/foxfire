@@ -1,4 +1,6 @@
 import type { QueueType, RankRange } from '../types'
+import type { GameId } from '../games/registry'
+import { LADDERS, ladderOfParam, type LadderParam } from '../games/ladders'
 import { parseSeasonRange } from '../rules/seasons'
 import { playerSlug } from './slug'
 
@@ -8,19 +10,39 @@ export interface PlayerRef {
   tagLine: string
 }
 
-/** The two ladders, as a URL says them. */
-export type RankQueue = 'solo' | 'flex'
+/** A ladder as a URL says it: `solo`, `flex`, `tft`, `double-up`, `hyper-roll`. */
+export type RankQueue = LadderParam
 
 /** A ladder as a URL says it. */
 export function rankQueueParam(queueType: QueueType): RankQueue {
-  return queueType === 'RANKED_FLEX_SR' ? 'flex' : 'solo'
+  return LADDERS[queueType].urlParam
 }
 
 /** The inverse, with anything unreadable treated as absent. */
 export function parseRankQueueParam(raw: unknown): QueueType | undefined {
-  if (raw === 'solo') return 'RANKED_SOLO_5x5'
-  if (raw === 'flex') return 'RANKED_FLEX_SR'
-  return undefined
+  return ladderOfParam(raw)
+}
+
+const TFT_PLAYER_PATH = /^\/players\/[^/]+\/tft(?:\/|$)/
+const LP_EDITOR_PATH = /^\/players\/[^/]+\/lp\/?$/
+const RECORDING_PATH = /^\/players\/[^/]+\/recordings\//
+
+/**
+ * Which game a player page is showing.
+ *
+ * TFT lives under the player — `/players/Faker-KR1/tft` — because the Riot ID
+ * is shared, and everything else under a player is League's, as it always was.
+ * Two pages are both games' and say which in their query: the LP editor by its
+ * ladder, and a recording by its `game`.
+ */
+export function gameOfPlayerPath(pathname: string, search: { queue?: unknown; game?: unknown } = {}): GameId {
+  if (TFT_PLAYER_PATH.test(pathname)) return 'tft'
+  if (LP_EDITOR_PATH.test(pathname)) {
+    const ladder = parseRankQueueParam(search.queue)
+    return ladder ? LADDERS[ladder].game : 'lol'
+  }
+  if (RECORDING_PATH.test(pathname) && search.game === 'tft') return 'tft'
+  return 'lol'
 }
 
 /**
@@ -100,6 +122,20 @@ export const paths = {
       range: search.range
     }),
 
+  /** A player's TFT profile, and optionally one of its games opened in the history. */
+  tft: (player: PlayerRef, search: { queue?: number | null; match?: string } = {}) =>
+    withQuery(`/players/${segment(playerSlug(player))}/tft`, {
+      queue: search.queue === undefined ? undefined : queueParam(search.queue),
+      match: search.match
+    }),
+
+  /** A player's TFT rank history. */
+  tftRank: (player: PlayerRef, search: { queue?: RankQueue; range?: RankRange } = {}) =>
+    withQuery(`/players/${segment(playerSlug(player))}/tft/rank`, {
+      queue: search.queue,
+      range: search.range
+    }),
+
   lpEditor: (player: PlayerRef, search: { queue: RankQueue; match?: string }) =>
     withQuery(`/players/${segment(playerSlug(player))}/lp`, {
       queue: search.queue,
@@ -113,9 +149,15 @@ export const paths = {
    * player's screen: the same game has a different recording, or none, in
    * each of its histories, and a link that did not say whose would have to
    * pick.
+   *
+   * Shared by both games, since a match id is unique across them. A TFT
+   * recording says so, so its page asks for a TFT row first rather than
+   * finding out from a League one that is not there.
    */
-  recording: (player: PlayerRef, matchId: string) =>
-    `/players/${segment(playerSlug(player))}/recordings/${segment(matchId)}`,
+  recording: (player: PlayerRef, matchId: string, search: { game?: GameId } = {}) =>
+    withQuery(`/players/${segment(playerSlug(player))}/recordings/${segment(matchId)}`, {
+      game: search.game === 'tft' ? 'tft' : undefined
+    }),
 
   /** One game, optionally as one of its players saw it — their LP, their row picked out. */
   match: (matchId: string, search: { player?: PlayerRef } = {}) =>

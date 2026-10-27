@@ -21,9 +21,17 @@ import type {
  * which is the point — a changed query here should be a deliberate change.
  */
 function fakeDb(tables: {
-  accounts?: Array<{ id: number; puuid: string; game_name: string; tag_line: string; platform: string | null }>
-  seasons?: Array<{ label: string; starts_at: number; is_preseason: number; resets_rank: number }>
-  matches?: Array<{ match_id: string; raw_json: string; game_creation: number }>
+  accounts?: Array<{
+    id: number
+    puuid: string
+    game_name: string
+    tag_line: string
+    platform: string | null
+    tft_puuid?: string | null
+  }>
+  account_scoped_puuids?: Array<{ account_id: number; scope: string; puuid: string }>
+  seasons?: Array<{ label: string; starts_at: number; is_preseason: number; resets_rank: number; game?: string }>
+  matches?: Array<{ match_id: string; raw_json: string; game_creation: number; game?: string }>
   rank_snapshots?: Array<Record<string, unknown> & { account_id: number; captured_at: number; id: number }>
 }): SqliteReader {
   const has = (name: string) => (tables as Record<string, unknown>)[name] !== undefined
@@ -31,6 +39,13 @@ function fakeDb(tables: {
   return {
     get: (sql, params = []) => {
       if (sql.includes('sqlite_master')) return (has(String(params[0])) ? { present: 1 } : undefined) as never
+
+      // A column is there when the fixture's rows carry it.
+      if (sql.includes('pragma_table_info')) {
+        const [table, column] = params.map(String)
+        const rows = (tables as Record<string, Array<Record<string, unknown>>>)[table] ?? []
+        return (rows.some((row) => column in row) ? { present: 1 } : undefined) as never
+      }
       const counted = /COUNT\(\*\) AS n FROM (\w+)/.exec(sql)
       if (counted) return { n: ((tables as Record<string, unknown[]>)[counted[1]] ?? []).length } as never
 
@@ -55,9 +70,9 @@ function fakeDb(tables: {
           throw new Error(`matches must be read in a fixed order: ${sql}`)
         }
 
-        const ordered = [...(tables.matches ?? [])].sort(
-          (a, b) => a.game_creation - b.game_creation || a.match_id.localeCompare(b.match_id)
-        )
+        const ordered = [...(tables.matches ?? [])]
+          .filter((m) => !sql.includes('WHERE game = ?') || m.game === params[0])
+          .sort((a, b) => a.game_creation - b.game_creation || a.match_id.localeCompare(b.match_id))
 
         // The ids alone, when that is all that is asked for.
         if (!sql.includes('raw_json')) return ordered.map((m) => ({ match_id: m.match_id })) as never[]
@@ -111,6 +126,7 @@ function recordingTarget(
     accounts: [] as ImportAccountRow[],
     seasons: [] as ImportSeasonRow[],
     matches: [] as ImportMatchRow[],
+    tftMatches: [] as ImportMatchRow[],
     readings: [] as ImportReadingRow[]
   }
 
@@ -149,6 +165,11 @@ function recordingTarget(
       // what the real one does when it cannot be asked first.
       const already = rows.filter((row) => options.stored?.includes(row.matchId)).length
       return { ...took(rows), accepted: rows.length - already, skipped: already, ...options.matchAnswer }
+    },
+    tftMatches: async (rows) => {
+      calls.push(`tftMatches:${rows.length}`)
+      sent.tftMatches.push(...rows)
+      return took(rows)
     },
     rankReadings: async (rows) => {
       calls.push(`readings:${rows.length}`)
@@ -191,6 +212,46 @@ describe('importStatsDb', () => {
     expect(sent.accounts[0]).toEqual({ gameName: 'Faker', tagLine: 'KR1', platform: 'kr', puuid: 'p-faker' })
     expect(sent.seasons[0]).toEqual({ label: 'S2026', startsAt: 1_000, isPreseason: false, resetsRank: true })
     expect(sent.readings[0]).toMatchObject({ puuid: 'p-faker', division: 'II', leaguePoints: 40, capturedAt: 10 })
+  })
+
+  it('files a desktop’s TFT games, sets and ratings apart from League’s', async () => {
+    // A file from a desktop that tracked TFT on a key of its own: the games say
+    // which game they are, the seasons too, and the account has an id under the
+    // TFT key that its TFT games are filed under.
+    const db = fakeDb({
+      accounts: [{ ...ACCOUNTS[0]!, tft_puuid: 'p-faker-tft' }, { ...ACCOUNTS[1]!, tft_puuid: null }],
+      account_scoped_puuids: [{ account_id: 1, scope: 'tft', puuid: 'p-faker-tft' }],
+      seasons: [
+        { label: 'S2026', starts_at: 1_000, is_preseason: 0, resets_rank: 1, game: 'lol' },
+        { label: 'Set 18', starts_at: 1_000, is_preseason: 0, resets_rank: 1, game: 'tft' }
+      ],
+      matches: [
+        { match_id: 'KR_1', raw_json: '{}', game_creation: 5, game: 'lol' },
+        { match_id: 'KR_2', raw_json: '{"tft":1}', game_creation: 6, game: 'tft' },
+        { match_id: 'KR_3', raw_json: '{"tft":2}', game_creation: 7, game: 'tft' }
+      ],
+      rank_snapshots: [
+        { id: 1, account_id: 1, captured_at: 10, queue_type: 'RANKED_TFT_TURBO', tier: null, rank: null, league_points: null, wins: 3, losses: 0, source: 'lcu', match_id: null, rated_tier: 'BLUE', rated_rating: 2_904 },
+        { id: 2, account_id: 1, captured_at: 11, queue_type: 'RANKED_SOLO_5x5', tier: 'GOLD', rank: 'II', league_points: 40, wins: 1, losses: 0, source: 'lcu', match_id: null, rated_tier: null, rated_rating: null }
+      ]
+    })
+    const { target, calls, sent } = recordingTarget({ stored: ['KR_3'] })
+
+    const result = await importStatsDb(db, target, () => {})
+
+    // One question about every game, then each game's own batch.
+    expect(calls).toEqual(['accounts:2', 'seasons:2', 'unstored:3', 'matches:1', 'tftMatches:1', 'readings:2', 'finish'])
+    expect(sent.matches.map((m) => m.matchId)).toEqual(['KR_1'])
+    expect(sent.tftMatches.map((m) => m.matchId)).toEqual(['KR_2'])
+    expect(result).toMatchObject({ matches: 2, alreadyThere: { matches: 1 } })
+
+    expect(sent.accounts[0]).toMatchObject({ puuid: 'p-faker', tftPuuid: 'p-faker-tft' })
+    expect(sent.accounts[1]).not.toHaveProperty('tftPuuid')
+    expect(sent.seasons.map((s) => s.game)).toEqual(['lol', 'tft'])
+
+    // The rating rides on the reading that has one, and only there.
+    expect(sent.readings[0]).toMatchObject({ queueType: 'RANKED_TFT_TURBO', ratedTier: 'BLUE', ratedRating: 2_904 })
+    expect(sent.readings[1]).not.toHaveProperty('ratedRating')
   })
 
   it('pages matches so a year of history is a few dozen requests rather than one enormous one', async () => {
