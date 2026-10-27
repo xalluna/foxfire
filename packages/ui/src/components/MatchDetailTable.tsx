@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import type { AssetManifest, MatchDetail, MatchParticipant } from '@foxfire/core'
+import { inPositionOrder, type AssetManifest, type MatchDetail, type MatchParticipant } from '@foxfire/core'
 import { useAssetManifest } from '../context/assetManifest'
 import { championIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
 import { positionIcon } from '../lib/positions'
@@ -191,7 +191,7 @@ export function MatchDetailTable({
   const maxTaken = Math.max(...data.participants.map((p) => p.damageTaken ?? 0), 1)
 
   const teamBlock = (teamId: number, label: string): JSX.Element => {
-    const team = data.participants.filter((p) => p.teamId === teamId)
+    const team = inPositionOrder(data.participants.filter((p) => p.teamId === teamId))
     const won = team[0]?.win ?? false
 
     return (
