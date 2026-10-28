@@ -37,6 +37,14 @@ version 3 still, and a desktop from before TFT is served as it always was.
   separately, where it used to be an API call. Both share the server's one
   Riot budget.
 
+### Changed
+
+- **Rank milestones are a timeline** in the web client, League's and TFT's
+  alike. Going back and forth over the same line folds into one quiet row that
+  opens to show each crossing; a rank higher than any held this season stays
+  out of the fold with its crest lit, and so does getting back to a rank after
+  a week or more away.
+
 ### Fixed
 
 - **An opened match lists each team by lane** in the web client — top,
@@ -116,6 +124,10 @@ version 3 still, and a desktop from before TFT is served as it always was.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.
+- `/api/riot-accounts/{id}/rank/history`, and TFT's, answer `peakBefore` as
+  well: the highest reading since the ladder last reset, from before the range —
+  what the Rank page measures a new peak against. It is additive, and the API
+  is version 3 still.
 
 ## [0.5.1] — 2026-09-27
 

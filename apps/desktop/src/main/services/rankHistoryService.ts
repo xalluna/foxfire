@@ -4,6 +4,7 @@ import {
   deleteSupersededManualSnapshots,
   getHistorySpan,
   getLatestSnapshot,
+  getPeakBefore,
   getRankMilestones,
   getRankSnapshots,
   getSnapshotBefore,
@@ -52,7 +53,9 @@ export function getRankHistory(
     snapshots: getRankSnapshots(db, accountId, queueType, sinceMs, untilMs, seasons),
     milestones: getRankMilestones(db, accountId, queueType, sinceMs, untilMs, seasons),
     // What "over this period" counts from. A range with no start has nothing before it.
-    before: sinceMs === null ? null : getSnapshotBefore(db, accountId, queueType, sinceMs, seasons)
+    before: sinceMs === null ? null : getSnapshotBefore(db, accountId, queueType, sinceMs, seasons),
+    // What a new peak is measured against: the season's best before the range.
+    peakBefore: sinceMs === null ? null : getPeakBefore(db, accountId, queueType, sinceMs, seasons)
   }
 }
 

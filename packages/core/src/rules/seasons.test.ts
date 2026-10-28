@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Season } from '../types'
 import {
+  lastResetAt,
   parseSeasonRange,
   rangeBounds,
   resetsBetween,
@@ -107,6 +108,23 @@ describe('resetsBetween', () => {
     // The cost of hand-entered boundaries: with no seasons there is no reset to
     // know about, so the guard cannot protect anything.
     expect(resetsBetween([], at(2025, 11, 30), at(2026, 0, 12))).toBe(false)
+  })
+})
+
+describe('lastResetAt', () => {
+  it('finds the reset a moment follows, passing over a preseason that carried rank', () => {
+    expect(lastResetAt(SEASONS, at(2026, 5, 1))).toBe(S2026.startsAt)
+    expect(lastResetAt(SEASONS, at(2025, 11, 28))).toBe(S2025.startsAt)
+  })
+
+  it('counts the reset instant itself as after it, as resetsBetween does', () => {
+    expect(lastResetAt(SEASONS, S2026.startsAt)).toBe(S2026.startsAt)
+    expect(lastResetAt(SEASONS, S2026.startsAt - 1)).toBe(S2025.startsAt)
+  })
+
+  it('has no answer before the first recorded reset, or with nothing recorded', () => {
+    expect(lastResetAt(SEASONS, at(2024, 5, 1))).toBeNull()
+    expect(lastResetAt([], at(2026, 5, 1))).toBeNull()
   })
 })
 

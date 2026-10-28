@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   getHistorySpan,
   getLatestSnapshot,
+  getPeakBefore,
   getRankMilestones,
   getRankSnapshots,
   getRankedMatchesBetween,
@@ -270,6 +271,50 @@ describe('getSnapshotBefore', () => {
 
     expect(getSnapshotBefore(db, accountId, SOLO, inSeason + 1, SEASONS)?.seasonId).toBe(1)
     expect(getSnapshotBefore(db, accountId, SOLO, inSeason)).toBeNull()
+  })
+})
+
+describe('getPeakBefore', () => {
+  let db: DatabaseSyncType
+  let accountId: number
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+    accountId = seedAccount(db)
+  })
+
+  const DAY = 86_400_000
+  // A thirty-day view in March, inside Season 2027 — after its reset.
+  const SINCE = new Date(2027, 2, 1).getTime()
+
+  it("finds the season's highest reading before the range, the later of a tie", () => {
+    insertRankSnapshot(db, accountId, gold('III', 10), 'lcu', SEASON_2027 + DAY)
+    insertRankSnapshot(db, accountId, gold('I', 90), 'lcu', SEASON_2027 + 2 * DAY)
+    insertRankSnapshot(db, accountId, gold('II', 20), 'lcu', SEASON_2027 + 3 * DAY)
+    insertRankSnapshot(db, accountId, gold('I', 90), 'lcu', SEASON_2027 + 4 * DAY)
+    insertRankSnapshot(db, accountId, gold('IV', 0), 'lcu', SINCE - DAY)
+    // Inside the range, so not before it however high.
+    insertRankSnapshot(db, accountId, { ...gold('IV', 0), tier: 'PLATINUM' }, 'lcu', SINCE)
+
+    const peak = getPeakBefore(db, accountId, SOLO, SINCE, SEASONS)
+    expect(peak?.capturedAt).toBe(SEASON_2027 + 4 * DAY)
+    expect(peak?.seasonId).toBe(3)
+  })
+
+  it('carries nothing across a reset, and everything across a preseason', () => {
+    insertRankSnapshot(db, accountId, { ...gold('I', 50), tier: 'DIAMOND' }, 'lcu', new Date(2026, 10, 1).getTime())
+    insertRankSnapshot(db, accountId, gold('II', 40), 'lcu', SEASON_2027 + DAY)
+
+    // Diamond was last year's ladder; this year's best is Gold.
+    expect(getPeakBefore(db, accountId, SOLO, SINCE, SEASONS)?.tier).toBe('GOLD')
+    // In the preseason, rank carried forward, and so does the best of it.
+    expect(getPeakBefore(db, accountId, SOLO, PRESEASON_2027 + DAY, SEASONS)?.tier).toBe('DIAMOND')
+  })
+
+  it('has nothing when the season has nothing before the range', () => {
+    insertRankSnapshot(db, accountId, gold('II', 40), 'lcu', new Date(2026, 10, 1).getTime())
+    expect(getPeakBefore(db, accountId, SOLO, SINCE, SEASONS)).toBeNull()
   })
 })
 

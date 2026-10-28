@@ -361,6 +361,16 @@ export function Link(props: IconProps): JSX.Element {
   )
 }
 
+/** Back and forth between two things — a rank somebody kept crossing over. */
+export function ArrowsLeftRight(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 8h16m-4-4 4 4-4 4" />
+      <path d="M20 16H4m4-4-4 4 4 4" />
+    </Icon>
+  )
+}
+
 /** Marks a settings row that opens a separate window rather than expanding. */
 export function ExternalLink(props: IconProps): JSX.Element {
   return (

@@ -91,6 +91,22 @@ export function resetsBetween(seasons: Season[], afterMs: number, untilMs: numbe
   return seasons.some((s) => s.resetsRank && s.startsAt > afterMs && s.startsAt <= untilMs)
 }
 
+/**
+ * When the ladder last reset at or before a moment, or null when no recorded
+ * boundary has.
+ *
+ * A reading taken at the reset's own instant is the first of the new ladder,
+ * as resetsBetween reads it, so "since the last reset" is `>= this`. Only a
+ * boundary that reset counts: rank carries through a preseason, and so does
+ * whatever somebody reached before it.
+ */
+export function lastResetAt(seasons: Season[], ms: number): number | null {
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    if (seasons[i].resetsRank && seasons[i].startsAt <= ms) return seasons[i].startsAt
+  }
+  return null
+}
+
 /** A season as a RankRange, which is how a selected period travels to whichever client answers. */
 export function seasonRange(id: number): RankRange {
   return `${SEASON_PREFIX}${id}`

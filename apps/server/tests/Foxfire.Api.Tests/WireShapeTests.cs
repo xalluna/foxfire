@@ -460,9 +460,9 @@ public class WireShapeTests(FoxfireServerFixture server)
             new Uri($"/api/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
                 UriKind.Relative));
 
-        // "before" is there even when it is null, so a client can tell a range
-        // with nothing ahead of it from a server too old to say.
-        AssertHasAll(history, "snapshots", "milestones", "before");
+        // "before" and "peakBefore" are there even when null, so a client can
+        // tell a range with nothing ahead of it from a server too old to say.
+        AssertHasAll(history, "snapshots", "milestones", "before", "peakBefore");
 
         var snapshot = history.GetProperty("snapshots").EnumerateArray().First();
 

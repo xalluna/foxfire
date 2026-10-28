@@ -80,6 +80,12 @@ record your games by itself, with no OBS to install.
   under `Unknown`, and a mode Foxfire does not know under `Other`. Recordings you already have
   stay where they are, and so does anything OBS was set to write somewhere else. Deleting the last
   recording in a folder removes the folder too.
+- **Rank milestones are a timeline.** A ladder's promotions and demotions hang on one line, newest
+  at the top. Where you went back and forth over the same line — Plat III, Plat IV, Plat III, Plat
+  IV — the crossings fold into one quiet row that says between which two ranks, how many times and
+  where it ended, and opens to show each one. A rank higher than any you have held this season stays
+  out of the fold with its crest lit, and so does getting back to a rank you had been away from for
+  a week or more. It is the same in League and TFT, Hyper Roll's colours included.
 
 ### Fixed
 
@@ -166,6 +172,9 @@ record your games by itself, with no OBS to install.
   has been silent for 30 seconds off a timer instead of the sound card, and that timer did not
   always keep up — some test recordings lost a tenth of a second of sound in every three from 30
   seconds in. A constant at −120 dBFS keeps the sound card in charge.
+- A ladder's rank history carries the season's best reading from before the range it covers, so a
+  30-day view can tell a first time from a return. This PC reads it from its own database, and a
+  server answers it from 0.6.0; against an older server, a peak is judged from the range alone.
 
 ## [0.16.1] — 2026-09-27
 

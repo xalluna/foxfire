@@ -45,10 +45,17 @@ public sealed record RankMilestoneResponse(
 /// counts from — see rankNetChange in packages/core. Null when the range has no
 /// start, or nothing precedes it.
 /// </param>
+/// <param name="PeakBefore">
+/// The highest reading since the ladder last reset, taken before the range
+/// began — what a milestone is measured against to be a new peak for the season
+/// (milestoneTimeline in packages/core). Null when the range has no start, or
+/// nothing that season precedes it.
+/// </param>
 public sealed record RankHistoryResponse(
     IReadOnlyList<RankSnapshotResponse> Snapshots,
     IReadOnlyList<RankMilestoneResponse> Milestones,
-    RankSnapshotResponse? Before);
+    RankSnapshotResponse? Before,
+    RankSnapshotResponse? PeakBefore = null);
 
 /// <summary>One day's close on the profile's graph. See <see cref="RankTrends"/>.</summary>
 /// <param name="At">Where it is drawn: the end of its day.</param>
@@ -140,6 +147,13 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             ? await LastBeforeAsync(riotAccountId, queueType, start, cancellationToken)
             : null;
 
+        // The season's best before the range, so a milestone on a thirty-day view
+        // can still say it is the first time this season rather than this month.
+        var peakBefore = bounds.StartMs is { } from
+            ? await PeakBeforeAsync(
+                riotAccountId, queueType, RankedSeasons.LastResetAt(seasons, from), from, cancellationToken)
+            : null;
+
         List<RankMilestoneResponse> milestones = [];
 
         for (var i = 1; i < rows.Count; i++)
@@ -164,7 +178,11 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
 
         milestones.Reverse();
 
-        return new RankHistoryResponse(snapshots, milestones, before is null ? null : Describe(before));
+        return new RankHistoryResponse(
+            snapshots,
+            milestones,
+            before is null ? null : Describe(before),
+            peakBefore is null ? null : Describe(peakBefore));
     }
 
     /// <summary>
@@ -223,6 +241,30 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             .AsNoTracking()
             .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueType && r.CapturedAt < beforeMs)
             .OrderByDescending(r => r.CapturedAt)
+            .ThenByDescending(r => r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// The highest reading from <paramref name="sinceMs"/> (the last reset, or
+    /// the beginning when there was none) up to, not including, <paramref name="beforeMs"/>.
+    ///
+    /// Highest by ladder position, the later of a tie — exact for divisions and
+    /// ratings. Master, Grandmaster and Challenger share one scale, so among them
+    /// the most LP wins whatever its tier was called.
+    /// </summary>
+    private Task<RankSnapshot?> PeakBeforeAsync(
+        Guid riotAccountId,
+        string queueType,
+        long? sinceMs,
+        long beforeMs,
+        CancellationToken cancellationToken) =>
+        db.RankSnapshots
+            .AsNoTracking()
+            .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueType && r.CapturedAt < beforeMs)
+            .Where(r => sinceMs == null || r.CapturedAt >= sinceMs)
+            .Where(r => r.LadderPosition != null)
+            .OrderByDescending(r => r.LadderPosition)
+            .ThenByDescending(r => r.CapturedAt)
             .ThenByDescending(r => r.Id)
             .FirstOrDefaultAsync(cancellationToken);
 

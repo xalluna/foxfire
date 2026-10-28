@@ -433,6 +433,28 @@ export interface RankMilestone {
   ratedTier?: string | null
 }
 
+/**
+ * Why a promotion is kept out of a fold.
+ *
+ * A `peak` is a division above anything held since the ladder last reset. A
+ * `return` is one not held for a week or more; `atLeast` when the last time it
+ * was held is before the readings the page has, so `awayMs` is a lower bound.
+ */
+export type MilestoneNote = { kind: 'peak' } | { kind: 'return'; awayMs: number; atLeast: boolean }
+
+/**
+ * One row of the Rank page's milestone timeline, newest first — see
+ * milestoneTimeline.
+ *
+ * A `stretch` is a run of crossings back and forth over one line, folded into
+ * a single row: its milestones newest first, and the two divisions it moved
+ * between — `lower` a demotion into the one beneath, `upper` a promotion into
+ * the one above.
+ */
+export type MilestoneEntry =
+  | { kind: 'milestone'; milestone: RankMilestone; note: MilestoneNote | null }
+  | { kind: 'stretch'; milestones: RankMilestone[]; lower: RankMilestone; upper: RankMilestone }
+
 export interface RankHistory {
   snapshots: RankSnapshot[]
   milestones: RankMilestone[]
@@ -446,6 +468,19 @@ export interface RankHistory {
    * reading inside the range, as it used to.
    */
   before?: RankSnapshot | null
+  /**
+   * The highest reading since the ladder last reset, taken before the range
+   * began — or null when the range has no start or nothing that season precedes
+   * it.
+   *
+   * What a milestone is measured against to be a new peak, so "first time this
+   * season" holds on a thirty-day view as well as on the season's own — see
+   * milestoneTimeline. Highest by ladder position, the later of a tie: exact for
+   * divisions and ratings, while Master, Grandmaster and Challenger share one
+   * scale and are told apart only by LP. Optional because a server older than
+   * 0.6.0 does not send it, and peaks are then judged from the range alone.
+   */
+  peakBefore?: RankSnapshot | null
 }
 
 /** A reading as the trend rule reads it: where somebody stood, and when. */

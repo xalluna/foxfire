@@ -3,6 +3,8 @@
  * own, and a server's insights page. Null is a dash: nothing was measured.
  */
 
+import { format, isSameDay, isSameMonth } from 'date-fns'
+
 export function formatMs(ms: number | null): string {
   if (ms === null) return '—'
   if (ms === 0) return '0ms'
@@ -18,6 +20,16 @@ export function formatBytes(bytes: number | null): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+/**
+ * The days a stretch of time covers, as briefly as reads clearly: "Oct 4",
+ * "Oct 10 – 18", "Sep 28 – Oct 3". Local time, as every date on screen is.
+ */
+export function formatDayRange(from: number, to: number): string {
+  if (isSameDay(from, to)) return format(from, 'MMM d')
+  if (isSameMonth(from, to)) return `${format(from, 'MMM d')} – ${format(to, 'd')}`
+  return `${format(from, 'MMM d')} – ${format(to, 'MMM d')}`
 }
 
 /** How long something has been running: the two largest units that say anything. */
