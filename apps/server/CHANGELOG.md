@@ -44,6 +44,10 @@ version 3 still, and a desktop from before TFT is served as it always was.
   opens to show each crossing; a rank higher than any held this season stays
   out of the fold with its crest lit, and so does getting back to a rank after
   a week or more away.
+- **The Champions page drops its subtitle** in the web client. The line under
+  the heading that counted your synced games and noted that remakes are left
+  out is gone; the season and queue pickers beside it already say what the
+  table covers.
 
 ### Fixed
 

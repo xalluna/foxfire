@@ -175,7 +175,6 @@ function ChampionsBody({
   // actually play and how they perform.
   const [sort, setSort] = useState<SortKey>('games')
   const [dir, setDir] = useState<SortDir>('desc')
-  const selectedSeason = seasonLabel === null ? null : { label: seasonLabel }
 
   // A new column sorts descending first — "best on this stat" is the question
   // being asked nine times in ten. Re-clicking the active one flips it.
@@ -226,21 +225,12 @@ function ChampionsBody({
     })
     .slice(0, 50)
 
-  const totalGames = data.reduce((n, w) => n + w.games, 0)
   const queueName = queueFilterLabel(queueId)
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 max-md:p-2">
       <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-start">
-        <div>
-          <h1 className="font-display text-xl text-text">Champions</h1>
-          <p className="mt-0.5 text-sm text-text-mute">
-            From your {totalGames} synced {queueId === null ? '' : `${queueName} `}
-            {totalGames === 1 ? 'game' : 'games'}
-            {selectedSeason === null ? ' across all time' : ` in ${selectedSeason.label}`}.
-            Remakes excluded.
-          </p>
-        </div>
+        <h1 className="font-display text-xl text-text">Champions</h1>
         {/* Wraps because the period picker grows by one button every January. */}
         <div className="flex flex-wrap items-center justify-end gap-2 max-md:justify-start">
           <Segmented options={rangeOptions} value={range} onChange={setPicked} />
@@ -277,7 +267,7 @@ function ChampionsBody({
             icon={<Icon.Trophy />}
             title={queueId === null ? 'No champions yet' : `No ${queueName} games found`}
             description={
-              selectedSeason !== null
+              seasonLabel !== null
                 ? 'Nothing stored for this season. Pick another, or sync more of your match history.'
                 : queueId === null
                   ? 'Sync your match history to see which champions you play and how they do.'
