@@ -30,9 +30,8 @@ import { initYouTubeQueue, onUploadFinished, stopYouTubeQueue } from './youtube/
 import { onServerSyncComplete } from './server/hub'
 import { onServerState } from './services/serverService'
 import { migrateUserData, verifyMigration } from './migrateUserData'
-import { initCapture, stopCapture } from './capture/captureService'
-import { pinLegacyCaptureFolder } from './services/captureSettings'
-import { quitLaunchedObs } from './obs/launch'
+import { initCapture, shutdownCapture } from './capture/captureService'
+import { pinCaptureDriver, pinLegacyCaptureFolder } from './services/captureSettings'
 import { takeCompletedInstall, type PendingInstall } from './updater/pending'
 import { initUpdater } from './updater/updater'
 
@@ -116,6 +115,9 @@ function bootstrap(): void {
   // default this replaces was never stored, so it has to be written down
   // before the constant behind it changes meaning.
   pinLegacyCaptureFolder()
+  // The same, for which recorder: the default became native, and an install
+  // that already records with OBS has to stay on it.
+  pinCaptureDriver()
   observeRateLimiter()
   // Started unconditionally and self-gating: with telemetry off this is a timer
   // that wakes every ten seconds and returns immediately, which is cheaper than
@@ -291,13 +293,13 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   stopLcuWatcher()
   stopReplayWatcher()
-  stopCapture()
+  // Before the database closes, since a native recording in progress is written
+  // down on the way out. Only quits an OBS this app started; one the user was
+  // already running, possibly mid-stream, is left alone.
+  shutdownCapture()
   // Before the database closes: the chunk in flight is abandoned, and the
   // upload resumes from YouTube's own record of it next launch.
   stopYouTubeQueue()
-  // Only quits an OBS this app started; one the user was already running,
-  // possibly mid-stream, is left alone.
-  quitLaunchedObs()
   cancelAllPostGameSyncs()
   stopResourceSampling()
   stopRetention()

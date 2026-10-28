@@ -24,6 +24,18 @@ files:
 # broke the 0.12.0 release, and it only appeared when the desktop moved into
 # a workspace; before that there was no other package.json for npm to reify.
 npmRebuild: false
+# The FFmpeg the native recorder runs, beside the app rather than inside
+# app.asar: it is a program to spawn, and Windows cannot start one out of an
+# archive. Fetched and checked by scripts/fetch-ffmpeg.mjs, which build:win and
+# the release workflow both run first; it lands at resources\ffmpeg\ffmpeg.exe
+# in the install, where main/capture/native/ffmpegBinary.ts looks for it. Its
+# LGPL licence travels with it.
+extraResources:
+  - from: resources/ffmpeg
+    to: ffmpeg
+    filter:
+      - ffmpeg.exe
+      - LICENSE.txt
 # Where the updater metadata says updates come from.
 #
 # electron-builder writes latest.yml — which electron-updater reads to decide

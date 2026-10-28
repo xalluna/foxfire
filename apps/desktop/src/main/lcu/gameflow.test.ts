@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { isGameEndTransition, isPlayingPhase, isUploadQuietPhase } from './gameflow'
+import { isGameEndTransition, isPlayingPhase, isPreGamePhase, isUploadQuietPhase } from './gameflow'
+
+describe('isPreGamePhase', () => {
+  it('covers every phase a game is launched from, TFT having no champion select', () => {
+    for (const phase of ['Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart']) {
+      expect(isPreGamePhase(phase)).toBe(true)
+    }
+  })
+
+  it('stops watching once the game is on, and is not watching in the lobby or after a game', () => {
+    for (const phase of ['InProgress', 'Reconnect', 'Lobby', 'None', 'EndOfGame', null]) {
+      expect(isPreGamePhase(phase)).toBe(false)
+    }
+  })
+})
 
 describe('isPlayingPhase', () => {
   it('counts both InProgress and Reconnect as being in a game', () => {

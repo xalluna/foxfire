@@ -11,10 +11,23 @@ changes you would never notice while using the app.
 
 Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
 and the LP each game moved, and recordings of it — tracked the way League always has been, on a
-server or on its own. And every new recording is filed by player, game and mode.
+server or on its own. Every new recording is filed by player, game and mode — and Foxfire can now
+record your games by itself, with no OBS to install.
 
 ### Added
 
+- **Recording without OBS.** Settings › Game capture has a choice of recorder: Foxfire, or OBS.
+  Foxfire's own recorder needs nothing installed — it records League's or TFT's own window, so a
+  browser you alt-tab to, a notification or Discord on top of the game never ends up in the
+  footage, and it encodes on your graphics card (NVIDIA, AMD or Intel, or Windows' own encoder when
+  none of those is there). It records the PC's sound in stereo, as it played, and, if you want it,
+  your microphone, picked from a list. The quality presets mean the same as they do for OBS, and cost about the same disk.
+  The card under the choice says which encoder this PC is using, or what is stopping it, with a
+  button to check again after a driver update.
+- **Recordings at your monitor's refresh rate.** Two quality presets for Foxfire's recorder keep
+  every frame your monitor shows — 1080p or 1440p at 144 fps on a 144 Hz screen — so footage moves
+  the way the game did instead of the slight judder of 60 frames picked out of 144. They follow the
+  fastest monitor you have, and OBS records them at 60.
 - **A TFT profile for every player.** A League | TFT switch sits at the top of a player's page, and
   the TFT side has a card for each ladder — Ranked, Double Up and Hyper Roll — with your rank (Hyper
   Roll's colour and rating), the set's games, your average place and how often you made the top
@@ -57,6 +70,10 @@ server or on its own. And every new recording is filed by player, game and mode.
 
 ### Changed
 
+- **Game capture starts on Foxfire's own recorder.** A new install records without OBS. If you
+  already record with OBS, nothing changes: you stay on it until you choose otherwise, and the
+  recorder can only be switched between games. "Game audio" means everything the PC plays, voice
+  chat and music included, with either recorder.
 - **Recordings are filed by player, game and mode.** A new recording lands in your recording
   folder as `Faker-KR1\LoL\Solo-Duo\2026-10-23 21-04-17.mp4` — or `TFT\Ranked`, `TFT\Double-Up`
   and so on — rather than loose beside every other. A recording that never learnt whose it was goes
@@ -66,6 +83,15 @@ server or on its own. And every new recording is filed by player, game and mode.
 
 ### Fixed
 
+- **Recordings start when the game does.** Foxfire only looked for the start of a game every two
+  seconds, so a recording began up to two seconds in, and a quick loading screen could be missed
+  altogether, since the League client itself was only checked every ten seconds. Now, from the
+  queue to the game, the client is checked every second and the game's start noticed within a
+  quarter of one, and the recorder is made ready during the loading screen.
+- **OBS recordings no longer open on black.** OBS only got hold of the game a few seconds after
+  play began — Foxfire switched OBS into its own setup as recording started, and OBS's game capture
+  then took its time finding the game. Foxfire now switches over while the game loads, and sets its
+  game capture to hook as fast as OBS allows.
 - **An opened match lists each team by lane** — top, jungle, mid, bot, then support — rather than
   in whatever order the game's data happened to arrive, which on a server was no order at all.
 
@@ -112,6 +138,34 @@ server or on its own. And every new recording is filed by player, game and mode.
   span — its start to your elimination, give or take five minutes — holds it. TFT recordings wait
   90 minutes for their game before being written off, League's 30. "Other and rotating modes" is
   League's: it does not record a TFT event queue.
+- Capture drives a recorder through one seam (`capture/recorder.ts`), with OBS and the native
+  recorder behind it. Whichever started a game finishes it, so switching recorder mid-game takes
+  effect after the game. Nothing that reads the capture status — the taskbar badge, the tray, the
+  updater's restart guard, the YouTube upload hold — needed to know which one it is.
+- The native recorder is the FFmpeg 9.0 LGPL build from BtbN, about 135 MB of the install,
+  pinned by checksum in `scripts/fetch-ffmpeg.mjs` and shipped beside the app with its licence. The
+  release workflow caches it and refuses a build without it. Video is Windows Graphics Capture of
+  the game window (`gfxcapture`) at the display's own refresh rate, evened out to the preset's 30 or
+  60 fps, and handed to NVENC on the GPU or converted for the other encoders;
+  audio comes from a hidden page that captures the PC's output and the microphone through Chromium
+  and pipes them to FFmpeg, which keeps them apart from the capture so the sound never sets the
+  pace of the picture; the two are lined up on the wall clock. The PC's sound is taken with
+  Chromium's call processing turned off — left on, it was mixed down to mono and run through
+  automatic gain control, which made loud moments sound blown out. Each encoder hands frames
+  back as soon as they are encoded: NVENC's default queue held the picture back far enough for
+  FFmpeg to pause the sound, which came out with a tenth of a second missing every third of a
+  second. Files are fragmented MP4, so
+  one cut short by a crash still plays, and each ends as the game's window closes rather than
+  carrying the sound on over a still frame until the League client says the game is over. Every
+  installed encoder is tried once at startup and the first that works is used.
+- An install that had capture set up before this version is pinned to OBS on first run, the way
+  the old recording folder was pinned when the app was renamed.
+- Quitting mid-game with the native recorder writes the recording down where FFmpeg is writing
+  it; FFmpeg finishes the file after the app has gone.
+- The native recorder's hidden audio page never plays perfect silence. Chromium runs a page that
+  has been silent for 30 seconds off a timer instead of the sound card, and that timer did not
+  always keep up — some test recordings lost a tenth of a second of sound in every three from 30
+  seconds in. A constant at −120 dBFS keeps the sound card in charge.
 
 ## [0.16.1] — 2026-09-27
 

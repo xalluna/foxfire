@@ -30,8 +30,10 @@ import type {
   ArchiveResult,
   AssetManifest,
   BackgroundSettings,
+  CaptureMicrophone,
   CaptureSettings,
   CaptureStatus,
+  NativeCaptureCheck,
   ClientArchive,
   EmailChange,
   IdentityReport,
@@ -307,7 +309,10 @@ export interface Api {
     get: () => Promise<BackgroundSettings>
     set: (patch: Partial<BackgroundSettings>) => Promise<BackgroundSettings>
   }
-  /** Recording games as they are played, through a local OBS over its websocket. */
+  /**
+   * Recording games as they are played — through a local OBS over its
+   * websocket, or natively, with the FFmpeg the app ships.
+   */
   capture: {
     getSettings: () => Promise<CaptureSettings>
     set: (patch: Partial<CaptureSettings>) => Promise<CaptureSettings>
@@ -324,6 +329,10 @@ export interface Api {
     /** One frame of the capture source as a data URI, or null when unavailable. */
     preview: () => Promise<string | null>
     reconnect: () => Promise<CaptureStatus>
+    /** Whether the native recorder can record here, and with which encoder. Probed afresh. */
+    nativeCheck: () => Promise<NativeCaptureCheck>
+    /** The microphones the native recorder can mix in, by device id. */
+    listMicrophones: () => Promise<CaptureMicrophone[]>
   }
   recordings: {
     /** A page of an account's recordings, newest first, bound or not, and how many there are — one game's, if asked. */

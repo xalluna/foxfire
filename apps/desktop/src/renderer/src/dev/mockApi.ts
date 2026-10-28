@@ -4,8 +4,10 @@ import type {
   Account,
   AppSettingsPublic,
   BackgroundSettings,
+  CaptureMicrophone,
   CaptureSettings,
   CaptureStatus,
+  NativeCaptureCheck,
   EmailChange,
   LcuStatus,
   Page,
@@ -130,14 +132,19 @@ function setYouTubeState(patch: Partial<YouTubeState>): void {
  * Dev-only — loaded lazily from main.tsx behind import.meta.env.DEV.
  */
 
-/** Mutable, so toggling a setting in the harness actually sticks for the session. */
+/**
+ * Mutable, so toggling a setting in the harness actually sticks for the session.
+ * Native, as a fresh install starts — except where the scenario is about OBS.
+ */
 const CAPTURE_SETTINGS: CaptureSettings = {
   enabled: true,
+  driver: scenario === 'no-obs' ? 'obs' : 'native',
   mode: 'managed',
   folder: 'D:\\Recordings',
   queues: [420, 440],
   otherQueues: false,
-  audio: 'game',
+  audio: 'game+mic',
+  micDeviceId: null,
   quality: '1080p60',
   softCapBytes: 50 * 1024 * 1024 * 1024,
   obsHost: '127.0.0.1',
@@ -749,8 +756,9 @@ export const mockApi: Api = {
    * 4-minute sync against a key that expires daily.
    */
   /**
-   * Capture, as it looks on a machine with OBS running and set up. The 'no-obs'
-   * scenario is the other half — the state most people will meet first.
+   * Capture, as it looks recording a game — natively on an NVIDIA card, or with
+   * OBS running and set up once the picker is switched. 'no-obs' and
+   * 'no-ffmpeg' are each recorder's way of being unable to.
    */
   capture: {
     getSettings: (): Promise<CaptureSettings> => delay(CAPTURE_SETTINGS, 150, false),
@@ -773,6 +781,8 @@ export const mockApi: Api = {
       delay(
         scenario === 'no-obs'
           ? { state: 'error', message: 'No OBS listening — is it running?' }
+          : scenario === 'no-ffmpeg' && CAPTURE_SETTINGS.driver === 'native'
+            ? { state: 'error', message: "Foxfire's FFmpeg is missing. Reinstall Foxfire to record without OBS." }
           : scenario === 'not-live'
             ? { state: 'idle' }
             : { state: 'recording', recordingId: 1, startedAt: Date.now() - 640_000 },
@@ -802,7 +812,26 @@ export const mockApi: Api = {
     // No OBS to screenshot in a browser, so the empty-preview copy is what the
     // harness exercises.
     preview: (): Promise<string | null> => delay(null, 200, false),
-    reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
+    reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false),
+    // Slow on purpose: the real one opens every encoder in turn.
+    nativeCheck: (): Promise<NativeCaptureCheck> =>
+      delay(
+        scenario === 'no-ffmpeg'
+          ? { ffmpeg: 'missing', version: null, encoder: null, encoders: [], displayHz: 144 }
+          : { ffmpeg: 'ok', version: 'n9.0.2-36-g6882969ce9', encoder: 'nvenc', encoders: ['nvenc', 'mf-hw', 'mf'], displayHz: 144 },
+        900,
+        false
+      ),
+    listMicrophones: (): Promise<CaptureMicrophone[]> =>
+      delay(
+        [
+          { deviceId: 'mic-shure', label: 'Microphone (Shure MV7)' },
+          { deviceId: 'mic-headset', label: 'Headset Microphone (HyperX Cloud II)' },
+          { deviceId: 'mic-webcam', label: 'Microphone (Logitech BRIO)' }
+        ],
+        300,
+        false
+      )
   },
   recordings: {
     list: (accountId: string, page?: PageOptions, game?: GameId | null): Promise<Page<Recording>> =>

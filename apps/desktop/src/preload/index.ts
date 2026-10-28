@@ -223,7 +223,9 @@ const api: Api = {
     },
     validate: () => ipcRenderer.invoke(CH.capture.validate),
     preview: () => ipcRenderer.invoke(CH.capture.preview),
-    reconnect: () => ipcRenderer.invoke(CH.capture.reconnect)
+    reconnect: () => ipcRenderer.invoke(CH.capture.reconnect),
+    nativeCheck: () => ipcRenderer.invoke(CH.capture.nativeCheck),
+    listMicrophones: () => ipcRenderer.invoke(CH.capture.listMicrophones)
   },
   recordings: {
     list: (accountId, page, game) => ipcRenderer.invoke(CH.recordings.list, accountId, page, game),

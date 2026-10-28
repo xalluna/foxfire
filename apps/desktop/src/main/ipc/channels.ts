@@ -178,8 +178,14 @@ export const CH = {
     validate: 'capture:validate',
     /** A single frame of the capture source, so setup can be checked by eye. */
     preview: 'capture:preview',
-    reconnect: 'capture:reconnect'
+    reconnect: 'capture:reconnect',
+    /** Whether the native recorder can record here: its FFmpeg, and which encoder. */
+    nativeCheck: 'capture:nativeCheck',
+    /** The microphones the native recorder can mix in. */
+    listMicrophones: 'capture:listMicrophones'
   },
+  // The native recorder's hidden audio page has channels of its own, in
+  // shared/captureAudio.ts — its preload must not import this file.
   recordings: {
     list: 'recordings:list',
     detail: 'recordings:detail',

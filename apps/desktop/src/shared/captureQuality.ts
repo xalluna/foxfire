@@ -9,14 +9,22 @@
  * Shared so the settings screen and the OBS provisioning cannot disagree about
  * what an option means.
  */
-export type CaptureQuality = '720p30' | '720p60' | '1080p30' | '1080p60'
+export type CaptureQuality = '720p30' | '720p60' | '1080p30' | '1080p60' | '1080pDisplay' | '1440pDisplay'
 
 export interface CaptureQualityOption {
   value: CaptureQuality
   label: string
   width: number
   height: number
-  fps: number
+  /**
+   * Frames per second, or 'display': the refresh rate of the fastest monitor,
+   * so every frame the game showed is kept. Taking 60 from a 144 Hz game
+   * spaces them unevenly — two refreshes apart, then three — and the footage
+   * judders in a way the game never did.
+   */
+  fps: number | 'display'
+  /** Only the native recorder can follow the display; OBS records these at 60. */
+  nativeOnly?: boolean
   /**
    * Rough disk cost, for the settings screen.
    *
@@ -76,14 +84,44 @@ export const CAPTURE_QUALITY_OPTIONS: readonly CaptureQualityOption[] = [
     fps: 60,
     approxGbPerHour: 5,
     hint: 'Recommended. Shows dodges and animation cancels, which is most of what footage is for.'
+  },
+  {
+    value: '1080pDisplay',
+    label: '1080p at your refresh rate',
+    width: 1920,
+    height: 1080,
+    fps: 'display',
+    nativeOnly: true,
+    // At 144 Hz. More frames cost less than their number suggests: the closer
+    // together they are, the less each one differs from the last.
+    approxGbPerHour: 9,
+    hint: 'Every frame your monitor shows, so motion looks the way it did in game. Disk figures are at 144 Hz.'
+  },
+  {
+    value: '1440pDisplay',
+    label: '1440p at your refresh rate',
+    width: 2560,
+    height: 1440,
+    fps: 'display',
+    nativeOnly: true,
+    approxGbPerHour: 14,
+    hint: 'What a 1440p monitor shows, frame for frame. The heaviest on disk and on the encoder. Disk figures are at 144 Hz.'
   }
 ]
 
 export const DEFAULT_CAPTURE_QUALITY: CaptureQuality = '1080p60'
 
+/** The refresh rate a 'display' preset's disk figure is quoted at. */
+export const DISPLAY_PRESET_REFERENCE_HZ = 144
+
 export function captureQualityOption(quality: CaptureQuality): CaptureQualityOption {
   return (
     CAPTURE_QUALITY_OPTIONS.find((option) => option.value === quality) ??
-    CAPTURE_QUALITY_OPTIONS[CAPTURE_QUALITY_OPTIONS.length - 1]!
+    CAPTURE_QUALITY_OPTIONS.find((option) => option.value === DEFAULT_CAPTURE_QUALITY)!
   )
+}
+
+/** The frame rate a preset records at, given the display's. */
+export function presetFps(option: Pick<CaptureQualityOption, 'fps'>, displayHz: number): number {
+  return option.fps === 'display' ? displayHz : option.fps
 }
