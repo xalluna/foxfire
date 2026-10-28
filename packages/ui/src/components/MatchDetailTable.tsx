@@ -1,8 +1,8 @@
 import clsx from 'clsx'
 import { inPositionOrder, type AssetManifest, type MatchDetail, type MatchParticipant } from '@foxfire/core'
 import { useAssetManifest } from '../context/assetManifest'
-import { championIconUrl, runeIconUrl, spellIconUrl } from '../lib/assets'
-import { positionIcon } from '../lib/positions'
+import { championIconUrl, championName, runeIconUrl, runeName, spellIconUrl, spellName } from '../lib/assets'
+import { positionIcon, positionLabel } from '../lib/positions'
 import { runeIds } from '../lib/runes'
 import { compactNumber } from '../lib/matchStats'
 import { formatRiotId } from '../lib/riotId'
@@ -26,12 +26,41 @@ function StatBar({
     <div className="w-full">
       <p className="text-[10px] leading-tight tabular-nums text-text-dim">
         {compactNumber(value)}
+        <span className="sr-only">{tone === 'damage' ? ' damage to champions' : ' damage taken'}</span>
       </p>
       <Bar
         fraction={max > 0 ? value / max : 0}
         tone={tone === 'damage' ? 'accent' : 'taken'}
         className="mt-0.5"
       />
+    </div>
+  )
+}
+
+/**
+ * Names the columns over each team's rows.
+ *
+ * The two bars are otherwise told apart only by colour and by which comes
+ * first, and the figures beside them say how much but not of what. Hidden from
+ * a screen reader, which hears each figure named where it stands instead. The
+ * spacers are the row's own widths, so a heading sits over its column.
+ */
+function ColumnHeads(): JSX.Element {
+  return (
+    <div
+      aria-hidden
+      className="flex items-center gap-2 px-2 pb-0.5 text-2xs uppercase tracking-widest text-text-mute"
+    >
+      <span className="w-4 shrink-0" />
+      <span className="w-8 shrink-0" />
+      <span className="w-[15px] shrink-0" />
+      <span className="w-[15px] shrink-0" />
+      <span className="w-32 shrink-0" />
+      <span className="w-[74px] shrink-0">KDA</span>
+      <span className="w-14 shrink-0">CS</span>
+      <span className="w-14 shrink-0">Gold</span>
+      <span className="w-16 shrink-0">Damage</span>
+      <span className="w-16 shrink-0">Taken</span>
     </div>
   )
 }
@@ -60,7 +89,7 @@ function ParticipantRow({
       )}
     >
       {position ? (
-        <img src={position} alt="" className="h-4 w-4 shrink-0" />
+        <img src={position} alt={positionLabel(p.teamPosition) ?? ''} className="h-4 w-4 shrink-0" />
       ) : (
         <span className="h-4 w-4 shrink-0" />
       )}
@@ -68,6 +97,7 @@ function ParticipantRow({
       <div className="relative shrink-0">
         <Asset
           src={championIconUrl(m, p.championId)}
+          alt={championName(m, p.championId, p.championName)}
           className="h-8 w-8"
           rounded="rounded-full"
         />
@@ -81,10 +111,12 @@ function ParticipantRow({
       <div className="flex shrink-0 flex-col gap-[2px]">
         <Asset
           src={p.summoner1Id !== null ? spellIconUrl(m, p.summoner1Id) : null}
+          alt={p.summoner1Id !== null ? spellName(m, p.summoner1Id) : undefined}
           className="h-[15px] w-[15px]"
         />
         <Asset
           src={p.summoner2Id !== null ? spellIconUrl(m, p.summoner2Id) : null}
+          alt={p.summoner2Id !== null ? spellName(m, p.summoner2Id) : undefined}
           className="h-[15px] w-[15px]"
         />
       </div>
@@ -92,11 +124,13 @@ function ParticipantRow({
       <div className="flex shrink-0 flex-col gap-[2px]">
         <Asset
           src={keystone !== null ? runeIconUrl(m, keystone) : null}
+          alt={keystone !== null ? runeName(m, keystone) : undefined}
           className="h-[15px] w-[15px] bg-canvas"
           rounded="rounded-full"
         />
         <Asset
           src={secondary !== null ? runeIconUrl(m, secondary) : null}
+          alt={secondary !== null ? runeName(m, secondary) : undefined}
           className="h-[15px] w-[15px]"
           rounded="rounded-full"
         />
@@ -129,6 +163,7 @@ function ParticipantRow({
       <span className="flex w-14 shrink-0 items-center gap-1 text-2xs tabular-nums text-text-mute">
         <Icon.Coin width={11} height={11} className="shrink-0 text-gold" />
         {compactNumber(p.goldEarned)}
+        <span className="sr-only"> gold</span>
       </span>
 
       <div className="w-16 shrink-0">
@@ -209,6 +244,7 @@ export function MatchDetailTable({
             {compactNumber(sum(team.map((p) => p.goldEarned)))}
           </span>
         </div>
+        <ColumnHeads />
         <div className="space-y-0.5">
           {team.map((p) => (
             <ParticipantRow

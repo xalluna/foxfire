@@ -788,6 +788,12 @@ export interface AssetManifest {
   championById: Record<number, { id: string; name: string }>
   spellById: Record<number, { id: string; name: string }>
   runeById: Record<number, { icon: string; name: string }>
+  /**
+   * Items' names, for whatever reads an item icon aloud. Absent when Data
+   * Dragon would not give them: the icons need only the id, so they draw
+   * either way.
+   */
+  itemById?: Record<number, { name: string }>
   /** TFT's, when Data Dragon gave them. A client draws names where this has nothing. */
   tft?: TftAssets
 }

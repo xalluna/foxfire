@@ -298,6 +298,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                 if (e.key === 'Enter' && url.trim()) void check()
               }}
               placeholder="foxfire.example.com"
+              aria-label="Server address"
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"
@@ -374,6 +375,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                 value={invite}
                 onChange={(e) => void checkInvite(e.target.value)}
                 placeholder="Paste your invite"
+                aria-label="Invite code"
                 spellCheck={false}
                 className={clsx(inputClass, 'w-full')}
               />
@@ -399,6 +401,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Faker"
+                aria-label="Username"
                 className={clsx(inputClass, 'w-full')}
               />
             </SettingsBlock>
@@ -410,6 +413,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              aria-label="Email"
               spellCheck={false}
               autoCapitalize="off"
               className={clsx(inputClass, 'w-full')}
@@ -424,6 +428,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
           >
             <input
               type="password"
+              aria-label="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => {
@@ -440,6 +445,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
             >
               <input
                 type="password"
+                aria-label="Confirm password"
                 value={confirmation}
                 onChange={(e) => setConfirmation(e.target.value)}
                 onKeyDown={(e) => {

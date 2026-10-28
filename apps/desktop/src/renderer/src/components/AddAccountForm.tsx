@@ -61,6 +61,7 @@ export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Eleme
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={example}
+          aria-label="Riot ID"
           spellCheck={false}
           autoFocus
           className="w-full rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-sm text-text outline-none transition placeholder:text-text-mute focus:border-accent-dim"

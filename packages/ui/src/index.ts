@@ -155,9 +155,12 @@ export {
   championIconUrl,
   championName,
   itemIconUrl,
+  itemName,
   profileIconUrl,
   runeIconUrl,
-  spellIconUrl
+  runeName,
+  spellIconUrl,
+  spellName
 } from './lib/assets'
 export { mostPlayed } from './lib/champions'
 export { roundedPath, type Point } from './lib/curve'

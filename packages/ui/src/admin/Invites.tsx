@@ -211,6 +211,7 @@ function Invites({
               if (e.key === 'Enter' && !creating) create()
             }}
             placeholder="friend@example.com (optional)"
+            aria-label="Their email (optional)"
             spellCheck={false}
             autoCapitalize="off"
             className={clsx(inputClass, 'flex-1')}

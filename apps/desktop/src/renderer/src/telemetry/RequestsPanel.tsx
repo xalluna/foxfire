@@ -87,6 +87,7 @@ export function RequestsPanel({ windowMs }: { windowMs: number }): JSX.Element {
 
       <div className="flex flex-wrap items-center gap-2">
         <Select
+          label="Endpoint"
           value={endpoint ?? ''}
           onChange={(value) => setEndpoint(value || null)}
           options={[
@@ -95,6 +96,7 @@ export function RequestsPanel({ windowMs }: { windowMs: number }): JSX.Element {
           ]}
         />
         <Select
+          label="Outcome"
           value={outcome ?? ''}
           onChange={(value) => setOutcome((value || null) as TelemetryOutcome | null)}
           options={[
@@ -271,16 +273,19 @@ function Detail({
 }
 
 function Select({
+  label,
   value,
   onChange,
   options
 }: {
+  label: string
   value: string
   onChange: (value: string) => void
   options: { value: string; label: string }[]
 }): JSX.Element {
   return (
     <select
+      aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="rounded-md border border-hairline bg-canvas px-2 py-1 text-2xs text-text-dim outline-none focus:border-accent-dim"

@@ -271,6 +271,7 @@ function TestSend({
               if (e.key === 'Enter' && !sending) send()
             }}
             placeholder="you@example.com"
+            aria-label="Send the test to"
             spellCheck={false}
             autoCapitalize="off"
             className={clsx(inputClass, 'flex-1')}

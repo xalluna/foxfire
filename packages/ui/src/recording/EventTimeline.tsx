@@ -30,9 +30,11 @@ const ROLE_STYLE: Record<RecordingEvent['role'], string> = {
   multikill: 'text-accent'
 }
 
+/** A shape per role, so the colour is never the only thing that tells them apart. */
 function RoleGlyph({ role }: { role: RecordingEvent['role'] }): JSX.Element {
   if (role === 'death') return <Icon.Skull width={11} height={11} />
   if (role === 'multikill') return <Icon.Star filled width={11} height={11} />
+  if (role === 'assist') return <Icon.Shield width={11} height={11} />
   return <Icon.Swords width={11} height={11} />
 }
 
@@ -132,16 +134,10 @@ export function EventTimeline({
         </div>
       )}
 
+      {/* The pointer is followed over the markers as well as the bar, so the
+          preview stays up while one is under it. */}
       <div
-        ref={trackRef}
-        role="slider"
-        tabIndex={0}
-        aria-label="Seek"
-        aria-valuemin={0}
-        aria-valuemax={Math.round(duration)}
-        aria-valuenow={Math.round(currentTime)}
-        aria-valuetext={formatClock(Math.round(currentTime))}
-        className="relative h-2 cursor-pointer rounded-full bg-surface-2"
+        className="relative"
         onMouseMove={(event) =>
           setHover({
             x: event.clientX - (trackRef.current?.getBoundingClientRect().left ?? 0) + 16,
@@ -149,48 +145,74 @@ export function EventTimeline({
           })
         }
         onMouseLeave={() => setHover(null)}
-        onClick={(event) => onSeek(timeAt(event.clientX))}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') onSeek(Math.max(0, currentTime - 5))
-          if (event.key === 'ArrowRight') onSeek(Math.min(duration, currentTime + 5))
-        }}
       >
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-accent/70"
-          style={{ width: `${progress}%` }}
-        />
-        <div
-          className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-canvas bg-accent"
-          style={{ left: `${progress}%` }}
-        />
+          ref={trackRef}
+          role="slider"
+          tabIndex={0}
+          aria-label="Seek"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration)}
+          aria-valuenow={Math.round(currentTime)}
+          aria-valuetext={formatClock(Math.round(currentTime))}
+          className="relative h-2 cursor-pointer rounded-full bg-surface-2"
+          onClick={(event) => onSeek(timeAt(event.clientX))}
+          onKeyDown={(event) => {
+            const to =
+              event.key === 'ArrowLeft' || event.key === 'ArrowDown'
+                ? Math.max(0, currentTime - 5)
+                : event.key === 'ArrowRight' || event.key === 'ArrowUp'
+                  ? Math.min(duration, currentTime + 5)
+                  : event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? duration
+                      : null
+            if (to === null) return
+            event.preventDefault()
+            onSeek(to)
+          }}
+        >
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-accent/70"
+            style={{ width: `${progress}%` }}
+          />
+          <div
+            className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-canvas bg-accent"
+            style={{ left: `${progress}%` }}
+          />
+        </div>
 
-        {duration > 0 &&
-          clusters.map((item) => {
-            const lead = leadEvent(item.events)
-            return (
-              <button
-                key={item.videoTime}
-                type="button"
-                title={describeCluster(item.events)}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onSeek(seekTargetFor(item.videoTime))
-                }}
-                className={clsx(
-                  'absolute bottom-full mb-1 -translate-x-1/2 rounded p-px transition hover:scale-125',
-                  ROLE_STYLE[lead.role]
-                )}
-                style={{ left: `${(item.videoTime / duration) * 100}%` }}
-              >
-                <RoleGlyph role={lead.role} />
-                {item.events.length > 1 && (
-                  <span className="absolute -right-1 -top-1 text-[8px] font-medium tabular-nums text-text">
-                    {item.events.length}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+        {/* Beside the slider rather than inside it: whatever is inside a
+            slider is not read out, and each marker is a button of its own. */}
+        <div className="pointer-events-none absolute inset-0">
+          {duration > 0 &&
+            clusters.map((item) => {
+              const lead = leadEvent(item.events)
+              const description = describeCluster(item.events)
+              return (
+                <button
+                  key={item.videoTime}
+                  type="button"
+                  title={description}
+                  aria-label={description}
+                  onClick={() => onSeek(seekTargetFor(item.videoTime))}
+                  className={clsx(
+                    'pointer-events-auto absolute bottom-full mb-1 -translate-x-1/2 rounded p-px transition hover:scale-125',
+                    ROLE_STYLE[lead.role]
+                  )}
+                  style={{ left: `${(item.videoTime / duration) * 100}%` }}
+                >
+                  <RoleGlyph role={lead.role} />
+                  {item.events.length > 1 && (
+                    <span className="absolute -right-1 -top-1 text-[8px] font-medium tabular-nums text-text">
+                      {item.events.length}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+        </div>
       </div>
 
       {/* Off-screen and muted: it exists only to decode single frames. */}

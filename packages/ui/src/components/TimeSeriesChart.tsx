@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
+import { chartCursorProps } from '../lib/chartCursor'
 import { roundedPath, type Point } from '../lib/curve'
 
 const WIDTH = 720
@@ -18,6 +19,18 @@ export interface Series {
   fill?: boolean
   /** Renders as a step function — right for counters that hold a value. */
   step?: boolean
+}
+
+/**
+ * Each line's pattern, by its place in the chart. Colour alone does not tell
+ * amber from gold, or teal from the accent, to everybody who reads these, so
+ * the second line is dashed, the third dotted and so on, and the legend draws
+ * the same. The first stays solid, which is all a single-series chart has.
+ */
+const DASHES = [undefined, '6 3', '1.5 3', '8 3 1.5 3', '12 4'] as const
+
+function dashOf(index: number): string | undefined {
+  return DASHES[index % DASHES.length]
 }
 
 /**
@@ -91,13 +104,17 @@ export function TimeSeriesChart({
   const times = [...new Set(all.map((p) => p.at))].sort((a, b) => a - b)
   const hoverAt = hover === null ? null : times[hover]
 
+  // Every line at one instant, as the legend reads them under the pointer.
+  const describeAt = (at: number): string =>
+    `${formatAt(at)}: ${series.map((s) => `${s.label} ${readAt(s, at, formatValue, 'no reading')}`).join(', ')}`
+
   return (
     <div className="relative">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="w-full"
-        role="img"
         aria-label={ariaLabel}
+        {...chartCursorProps(times.length, hover, setHover, (i) => describeAt(times[i]))}
         onMouseLeave={() => setHover(null)}
       >
         <defs>
@@ -180,7 +197,13 @@ export function TimeSeriesChart({
                   fill={`url(#${gradientId}-${i})`}
                 />
               )}
-              <path d={runs.map((run) => run.path).join(' ')} fill="none" stroke={s.colour} strokeWidth="1.5" />
+              <path
+                d={runs.map((run) => run.path).join(' ')}
+                fill="none"
+                stroke={s.colour}
+                strokeWidth="1.5"
+                strokeDasharray={dashOf(i)}
+              />
             </g>
           )
         })}
@@ -229,9 +252,11 @@ export function TimeSeriesChart({
       </svg>
 
       <div className="mt-1 flex flex-wrap items-center gap-3 px-1">
-        {series.map((s) => (
+        {series.map((s, i) => (
           <span key={s.label} className="flex items-center gap-1.5 text-2xs text-text-mute">
-            <span className="h-0.5 w-3 rounded" style={{ backgroundColor: s.colour }} />
+            <svg width="20" height="4" className="shrink-0" aria-hidden>
+              <line x1="0" x2="20" y1="2" y2="2" stroke={s.colour} strokeWidth="2" strokeDasharray={dashOf(i)} />
+            </svg>
             {s.label}
             {hoverAt !== null && (
               <span className="font-mono text-text-dim">{readAt(s, hoverAt, formatValue)}</span>
@@ -292,9 +317,14 @@ function measuredRuns(series: Series): Array<Array<{ at: number; value: number }
   return runs
 }
 
-function readAt(series: Series, at: number, formatValue: (value: number) => string): string {
+function readAt(
+  series: Series,
+  at: number,
+  formatValue: (value: number) => string,
+  missing = '—'
+): string {
   const point = series.points.find((p) => p.at === at)
-  return point?.value === null || point === undefined ? '—' : formatValue(point.value)
+  return point?.value === null || point === undefined ? missing : formatValue(point.value)
 }
 
 /** A moment to the millisecond, for a panel whose points are that close together. */

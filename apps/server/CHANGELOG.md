@@ -36,6 +36,13 @@ version 3 still, and a desktop from before TFT is served as it always was.
   account's history goes back is now set from the page, for League and TFT
   separately, where it used to be an API call. Both share the server's one
   Riot budget.
+- **Charts you can read from the keyboard**, in the web client. Tab to a rank
+  graph or an Insights chart, and the arrow keys step through its readings
+  with the same tooltip the pointer shows; Home and End go to the first and the
+  latest. A screen reader hears each reading as you move.
+- **Right-click menus from the keyboard**, in the web client. The menu key or
+  Shift+F10 on a match row opens its menu with focus inside it; the arrow keys
+  walk it, and Escape or choosing an item puts you back on the row.
 
 ### Changed
 
@@ -48,11 +55,29 @@ version 3 still, and a desktop from before TFT is served as it always was.
   the heading that counted your synced games and noted that remakes are left
   out is gone; the season and queue pickers beside it already say what the
   table covers.
+- **Things told apart by colour are told apart by shape as well**, in the web
+  client. Insights charts draw their second line dashed and their third
+  dotted, and the legend matches; an assist on a recording's timeline is a
+  shield rather than the kill's swords in a quieter colour; and the scoreboard
+  names its columns, so the two damage bars are not told apart by colour alone.
 
 ### Fixed
 
 - **An opened match lists each team by lane** in the web client — top,
   jungle, mid, bot, then support — rather than in no particular order.
+- **Focus rings are no longer cut off** in the web client, on match rows,
+  period and queue toggles, the links under the profile's cards and right-click
+  menu items.
+- **Screen readers hear what the icons are** in the web client — champions,
+  spells, runes and items, each player's lane on the scoreboard, and TFT's
+  units, stars, traits, items and augments — and hear LP as gained or lost,
+  where "19 LP" used to stand for a win and a loss alike.
+- **The admin pages' fields have names**: the invite's email, the test email's
+  address and the replay cap were named only by their placeholder.
+- **Smaller things a screen reader got wrong**, in the web client: the
+  Champions table reads its sort off its column headers, the tier track says
+  how far it is to the next tier, and a recording's event markers are buttons
+  of their own rather than sitting unread inside the seek bar.
 
 ### Under the hood
 
@@ -124,7 +149,9 @@ version 3 still, and a desktop from before TFT is served as it always was.
   and rating.
 - The web client reads TFT through the same contract the desktop does, and its
   asset manifest carries Data Dragon's TFT units, traits, items and augments
-  when Data Dragon gives them.
+  when Data Dragon gives them — and League's item names, from `item.json`,
+  fetched on its own so a missing one costs the icons their names and nothing
+  else.
 - `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
   `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
   advisories, and with warnings as errors a restore refused to start.

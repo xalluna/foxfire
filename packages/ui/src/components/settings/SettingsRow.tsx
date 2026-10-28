@@ -224,7 +224,8 @@ export function PathRow({
  *
  * Both of the extra windows — archived clients and the telemetry panel — are
  * reached this way, and the glyph is the promise: this leaves the page rather
- * than expanding it.
+ * than expanding it. The row is the card's full width and the card clips to its
+ * corners, so the focus ring is drawn inside it.
  */
 export function LinkRow({
   label,
@@ -239,7 +240,7 @@ export function LinkRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-surface-2/40"
+      className="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-surface-2/40 focus-visible:outline-offset-[-2px]"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-sm text-text">{label}</span>
@@ -280,6 +281,7 @@ export function ByteCapRow({
             min={0}
             disabled={disabled}
             value={Math.round(bytes / GB)}
+            aria-label={`${label}, in ${unit}`}
             onChange={(event) => onChange(Math.max(0, Number(event.target.value)) * GB)}
             className={clsx(inputClass, 'w-20 tabular-nums')}
           />

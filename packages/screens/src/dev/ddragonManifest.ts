@@ -3,7 +3,8 @@ import type { AssetManifest } from '@foxfire/core'
 /**
  * A real Data Dragon manifest, captured from patch 16.16.1 by
  * scripts/../gen (see dev/README) so the browser harness renders genuine
- * champion, spell and rune art.
+ * champion, spell and rune art. Its item names are only the items the
+ * fixtures carry, taken from the same patch's item.json.
  *
  * In the app this arrives over IPC because the CSP forbids fetch to the CDN;
  * only images may load from ddragon directly. The harness has no main process
@@ -1114,6 +1115,92 @@ export const DDRAGON_MANIFEST: AssetManifest = {
     "9923": {
       "icon": "perk-images/Styles/Domination/HailOfBlades/HailOfBlades.png",
       "name": "Hail of Blades"
+    }
+  },
+  "itemById": {
+    "1028": {
+      "name": "Ruby Crystal"
+    },
+    "1038": {
+      "name": "B. F. Sword"
+    },
+    "1056": {
+      "name": "Doran's Ring"
+    },
+    "1206": {
+      "name": "Mid Lane Quest Reward"
+    },
+    "1208": {
+      "name": "Support Quest Reward"
+    },
+    "1209": {
+      "name": "Jungle Quest Reward"
+    },
+    "1221": {
+      "name": "Top Lane Quest Reward"
+    },
+    "2503": {
+      "name": "Blackfire Torch"
+    },
+    "3006": {
+      "name": "Berserker's Greaves"
+    },
+    "3009": {
+      "name": "Boots of Swiftness"
+    },
+    "3011": {
+      "name": "Chemtech Putrifier"
+    },
+    "3031": {
+      "name": "Infinity Edge"
+    },
+    "3047": {
+      "name": "Plated Steelcaps"
+    },
+    "3050": {
+      "name": "Zeke's Convergence"
+    },
+    "3067": {
+      "name": "Kindlegem"
+    },
+    "3068": {
+      "name": "Sunfire Aegis"
+    },
+    "3075": {
+      "name": "Thornmail"
+    },
+    "3089": {
+      "name": "Rabadon's Deathcap"
+    },
+    "3100": {
+      "name": "Lich Bane"
+    },
+    "3143": {
+      "name": "Randuin's Omen"
+    },
+    "3157": {
+      "name": "Zhonya's Hourglass"
+    },
+    "3222": {
+      "name": "Mikael's Blessing"
+    },
+    "3363": {
+      "name": "Farsight Alteration"
+    },
+    "3364": {
+      "name": "Oracle Lens"
+    },
+    "3742": {
+      "name": "Dead Man's Plate"
+    },
+    "3853": {
+      "name": "Shard of True Ice"
+    },
+    "6672": {
+      "name": "Kraken Slayer"
+    },
+    "6673": {
+      "name": "Immortal Shieldbow"
     }
   }
 }
