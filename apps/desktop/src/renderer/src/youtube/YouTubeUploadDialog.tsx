@@ -176,7 +176,7 @@ function YouTubeUploadDialog({
               value={description}
               rows={7}
               onChange={(event) => setDescription(event.target.value)}
-              className={`${inputClass} mt-1.5 w-full resize-y font-mono text-2xs leading-relaxed`}
+              className={`${inputClass} mt-1.5 w-full resize-y font-mono text-xs leading-relaxed`}
             />
             <p className="mt-1 text-2xs text-text-mute">
               The timestamps become chapters on YouTube. Neither the title nor the description may contain &lt; or &gt;.
@@ -205,13 +205,13 @@ function YouTubeUploadDialog({
           </div>
 
           {longGame && (
-            <p className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-2xs leading-relaxed text-amber">
+            <p className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-xs leading-relaxed text-amber">
               This game runs past 15 minutes. YouTube only takes videos that long from a channel that has
               verified a phone number — do that once at youtube.com/verify if the upload is refused.
             </p>
           )}
 
-          <p className="text-2xs leading-relaxed text-text-mute">
+          <p className="text-xs leading-relaxed text-text-mute">
             Uploading to {youtube?.email ?? 'your channel'}. By uploading you agree to the{' '}
             <a href={YOUTUBE_LINKS.terms} target="_blank" rel="noreferrer" className="text-accent hover:underline">
               YouTube Terms of Service

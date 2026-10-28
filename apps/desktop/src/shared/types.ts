@@ -107,6 +107,12 @@ export interface BackgroundSettings {
   lcuInstallPath: string | null
 }
 
+/** How this PC draws Foxfire. Steps and rules in shared/display.ts. */
+export interface DisplaySettings {
+  /** The zoom factor every window is drawn at: one of ZOOM_STEPS. */
+  zoom: number
+}
+
 /**
  * Which kind of Riot key is saved. It decides how fast the app is allowed to
  * ask for things, and whether it should keep warning about a 24-hour expiry —

@@ -134,7 +134,7 @@ export function TftProfilePage({
   ))
 
   const denied = tftAccess === 'denied' && (
-    <div className="rounded-lg border border-amber/30 bg-amber/[0.06] px-4 py-3 text-2xs leading-relaxed text-amber">
+    <div className="rounded-lg border border-amber/30 bg-amber/[0.06] px-4 py-3 text-xs leading-relaxed text-amber">
       This server&apos;s Riot key cannot reach TFT, so nothing new is fetched for it. Whatever was stored before still
       shows. Its host can add a TFT key.
     </div>
@@ -222,7 +222,7 @@ export function TftProfilePage({
 
       {notice !== null && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber/30 bg-surface px-4 py-3 shadow-flyout">
-          <p className="max-w-md text-2xs leading-relaxed text-amber">{notice}</p>
+          <p className="max-w-md text-xs leading-relaxed text-amber">{notice}</p>
           <button
             type="button"
             onClick={onDismissNotice}

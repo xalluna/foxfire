@@ -4,6 +4,7 @@ import type { GameId } from '@foxfire/core'
 import type {
   ArchiveCopyProgress,
   CaptureStatus,
+  DisplaySettings,
   LcuStatus,
   ReplayImportProgress,
   ServerState,
@@ -207,6 +208,15 @@ const api: Api = {
   background: {
     get: () => ipcRenderer.invoke(CH.background.get),
     set: (patch) => ipcRenderer.invoke(CH.background.set, patch)
+  },
+  display: {
+    get: () => ipcRenderer.invoke(CH.display.get),
+    set: (patch) => ipcRenderer.invoke(CH.display.set, patch),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, settings: DisplaySettings): void => cb(settings)
+      ipcRenderer.on(CH.display.changed, handler)
+      return () => ipcRenderer.removeListener(CH.display.changed, handler)
+    }
   },
   capture: {
     getSettings: () => ipcRenderer.invoke(CH.capture.getSettings),

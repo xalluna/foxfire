@@ -199,7 +199,7 @@ export function BulkUploadDialog({
         )}
 
         {longGames > 0 && (
-          <p className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-2xs text-amber">
+          <p className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-xs text-amber">
             {longGames} of these run past 15 minutes. YouTube only takes videos that long from a channel that
             has verified a phone number — do that once at youtube.com/verify first, or those uploads will be
             refused.

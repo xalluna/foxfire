@@ -3,16 +3,21 @@ import { format } from 'date-fns'
 import type { RankCloses, RankTrendPoint } from '@foxfire/core'
 import { ratedBandBoundaries, ratedTierAt, tierBandBoundaries } from '@foxfire/core'
 import { roundedPath } from '../lib/curve'
+import { useMeasuredWidth } from '../hooks/useMeasuredWidth'
 import { ratedTierColor, ratedTierLabel, tierColor, tierLabel } from '../lib/rank'
 
 const DAY_MS = 86_400_000
 
-const WIDTH = 720
-const HEIGHT = 260
-const PAD = { top: 12, right: 12, bottom: 24, left: 52 }
-
-const PLOT_W = WIDTH - PAD.left - PAD.right
-const PLOT_H = HEIGHT - PAD.top - PAD.bottom
+// Drawn at the width it is shown at, measured, so its labels are the 11px
+// they say rather than whatever a stretched viewBox makes of them. The height
+// keeps the old 720 × 260 proportion, held between a height the bands still
+// read at and one that does not take over a wide window. The left pad fits
+// "Grandmaster" at that size.
+const FALLBACK_WIDTH = 720
+const ASPECT = 720 / 260
+const MIN_HEIGHT = 200
+const MAX_HEIGHT = 360
+const PAD = { top: 12, right: 12, bottom: 26, left: 80 }
 
 type Plotted = RankTrendPoint & { ladderPosition: number }
 
@@ -46,10 +51,18 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
   // useId's colons are stripped: they are legal in an id but not in every
   // engine's parsing of a url(#…) reference.
   const uid = useId().replace(/:/g, '')
+  const [frame, width] = useMeasuredWidth(FALLBACK_WIDTH)
+  const height = Math.round(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, width / ASPECT)))
+  const plotW = width - PAD.left - PAD.right
+  const plotH = height - PAD.top - PAD.bottom
 
   const points = closes.points.filter((p): p is Plotted => p.ladderPosition !== null)
   if (points.length === 0) {
-    return <p className="px-4 py-10 text-center text-sm text-text-mute">Nothing recorded yet.</p>
+    return (
+      <p ref={frame} className="px-4 py-10 text-center text-sm text-text-mute">
+        Nothing recorded yet.
+      </p>
+    )
   }
 
   const positions = points.map((p) => p.ladderPosition)
@@ -68,8 +81,8 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
 
   const tSpan = closes.to - closes.from || 1
 
-  const x = (t: number): number => PAD.left + ((t - closes.from) / tSpan) * PLOT_W
-  const y = (p: number): number => PAD.top + (1 - (p - yMin) / (yMax - yMin || 1)) * PLOT_H
+  const x = (t: number): number => PAD.left + ((t - closes.from) / tSpan) * plotW
+  const y = (p: number): number => PAD.top + (1 - (p - yMin) / (yMax - yMin || 1)) * plotH
 
   // One path per season rather than one for the whole series. Drawn straight
   // through, an annual reset puts a two-thousand-point vertical drop across the
@@ -91,7 +104,7 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
     } else segments.push([point])
   }
 
-  const baseline = PAD.top + PLOT_H
+  const baseline = PAD.top + plotH
   const paths = segments.map((segment) => {
     const line = roundedPath(segment.map((p) => [x(p.at), y(p.ladderPosition)]))
     const from = x(segment[0].at)
@@ -108,7 +121,7 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
   ]
   for (let i = 1; i < points.length; i++) {
     if (bandOf(points[i]) === bandOf(points[i - 1])) continue
-    const offset = (x(points[i].at) - PAD.left) / (PLOT_W || 1)
+    const offset = (x(points[i].at) - PAD.left) / (plotW || 1)
     stops.push({ offset, color: colorOf(bandOf(points[i - 1])) })
     stops.push({ offset, color: colorOf(bandOf(points[i])) })
   }
@@ -129,10 +142,12 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
   const active = hover === null ? null : points[hover]
 
   return (
-    <div className="relative">
+    <div ref={frame} className="relative">
       <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="w-full"
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height={height}
+        className="block"
         role="img"
         aria-label="Rank over time"
         onMouseLeave={() => setHover(null)}
@@ -145,7 +160,7 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
             gradientUnits="userSpaceOnUse"
             x1={PAD.left}
             y1="0"
-            x2={WIDTH - PAD.right}
+            x2={width - PAD.right}
             y2="0"
           >
             {stops.map((s, i) => (
@@ -165,14 +180,14 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
             maskUnits="userSpaceOnUse"
             x={PAD.left}
             y={PAD.top}
-            width={PLOT_W}
-            height={PLOT_H}
+            width={plotW}
+            height={plotH}
           >
             <rect
               x={PAD.left}
               y={PAD.top}
-              width={PLOT_W}
-              height={PLOT_H}
+              width={plotW}
+              height={plotH}
               fill={`url(#${uid}-fade)`}
             />
           </mask>
@@ -182,7 +197,7 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
           <line
             key={p}
             x1={PAD.left}
-            x2={WIDTH - PAD.right}
+            x2={width - PAD.right}
             y1={y(p)}
             y2={y(p)}
             stroke="rgb(var(--hairline))"
@@ -196,7 +211,7 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
           <g key={band.tier}>
             <line
               x1={PAD.left}
-              x2={WIDTH - PAD.right}
+              x2={width - PAD.right}
               y1={y(band.start)}
               y2={y(band.start)}
               stroke={colorOf(band.tier)}
@@ -206,11 +221,10 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
             />
             <text
               x={PAD.left - 8}
-              y={y(band.start) + 3}
+              y={y(band.start) + 4}
               textAnchor="end"
-              className="text-[9px]"
+              className="text-2xs"
               fill={colorOf(band.tier)}
-              fillOpacity="0.8"
             >
               {bandLabel(band.tier)}
             </text>
@@ -272,28 +286,28 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
             reliably, and one strip per point keeps the tooltip predictable.
             The closes are evenly spaced, so every strip is a step wide. */}
         {points.map((p, i) => {
-          const half = ((closes.step / tSpan) * PLOT_W) / 2
+          const half = ((closes.step / tSpan) * plotW) / 2
           return (
             <rect
               key={`hit-${p.at}`}
               x={x(p.at) - half}
               y={PAD.top}
               width={half * 2}
-              height={PLOT_H}
+              height={plotH}
               fill="transparent"
               onMouseEnter={() => setHover(i)}
             />
           )
         })}
 
-        <text x={PAD.left} y={HEIGHT - 6} className="text-[9px]" fill="rgb(var(--text-mute))">
+        <text x={PAD.left} y={height - 7} className="text-2xs" fill="rgb(var(--text-mute))">
           {format(closes.from, 'MMM d')}
         </text>
         <text
-          x={WIDTH - PAD.right}
-          y={HEIGHT - 6}
+          x={width - PAD.right}
+          y={height - 7}
           textAnchor="end"
-          className="text-[9px]"
+          className="text-2xs"
           fill="rgb(var(--text-mute))"
         >
           {format(closes.to, 'MMM d')}
@@ -304,8 +318,10 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
         <div
           className="pointer-events-none absolute -translate-x-1/2 rounded-md border border-hairline bg-canvas px-2 py-1.5 text-2xs shadow-lg"
           style={{
-            left: `${(x(active.at) / WIDTH) * 100}%`,
-            top: `${(y(active.ladderPosition) / HEIGHT) * 100}%`
+            // Held inside the chart, so a reading at either end does not hang
+            // off it. Pixels, because the drawing is at 1:1.
+            left: Math.min(Math.max(x(active.at), 56), width - 56),
+            top: y(active.ladderPosition)
           }}
         >
           <p className="font-medium" style={{ color: colorOf(bandOf(active)) }}>

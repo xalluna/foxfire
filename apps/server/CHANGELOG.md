@@ -48,6 +48,21 @@ version 3 still, and a desktop from before TFT is served as it always was.
   the heading that counted your synced games and noted that remakes are left
   out is gone; the season and queue pickers beside it already say what the
   table covers.
+- **Easier to read** in the web client. Secondary text — captions,
+  timestamps, column headers, form hints — is a lighter grey that holds up
+  against every panel, and every colour text is written in now meets the WCAG
+  AA contrast guideline. Text is a size larger throughout, and no word or
+  number is smaller than 11px. For larger still, the browser's own zoom
+  (Ctrl + =) is remembered for the site.
+- **Edges you can see** in the web client. Panels sit a shade further off the
+  background with an outline you can make out, text boxes, dropdowns and
+  buttons have an outline of their own, and a field you are typing in turns
+  bright blue.
+- **Chart labels keep their size.** The rank graph and the insights charts
+  used to scale their labels with the window, to almost nothing on a phone.
+- **Tier colours read on dark panels.** Iron, Bronze, Master and Grandmaster
+  — and Hyper Roll's Purple — are lighter shades of the same colours. The
+  crests are untouched.
 
 ### Fixed
 
@@ -132,6 +147,9 @@ version 3 still, and a desktop from before TFT is served as it always was.
   well: the highest reading since the ladder last reset, from before the range —
   what the Rank page measures a new peak against. It is additive, and the API
   is version 3 still.
+- `styles/contrast.test.ts` in `@foxfire/ui` holds every text colour in the
+  palette, tier colours included, to 4.5:1 against every background and every
+  control outline to 3:1, so a colour change that falls short fails the build.
 
 ## [0.5.1] — 2026-09-27
 

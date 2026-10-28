@@ -235,7 +235,7 @@ function FilePlayer({
             value={speed}
             aria-label="Playback speed"
             onChange={(event) => setSpeed(Number(event.target.value))}
-            className="h-7 rounded-md border border-hairline bg-canvas px-2 text-2xs tabular-nums text-text focus:border-accent-dim focus:outline-none"
+            className="h-7 rounded-md border border-edge bg-canvas px-2 text-xs tabular-nums text-text focus:border-accent focus:outline-none"
           >
             {SPEEDS.map((option) => (
               <option key={option} value={option}>
@@ -403,7 +403,7 @@ function ControlButton({
       aria-label={label}
       onClick={onClick}
       className={clsx(
-        'flex h-7 w-7 items-center justify-center rounded-md border border-hairline',
+        'flex h-7 w-7 items-center justify-center rounded-md border border-edge',
         'text-text-dim transition hover:border-accent-dim hover:text-accent'
       )}
     >

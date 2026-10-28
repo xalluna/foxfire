@@ -45,7 +45,7 @@ export function InvitePage(): JSX.Element {
       ) : (
         <div className="space-y-4">
           <RegisterForm inviteToken={token} invitedEmail={preview.data.email} />
-          <p className="text-2xs leading-relaxed text-text-mute">
+          <p className="text-xs leading-relaxed text-text-mute">
             Prefer the desktop app? This invite works there too: connect it to this server&rsquo;s address and
             paste this link as the invite code.
           </p>

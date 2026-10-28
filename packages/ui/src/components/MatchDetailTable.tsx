@@ -24,7 +24,7 @@ function StatBar({
 }): JSX.Element {
   return (
     <div className="w-full">
-      <p className="text-[10px] leading-tight tabular-nums text-text-dim">
+      <p className="text-2xs leading-tight tabular-nums text-text-dim">
         {compactNumber(value)}
       </p>
       <Bar
@@ -72,7 +72,7 @@ function ParticipantRow({
           rounded="rounded-full"
         />
         {p.champLevel !== null && (
-          <span className="absolute -bottom-0.5 -right-1 rounded-full bg-canvas px-1 text-[9px] tabular-nums text-text-dim ring-1 ring-hairline">
+          <span className="absolute -bottom-0.5 -right-1 rounded-full bg-canvas px-1 text-2xs leading-none tabular-nums text-text-dim ring-1 ring-hairline">
             {p.champLevel}
           </span>
         )}

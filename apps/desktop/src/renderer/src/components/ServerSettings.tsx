@@ -380,7 +380,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
               {invitePreview !== null && (
                 <p
                   className={clsx(
-                    'mt-2 text-2xs leading-relaxed',
+                    'mt-2 text-xs leading-relaxed',
                     invitePreview.usable ? 'text-teal' : 'text-red'
                   )}
                 >
@@ -457,7 +457,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                   the whole errand happens there. Without mail there is nowhere
                   to send a link except through its admin. */}
               {probe?.email && probe.publicUrl ? (
-                <p className="text-2xs leading-relaxed text-text-mute">
+                <p className="text-xs leading-relaxed text-text-mute">
                   <a
                     href={absoluteUrl(probe.publicUrl, paths.forgotPassword())}
                     target="_blank"
@@ -469,7 +469,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                   It opens in your browser, and the link to set a new one is emailed to you.
                 </p>
               ) : (
-                <p className="text-2xs leading-relaxed text-text-mute">
+                <p className="text-xs leading-relaxed text-text-mute">
                   Forgotten your password? Ask whoever runs this server for a reset link, and open it
                   in a browser.
                 </p>

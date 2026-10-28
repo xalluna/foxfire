@@ -185,7 +185,7 @@ export function SeasonsEditor({
             <button
               onClick={() => setRows((c) => (c ?? []).filter((r) => r.key !== row.key))}
               aria-label="Remove season"
-              className="shrink-0 rounded-md border border-hairline px-2 text-text-mute transition hover:border-red/40 hover:text-red"
+              className="shrink-0 rounded-md border border-edge px-2 text-text-mute transition hover:border-red hover:text-red"
             >
               <Icon.Trash width={14} height={14} />
             </button>
@@ -219,7 +219,7 @@ export function SeasonsEditor({
         labels, so it is the only one that gets an explanation.
       */}
       <SettingsBlock>
-        <p className="text-2xs leading-relaxed text-text-mute">
+        <p className="text-xs leading-relaxed text-text-mute">
           Tick <span className="text-text-dim">Rank was reset</span> when the ladder was emptied and
           you played placements. It stops the reset being recorded as a game that cost you two
           thousand LP, and keeps it out of your promotion history. Leave it clear for a season your

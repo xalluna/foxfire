@@ -221,7 +221,7 @@ export function LpEditorPage({
             {queueFilterLabel(queueIdForQueueType(queueType))}
           </span>
         </div>
-        <p className="mt-1.5 max-w-2xl text-2xs leading-relaxed text-text-mute">
+        <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-text-mute">
           These games have no LP figure because more than one of them fell between two rank
           readings, so the total could not be split. Enter the rank you finished a game at and the
           rest of the run is worked out from it — you rarely need to fill in every row.
@@ -343,7 +343,7 @@ export function LpEditorPage({
                   {/* Typed an after state with nothing to measure it against.
                       Saying so beats letting Save quietly leave the row out. */}
                   {draft.after !== null && before === null && (
-                    <p className="w-full text-2xs leading-snug text-amber">
+                    <p className="w-full text-xs leading-snug text-amber">
                       Enter the rank going into this game too — there is no earlier reading to
                       measure the change against.
                     </p>
@@ -375,7 +375,7 @@ export function LpEditorPage({
               Discard changes
             </button>
           )}
-          {error && <p className="text-2xs leading-snug text-red">{error}</p>}
+          {error && <p className="text-xs leading-snug text-red">{error}</p>}
           <span className="ml-auto text-2xs text-text-mute">
             {outstanding} game{outstanding === 1 ? '' : 's'} without LP
           </span>

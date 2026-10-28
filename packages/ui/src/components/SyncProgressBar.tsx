@@ -17,7 +17,7 @@ export function SyncProgressBar({
 
   if (progress.phase === 'error') {
     return (
-      <div className="mt-3 flex items-start gap-2 rounded-md border border-red/40 bg-red/10 px-2.5 py-2 text-2xs leading-snug text-red">
+      <div className="mt-3 flex items-start gap-2 rounded-md border border-red/40 bg-red/10 px-2.5 py-2 text-xs leading-snug text-red">
         <Icon.Warning width={13} height={13} className="mt-px shrink-0" />
         <span>Sync failed: {progress.message ?? 'unknown error'}</span>
       </div>
@@ -39,7 +39,7 @@ export function SyncProgressBar({
       </div>
       <Bar fraction={pct / 100} tone="accent-solid" className="mt-1.5" />
       {progress.phase === 'backfill' && progress.total > 25 && (
-        <p className="mt-1.5 text-[10px] leading-snug text-text-mute">
+        <p className="mt-1.5 text-xs leading-snug text-text-mute">
           About {minutesLeft} min left at the personal-key rate limit. You can keep using the app
           while it runs.
         </p>

@@ -180,7 +180,7 @@ export function CaptureSettings(): JSX.Element {
                     {validation.data.problems.map((problem) => (
                       <li
                         key={problem.kind}
-                        className="flex gap-2 text-2xs leading-relaxed text-amber"
+                        className="flex gap-2 text-xs leading-relaxed text-amber"
                       >
                         <Icon.Warning className="mt-px shrink-0" width={12} height={12} />
                         <span>{describeProblem(problem)}</span>
@@ -365,7 +365,7 @@ function ChoiceCards<T extends string>({
               'rounded-md border p-3 text-left transition disabled:cursor-not-allowed',
               value === option.value
                 ? 'border-accent-dim bg-accent/10'
-                : 'border-hairline bg-surface-2 hover:border-accent-dim/50'
+                : 'border-edge bg-surface-2 hover:border-accent-dim/50'
             )}
           >
             <span
@@ -373,7 +373,7 @@ function ChoiceCards<T extends string>({
             >
               {option.label}
             </span>
-            <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
+            <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">
               {option.hint}
             </span>
           </button>
@@ -649,7 +649,7 @@ function ObsPassword({
         <button
           type="button"
           onClick={() => clear.mutate()}
-          className="mt-2 text-2xs text-text-mute underline underline-offset-2 hover:text-red"
+          className="mt-2 text-xs text-text-mute underline underline-offset-2 hover:text-red"
         >
           Remove saved password
         </button>
@@ -711,7 +711,7 @@ function QueuePicker({
           </div>
         </div>
       ))}
-      <p className="mt-2.5 text-2xs leading-relaxed text-text-mute">
+      <p className="mt-2.5 text-xs leading-relaxed text-text-mute">
         “Other” covers League’s customs, Practice Tool and whatever rotating mode is running, so a
         new gamemode is not silently missed. It never overrides a queue you unticked above, and it
         does not record TFT.
@@ -785,7 +785,7 @@ function QualityPicker({
       </select>
 
       {managed && chosen && (
-        <p className="mt-2 text-2xs leading-relaxed text-text-mute">
+        <p className="mt-2 text-xs leading-relaxed text-text-mute">
           {chosen.nativeOnly && driver === 'obs'
             ? `OBS records this at ${chosen.height}p 60fps — following the display is Foxfire's recorder's alone.`
             : chosen.hint}
@@ -873,7 +873,7 @@ function Preview({
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <span className="block text-sm text-text">Preview</span>
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">
             A live frame of what would be recorded, straight from OBS.
           </span>
         </div>
@@ -887,7 +887,7 @@ function Preview({
           {frame ? (
             <img src={frame} alt="What OBS would capture" className="w-full" />
           ) : (
-            <p className="p-6 text-center text-2xs leading-relaxed text-text-mute">
+            <p className="p-6 text-center text-xs leading-relaxed text-text-mute">
               {managed
                 ? 'The capture source is created the first time a game is recorded, so there is nothing to preview yet.'
                 : 'No frame yet. Check OBS is running and the scene above is the one that captures the game.'}

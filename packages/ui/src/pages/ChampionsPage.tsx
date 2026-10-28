@@ -120,7 +120,7 @@ function Stat({
       <p className={clsx('text-sm tabular-nums', thin ? 'text-text-mute' : (tone ?? 'text-text'))}>
         {primary}
       </p>
-      <p className={clsx('text-2xs tabular-nums', thin ? 'text-text-mute/70' : 'text-text-mute')}>
+      <p className="text-2xs tabular-nums text-text-mute">
         {secondary}
       </p>
     </div>

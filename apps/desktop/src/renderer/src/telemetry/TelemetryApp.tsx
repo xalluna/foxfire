@@ -56,10 +56,10 @@ export function TelemetryApp(): JSX.Element {
               onClick={() => setEnabled.mutate(!data.enabled)}
               disabled={setEnabled.isPending}
               className={clsx(
-                'rounded-full border px-2.5 py-0.5 text-2xs font-medium transition',
+                'rounded-full border px-2.5 py-0.5 text-xs font-medium transition',
                 data.enabled
                   ? 'border-teal/30 bg-teal/10 text-teal hover:bg-teal/20'
-                  : 'border-hairline bg-surface text-text-mute hover:border-accent-dim hover:text-accent'
+                  : 'border-edge bg-surface text-text-mute hover:border-accent hover:text-accent'
               )}
             >
               {data.enabled ? 'Collecting' : 'Paused'}
@@ -72,7 +72,7 @@ export function TelemetryApp(): JSX.Element {
                 key={option.label}
                 onClick={() => setWindowMs(option.ms)}
                 className={clsx(
-                  'rounded-md px-2 py-1 text-2xs font-medium transition',
+                  'rounded-md px-2 py-1 text-xs font-medium transition',
                   windowMs === option.ms
                     ? 'bg-accent/15 text-accent'
                     : 'text-text-mute hover:bg-surface hover:text-text-dim'
@@ -90,7 +90,7 @@ export function TelemetryApp(): JSX.Element {
               key={entry.id}
               onClick={() => setTab(entry.id)}
               className={clsx(
-                'border-b-2 px-3 py-2 text-2xs font-medium transition',
+                'border-b-2 px-3 py-2 text-xs font-medium transition',
                 tab === entry.id
                   ? 'border-accent text-accent'
                   : 'border-transparent text-text-mute hover:text-text-dim'

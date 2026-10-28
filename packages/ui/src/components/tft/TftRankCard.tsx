@@ -49,8 +49,8 @@ export function PlacementSpread({ summary }: { summary: TftLadderSummary }): JSX
                   style={{ height: `${Math.max(count === 0 ? 0 : 8, (count / most) * 100)}%` }}
                 />
               </div>
-              <span className="text-[10px] tabular-nums text-text-mute">#{i + 1}</span>
-              <span className="text-[10px] font-medium tabular-nums text-text-dim">{count}</span>
+              <span className="text-2xs tabular-nums text-text-mute">#{i + 1}</span>
+              <span className="text-2xs font-medium tabular-nums text-text-dim">{count}</span>
             </div>
           )
         })}

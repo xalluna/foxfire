@@ -53,6 +53,8 @@ import {
 } from '../services/serverAdminService'
 import { chooseImportDatabase, importDatabase } from '../services/importService'
 import { getBackgroundSettings, setBackgroundSettings } from '../services/backgroundService'
+import { getDisplaySettings } from '../services/displayService'
+import { setZoom } from '../zoom'
 import { getLcuStatus } from '../lcu/watcher'
 import { syncTray } from '../tray'
 import {
@@ -133,6 +135,7 @@ import type {
   AdminUserQuery,
   BackgroundSettings,
   CaptureSettings,
+  DisplaySettings,
   EmailChange,
   ManualRankEdit,
   PageOptions,
@@ -396,6 +399,11 @@ export function registerIpcHandlers(): void {
     if (patch.lcuInstallPath !== undefined) forgetLiveClient()
     return next
   })
+
+  ipcMain.handle(CH.display.get, () => getDisplaySettings())
+  ipcMain.handle(CH.display.set, (_e, patch: Partial<DisplaySettings>) =>
+    patch.zoom === undefined ? getDisplaySettings() : setZoom(patch.zoom)
+  )
 
   ipcMain.handle(CH.capture.getSettings, () => getCaptureSettings())
   ipcMain.handle(CH.capture.setSettings, (_e, patch: Partial<CaptureSettings>) => {
