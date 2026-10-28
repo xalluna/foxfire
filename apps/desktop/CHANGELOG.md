@@ -86,6 +86,9 @@ record your games by itself, with no OBS to install.
   where it ended, and opens to show each one. A rank higher than any you have held this season stays
   out of the fold with its crest lit, and so does getting back to a rank you had been away from for
   a week or more. It is the same in League and TFT, Hyper Roll's colours included.
+- **The Champions page drops its subtitle.** The line under the heading that counted your synced
+  games and noted that remakes are left out is gone; the season and queue pickers beside it already
+  say what the table covers.
 
 ### Fixed
 
