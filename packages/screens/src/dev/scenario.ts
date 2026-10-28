@@ -4,7 +4,7 @@
  * The states below are not rare edge cases in this app: a personal Riot key
  * expires every 24 hours, so no-key and key-expired are part of ordinary use
  * and need to be as designed as the happy path. Some are the desktop's alone
- * (no-key, key-expired, not-live, no-obs); the fixture client answers the rest,
+ * (no-key, key-expired, not-live, no-obs, no-ffmpeg); the fixture client answers the rest,
  * and the desktop's mock builds on it for its own.
  */
 export type Scenario =
@@ -17,6 +17,9 @@ export type Scenario =
   | 'sync-error'
   | 'not-live'
   | 'no-obs'
+  // The native recorder in a build whose FFmpeg is missing — a dev checkout
+  // that never fetched it, or an install something deleted it from.
+  | 'no-ffmpeg'
   // Signed in to a Foxfire server; refused by one for being too old; and one
   // whose own Riot key has expired, which is the state a personal key reaches
   // every twenty-four hours and which nobody on this machine can fix.

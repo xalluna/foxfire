@@ -353,6 +353,72 @@ the window and the tray, and it is refused while a game is on or a recording is 
 it installs on the next quit. The Releases page stays the way in for a first install, which is why
 the repository is public.
 
+## How the desktop records
+
+From 0.17.0 there are two recorders, chosen in Settings › Game capture (`capture.driver`): OBS,
+driven over its websocket, and the native recorder, an FFmpeg the app ships and runs itself. A new
+install starts on native; an install that had capture set up before is pinned to OBS on first run
+(`pinCaptureDriver`). Both sit behind `Recorder` in `apps/desktop/src/main/capture/recorder.ts`, and
+`captureService.ts` decides when to record without knowing which one it is driving. The recorder that
+starts a game finishes it, so a switch mid-game applies after it. Everything outside the service reads
+only `CaptureStatus`.
+
+The native recorder is `main/capture/native`:
+
+- **Video is the game's window, not the screen** — FFmpeg's `gfxcapture` (Windows Graphics Capture,
+  FFmpeg 8.1+), matched by the executable and class in `capture/gameWindows.ts`, which OBS's own
+  setup reads too. NVENC takes the GPU frames as they are; every other encoder gets them converted on
+  the CPU, because FFmpeg's D3D11 scaler will not take gfxcapture's textures. NVENC converts with
+  BT.601 into limited range, and the stream is labelled to say so (`setparams`) — FFmpeg would
+  otherwise label it RGB.
+- **Audio is not FFmpeg's**: it cannot capture what Windows plays. A hidden page
+  (`renderer/capture-audio.html`, its own preload and in-memory session) takes loopback audio from a
+  display-media request main answers, mixes in the microphone, and hands main 20 ms chunks that go to
+  FFmpeg over a named pipe (`audioPipe.ts`). stdin is kept for the `q` that stops a recording, and
+  the pipe is closed with it: FFmpeg cannot act on a `q` while a thread of its is waiting on a read.
+  The PC's sound is asked for with echo cancellation, noise suppression and gain control all off,
+  as the mic is: asked for as plain `audio: true`, Chromium processes it like a call — mono, with
+  automatic gain pumping it under a limiter — and recordings sounded blown out.
+- **The audio never shares the capture's filtergraph.** FFmpeg runs a graph as one and asks it for
+  whichever output is furthest behind, which with live audio is the audio — so with both in one
+  `-filter_complex`, capture was asked for a frame only as audio came in: 64 a second from a 144 Hz
+  window, against 134 apart, and a third of a real game's file repeats. The capture is the complex
+  graph alone; the audio is filtered with `-af`.
+- **Every encoder hands frames straight back** (`-delay 0` for NVENC, `-async_depth 1` for AMF and
+  QSV, no B-frames). FFmpeg pauses whichever input runs 100 ms ahead of the slowest stream into the
+  file (`SCHEDULE_TOLERANCE`, compiled in), and an encoder's queue makes the video the slowest. The
+  paused audio is then read in a rush, all stamped with the moment it was read, and `aresample` cuts
+  and pads it to match: NVENC's default queue left a tenth of a second of silence every third of a
+  second. Check the audio for runs of exact zeros after changing an encoder's settings.
+- **The two are lined up on the wall clock** — audio stamped as it is read, video by the capture's
+  own frame times moved onto the wall clock by the smallest gap seen — and the file's zero is the
+  launch. `ffmpegArgs.ts` explains it. Do not drop `-copyts` or the `setpts`: without them FFmpeg
+  starts both streams at zero, and the audio leads by however long window capture took to deliver a
+  frame. And do not stamp video with the wall clock as frames pass: frames held up anywhere
+  downstream arrive in clumps, a clump shares one moment, and the `fps` filter keeps one of each.
+- **Count distinct frames, not frames**, when checking a recording's smoothness: the `fps` filter
+  writes exactly the preset's rate whatever capture delivered, repeating what it must.
+- **Capture runs at the display's rate** (`max_framerate` at least 240) and the `fps` filter takes the
+  preset's rate from it. Windows hands over a captured frame only on a refresh: capped at 60, a 144 Hz
+  monitor gives one every third refresh — 48 fps at best, 25–38 in a real game. Taking 60 from 144 is
+  smooth in count but judders, so the `…Display` presets record at the fastest monitor's own rate
+  (`displayRate.ts`); OBS has no such setting and records them at 60.
+- **Files are fragmented MP4**, named up front (`pending-<ms>.mp4` in the capture folder) and filed
+  like OBS's once FFmpeg exits. `recordingProtocol.ts` serves nothing but MP4 from that folder.
+- **The file ends with the game's window** — gfxcapture logs `Capture item closed`, and the recorder
+  sends the `q` itself — but the recording ends when the service ends it, as an OBS one does: the
+  finished file is held until `end()`. The window goes a few seconds before the client leaves
+  InProgress, and a recording reported finished in between would let the next poll arm the same game
+  again.
+
+**The FFmpeg is pinned**, by URL and SHA-256, in `apps/desktop/scripts/fetch-ffmpeg.mjs` — the LGPL
+win64 build from BtbN, no GPL encoders needed. `npm run fetch-ffmpeg -w @foxfire/desktop` puts it in
+`apps/desktop/resources/ffmpeg/` (gitignored), which a dev build reads and `extraResources` ships;
+`build:win` and the release workflow both run it, and the workflow caches it. BtbN prunes old
+autobuilds, so a pin eventually stops downloading: take the newest dated autobuild's
+`…-win64-lgpl-<ver>.zip` and its digest, and record a game with it before releasing. The fetch refuses
+a binary without `gfxcapture` or the encoders.
+
 ## How recordings reach YouTube
 
 A recording starts as an OBS file on one PC. From 0.14.0 it can go to YouTube, and from there be

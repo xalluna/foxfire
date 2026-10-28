@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { getBoolSetting, getSetting, setBoolSetting, setSetting } from '../db/repositories/appSettings.repo'
 import { getDb } from '../db'
 import { clearSecret, hasSecret, loadSecret, saveSecret } from '../security/keyStore'
-import type { CaptureAudio, CaptureSettings, ObsMode } from '@shared/types'
+import type { CaptureAudio, CaptureDriver, CaptureSettings, ObsMode } from '@shared/types'
 import { DEFAULT_CAPTURE_QUALITY, type CaptureQuality } from '@shared/captureQuality'
 
 /**
@@ -17,11 +17,13 @@ import { DEFAULT_CAPTURE_QUALITY, type CaptureQuality } from '@shared/captureQua
  */
 const KEY = {
   enabled: 'capture.enabled',
+  driver: 'capture.driver',
   mode: 'capture.mode',
   folder: 'capture.folder',
   queues: 'capture.queues',
   otherQueues: 'capture.otherQueues',
   audio: 'capture.audio',
+  micDevice: 'capture.micDevice',
   quality: 'capture.quality',
   softCap: 'capture.softCapBytes',
   obsHost: 'capture.obsHost',
@@ -83,6 +85,31 @@ export function pinLegacyCaptureFolder(): void {
 }
 
 /**
+ * Keeps an install that already records with OBS on OBS.
+ *
+ * The driver's default is native, resolved on every read like every other
+ * default here — so without this, the update that added native would have
+ * silently moved everybody who set OBS up onto a recorder they never chose,
+ * mid-season, with a different picture and different audio. Writing 'obs' down
+ * makes their choice explicit; they can still switch in settings.
+ *
+ * "Set up" is a `capture.enabled` row: written the first time the "Record my
+ * games" box is ticked, and never before. A genuinely new install has none and
+ * starts on native. Must run before anything reads the settings.
+ */
+export function pinCaptureDriver(): void {
+  const db = getDb()
+  if (getSetting(db, KEY.driver) !== null) return
+  if (getSetting(db, KEY.enabled) === null) return
+
+  setSetting(db, KEY.driver, 'obs')
+}
+
+function readDriver(raw: string | null): CaptureDriver {
+  return raw === 'obs' || raw === 'native' ? raw : 'native'
+}
+
+/**
  * An empty stored value means "cleared", not "empty string".
  *
  * Clearing a path writes '' rather than deleting the row, and `??` does not
@@ -115,11 +142,13 @@ export function getCaptureSettings(): CaptureSettings {
 
   return {
     enabled: getBoolSetting(db, KEY.enabled, false),
+    driver: readDriver(text(getSetting(db, KEY.driver))),
     mode: (text(getSetting(db, KEY.mode)) as ObsMode | null) ?? 'managed',
     folder: text(getSetting(db, KEY.folder)) ?? defaultFolder(),
     queues: readQueues(text(getSetting(db, KEY.queues))),
     otherQueues: getBoolSetting(db, KEY.otherQueues, false),
     audio: (text(getSetting(db, KEY.audio)) as CaptureAudio | null) ?? 'game',
+    micDeviceId: text(getSetting(db, KEY.micDevice)),
     quality:
       (text(getSetting(db, KEY.quality)) as CaptureQuality | null) ?? DEFAULT_CAPTURE_QUALITY,
     softCapBytes: readNumber(text(getSetting(db, KEY.softCap)), DEFAULT_SOFT_CAP),
@@ -140,11 +169,13 @@ export function setCaptureSettings(patch: Partial<CaptureSettings>): CaptureSett
   const db = getDb()
 
   if (patch.enabled !== undefined) setBoolSetting(db, KEY.enabled, patch.enabled)
+  if (patch.driver !== undefined) setSetting(db, KEY.driver, patch.driver)
   if (patch.mode !== undefined) setSetting(db, KEY.mode, patch.mode)
   if (patch.folder !== undefined) setSetting(db, KEY.folder, patch.folder ?? '')
   if (patch.queues !== undefined) setSetting(db, KEY.queues, JSON.stringify(patch.queues))
   if (patch.otherQueues !== undefined) setBoolSetting(db, KEY.otherQueues, patch.otherQueues)
   if (patch.audio !== undefined) setSetting(db, KEY.audio, patch.audio)
+  if (patch.micDeviceId !== undefined) setSetting(db, KEY.micDevice, patch.micDeviceId ?? '')
   if (patch.quality !== undefined) setSetting(db, KEY.quality, patch.quality)
   if (patch.softCapBytes !== undefined) setSetting(db, KEY.softCap, String(patch.softCapBytes))
   if (patch.obsHost !== undefined) setSetting(db, KEY.obsHost, patch.obsHost)

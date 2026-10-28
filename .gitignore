@@ -22,6 +22,10 @@ obj/
 # The web client's build, copied in for the server to host. Built, never edited.
 apps/server/src/Foxfire.Api/wwwroot/
 
+# The FFmpeg the native recorder runs, fetched by scripts/fetch-ffmpeg.mjs and
+# shipped beside the app by electron-builder. Pinned there, never committed.
+apps/desktop/resources/ffmpeg/
+
 # The changelog section the release workflow cuts out for a build: the Release
 # body, and the patch notes built into latest.yml. Written from CHANGELOG.md
 # every time, so a copy left behind by a local build is never worth committing.

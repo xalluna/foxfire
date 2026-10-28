@@ -57,6 +57,22 @@ export function isGameEndTransition(previous: string | null, next: string | null
 }
 
 /**
+ * Phases from which a game is about to start: in queue, accepting, picking,
+ * launching. TFT has no champion select and goes straight from the ready check
+ * to the game, so the queue itself counts.
+ *
+ * The client moves on to InProgress as the game launches — the start of the
+ * loading screen — and capture arms on that. Only noticed at the watcher's own
+ * pace, it could be ten seconds late, which a quick loading screen does not
+ * outlast: the game was already being played before capture knew about it.
+ */
+const PRE_GAME_PHASES = ['Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart'] as const
+
+export function isPreGamePhase(phase: string | null): boolean {
+  return phase !== null && (PRE_GAME_PHASES as readonly string[]).includes(phase)
+}
+
+/**
  * Phases during which an upload should leave the connection alone.
  *
  * From champ select until the game has finished reporting: a two-gigabyte

@@ -7,9 +7,10 @@ import {
   setRecordQuality,
   setVideoOutput
 } from './config'
-import { captureQualityOption, OBS_RECORD_QUALITY } from '@shared/captureQuality'
+import { captureQualityOption, OBS_RECORD_QUALITY, presetFps } from '@shared/captureQuality'
 import type { CaptureAudio, CaptureQuality } from '@shared/types'
 import type { GameId } from '@foxfire/core'
+import { GAME_WINDOWS, obsWindowSpec } from '../capture/gameWindows'
 
 /**
  * Managed mode: an OBS profile and scene collection this app owns outright.
@@ -45,24 +46,14 @@ const MIC_INPUT = `${OURS}Microphone`
 /**
  * One Game Capture for each game, each waiting for its own program's window.
  *
- * The two are different programs: League's game is `League of Legends.exe`,
- * and TFT's is Riot's own Unreal client. Both sit in the scene all the time,
- * and only the game being played has a window, so the other draws nothing —
- * which means the scene never depends on having been told which game is on.
- *
- * `window` is OBS's own spec, "title:class:executable". The game window, not
- * the League client: the client is a separate process, and capturing it would
- * record the post-game screen and nothing else.
+ * Both sit in the scene all the time, and only the game being played has a
+ * window, so the other draws nothing — which means the scene never depends on
+ * having been told which game is on. The windows themselves are shared with the
+ * native recorder; see capture/gameWindows.ts.
  */
 const GAME_SOURCES: Record<GameId, { input: string; window: string }> = {
-  lol: {
-    input: 'League of Legends',
-    window: 'League of Legends (TM) Client:RiotWindowClass:League of Legends.exe'
-  },
-  tft: {
-    input: 'Teamfight Tactics',
-    window: 'Teamfight Tactics:UnrealWindow:TFTClient-Win64-Shipping.exe'
-  }
+  lol: { input: 'League of Legends', window: obsWindowSpec(GAME_WINDOWS.lol) },
+  tft: { input: 'Teamfight Tactics', window: obsWindowSpec(GAME_WINDOWS.tft) }
 }
 
 /** What was selected before we switched, so it can be put back. */
@@ -181,7 +172,14 @@ function gameCaptureSettings(window: string): Record<string, unknown> {
     // game process, and that hook is a known cause of added latency in the game's
     // own output — intolerable in a game played on sound cues. Desktop audio is
     // captured passively off the output device instead, where nothing is hooked.
-    capture_audio: false
+    capture_audio: false,
+    // Fastest (3), not OBS's Normal. At Normal, Game Capture looks for the
+    // window every couple of seconds and, when its first hook is not ready,
+    // waits three more before trying again: OBS's own log, on a real game,
+    // showed the picture arriving four and a half seconds after play began —
+    // the black start of every OBS recording. The window is up for the whole
+    // loading screen, and at this rate the hook is in before the game starts.
+    hook_rate: 3
   }
 }
 
@@ -289,8 +287,10 @@ export async function enterManagedMode(
     // Re-applied every time rather than only when the profile is built. A
     // profile made by an earlier version keeps whatever it was born with, so a
     // setting changed in this app would otherwise never reach OBS.
-    const { width, height, fps } = captureQualityOption(quality)
-    await setVideoOutput(width, height, fps)
+    // A preset that follows the display is the native recorder's alone; OBS
+    // records it at 60, at its resolution.
+    const option = captureQualityOption(quality)
+    await setVideoOutput(option.width, option.height, presetFps(option, 60))
     await setRecordQuality(OBS_RECORD_QUALITY)
 
     await applyManagedAudio(audio)

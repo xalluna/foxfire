@@ -112,6 +112,8 @@ import {
   setObsPassword
 } from '../services/captureSettings'
 import { getCaptureStatus, refreshCapture } from '../capture/captureService'
+import { nativeRecorder } from '../capture/native/nativeRecorder'
+import { listMicrophones } from '../capture/native/audioCapture'
 import {
   forgetRecording,
   getDiskUsage,
@@ -398,11 +400,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.capture.getSettings, () => getCaptureSettings())
   ipcMain.handle(CH.capture.setSettings, (_e, patch: Partial<CaptureSettings>) => {
     const next = setCaptureSettings(patch)
-    // Switching capture on has to start OBS and the websocket client, which the
+    // Switching capture on, or switching recorder, has to start one — OBS and
+    // its websocket client, or the native recorder's encoder check — which the
     // settings service deliberately knows nothing about.
     refreshCapture()
     return next
   })
+  // Asked fresh every time: the settings screen is where somebody looks after
+  // updating a GPU driver, and a remembered answer would tell them nothing changed.
+  ipcMain.handle(CH.capture.nativeCheck, () => nativeRecorder.recheck())
+  ipcMain.handle(CH.capture.listMicrophones, () => listMicrophones())
   ipcMain.handle(CH.capture.setObsPassword, (_e, password: string) => {
     const next = setObsPassword(password)
     // The old password is what the live connection authenticated with, so it

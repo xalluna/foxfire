@@ -11,7 +11,7 @@ import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry
 import { LADDERS, queueTypeForQueueId, type GameId } from '@foxfire/core'
 import type { LcuStatus } from '@shared/types'
 import { discoverLcu, type LcuCredentials } from './discovery'
-import { isGameEndTransition, isPlayingPhase } from './gameflow'
+import { isGameEndTransition, isPlayingPhase, isPreGamePhase } from './gameflow'
 import { setGameflowPhase } from './phase'
 import { readingsFromRankedStats, type LcuRankedQueue } from './rankedStats'
 import { isSettled, pendingReadingFor, type PendingRankReading } from './rankSettling'
@@ -44,7 +44,23 @@ const POLL_CONNECTED_MS = 10_000
  */
 const POLL_IDLE_MS = 30_000
 
+/**
+ * How often the phase alone is read, between ticks, while a game is about to
+ * start — see isPreGamePhase. One loopback request, and the difference between
+ * capture arming at the start of the loading screen and up to ten seconds into
+ * it, or after it, which is how the first five seconds of a Practice Tool game
+ * went unrecorded.
+ */
+const PRE_GAME_POLL_MS = 1_000
+
 let timer: NodeJS.Timeout | null = null
+let preGameTimer: NodeJS.Timeout | null = null
+
+/** The client and account the last tick followed, for the pre-game reads between ticks. */
+let followed: { creds: LcuCredentials; accountId: string } | null = null
+
+/** Set while trackGameflow runs, so the pre-game read and a tick never interleave in it. */
+let tracking = false
 let running = false
 let status: LcuStatus = { state: 'disconnected' }
 
@@ -162,9 +178,11 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
   }
 
   // The only signal capture gets that a game exists at all. Ten seconds is far
-  // too coarse to time a recording by, but arming does not need to be quick:
-  // the loading screen that follows lasts at least a minute, and the recording
-  // itself is started by the game answering on loopback.
+  // too coarse to time a recording by, and arming has to come before the game
+  // starts — a quick loading screen is over in less — so the moment a game is
+  // about to start, the phase is read every second between ticks
+  // (watchForGameStart). The recording itself is started by the game
+  // answering on loopback.
   inGame = isPlayingPhase(phase)
   onGamePhase(accountId, currentQueueId, inGame, { game: currentGame, gameId: currentGameId })
   setGameflowPhase(phase)
@@ -180,6 +198,50 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
   return ended
 }
 
+/** trackGameflow, unless the other caller of it is already inside. */
+async function trackGameflowOnce(creds: LcuCredentials, accountId: string): Promise<boolean> {
+  if (tracking) return false
+  tracking = true
+  try {
+    return await trackGameflow(creds, accountId)
+  } finally {
+    tracking = false
+  }
+}
+
+/**
+ * Reads the phase every second while a game is about to start, and hands the
+ * moment it starts to trackGameflow — which arms capture — rather than leaving
+ * it for the next tick. Only the phase: the rest of the tick, the account and
+ * the rank, can wait its ten seconds, and connected to a server some of it is
+ * a request to the server.
+ */
+function watchForGameStart(): void {
+  if (preGameTimer) {
+    clearTimeout(preGameTimer)
+    preGameTimer = null
+  }
+  if (!running || !followed || !isPreGamePhase(lastPhase)) return
+
+  preGameTimer = setTimeout(() => {
+    preGameTimer = null
+    void readPreGamePhase().finally(watchForGameStart)
+  }, PRE_GAME_POLL_MS)
+}
+
+async function readPreGamePhase(): Promise<void> {
+  const current = followed
+  if (!current) return
+  let phase: string | null
+  try {
+    phase = await lcuGet<string>(current.creds, '/lol-gameflow/v1/gameflow-phase')
+  } catch {
+    // The tick will say so if the client went away.
+    return
+  }
+  if (phase !== lastPhase) await trackGameflowOnce(current.creds, current.accountId)
+}
+
 /** Reads the phase for its own sake, for a client this app follows no account on. */
 async function publishPhaseOnly(creds: LcuCredentials): Promise<void> {
   try {
@@ -193,6 +255,7 @@ async function tick(): Promise<void> {
   const db = getDb()
 
   const creds = await discoverLcu(getSetting(db, LCU_PATH_SETTING))
+  followed = null
   if (!creds) {
     setStatus({ state: 'disconnected' })
     setGameflowPhase(null)
@@ -239,7 +302,8 @@ async function tick(): Promise<void> {
 
     // Read before the rank stats so the snapshot below can be forced when a
     // ranked game has just concluded.
-    const gameEnded = await trackGameflow(creds, account.id)
+    followed = { creds, accountId: account.id }
+    const gameEnded = await trackGameflowOnce(creds, account.id)
     // Again with the fresh phase. setStatus ignores an unchanged value, so the
     // repeat costs nothing on the many ticks where nothing moved.
     setStatus({ ...connected, inGame })
@@ -342,6 +406,7 @@ async function loop(): Promise<void> {
   if (!running) return
   await tick()
   if (!running) return
+  watchForGameStart()
   timer = setTimeout(
     () => void loop(),
     status.state === 'disconnected' ? POLL_IDLE_MS : POLL_CONNECTED_MS
@@ -360,6 +425,11 @@ export function stopLcuWatcher(): void {
     clearTimeout(timer)
     timer = null
   }
+  if (preGameTimer) {
+    clearTimeout(preGameTimer)
+    preGameTimer = null
+  }
+  followed = null
   // Only cleared on a full stop, never on a transient disconnect. A poll that
   // fails mid-game would otherwise forget it was in one, and the end-of-game
   // transition on the next tick — the one moment this exists to catch — would

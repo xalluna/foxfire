@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Icon } from '@foxfire/ui'
-import type { CaptureStatus } from '@shared/types'
+import type { CaptureDriver, CaptureStatus } from '@shared/types'
 
 /**
  * Whether capture is actually rolling, in the title bar.
@@ -42,9 +42,15 @@ function useCaptureStatus(): CaptureStatus | undefined {
  */
 export function CaptureIndicator(): JSX.Element | null {
   const status = useCaptureStatus()
+  // Only to say what is being connected to; the same query the settings page keeps current.
+  const settings = useQuery({
+    queryKey: ['capture'],
+    queryFn: () => window.api.capture.getSettings(),
+    staleTime: 30_000
+  })
   if (!status || status.state === 'off') return null
 
-  const { label, tone, dot } = describe(status)
+  const { label, tone, dot } = describe(status, settings.data?.driver ?? 'native')
 
   return (
     <span
@@ -60,7 +66,10 @@ export function CaptureIndicator(): JSX.Element | null {
   )
 }
 
-function describe(status: CaptureStatus): {
+function describe(
+  status: CaptureStatus,
+  driver: CaptureDriver
+): {
   label: string
   tone: string
   dot: JSX.Element | null
@@ -83,7 +92,11 @@ function describe(status: CaptureStatus): {
     case 'idle':
       return { label: 'Capture ready', tone: 'border-teal/30 bg-teal/10 text-teal', dot: null }
     case 'connecting':
-      return { label: 'Connecting to OBS', tone: 'border-hairline text-text-mute', dot: null }
+      return {
+        label: driver === 'obs' ? 'Connecting to OBS' : 'Getting capture ready',
+        tone: 'border-hairline text-text-mute',
+        dot: null
+      }
     default:
       return {
         label: 'Capture problem',

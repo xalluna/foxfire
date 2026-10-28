@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Never shown. The native recorder's audio comes from here: the PC's output
+      and the microphone, mixed, handed to main as raw samples. blob: is for the
+      AudioWorklet, which is loaded from a string — see captureAudio/main.ts.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' blob:;"
+    />
+    <title>Foxfire — capture audio</title>
+  </head>
+  <body>
+    <script type="module" src="/src/captureAudio/main.ts"></script>
+  </body>
+</html>
