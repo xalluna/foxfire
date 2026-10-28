@@ -12,6 +12,7 @@ import {
   ladderMovementFor,
   ladderPositionFor,
   laddersOf,
+  lastResetAt,
   resetsBetween,
   seasonAt,
   type GameId
@@ -390,6 +391,39 @@ export function getSnapshotBefore(
         LIMIT 1`
     )
     .get(accountId, queueType, beforeMs) as unknown as SnapshotRow | undefined
+
+  return row ? toSnapshot(row, seasons) : null
+}
+
+/**
+ * The highest reading since the ladder last reset, strictly before a moment, or
+ * null if that season has none before it.
+ *
+ * What the Rank page measures a new peak against, so a thirty-day view still
+ * knows what the player reached earlier in the season. Highest by ladder
+ * position, the later of a tie: exact for divisions and ratings, while Master,
+ * Grandmaster and Challenger share one scale and the most LP wins among them.
+ * The server's RankReads.PeakBeforeAsync answers the same way.
+ */
+export function getPeakBefore(
+  db: DatabaseSync,
+  accountId: number,
+  queueType: QueueType,
+  beforeMs: number,
+  seasons: Season[] = []
+): RankSnapshot | null {
+  const sinceMs = lastResetAt(seasons, beforeMs)
+  const row = db
+    .prepare(
+      `SELECT ${SNAPSHOT_COLUMNS}
+         FROM rank_snapshots
+        WHERE account_id = ? AND queue_type = ? AND captured_at < ?
+          AND (? IS NULL OR captured_at >= ?)
+          AND ladder_position IS NOT NULL
+        ORDER BY ladder_position DESC, captured_at DESC, id DESC
+        LIMIT 1`
+    )
+    .get(accountId, queueType, beforeMs, sinceMs, sinceMs) as unknown as SnapshotRow | undefined
 
   return row ? toSnapshot(row, seasons) : null
 }

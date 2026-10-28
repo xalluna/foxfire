@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { formatBytes, formatMs, formatUptime } from './format'
+import { formatBytes, formatDayRange, formatMs, formatUptime } from './format'
+
+describe('formatDayRange', () => {
+  // Local time, as the function reads it.
+  const at = (month: number, day: number, hour = 12): number => new Date(2026, month, day, hour).getTime()
+
+  it('says one day once', () => {
+    expect(formatDayRange(at(9, 4, 9), at(9, 4, 23))).toBe('Oct 4')
+  })
+
+  it('names the month once inside it, and both across two', () => {
+    expect(formatDayRange(at(9, 10), at(9, 18))).toBe('Oct 10 – 18')
+    expect(formatDayRange(at(8, 28), at(9, 3))).toBe('Sep 28 – Oct 3')
+  })
+
+  it('does not mistake the same month of another year for this one', () => {
+    expect(formatDayRange(new Date(2025, 9, 10).getTime(), at(9, 18))).toBe('Oct 10 – Oct 18')
+  })
+})
 
 describe('formatMs', () => {
   it('reads a duration at the scale it is at', () => {

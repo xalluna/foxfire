@@ -174,4 +174,25 @@ public static class RankedSeasons
 
         return false;
     }
+
+    /// <summary>
+    /// When the ladder last reset at or before a moment, or null when no recorded
+    /// boundary has.
+    ///
+    /// A reading taken at the reset's own instant is the first of the new ladder,
+    /// as <see cref="ResetsBetween"/> reads it, so "since the last reset" is
+    /// <c>&gt;=</c> this. Only a boundary that reset counts: rank carries through a
+    /// preseason, and so does whatever somebody reached before it.
+    /// </summary>
+    public static long? LastResetAt(IReadOnlyList<Season> seasons, long ms)
+    {
+        ArgumentNullException.ThrowIfNull(seasons);
+
+        for (var i = seasons.Count - 1; i >= 0; i--)
+        {
+            if (seasons[i].ResetsRank && seasons[i].StartsAt <= ms) return seasons[i].StartsAt;
+        }
+
+        return null;
+    }
 }

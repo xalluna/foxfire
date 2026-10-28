@@ -1,14 +1,22 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { format } from 'date-fns'
-import type { QueueType, RankHistory, RankMilestone, RankRange, RankSnapshot, Season } from '@foxfire/core'
-import { LADDERS, laddersOf, parseSeasonRange, rankNetChange, rankRangeCloses, seasonRange } from '@foxfire/core'
+import type { QueueType, RankHistory, RankRange, RankSnapshot, Season } from '@foxfire/core'
+import {
+  LADDERS,
+  laddersOf,
+  milestoneTimeline,
+  parseSeasonRange,
+  rankNetChange,
+  rankRangeCloses,
+  seasonRange
+} from '@foxfire/core'
 import { EmptyState } from '../components/EmptyState'
+import { MilestoneTimeline } from '../components/MilestoneTimeline'
 import { RankChart } from '../components/RankChart'
 import { Segmented } from '../components/Segmented'
 import { Skeleton } from '../components/Skeleton'
 import * as Icon from '../components/icons'
-import { queueLabel, ratedTierColor, ratedTierLabel, tierColor, tierCrest, tierLabel } from '../lib/rank'
+import { queueLabel, ratedTierLabel, tierLabel } from '../lib/rank'
 
 /** League's two ladders, which is what the page offers unless it is handed a game's own. */
 const LEAGUE_LADDERS: Array<[QueueType, string]> = laddersOf('lol').map((ladder) => [
@@ -20,13 +28,6 @@ const LEAGUE_LADDERS: Array<[QueueType, string]> = laddersOf('lol').map((ladder)
 function standing(reading: RankSnapshot, rated: boolean): string {
   if (rated) return `${ratedTierLabel(reading.ratedTier)} · ${(reading.ratedRating ?? 0).toLocaleString()} rating`
   return `${tierLabel(reading.tier, reading.rank)} · ${reading.leaguePoints ?? 0} LP`
-}
-
-/** What a milestone crossed into, and the colour it is said in. */
-function crossedInto(m: RankMilestone, rated: boolean): { label: string; color: string } {
-  return rated
-    ? { label: ratedTierLabel(m.ratedTier), color: ratedTierColor(m.ratedTier) }
-    : { label: tierLabel(m.tier, m.rank), color: tierColor(m.tier) }
 }
 
 /**
@@ -102,8 +103,11 @@ export function RankPage({
   const pastSeason = selected !== null && (periods ?? [])[0]?.id !== selected.id
 
   const snapshots = data?.snapshots ?? []
-  const milestones = data?.milestones ?? []
   const latest = snapshots[snapshots.length - 1]
+
+  // The milestones with the back-and-forth folded, and peaks and returns kept
+  // out of the folds — measured on this ladder, against this game's resets.
+  const timeline = data ? milestoneTimeline(data, queueType, seasons ?? []) : []
 
   // Counted from the reading before the period, so "30 days" includes the
   // month's first game and says what the profile's card says. Only meaningful
@@ -194,50 +198,14 @@ export function RankPage({
               Milestones
             </p>
 
-            {milestones.length === 0 ? (
+            {timeline.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-text-mute">
                 No tier or division changes in this period.
               </p>
             ) : (
-              <ul className="divide-y divide-hairline/60">
-                {milestones.map((m) => {
-                  // A rated tier has no crest, so it gets a swatch of its colour.
-                  const crest = rated ? null : tierCrest(m.tier)
-                  const promoted = m.movement === 'promotion'
-                  const into = crossedInto(m, rated)
-                  return (
-                    <li
-                      key={`${m.capturedAt}-${m.tier}-${m.rank}-${m.ratedTier ?? ''}`}
-                      className="flex items-center gap-3 px-4 py-2.5"
-                    >
-                      {crest ? (
-                        <img
-                          src={crest}
-                          alt=""
-                          className={clsx('h-7 w-7 object-contain', !promoted && 'opacity-50')}
-                        />
-                      ) : rated ? (
-                        <div className="flex h-7 w-7 items-center justify-center">
-                          <span
-                            className={clsx('h-3 w-3 rounded-full', !promoted && 'opacity-50')}
-                            style={{ backgroundColor: into.color }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="h-7 w-7" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm" style={{ color: into.color }}>
-                          {promoted ? 'Promoted to' : 'Demoted to'} {into.label}
-                        </p>
-                      </div>
-                      <p className="text-2xs tabular-nums text-text-mute">
-                        {format(m.capturedAt, 'MMM d, HH:mm')}
-                      </p>
-                    </li>
-                  )
-                })}
-              </ul>
+              // Keyed by ladder and range: a fold left open belongs to the
+              // milestones it was opened on.
+              <MilestoneTimeline key={`${queueType}-${range}`} entries={timeline} rated={rated} />
             )}
           </section>
         </>

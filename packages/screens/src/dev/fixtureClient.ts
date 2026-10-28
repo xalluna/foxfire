@@ -27,6 +27,7 @@ import type {
   QueueType,
   RankHistory,
   RankRange,
+  RankSnapshot,
   RankTrend,
   Season,
   SeasonInput,
@@ -40,6 +41,7 @@ import type {
 import {
   compareSearchResults,
   ladderMovementFor,
+  lastResetAt,
   pageOf,
   rankMovement,
   rankTrend,
@@ -142,6 +144,23 @@ function withRecording(accountId: string, match: MatchSummary): MatchSummary {
 
 function notifyEdited(accountId: string): void {
   for (const listener of editedListeners) listener(accountId)
+}
+
+/**
+ * The season's best reading before a range, as the servers answer
+ * `peakBefore`: highest ladder position since the last reset, the later of a
+ * tie. Null when the range has no start.
+ */
+function peakBeforeOf(series: RankSnapshot[], sinceMs: number | null, seasons: Season[]): RankSnapshot | null {
+  if (sinceMs === null) return null
+  const resetAt = lastResetAt(seasons, sinceMs)
+  let peak: RankSnapshot | null = null
+  for (const s of series) {
+    if (s.capturedAt >= sinceMs || (resetAt !== null && s.capturedAt < resetAt)) continue
+    if (s.ladderPosition === null) continue
+    if (peak === null || s.ladderPosition >= (peak.ladderPosition ?? 0)) peak = s
+  }
+  return peak
 }
 
 function accounts(): Account[] {
@@ -835,7 +854,8 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
               ]
             })
             .reverse()
-          return delay({ snapshots, milestones, before }, 280)
+          const peakBefore = peakBeforeOf(series, sinceMs, TFT_SEASONS)
+          return delay({ snapshots, milestones, before, peakBefore }, 280)
         },
 
         trend: (accountId: string, queueType: QueueType): Promise<RankTrend> => {
@@ -950,7 +970,8 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           })
           .reverse()
 
-        return delay({ snapshots, milestones, before }, 280)
+        const peakBefore = peakBeforeOf(series, sinceMs, DEV_SEASONS)
+        return delay({ snapshots, milestones, before, peakBefore }, 280)
       },
 
       // The whole series is handed over: the rule only looks backwards from
