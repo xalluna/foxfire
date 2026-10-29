@@ -148,7 +148,8 @@ export interface InsightsRiot {
 export interface InsightsSyncRun {
   accountId: string
   riotId: string | null
-  trigger: 'manual' | 'auto'
+  /** background is the server's timed sweep. */
+  trigger: 'manual' | 'auto' | 'background'
   kind: 'backfill' | 'delta' | 'unknown'
   outcome: 'ok' | 'partial' | 'failed'
   startedAt: number
@@ -165,6 +166,8 @@ export interface InsightsSync {
     runs: number
     manual: number
     auto: number
+    /** Runs the timed sweep started. Absent from a server older than it. */
+    background?: number
     failed: number
     /** Runs that stored some matches and missed others. */
     partial: number

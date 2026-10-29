@@ -431,6 +431,18 @@ export interface ServerAdminSettings {
    * starts, rather than learning it from a storage bill.
    */
   replayByteCap: number
+
+  /**
+   * Whether the server syncs every tracked account by itself, on a timer —
+   * what keeps the LP graph of somebody not running Foxfire accurate. Off
+   * unless an admin turns it on. Absent, with the two below, from a server
+   * older than the switch.
+   */
+  backgroundSync?: boolean
+  /** Minutes between the starts of two background sweeps. */
+  backgroundSyncMinutes?: number
+  /** A sweep leaves alone an account synced this many minutes ago or less. Always under the interval. */
+  backgroundSyncSkipMinutes?: number
 }
 
 /**

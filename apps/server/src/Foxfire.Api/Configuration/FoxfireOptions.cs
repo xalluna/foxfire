@@ -338,6 +338,28 @@ public sealed class TelemetryOptions
 }
 
 /// <summary>
+/// How this process takes part in syncing. Whether the server syncs everybody
+/// on a timer, and how often, is an admin's switch in Settings, not this — see
+/// Sync/BackgroundSyncs.cs.
+/// </summary>
+public sealed class SyncOptions
+{
+    public const string Section = "Sync";
+
+    /// <summary>
+    /// Whether this process runs the background sweep at all when an admin has
+    /// turned it on.
+    ///
+    /// On for every real server. Off is for the test suite, which starts dozens
+    /// of servers on one database: one test turning background sync on would
+    /// otherwise set every one of them sweeping everybody's accounts, through a
+    /// Riot client with no real key behind it. The sweep's tests drive it
+    /// themselves.
+    /// </summary>
+    public bool Background { get; set; } = true;
+}
+
+/// <summary>
 /// Checks the whole configuration at once, before anything starts.
 ///
 /// All of it, in one message, rather than failing on the first missing value and

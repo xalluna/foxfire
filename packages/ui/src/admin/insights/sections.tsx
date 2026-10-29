@@ -394,7 +394,19 @@ export function SyncTab({ data }: { data: InsightsSync }): JSX.Element {
         <Tile
           label="Runs"
           value={count(totals.runs)}
-          detail={`${count(totals.manual)} asked for · ${count(totals.auto)} automatic`}
+          detail={
+            // A line of its own: the tile cuts its line off at the edge, and
+            // the first one already reaches it with three-figure counts.
+            <>
+              {count(totals.manual)} asked for · {count(totals.auto)} automatic
+              {totals.background ? (
+                <>
+                  <br />
+                  {count(totals.background)} in the background
+                </>
+              ) : null}
+            </>
+          }
         />
         <Tile
           label="Failed"
@@ -481,7 +493,11 @@ export function SyncTab({ data }: { data: InsightsSync }): JSX.Element {
             header: 'Outcome',
             cell: (r) => <Chip tone={syncTone(r.outcome)}>{syncOutcome(r.outcome)}</Chip>
           },
-          { header: 'Kind', cell: (r) => `${r.kind}${r.trigger === 'manual' ? ', asked for' : ''}` },
+          {
+            header: 'Kind',
+            cell: (r) =>
+              `${r.kind}${r.trigger === 'manual' ? ', asked for' : r.trigger === 'background' ? ', background' : ''}`
+          },
           { header: 'When', cell: (r) => formatAge(r.startedAt) },
           { header: 'Took', numeric: true, cell: (r) => formatMs(r.durationMs) },
           {

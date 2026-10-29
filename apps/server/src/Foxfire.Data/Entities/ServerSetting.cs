@@ -81,6 +81,26 @@ public static class ServerSettingKeys
     public const string BackfillTarget = "sync.backfillTarget";
 
     /// <summary>
+    /// Whether the server syncs every tracked account by itself, on a timer.
+    /// "true" or "false".
+    ///
+    /// Off by default. It is what keeps the LP graph of somebody who is not
+    /// running Foxfire accurate, and it is also a few Riot requests per account
+    /// every sweep, from the one budget the whole server shares — a decision for
+    /// the host, like the backfill target, rather than one to inherit.
+    /// </summary>
+    public const string BackgroundSync = "sync.background";
+
+    /// <summary>Minutes between the starts of two background sweeps.</summary>
+    public const string BackgroundSyncMinutes = "sync.backgroundMinutes";
+
+    /// <summary>
+    /// Minutes since its last sync inside which a sweep leaves an account alone.
+    /// Always shorter than <see cref="BackgroundSyncMinutes"/>.
+    /// </summary>
+    public const string BackgroundSyncSkipMinutes = "sync.backgroundSkipMinutes";
+
+    /// <summary>
     /// How many bytes of blob storage replays may take. "0" means no cap.
     ///
     /// Uncapped by default, because a cap nobody chose is a cap that surprises

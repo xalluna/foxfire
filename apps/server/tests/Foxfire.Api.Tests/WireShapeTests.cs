@@ -330,6 +330,30 @@ public class WireShapeTests(FoxfireServerFixture server)
         Assert.Equal("auto", progress.GetProperty("trigger").GetString());
     }
 
+    /// <summary>
+    /// The clients know two triggers, and keep quiet for auto. A background
+    /// sweep is nobody watching either — and a value a desktop already
+    /// installed has never seen must not reach it, or it would draw a spinner
+    /// for every account every half hour.
+    /// </summary>
+    [Fact]
+    public void A_background_sync_goes_out_as_auto()
+    {
+        var protocol = server.Services.GetServices<IHubProtocol>().Single(p => p.Name == "json");
+        var output = new ArrayBufferWriter<byte>();
+
+        protocol.WriteMessage(
+            new InvocationMessage(
+                HubEvents.SyncProgress,
+                [new SyncProgressEvent(Guid.NewGuid(), SyncPhase.Delta, 1, 2, null, SyncTrigger.Background)]),
+            output);
+
+        var frame = Encoding.UTF8.GetString(output.WrittenSpan).TrimEnd('\u001e');
+        var progress = JsonDocument.Parse(frame).RootElement.GetProperty("arguments")[0];
+
+        Assert.Equal("auto", progress.GetProperty("trigger").GetString());
+    }
+
     [Fact]
     public async Task A_match_row_carries_every_field_the_row_component_draws()
     {

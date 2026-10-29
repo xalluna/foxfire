@@ -1,9 +1,15 @@
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Foxfire.Api.Services;
+
+/// <summary>Whether the server sweeps by itself, how often, and whom it leaves alone.</summary>
+/// <param name="Interval">Between the starts of two sweeps.</param>
+/// <param name="Skip">An account synced more recently than this is left alone.</param>
+public sealed record BackgroundSyncSettings(bool Enabled, TimeSpan Interval, TimeSpan Skip);
 
 /// <summary>
 /// The handful of switches an admin can change without a restart.
@@ -125,6 +131,47 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
         game == Foxfire.Core.Game.Tft
             ? GetTftBackfillTargetAsync(cancellationToken)
             : GetBackfillTargetAsync(cancellationToken);
+
+    /// <summary>Off unless somebody has turned it on. See <see cref="ServerSettingKeys.BackgroundSync"/>.</summary>
+    public const bool BackgroundSyncDefault = false;
+
+    public async Task<bool> IsBackgroundSyncEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.BackgroundSync, cancellationToken);
+        return raw is null ? BackgroundSyncDefault : raw == "true";
+    }
+
+    public Task SetBackgroundSyncAsync(bool enabled, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.BackgroundSync, enabled ? "true" : "false", cancellationToken);
+
+    public async Task<int> GetBackgroundSyncMinutesAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.BackgroundSyncMinutes, cancellationToken);
+        return int.TryParse(raw, out var value)
+            && value is >= BackgroundSyncRules.MinIntervalMinutes and <= BackgroundSyncRules.MaxIntervalMinutes
+                ? value
+                : BackgroundSyncRules.IntervalMinutesDefault;
+    }
+
+    public Task SetBackgroundSyncMinutesAsync(int minutes, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.BackgroundSyncMinutes, minutes.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    public async Task<int> GetBackgroundSyncSkipMinutesAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.BackgroundSyncSkipMinutes, cancellationToken);
+        return int.TryParse(raw, out var value) && value >= BackgroundSyncRules.MinSkipMinutes
+            ? value
+            : BackgroundSyncRules.SkipMinutesDefault;
+    }
+
+    public Task SetBackgroundSyncSkipMinutesAsync(int minutes, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.BackgroundSyncSkipMinutes, minutes.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    /// <summary>All three background sync switches, as the sweep reads them.</summary>
+    public async Task<BackgroundSyncSettings> GetBackgroundSyncAsync(CancellationToken cancellationToken = default) =>
+        new(await IsBackgroundSyncEnabledAsync(cancellationToken),
+            TimeSpan.FromMinutes(await GetBackgroundSyncMinutesAsync(cancellationToken)),
+            TimeSpan.FromMinutes(await GetBackgroundSyncSkipMinutesAsync(cancellationToken)));
 
     /// <summary>
     /// The attribution rule the stored LP figures were built under.

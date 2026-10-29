@@ -9,12 +9,18 @@ namespace Foxfire.Api.Features.ServerSettings;
 /// this is the request whose whole job is producing one.
 /// </remarks>
 /// <param name="PublicAccess">Whether anybody can read this server without signing in.</param>
+/// <param name="BackgroundSync">Whether the server syncs every tracked account by itself.</param>
+/// <param name="BackgroundSyncMinutes">Between the starts of two background sweeps.</param>
+/// <param name="BackgroundSyncSkipMinutes">A sweep leaves alone an account synced this recently.</param>
 public sealed record ServerSettingsResponse(
     bool PublicSignup,
     int BackfillTarget,
     long ReplayByteCap,
     int TftBackfillTarget,
-    bool PublicAccess)
+    bool PublicAccess,
+    bool BackgroundSync,
+    int BackgroundSyncMinutes,
+    int BackgroundSyncSkipMinutes)
 {
     /// <summary>
     /// Reads every switch, so the two handlers that answer with this cannot
@@ -27,7 +33,10 @@ public sealed record ServerSettingsResponse(
             await settings.GetBackfillTargetAsync(cancellationToken),
             await settings.GetReplayByteCapAsync(cancellationToken),
             await settings.GetTftBackfillTargetAsync(cancellationToken),
-            await settings.IsPublicAccessEnabledAsync(cancellationToken));
+            await settings.IsPublicAccessEnabledAsync(cancellationToken),
+            await settings.IsBackgroundSyncEnabledAsync(cancellationToken),
+            await settings.GetBackgroundSyncMinutesAsync(cancellationToken),
+            await settings.GetBackgroundSyncSkipMinutesAsync(cancellationToken));
 }
 
 /// <summary>What this server currently allows.</summary>

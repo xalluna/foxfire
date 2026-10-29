@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type {
   AdminActionResult,
@@ -9,7 +9,7 @@ import type {
 } from '@foxfire/core'
 import { inputClass } from '../components/settings/controls'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
-import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
+import { SettingsBlock, SettingsRow, StatusRow, ToggleRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
 import { ShowMoreButton } from '../components/ShowMore'
@@ -55,6 +55,15 @@ export interface ServerDataPageProps {
   /** Rejects with why not — the server keeps both between 1 and 1000. */
   onSaveBackfill?: (patch: { backfillTarget?: number; tftBackfillTarget?: number }) => Promise<void>
 
+  /**
+   * Whether the server syncs everybody on a timer, how often, and whom it
+   * leaves alone, in minutes. Undefined while the settings are loading, and
+   * from a server older than the switch.
+   */
+  backgroundSync?: { enabled: boolean; minutes: number; skipMinutes: number }
+  /** Rejects with why not — the window has to be shorter than the interval. */
+  onSaveBackgroundSync?: (patch: BackgroundSyncPatch) => Promise<void>
+
   /** The pages of the replay library fetched so far, biggest first. Undefined while the first loads. */
   replays: AdminReplay[] | undefined
   /** Whether there is another page of the library after `replays`. */
@@ -62,6 +71,13 @@ export interface ServerDataPageProps {
   loadingMoreReplays: boolean
   onShowMoreReplays: () => void
   onRemoveReplay: (matchId: string) => Promise<AdminActionResult>
+}
+
+/** The background sync switches one save changes — usually the one somebody touched. */
+export interface BackgroundSyncPatch {
+  backgroundSync?: boolean
+  backgroundSyncMinutes?: number
+  backgroundSyncSkipMinutes?: number
 }
 
 /**
@@ -90,6 +106,8 @@ export function ServerDataPage({
   onSaveReplayCap,
   backfill,
   onSaveBackfill,
+  backgroundSync,
+  onSaveBackgroundSync,
   replays,
   hasMoreReplays,
   loadingMoreReplays,
@@ -161,6 +179,9 @@ export function ServerDataPage({
         <StorageCard storage={storage} replayCap={replayCap} onSaveReplayCap={onSaveReplayCap} />
       )}
       {backfill && onSaveBackfill && <BackfillCard backfill={backfill} onSave={onSaveBackfill} />}
+      {backgroundSync && onSaveBackgroundSync && (
+        <BackgroundSyncCard settings={backgroundSync} onSave={onSaveBackgroundSync} />
+      )}
       <ReplayLibraryCard
         replays={replays}
         hasMore={hasMoreReplays}
@@ -353,12 +374,14 @@ function BackfillCard({
       <TargetRow
         label="League games"
         value={backfill.league}
+        unit="games"
         onSave={(games) => save({ backfillTarget: games })}
       />
       {backfill.tft !== undefined && (
         <TargetRow
           label="TFT games"
           value={backfill.tft}
+          unit="games"
           onSave={(games) => save({ tftBackfillTarget: games })}
         />
       )}
@@ -366,26 +389,99 @@ function BackfillCard({
   )
 }
 
-/** One game's backfill target, saved when the field is left or Enter is pressed. */
+/**
+ * Keeping everybody's history current without anybody asking.
+ *
+ * Off, an account syncs when its owner's Foxfire sees a game end, when
+ * somebody presses Sync now, or when another member's sync finds it in a
+ * game — so the LP graph of somebody who is not running Foxfire, or of an
+ * account nobody has claimed, stops between those. On, the server sweeps
+ * everybody itself. The copy is about the cost, because that is the decision:
+ * a few requests per account per game per sweep, from the budget every sync
+ * on the server shares.
+ */
+function BackgroundSyncCard({
+  settings,
+  onSave
+}: {
+  settings: { enabled: boolean; minutes: number; skipMinutes: number }
+  onSave: (patch: BackgroundSyncPatch) => Promise<void>
+}): JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+
+  // The switch moves when it is clicked rather than when the settings come
+  // back, and goes back if the save is refused.
+  const [pending, setPending] = useState<boolean | null>(null)
+  useEffect(() => setPending(null), [settings.enabled])
+
+  const save = (patch: BackgroundSyncPatch): Promise<void> =>
+    onSave(patch).then(
+      () => setError(null),
+      (err: unknown) => {
+        setPending(null)
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    )
+
+  return (
+    <SettingsCard
+      title="Background sync"
+      description={
+        'Keeps everybody’s match history and LP graph current, including members who are not running '
+        + 'Foxfire and accounts nobody has claimed. Each sweep is a few Riot requests for every account '
+        + 'and game, from the budget every sync on this server shares — they wait behind anybody searching '
+        + 'and every game that just ended.'
+      }
+    >
+      {error !== null && <StatusRow tone="error">{error}</StatusRow>}
+      <ToggleRow
+        label="Sync every account on a timer"
+        description="Off, an account syncs when its owner’s Foxfire sees a game end, when somebody presses Sync now, or when another member’s sync finds it in a game."
+        checked={pending ?? settings.enabled}
+        disabled={pending !== null}
+        onChange={(on) => {
+          setPending(on)
+          void save({ backgroundSync: on })
+        }}
+      />
+      <TargetRow
+        label="Sweep every"
+        value={settings.minutes}
+        unit="minutes"
+        onSave={(minutes) => save({ backgroundSyncMinutes: minutes })}
+      />
+      <TargetRow
+        label="Leave alone anybody synced in the last"
+        value={settings.skipMinutes}
+        unit="minutes"
+        onSave={(minutes) => save({ backgroundSyncSkipMinutes: minutes })}
+      />
+    </SettingsCard>
+  )
+}
+
+/** A whole number with its unit, saved when the field is left or Enter is pressed. */
 function TargetRow({
   label,
   value,
+  unit,
   onSave
 }: {
   label: string
   value: number
-  onSave: (games: number) => Promise<void>
+  unit: string
+  onSave: (value: number) => Promise<void>
 }): JSX.Element {
   const [draft, setDraft] = useState<string | null>(null)
   const shown = draft ?? String(value)
 
   function commit(): void {
-    const games = Number(shown.trim())
-    if (!Number.isInteger(games) || games === value) {
+    const next = Number(shown.trim())
+    if (!Number.isInteger(next) || next === value) {
       setDraft(null)
       return
     }
-    void onSave(games).then(() => setDraft(null))
+    void onSave(next).then(() => setDraft(null))
   }
 
   return (
@@ -404,7 +500,7 @@ function TargetRow({
             aria-label={label}
             className={clsx(inputClass, 'w-20 text-right tabular-nums')}
           />
-          <span className="text-sm text-text-mute">games</span>
+          <span className="text-sm text-text-mute">{unit}</span>
         </div>
       }
     />

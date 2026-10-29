@@ -15,11 +15,12 @@ namespace Foxfire.Api.Features.Sync;
 /// a backfill is minutes of Riot requests. Progress arrives over the hub.
 ///
 /// Open to any member, which is a deliberate exception to the rule that writes
-/// are the owner's. An account an admin added belongs to nobody, nothing on
-/// this server syncs on a timer, and the post-game ladder is armed by a desktop
-/// watching a League client that account has none of — so owner-only would mean
-/// its history froze on the day it was added. What stops that from being an
-/// open tap on the community's Riot key is <see cref="SyncCooldown"/>.
+/// are the owner's. An account an admin added belongs to nobody, nothing syncs
+/// it on a timer unless the host has turned background sync on
+/// (<see cref="BackgroundSyncs"/>), and the post-game ladder is armed by a
+/// desktop watching a League client that account has none of — so owner-only
+/// would mean its history froze on the day it was added. What stops that from
+/// being an open tap on the community's Riot key is <see cref="SyncCooldown"/>.
 /// </summary>
 public sealed record StartSyncRequest(Guid RiotAccountId, string? Game = null) : IEmptyDomainRequest;
 
