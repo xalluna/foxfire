@@ -318,6 +318,27 @@ The desktop's **Developer telemetry** is a different thing: this PC's own Riot c
 League client, in `telemetry.db`, never sent anywhere. The two share only the chart
 (`TimeSeriesChart` in `@foxfire/ui`).
 
+## Background sync
+
+Off unless an admin turns it on, on Data & storage. On, `Sync/BackgroundSyncs.cs` sweeps every
+tracked account's League and TFT history by itself — every 30 minutes by default, leaving alone any
+synced in the last 15 (`sync.backgroundMinutes`, `sync.backgroundSkipMinutes`; the window is always
+shorter than the interval, or a sweep would skip everybody the last one reached). It exists for the
+accounts nothing else syncs: an owner not running Foxfire arms no post-game ladder, and an
+unclaimed account has nobody to press Sync now.
+
+- **The rules** are `BackgroundSyncRules` in `Foxfire.Core`: when a sweep is due, who is fresh, and
+  the order — stalest first, never-synced (a backfill) last.
+- **A sweep** goes one account at a time, and skips one whose sync is under way or whose post-game
+  ladder is waiting, and TFT while `TftAccess` says the key cannot reach it. Its runs are
+  `SyncTrigger.Background`, which is Riot's backfill queue and `background` in Insights — but
+  `auto` on the wire, because clients know only manual and auto (`SyncProgressEvent.Trigger`).
+- **One process sweeps**, under `SqlAppLock` like the email dispatcher, and the time of the last
+  sweep is the process's own; the skip window is what keeps a restart from asking Riot twice.
+- `Sync__Background=false` stops a process sweeping at all. It is the test fixture's, beside
+  `Telemetry__Persist=false`: one test turning the switch on would set every host sweeping the
+  shared database.
+
 ## Server email
 
 Optional, and off unless `Email__Provider` names a provider. Off, the server behaves as it always

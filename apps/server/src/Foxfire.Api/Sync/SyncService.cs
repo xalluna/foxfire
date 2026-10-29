@@ -180,7 +180,7 @@ public sealed partial class SyncService(
         finally
         {
             var elapsed = time.GetElapsedTime(started);
-            var triggerName = trigger == SyncTrigger.Manual ? "manual" : "auto";
+            var triggerName = TriggerName(trigger);
 
             metrics.SyncFinished(triggerName, run.Kind, outcome, elapsed, run.Stored, run.Failed);
             recent.Add(new SyncRunRecord(
@@ -224,6 +224,32 @@ public sealed partial class SyncService(
         _ => "Sync failed."
     };
 
+    /// <summary>
+    /// Which of Riot's queues a run's requests wait in.
+    ///
+    /// A backfill is background work however it was triggered: two hundred
+    /// requests out of a hundred every two minutes is the whole server's budget
+    /// for four minutes, and nobody else's search should stop for it. So is a
+    /// background sweep, which nobody asked for and nothing is waiting on.
+    /// </summary>
+    private static RiotRequestPriority PriorityFor(bool isBackfill, SyncTrigger trigger) =>
+        isBackfill
+            ? RiotRequestPriority.Backfill
+            : trigger switch
+            {
+                SyncTrigger.Manual => RiotRequestPriority.Interactive,
+                SyncTrigger.Background => RiotRequestPriority.Backfill,
+                _ => RiotRequestPriority.PostGame
+            };
+
+    /// <summary>The trigger as the insights page counts it.</summary>
+    private static string TriggerName(SyncTrigger trigger) => trigger switch
+    {
+        SyncTrigger.Manual => "manual",
+        SyncTrigger.Background => "background",
+        _ => "auto"
+    };
+
     private async Task<SyncResult> RunAsync(Guid riotAccountId, SyncTrigger trigger, SyncRunProgress run)
     {
         using var scope = scopes.CreateScope();
@@ -248,14 +274,7 @@ public sealed partial class SyncService(
         run.Kind = isBackfill ? "backfill" : "delta";
         run.RiotId = account.RiotId;
 
-        // A backfill is background work however it was triggered: two hundred
-        // requests out of a hundred every two minutes is the whole server's
-        // budget for four minutes, and nobody else's search should stop for it.
-        var priority = isBackfill
-            ? RiotRequestPriority.Backfill
-            : trigger == SyncTrigger.Manual
-                ? RiotRequestPriority.Interactive
-                : RiotRequestPriority.PostGame;
+        var priority = PriorityFor(isBackfill, trigger);
 
         log.LogInformation(
             "Sync started for {RiotId} ({Phase}, {Trigger})", account.RiotId, phase, trigger);

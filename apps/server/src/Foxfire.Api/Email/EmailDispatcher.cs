@@ -1,5 +1,4 @@
-using System.Data;
-using System.Data.Common;
+using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Telemetry;
 using Foxfire.Data;
@@ -23,9 +22,10 @@ namespace Foxfire.Api.Email;
 /// One process sends at a time. The old and new processes of a deploy overlap
 /// for a moment, and two dispatchers counting the same day separately would
 /// each think there was room for the last message. So a round starts by taking
-/// an application lock in SQL Server; a process that cannot have it sits the
-/// round out. The lock is on the session, and the session is this round's
-/// connection, so a process that dies lets go of it with the connection.
+/// an application lock in SQL Server (<see cref="SqlAppLock"/>); a process that
+/// cannot have it sits the round out. The lock is on the session, and the
+/// session is this round's connection, so a process that dies lets go of it
+/// with the connection.
 ///
 /// A message is claimed before it is sent — status sending, with a lease — so
 /// that a process that dies mid-send leaves something the next round can see.
@@ -152,7 +152,7 @@ public sealed class EmailDispatcher : BackgroundService
         try
         {
             var connection = db.Database.GetDbConnection();
-            if (!await TryLockAsync(connection, cancellationToken)) return false;
+            if (!await SqlAppLock.TryTakeAsync(connection, LockResource, cancellationToken)) return false;
 
             try
             {
@@ -160,7 +160,7 @@ public sealed class EmailDispatcher : BackgroundService
             }
             finally
             {
-                await ReleaseAsync(connection);
+                await SqlAppLock.ReleaseAsync(connection, LockResource, _log);
             }
         }
         finally
@@ -570,41 +570,6 @@ public sealed class EmailDispatcher : BackgroundService
         message.Status = status;
         message.Reason = reason;
         message.LeaseUntil = null;
-    }
-
-    private static async Task<bool> TryLockAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            "DECLARE @result int; "
-            + "EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', "
-            + "@LockOwner = 'Session', @LockTimeout = 0; "
-            + "SELECT @result;";
-
-        var resource = command.CreateParameter();
-        resource.ParameterName = "@resource";
-        resource.DbType = DbType.String;
-        resource.Value = LockResource;
-        command.Parameters.Add(resource);
-
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        return result is int granted && granted >= 0;
-    }
-
-    private async Task ReleaseAsync(DbConnection connection)
-    {
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"EXEC sp_releaseapplock @Resource = '{LockResource}', @LockOwner = 'Session';";
-            await command.ExecuteNonQueryAsync();
-        }
-        catch (DbException ex)
-        {
-            // The session going away releases it anyway, which is what closing
-            // the connection is about to do.
-            _log.LogDebug(ex, "Could not release the email dispatch lock explicitly");
-        }
     }
 
     /// <summary>The two windows as a round sees them, kept current as it sends.</summary>

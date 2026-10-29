@@ -23,7 +23,14 @@ public enum SyncTrigger
     Manual,
 
     /// <summary>A game ended, or the server decided by itself. No spinner.</summary>
-    Auto
+    Auto,
+
+    /// <summary>
+    /// The background sweep: nobody asked and nothing is waiting, so its
+    /// requests go last in Riot's queue. Never on the wire — clients know
+    /// manual and auto, and to them this is auto. See <see cref="SyncProgressEvent.Trigger"/>.
+    /// </summary>
+    Background
 }
 
 /// <summary>Which part of a sync the numbers describe.</summary>
@@ -72,7 +79,16 @@ public sealed record SyncProgressEvent(
     string? Message,
     SyncTrigger Trigger,
     DateTimeOffset? CooldownUntil = null,
-    string Game = "lol");
+    string Game = "lol")
+{
+    /// <summary>
+    /// Manual or auto, and nothing else. A client types the trigger as exactly
+    /// those two, and keeps quiet for auto; a background sweep is nothing
+    /// anybody is watching either, so it goes out as auto rather than as a value
+    /// a desktop already installed would not know what to do with.
+    /// </summary>
+    public SyncTrigger Trigger { get; } = Trigger == SyncTrigger.Background ? SyncTrigger.Auto : Trigger;
+}
 
 /// <summary>
 /// Everything this server tells the desktops connected to it.

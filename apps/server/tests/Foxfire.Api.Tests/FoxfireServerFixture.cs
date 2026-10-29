@@ -102,6 +102,11 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         // drive the store themselves; the last hour is in memory either way.
         Environment.SetEnvironmentVariable("Telemetry__Persist", "false");
 
+        // The same database again: a test that turns background sync on would
+        // set every host sweeping everybody's accounts, through a Riot client
+        // with no real key. BackgroundSyncTests drive the sweep themselves.
+        Environment.SetEnvironmentVariable("Sync__Background", "false");
+
         _factory = new WebApplicationFactory<Program>();
 
         // Force the host to build now rather than on first request, so a
@@ -314,7 +319,14 @@ public sealed record InviteInfo(
 
 public sealed record InvitePreview(bool Usable, string ServerName, string? Email, string Message);
 
-public sealed record ServerSettings(bool PublicSignup, int BackfillTarget, long ReplayByteCap, bool PublicAccess = false);
+public sealed record ServerSettings(
+    bool PublicSignup,
+    int BackfillTarget,
+    long ReplayByteCap,
+    bool PublicAccess = false,
+    bool BackgroundSync = false,
+    int BackgroundSyncMinutes = 0,
+    int BackgroundSyncSkipMinutes = 0);
 
 /// <summary>
 /// One server for the whole assembly.

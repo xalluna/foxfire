@@ -35,6 +35,7 @@ builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOpt
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
 builder.Services.Configure<LogOptions>(builder.Configuration.GetSection(LogOptions.Section));
+builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.Section));
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new();
 var riotOptions = builder.Configuration.GetSection(RiotOptions.Section).Get<RiotOptions>() ?? new();
@@ -227,6 +228,11 @@ builder.Services.AddScoped<ManualRankEditor>();
 builder.Services.AddSingleton<IServerEvents, SignalRServerEvents>();
 builder.Services.AddSingleton<SyncService>();
 builder.Services.AddSingleton<PostGameSyncScheduler>();
+
+// Everybody, on a timer, when an admin has turned it on — see Sync/BackgroundSyncs.cs.
+// A singleton the tests can drive, and the hosted service that keeps it going.
+builder.Services.AddSingleton<BackgroundSyncs>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundSyncs>());
 
 builder.Services.AddHttpClient(RiotClient.HttpClientName, http =>
 {

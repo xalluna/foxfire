@@ -7,7 +7,7 @@ using static Foxfire.Api.Features.Insights.InsightsShapes;
 namespace Foxfire.Api.Features.Insights;
 
 /// <summary>One sync run the server did recently.</summary>
-/// <param name="Trigger">manual or auto.</param>
+/// <param name="Trigger">manual, auto, or background for the timed sweep.</param>
 /// <param name="Kind">backfill, delta, or unknown for a run that failed before it could tell.</param>
 /// <param name="Outcome">ok, partial when some matches failed, or failed.</param>
 public sealed record InsightsSyncRun(
@@ -26,6 +26,7 @@ public sealed record InsightsSyncRun(
 /// <param name="Failed">Runs that threw.</param>
 /// <param name="Partial">Runs that stored some matches and missed others.</param>
 /// <param name="MatchesFailed">Matches runs could not fetch, retried by the next.</param>
+/// <param name="Background">Runs the timed sweep started — see <see cref="BackgroundSyncs"/>.</param>
 public sealed record InsightsSyncTotals(
     long Runs,
     long Manual,
@@ -35,7 +36,8 @@ public sealed record InsightsSyncTotals(
     long Stored,
     long MatchesFailed,
     double? P50Ms,
-    double? P95Ms);
+    double? P95Ms,
+    long Background);
 
 /// <param name="Running">Syncs under way.</param>
 /// <param name="PostGamePending">Accounts whose just-finished game is being waited for.</param>
@@ -99,7 +101,8 @@ internal sealed class GetInsightsSyncRequestHandler(
             Stored: (long)frame.Total(InsightMetrics.SyncMatches, d => At(d, 0) == "stored").Sum,
             MatchesFailed: (long)frame.Total(InsightMetrics.SyncMatches, d => At(d, 0) == "failed").Sum,
             P50Ms: Round(runs.Percentile(0.5)),
-            P95Ms: Round(runs.Percentile(0.95)));
+            P95Ms: Round(runs.Percentile(0.95)),
+            Background: frame.Total(InsightMetrics.SyncRuns, d => At(d, 0) == "background").Count);
 
         return new InsightsSyncResponse(
             Frame(frame, collector.StartedAt),

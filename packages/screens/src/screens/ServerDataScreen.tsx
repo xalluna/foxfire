@@ -97,6 +97,20 @@ export function ServerDataScreen(): JSX.Element {
         await client.admin.setSettings(patch)
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
       }}
+      backgroundSync={
+        // All three or none: a server older than the switch sends none of them.
+        settings.data?.backgroundSync !== undefined
+          ? {
+              enabled: settings.data.backgroundSync,
+              minutes: settings.data.backgroundSyncMinutes ?? 30,
+              skipMinutes: settings.data.backgroundSyncSkipMinutes ?? 15
+            }
+          : undefined
+      }
+      onSaveBackgroundSync={async (patch) => {
+        await client.admin.setSettings(patch)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
+      }}
       replays={replays.data === undefined ? undefined : pageItems(replays.data, (replay) => replay.matchId)}
       hasMoreReplays={replays.hasNextPage}
       loadingMoreReplays={replays.isFetchingNextPage}

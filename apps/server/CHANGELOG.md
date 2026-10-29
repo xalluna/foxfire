@@ -36,6 +36,17 @@ version 3 still, and a desktop from before TFT is served as it always was.
   account's history goes back is now set from the page, for League and TFT
   separately, where it used to be an API call. Both share the server's one
   Riot budget.
+- **Background sync, so everybody's LP graph stays true.** Data & storage has a
+  switch that has the server sync every account it tracks by itself — League
+  and TFT — every 30 minutes, leaving alone anybody synced in the last 15.
+  Until now an account synced only when its owner's Foxfire saw a game end,
+  somebody pressed Sync now, or another member's sync found it in a game, so a
+  member who wasn't running Foxfire, or an account nobody had claimed, had a
+  graph that went flat in between. Both timings can be changed, the second
+  always shorter than the first. It is off until an admin turns it on: each
+  sweep is a few Riot requests for every account, and they wait behind anybody
+  searching and every game that just ended. Insights › Sync counts its runs
+  separately.
 - **Charts you can read from the keyboard**, in the web client. Tab to a rank
   graph or an Insights chart, and the arrow keys step through its readings
   with the same tooltip the pointer shows; Home and End go to the first and the
@@ -242,6 +253,17 @@ version 3 still, and a desktop from before TFT is served as it always was.
   id list, the reading, the profile and whatever is new — and the account's own
   finished event refreshes its screens, so `lcu:rankChanged` is no longer raised
   for it.
+- Background sync is `Sync/BackgroundSyncs.cs`, a hosted service that reads
+  `sync.background`, `sync.backgroundMinutes` and `sync.backgroundSkipMinutes`
+  every minute. A sweep goes stalest history first and never-synced last, one
+  account at a time, and skips one whose sync is under way or whose post-game
+  ladder is waiting, and TFT altogether while the key cannot reach it. Its runs
+  are `SyncTrigger.Background`: Riot's backfill queue, and `background` in the
+  sync metrics and `InsightsSyncTotals.Background` — but `auto` on the wire,
+  since clients know only manual and auto. One process sweeps at a time, under
+  an `sp_getapplock` that the email dispatcher now takes through the same
+  `SqlAppLock`. `Sync__Background=false` keeps a process from sweeping at all,
+  which is the test fixture's: its hosts share one database.
 
 ## [0.5.1] — 2026-09-27
 

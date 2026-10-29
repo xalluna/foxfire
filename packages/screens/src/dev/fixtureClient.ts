@@ -639,7 +639,10 @@ let mockServerSettings: ServerAdminSettings = {
   publicAccess: false,
   backfillTarget: 200,
   tftBackfillTarget: 200,
-  replayByteCap: 0
+  replayByteCap: 0,
+  backgroundSync: false,
+  backgroundSyncMinutes: 30,
+  backgroundSyncSkipMinutes: 15
 }
 
 const DAY_MS = 24 * 3600_000
@@ -1358,7 +1361,20 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       getSettings: (): Promise<ServerAdminSettings> => delay(mockServerSettings, 180, false),
 
       setSettings: (patch: Partial<ServerAdminSettings>): Promise<ServerAdminSettings> => {
-        mockServerSettings = { ...mockServerSettings, ...patch }
+        const next = { ...mockServerSettings, ...patch }
+
+        // The one rule worth seeing refused in the harness, the way the
+        // server words it: a window as long as the interval skips everybody.
+        if ((next.backgroundSyncSkipMinutes ?? 15) >= (next.backgroundSyncMinutes ?? 30)) {
+          return Promise.reject(
+            new Error(
+              'Accounts synced recently are left alone for at least a minute and for less than the interval — '
+                + 'otherwise every other sweep would leave everybody alone.'
+            )
+          )
+        }
+
+        mockServerSettings = next
         return delay(mockServerSettings, 180, false)
       },
 

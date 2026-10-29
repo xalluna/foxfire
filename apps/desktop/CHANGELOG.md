@@ -86,6 +86,12 @@ record your games by itself, with no OBS to install.
 - **Server admins: open the server to anybody, and see what's been shared.** Settings › Invites has
   "Anyone can look without signing in", and a list of every shared profile with who shared it and
   when it runs out, to copy or withdraw.
+- **Server admins: background sync.** Settings › Data & storage can have the server sync every
+  account it tracks by itself — every 30 minutes, leaving alone anybody synced in the last 15 — so
+  the LP graph of somebody who isn't running Foxfire, or of an account nobody has claimed, no
+  longer goes flat between their games. Off until you turn it on, and both timings can be changed;
+  Server insights counts its runs on their own. Needs a server new enough to have it — on an older
+  one the card isn't there.
 
 ### Changed
 

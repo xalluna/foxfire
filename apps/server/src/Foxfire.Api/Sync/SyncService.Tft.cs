@@ -53,11 +53,7 @@ public sealed partial class SyncService
         run.Kind = isBackfill ? "backfill" : "delta";
         run.RiotId = account.RiotId;
 
-        var priority = isBackfill
-            ? RiotRequestPriority.Backfill
-            : trigger == SyncTrigger.Manual
-                ? RiotRequestPriority.Interactive
-                : RiotRequestPriority.PostGame;
+        var priority = PriorityFor(isBackfill, trigger);
 
         log.LogInformation("TFT sync started for {RiotId} ({Phase}, {Trigger})", account.RiotId, phase, trigger);
 
