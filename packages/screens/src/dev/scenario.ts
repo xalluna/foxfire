@@ -64,6 +64,13 @@ export type Scenario =
   // A server whose Riot key cannot reach TFT: every TFT page says so, and its
   // history is whatever was stored before.
   | 'tft-no-access'
+  // Nobody signed in. An open server, read by anybody with no sync, no LP and
+  // no downloads; a share link, which opens one profile and refuses the rest;
+  // and that link once it has run out. The web harness's alone — the desktop
+  // always signs in.
+  | 'public-signed-out'
+  | 'shared-link'
+  | 'shared-link-ended'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

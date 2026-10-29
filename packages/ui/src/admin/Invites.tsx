@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import clsx from 'clsx'
-import type { AdminActionResult, AdminInvite } from '@foxfire/core'
+import type { AdminActionResult, AdminInvite, ShareLink } from '@foxfire/core'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
 import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, inputClass, primaryButtonClass } from '../components/settings/controls'
@@ -37,16 +37,37 @@ export interface InvitesPageProps {
   mailEnabled?: boolean
   /** Emails an invite's link to its address — offered only where the invite says `canEmail`. */
   onEmailInvite?: (id: string) => Promise<AdminActionResult>
+
+  /**
+   * Whether anybody can read the server without signing in. Undefined from a
+   * server too old to have the switch, and then it is not offered.
+   */
+  publicAccess?: boolean
+  onSetPublicAccess: (on: boolean) => Promise<void>
+  /** The share links fetched so far that still open something, newest first. */
+  shareLinks: ShareLink[]
+  shareLinksLoading: boolean
+  hasMoreShareLinks: boolean
+  loadingMoreShareLinks: boolean
+  onShowMoreShareLinks: () => void
+  /** Copies a link. Absent where the server does not say where its web client is. */
+  onCopyShareLink?: (link: ShareLink) => void
+  onRevokeShareLink: (id: string) => Promise<AdminActionResult>
 }
 
 /**
- * How somebody gets an account on this server.
+ * How somebody gets an account on this server, and how somebody without one
+ * gets to look.
  *
  * The switch and the invite list are one page because they are one decision:
  * invites only matter while public sign-up is off, and turning it off is what
  * makes them the way in. Who is already here is the Members page — a server
  * with forty people on it should not make an admin scroll past all of them to
  * reach the box that sends an invite.
+ *
+ * Looking in is the same question asked of reading: open to anybody, or to
+ * members and whoever they have shared a profile with — and the shared links
+ * are listed so an admin can see what is out there and withdraw it.
  */
 export function InvitesPage({
   outstanding,
@@ -62,7 +83,16 @@ export function InvitesPage({
   onRevokeInvite,
   onCopy,
   mailEnabled = false,
-  onEmailInvite
+  onEmailInvite,
+  publicAccess,
+  onSetPublicAccess,
+  shareLinks,
+  shareLinksLoading,
+  hasMoreShareLinks,
+  loadingMoreShareLinks,
+  onShowMoreShareLinks,
+  onCopyShareLink,
+  onRevokeShareLink
 }: InvitesPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -117,6 +147,47 @@ export function InvitesPage({
         />
       </SettingsCard>
 
+      {/* Beside joining, and above the invites: both switches at the top, and
+          the shared links before a list of everybody who ever joined. */}
+      {publicAccess !== undefined && (
+        <SettingsCard title="Looking in">
+          <SettingsRow
+            label="Anyone can look without signing in"
+            description={
+              publicAccess
+                ? 'Anybody who knows this address can read every profile, game and rank here — but not sync, edit or download anything. Who claimed which account and what members attached stay hidden.'
+                : 'Only members can read this server, and whoever a member shares one profile with.'
+            }
+            control={
+              <button
+                type="button"
+                disabled={settingsLoading || busy}
+                className={ghostButtonClass}
+                onClick={() =>
+                  act(async () => {
+                    await onSetPublicAccess(!publicAccess)
+                    return { ok: true, error: null }
+                  })
+                }
+              >
+                {publicAccess ? 'Turn off' : 'Turn on'}
+              </button>
+            }
+          />
+        </SettingsCard>
+      )}
+
+      <SharedLinks
+        links={shareLinks}
+        loading={shareLinksLoading}
+        hasMore={hasMoreShareLinks}
+        loadingMore={loadingMoreShareLinks}
+        onShowMore={onShowMoreShareLinks}
+        onCopy={onCopyShareLink}
+        onRevoke={(id) => act(() => onRevokeShareLink(id))}
+        publicAccess={publicAccess ?? false}
+      />
+
       <Invites
         outstanding={outstanding}
         used={used}
@@ -133,6 +204,77 @@ export function InvitesPage({
         mailEnabled={mailEnabled}
       />
     </SettingsPage>
+  )
+}
+
+/**
+ * The profiles members have opened to somebody outside, while their links last.
+ *
+ * Every member may share, so this is where an admin sees what is out there —
+ * and takes back a link somebody should not have posted.
+ */
+function SharedLinks({
+  links,
+  loading,
+  hasMore,
+  loadingMore,
+  onShowMore,
+  onCopy,
+  onRevoke,
+  publicAccess
+}: {
+  links: ShareLink[]
+  loading: boolean
+  hasMore: boolean
+  loadingMore: boolean
+  onShowMore: () => void
+  onCopy?: (link: ShareLink) => void
+  onRevoke: (id: string) => void
+  publicAccess: boolean
+}): JSX.Element {
+  return (
+    <SettingsCard
+      title="Shared profiles"
+      description={
+        publicAccess
+          ? 'Every profile is open to anybody while looking in is on, so these only matter once it is off again.'
+          : 'Links members made to show one profile to somebody without an account. Each opens that profile, read-only, for a week.'
+      }
+    >
+      {loading && <SettingsRow label="Loading…" />}
+
+      {!loading && links.length === 0 && (
+        <SettingsBlock label="Open links">
+          <EmptyState
+            icon={<Icon.Link />}
+            title="Nobody has shared a profile"
+            description="A member's Share button on a profile makes one, and it shows up here until it runs out."
+          />
+        </SettingsBlock>
+      )}
+
+      {links.map((link) => (
+        <SettingsRow
+          key={link.id}
+          label={`${link.gameName}#${link.tagLine}`}
+          description={`Shared by ${link.createdBy ?? 'a member since deleted'} · Expires ${formatDate(link.expiresAt)}`}
+          control={
+            <>
+              {onCopy && (
+                <button type="button" className={ghostButtonClass} onClick={() => onCopy(link)}>
+                  Copy link
+                </button>
+              )}
+              <button type="button" className={ghostButtonClass} onClick={() => onRevoke(link.id)}>
+                Withdraw
+              </button>
+            </>
+          }
+        />
+      ))}
+
+      {hasMore && <ShowMoreButton variant="settings" onClick={onShowMore} loading={loadingMore} />}
+    </SettingsCard>
   )
 }
 

@@ -6,6 +6,7 @@ import { useShareLink } from '../client/useShareLink'
 import { recordingBlockedReason, withoutServerRecording } from '../match/matchMenu'
 import { useAccountByRiotId } from '../queries/accounts'
 import { queryKeys } from '../queries/keys'
+import { isRefused } from '../queries/queryClient'
 import { PlayerBackLink } from '../routes/PlayerBackLink'
 
 /** Whether a failed read was the server saying it has no such thing. */
@@ -40,8 +41,9 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
   const detail = useQuery({
     queryKey: queryKeys.matchDetail(matchId),
     queryFn: () => client.dashboard.matchDetail(matchId),
-    // A game the server has no record of is an answer, not a failure to retry.
-    retry: (count, error) => !isNotFound(error) && count < 1
+    // A game the server has no record of is an answer, not a failure to retry,
+    // and so is one it will not show somebody reading without an account.
+    retry: (count, error) => !isNotFound(error) && !isRefused(error) && count < 1
   })
 
   // As on the history: no server recording where nothing here can play it.
@@ -77,6 +79,7 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
       detailLoading={detail.isLoading}
       trackedPuuid={account?.puuid ?? null}
       notFound={notFound}
+      membersOnly={detail.isError && isRefused(detail.error)}
     />
   )
 }

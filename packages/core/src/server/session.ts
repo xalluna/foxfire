@@ -84,6 +84,25 @@ export interface ServerSessionOptions {
 
   /** The server refused this build outright. Carries the version it wants, when it named one. */
   onUpgradeRequired?(upgradeTo: string | null): void
+
+  /**
+   * Whether a request may go without anybody signed in, and with what.
+   *
+   * Asked only while nobody is. Null — and leaving it out, which is the
+   * desktop's case — means a request needs a session, as it always did: it
+   * renews first, and a refusal signs out. Anything else sends the request the
+   * way an outsider reading an open server or a share link would: no token,
+   * the link's token when there is one, and a 401 is only an answer, because
+   * there is no session to end.
+   */
+  outsider?(): { shareToken: string | null } | null
+
+  /**
+   * One of those requests was refused. Its `code` says whether the share link
+   * stopped working — `share_link_expired`, `_withdrawn`, `_invalid` — or only
+   * does not reach this far (`not_shared`), which is the page's to say.
+   */
+  onOutsiderRefused?(error: ServerError): void
 }
 
 /** One signed-in presence on one server. */
@@ -398,6 +417,18 @@ export function createServerSession(options: ServerSessionOptions): ServerSessio
     },
 
     async request<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+      const outsider = current === null ? options.outsider?.() : null
+
+      if (outsider) {
+        try {
+          return await transport.request<T>(`${basePath}${path}`, { ...init, shareToken: outsider.shareToken })
+        } catch (err) {
+          upgradeRequired(err)
+          if (err instanceof ServerError && err.isUnauthorized) options.onOutsiderRefused?.(err)
+          throw err
+        }
+      }
+
       // Outside the retry: a renewal the server refused has already signed this
       // session out, and asking again would only be told the same thing.
       const token = await accessToken()

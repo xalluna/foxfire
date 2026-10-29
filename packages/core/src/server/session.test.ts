@@ -431,4 +431,78 @@ describe('createServerSession', () => {
     expect(server.calls.map((call) => call.path)).toContain('/auth/refresh')
     expect(server.calls.at(-1)?.headers.Authorization).toBe('Bearer a-2')
   })
+
+  it('reads as an outsider while nobody is signed in: no token, the link, and no signing out', async () => {
+    const signedOut = vi.fn()
+    const refused = vi.fn()
+    const server = fakeServer({
+      'GET /riot-accounts/a1/dashboard': [json({ ok: true })],
+      'GET /riot-accounts/b2/dashboard': [json({ error: 'share_link_expired', message: 'This link has expired.' }, 401)]
+    })
+
+    const s = createServerSession({
+      baseUrl: 'https://fox.example',
+      identity: { kind: 'web', apiVersion: 3 },
+      tokenTransport: 'cookie',
+      outsider: () => ({ shareToken: 'link-token' }),
+      onSignedOut: signedOut,
+      onOutsiderRefused: refused,
+      fetch: server.fetch
+    })
+
+    await expect(s.request('/riot-accounts/a1/dashboard')).resolves.toEqual({ ok: true })
+    await expect(s.request('/riot-accounts/b2/dashboard')).rejects.toMatchObject({ status: 401 })
+
+    // Straight to the route each time: nothing to renew, and a refusal is an
+    // answer about this profile rather than the end of a session.
+    expect(server.calls.map((call) => call.path)).toEqual([
+      '/riot-accounts/a1/dashboard',
+      '/riot-accounts/b2/dashboard'
+    ])
+    expect(server.calls.map((call) => call.headers.Authorization)).toEqual([undefined, undefined])
+    expect(server.calls.map((call) => call.headers['X-Foxfire-Share'])).toEqual(['link-token', 'link-token'])
+    expect(signedOut).not.toHaveBeenCalled()
+
+    // And the page is told which way the link failed, to say so.
+    expect(refused).toHaveBeenCalledTimes(1)
+    expect(refused.mock.calls[0][0]).toMatchObject({ status: 401, code: 'share_link_expired' })
+  })
+
+  it('is a member again the moment somebody signs in, whatever link it was carrying', async () => {
+    const server = fakeServer({
+      'POST /auth/login': [json(session('a-1', 15 * 60_000))],
+      'GET /seasons': [json([])]
+    })
+
+    const s = createServerSession({
+      baseUrl: 'https://fox.example',
+      identity: DESKTOP,
+      tokenTransport: 'body',
+      store: memoryStore(null),
+      outsider: () => ({ shareToken: 'link-token' }),
+      fetch: server.fetch
+    })
+
+    await s.login({ email: 'faker@example.com', password: 'correct horse battery' })
+    await s.request('/seasons')
+
+    const seasons = server.calls.find((call) => call.path === '/seasons')
+    expect(seasons?.headers.Authorization).toBe('Bearer a-1')
+    expect(seasons?.headers['X-Foxfire-Share']).toBeUndefined()
+  })
+
+  it('still needs a session when the page has not said it may read without one', async () => {
+    const server = fakeServer({ 'POST /auth/refresh': [json({ error: 'unauthorized' }, 401)] })
+
+    const s = createServerSession({
+      baseUrl: 'https://fox.example',
+      identity: { kind: 'web', apiVersion: 3 },
+      tokenTransport: 'cookie',
+      outsider: () => null,
+      fetch: server.fetch
+    })
+
+    await expect(s.request('/seasons')).rejects.toMatchObject({ status: 401 })
+    expect(server.calls.map((call) => call.path)).toEqual(['/auth/refresh'])
+  })
 })

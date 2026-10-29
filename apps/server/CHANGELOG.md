@@ -43,6 +43,27 @@ version 3 still, and a desktop from before TFT is served as it always was.
 - **Right-click menus from the keyboard**, in the web client. The menu key or
   Shift+F10 on a match row opens its menu with focus inside it; the arrow keys
   walk it, and Escape or choosing an item puts you back on the row.
+- **A server anybody can read, if you want one.** Invites has a new switch,
+  "Anyone can look without signing in". On, the web client opens every profile,
+  game and rank page — and the search box — to whoever has the address, with a
+  Sign in button where your name would be. Off, which is how every server
+  starts, nothing has changed. Either way, somebody who is not signed in can't
+  sync, type LP, attach or download anything, isn't shown who claimed an
+  account or the YouTube recordings members attached, and never makes the
+  server call Riot.
+- **Sharing one profile with somebody outside.** On a server that isn't open,
+  Share takes Copy link's place on a profile: a link that opens it — League
+  and TFT, both rank pages, champions, and every game in its history — to
+  anybody, without an account, for a week. Nothing else on the server opens
+  with it: a teammate on a scoreboard, or a name typed into the address bar,
+  says it is for members. Sharing the same profile again within a day gives
+  back the same link, and whoever made a link can withdraw it from the same
+  dialog. A link that has expired or been withdrawn says exactly that —
+  whether it was opened that way or stopped working while the profile was
+  open — rather than asking whoever followed it to sign in.
+- **Shared profiles on the Invites page.** Admins see every link that still
+  opens something — whose profile, who shared it, when it runs out — and can
+  copy or withdraw any of them.
 
 ### Changed
 
@@ -102,6 +123,22 @@ version 3 still, and a desktop from before TFT is served as it always was.
 
 ### Under the hood
 
+- Reads have a policy of their own, `FoxfirePolicies.Reader`: a member, or
+  anybody while `access.public` is on, or a share link whose `ShareCoverage`
+  includes the route. Each read route says which with `AllowOutsiders`, and
+  every write is `RequireAuthorization()` on its own, so the route groups that
+  mixed the two are split. A share link's token travels in `X-Foxfire-Share`
+  and is checked against its row on every request; the request line records
+  the link's id, never its token.
+- Reads without a member are limited per address, at
+  `RateLimit__ReaderPerMinute` (120 by default); members are never counted.
+  The rate limiter now runs after authentication so it can tell them apart.
+  A rejection says "too many requests" rather than "too many attempts".
+- `/version` says `publicAccess`. Server settings carry it, cached for fifteen
+  seconds a process.
+- The `ShareLinks` table, migration `AddShareLinks`. Share tokens are signed
+  with a key derived from the invite key under a label of their own, so none
+  ever verifies as an invite or a reset.
 - Games are a first-class idea. `Foxfire.Core` has `Game` and the ladders of
   both — `RankedQueue` gains TFT's Ranked, Double Up and Hyper Roll, and Hyper
   Roll's rating has a scale of its own — kept in step with `@foxfire/core`'s

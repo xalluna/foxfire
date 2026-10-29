@@ -11,7 +11,7 @@ import {
 import { paths, playerSlug } from '@foxfire/core/routes'
 import { TftProfilePage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
-import { useIsHeadAdmin } from '../client/useConnection'
+import { useIsHeadAdmin, useViewer } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
 import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { TftLobbyPanel } from '../match/TftLobbyPanel'
@@ -20,6 +20,7 @@ import { useHomeAccount } from '../queries/accounts'
 import { useFavorites, useToggleFavorite } from '../queries/favorites'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
+import { useShareProfile } from '../queries/shareProfile'
 import { isSyncing, syncCooldownUntil, useSyncProgress } from '../store/syncProgress'
 import { tftRankQueueSearchFor } from '../routes/params'
 import { MoreLink } from './MoreLink'
@@ -63,6 +64,8 @@ export function TftProfileScreen({
 
   const recordings = useRecordingActions(account, 'tft')
   const isHeadAdmin = useIsHeadAdmin()
+  const { outsider, viaLink } = useViewer()
+  const shareProfile = useShareProfile(account, (token) => paths.tft(account, { share: token }))
 
   const progress = useSyncProgress(account.id, 'tft')
   const syncing = isSyncing(progress)
@@ -94,7 +97,7 @@ export function TftProfileScreen({
 
   const { available: canStar, isFavorite } = useFavorites()
   const toggleFavorite = useToggleFavorite()
-  const home = useHomeAccount()
+  const home = useHomeAccount({ enabled: !viaLink })
   const setHome = useMutation({
     mutationFn: () => client.accounts.setHome(account.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
@@ -136,7 +139,7 @@ export function TftProfileScreen({
           },
           ...recordings.actionsFor(match)
         },
-        { isMine: account.isMine, isHeadAdmin, ...recordings.menuContext }
+        { isMine: account.isMine, isHeadAdmin, ...recordings.menuContext, outsider }
       )
     })
   }
@@ -147,6 +150,7 @@ export function TftProfileScreen({
   return (
     <>
       {recordings.dialogs}
+      {shareProfile.dialog}
       <TftProfilePage
         account={dashboard.data?.account ?? account}
         leagueEntries={dashboard.data?.leagueEntries ?? []}
@@ -155,11 +159,17 @@ export function TftProfileScreen({
         tftAccess={dashboard.data?.tftAccess ?? 'unknown'}
         syncProgress={progress}
         syncing={syncing}
-        onSync={() => sync.mutate()}
+        onSync={outsider ? undefined : () => sync.mutate()}
         syncCooldownUntil={cooldownUntil}
-        onCopyProfileLink={share ? () => share(paths.tft(account, { queue: queueId ?? undefined })) : undefined}
+        // One or the other, as on League's profile: Share takes Copy link's place.
+        onCopyProfileLink={
+          share && !shareProfile.onShare
+            ? () => share(paths.tft(account, { queue: queueId ?? undefined }))
+            : undefined
+        }
+        onShareProfile={shareProfile.onShare}
         favorite={
-          canStar
+          canStar && !viaLink
             ? {
                 starred,
                 onToggle: () =>
@@ -170,11 +180,15 @@ export function TftProfileScreen({
               }
             : undefined
         }
-        home={{
-          isHome: home.data?.id === account.id,
-          onSetHome: () => setHome.mutate(),
-          where: platform.kind === 'web' ? 'this browser' : 'this PC'
-        }}
+        home={
+          viaLink
+            ? undefined
+            : {
+                isHome: home.data?.id === account.id,
+                onSetHome: () => setHome.mutate(),
+                where: platform.kind === 'web' ? 'this browser' : 'this PC'
+              }
+        }
         rankedTrend={rankedTrend.data}
         rankMore={(ladder) => (
           // That card's ladder, and no range: thirty days is where the Rank page opens.

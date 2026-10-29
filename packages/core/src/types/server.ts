@@ -41,6 +41,11 @@ export interface ServerProbe {
    */
   email: boolean | null
   /**
+   * Whether the server can be read without signing in. Null from a server
+   * older than the switch, and when it could not be reached.
+   */
+  publicAccess: boolean | null
+  /**
    * How this build stands against that server's stated range. Advisory only:
    * the server's allow list is a set rather than a range, so a version between
    * the minimum and the newest can still be absent from it. This decides what
@@ -73,6 +78,11 @@ export interface VersionInfo {
   publicUrl?: string
   /** Whether the server sends email. Absent from a server older than mail. */
   email?: boolean
+  /**
+   * Whether the server can be read without signing in. Absent from a server
+   * older than the switch, which means no.
+   */
+  publicAccess?: boolean
 }
 
 /** Who you are on a server, as the server says it. */
@@ -364,9 +374,50 @@ export interface AdminInvite {
   canEmail?: boolean
 }
 
+/**
+ * One profile, opened to whoever holds the link, for a week.
+ *
+ * What the member who shared it and the admins see. The link itself is the
+ * profile's own address with `?share=` and the token on it — see
+ * `paths.player` — so the same address works for a member and an outsider.
+ */
+export interface ShareLink {
+  id: string
+  riotAccountId: string
+  gameName: string
+  tagLine: string
+  /** Recomputed by the server each time, so copying it again gives the same link. */
+  token: string
+  createdAt: string
+  expiresAt: string
+  /** Who shared it. */
+  createdBy: string | null
+}
+
+/** Why a share link opens nothing. */
+export type ShareLinkEnd = 'expired' | 'withdrawn' | 'invalid'
+
+/** What somebody following a share link is told about it, before a page is built around it. */
+export interface ShareLinkOpen {
+  usable: boolean
+  /** Why not, when it is not — the server's words, for a person. */
+  message: string
+  /** Which way it failed, when it did. Absent from a server older than saying. */
+  reason?: ShareLinkEnd | null
+  riotAccountId: string | null
+  gameName: string | null
+  tagLine: string | null
+  expiresAt: string | null
+}
+
 /** The switches an admin can change while the server runs. */
 export interface ServerAdminSettings {
   publicSignup: boolean
+  /**
+   * Whether anybody can read the server without signing in. Absent from a
+   * server older than the switch, which never could.
+   */
+  publicAccess?: boolean
   backfillTarget: number
   /** How far back a new account's TFT goes, separately from League's. Absent from a server older than TFT. */
   tftBackfillTarget?: number

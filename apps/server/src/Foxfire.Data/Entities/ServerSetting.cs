@@ -53,6 +53,16 @@ public static class ServerSettingKeys
     public const string PublicSignup = "signup.public";
 
     /// <summary>
+    /// Whether anybody may read this server without signing in. "true" or "false".
+    ///
+    /// Off by default, the other way round from signup: a server that cannot be
+    /// read without an account is the one nobody is surprised by, and opening
+    /// every member's history to the internet is a decision somebody should
+    /// have made rather than inherited. Writes stay members-only either way.
+    /// </summary>
+    public const string PublicAccess = "access.public";
+
+    /// <summary>
     /// How many TFT matches to fetch when an account is first linked. League's
     /// <see cref="BackfillTarget"/> is its own, under the key it always had.
     /// </summary>

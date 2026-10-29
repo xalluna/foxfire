@@ -11,7 +11,8 @@ import type {
   InsightsSections,
   InsightsWindow,
   ServerLogEntry,
-  ServerLogQuery
+  ServerLogQuery,
+  ShareLink
 } from '@foxfire/core'
 import type {
   AdminReplay,
@@ -167,6 +168,10 @@ export interface Api {
     resendEmailConfirmation: () => Promise<AccountEmailResult>
     /** Stops a move to a new address that has not been confirmed. */
     cancelEmailChange: () => Promise<AccountEmailResult>
+    /** Opens a profile to somebody outside, for a week. The same link again within a day. */
+    createShareLink: (accountId: string) => Promise<ShareLink>
+    /** Withdraws a share link: your own, or anybody's for an admin. */
+    revokeShareLink: (id: string) => Promise<AdminActionResult>
     /** Null is local-only mode. Not the same as signing out: the credential stays. */
     setActive: (url: string | null) => Promise<ServerState>
     forget: (url: string) => Promise<ServerState>
@@ -209,6 +214,8 @@ export interface Api {
     sendTestEmail: (to: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
+    /** A page of the share links that still open something, newest first. */
+    shareLinks: (page?: PageOptions) => Promise<Page<ShareLink>>
     /** What the server is holding, for the Data & storage page. */
     storage: () => Promise<ServerStorageUsage>
     /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */

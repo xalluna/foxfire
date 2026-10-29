@@ -78,6 +78,14 @@ record your games by itself, with no OBS to install.
 - **Right-click menus from the keyboard.** The menu key or Shift+F10 on a match row opens its menu
   with focus inside it; the arrow keys walk it, and Escape or choosing an item puts you back on the
   row. An item that cannot be used yet can still be reached, so its reason is read out.
+- **Share a profile with somebody who isn't on your server.** Connected to a server, Share takes
+  Copy link's place on every profile: a link that opens that player's profile — League and TFT,
+  ranks, champions and games — in a browser, without an account, for a week. Withdraw it from the
+  same dialog. Nothing else on the server opens with it. On a server its admins have opened to
+  everybody, Copy link already reaches anyone, so it stays and Share isn't offered.
+- **Server admins: open the server to anybody, and see what's been shared.** Settings › Invites has
+  "Anyone can look without signing in", and a list of every shared profile with who shared it and
+  when it runs out, to copy or withdraw.
 
 ### Changed
 

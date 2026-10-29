@@ -103,11 +103,18 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 export const paths = {
   home: () => '/',
 
-  /** A profile, and optionally one of its games opened in the history. */
-  player: (player: PlayerRef, search: { queue?: number | null; match?: string } = {}) =>
+  /**
+   * A profile, and optionally one of its games opened in the history.
+   *
+   * With `share`, the link a member shares with somebody outside: the same
+   * address, carrying the share link's token, which the web client takes off
+   * the address as it opens it.
+   */
+  player: (player: PlayerRef, search: { queue?: number | null; match?: string; share?: string } = {}) =>
     withQuery(`/players/${segment(playerSlug(player))}`, {
       queue: search.queue === undefined ? undefined : queueParam(search.queue),
-      match: search.match
+      match: search.match,
+      share: search.share
     }),
 
   champions: (player: PlayerRef, search: { queue?: number | null; range?: RankRange } = {}) =>
@@ -122,11 +129,12 @@ export const paths = {
       range: search.range
     }),
 
-  /** A player's TFT profile, and optionally one of its games opened in the history. */
-  tft: (player: PlayerRef, search: { queue?: number | null; match?: string } = {}) =>
+  /** A player's TFT profile, and optionally one of its games opened in the history. `share` as for `player`. */
+  tft: (player: PlayerRef, search: { queue?: number | null; match?: string; share?: string } = {}) =>
     withQuery(`/players/${segment(playerSlug(player))}/tft`, {
       queue: search.queue === undefined ? undefined : queueParam(search.queue),
-      match: search.match
+      match: search.match,
+      share: search.share
     }),
 
   /** A player's TFT rank history. */

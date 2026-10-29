@@ -8,15 +8,17 @@ namespace Foxfire.Api.Features.ServerSettings;
 /// Declared here rather than beside the update, because both answer with it and
 /// this is the request whose whole job is producing one.
 /// </remarks>
+/// <param name="PublicAccess">Whether anybody can read this server without signing in.</param>
 public sealed record ServerSettingsResponse(
     bool PublicSignup,
     int BackfillTarget,
     long ReplayByteCap,
-    int TftBackfillTarget)
+    int TftBackfillTarget,
+    bool PublicAccess)
 {
     /// <summary>
-    /// Reads all three, so the two handlers that answer with this cannot drift
-    /// apart on what "all three" means.
+    /// Reads every switch, so the two handlers that answer with this cannot
+    /// drift apart on what "every" means.
     /// </summary>
     internal static async Task<ServerSettingsResponse> ReadAsync(
         ServerSettingsService settings,
@@ -24,7 +26,8 @@ public sealed record ServerSettingsResponse(
         new(await settings.IsPublicSignupEnabledAsync(cancellationToken),
             await settings.GetBackfillTargetAsync(cancellationToken),
             await settings.GetReplayByteCapAsync(cancellationToken),
-            await settings.GetTftBackfillTargetAsync(cancellationToken));
+            await settings.GetTftBackfillTargetAsync(cancellationToken),
+            await settings.IsPublicAccessEnabledAsync(cancellationToken));
 }
 
 /// <summary>What this server currently allows.</summary>

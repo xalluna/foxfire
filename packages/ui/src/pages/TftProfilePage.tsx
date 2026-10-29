@@ -38,9 +38,12 @@ export interface TftProfilePageProps {
   tftAccess: TftAccess
   syncProgress?: SyncProgressEvent
   syncing: boolean
-  onSync: () => void
+  /** Absent for somebody reading without signing in, who cannot sync. */
+  onSync?: () => void
   syncCooldownUntil: string | null
   onCopyProfileLink?: () => Promise<void> | void
+  /** Opens this profile to somebody outside. Absent where there is nobody it could add. */
+  onShareProfile?: () => void
   favorite?: FavoriteMark
   home?: HomeMark
 
@@ -92,6 +95,7 @@ export function TftProfilePage({
   onSync,
   syncCooldownUntil,
   onCopyProfileLink,
+  onShareProfile,
   favorite,
   home,
   rankedTrend,
@@ -150,6 +154,7 @@ export function TftProfilePage({
           cooldownUntil={syncCooldownUntil}
           progress={syncProgress}
           onCopyLink={onCopyProfileLink}
+          onShare={onShareProfile}
           favorite={favorite}
           home={home}
         />
@@ -168,6 +173,7 @@ export function TftProfilePage({
             cooldownUntil={syncCooldownUntil}
             progress={syncProgress}
             onCopyLink={onCopyProfileLink}
+            onShare={onShareProfile}
             favorite={favorite}
             home={home}
           />
@@ -198,7 +204,10 @@ export function TftProfilePage({
                     ? 'Sync is running — games will appear here as they arrive.'
                     : 'Pull this TFT history from Riot to see it here.'
               }
-              action={!syncing && <SyncButton onSync={onSync} syncing={false} cooldownUntil={syncCooldownUntil} />}
+              action={
+                !syncing &&
+                onSync && <SyncButton onSync={onSync} syncing={false} cooldownUntil={syncCooldownUntil} />
+              }
             />
           )}
 

@@ -11,11 +11,12 @@ namespace Foxfire.Api.Startup;
 /// <summary>
 /// Per-address limits on the routes worth abusing.
 ///
-/// Two, and only two. Signing in and registering, because a server reachable
-/// from the internet will have somebody trying passwords against it — Identity's
-/// lockout protects one account at a time, and this protects all of them from
-/// one address. And search, because every search is a live Riot call on the
-/// server's single key, shared by the whole community.
+/// Three. Signing in and registering, because a server reachable from the
+/// internet will have somebody trying passwords against it — Identity's lockout
+/// protects one account at a time, and this protects all of them from one
+/// address. Search, because it is a scan over every tracked account. And reads
+/// by outsiders — an open server's visitors, a share link's holder — because
+/// those are the requests nobody had to sign in to send.
 ///
 /// Everything else is unlimited: it is either authenticated and cheap, or a
 /// refresh, which no household should ever be able to trip by reloading tabs.
@@ -28,8 +29,11 @@ public static class RateLimits
     /// <summary>Signing in and registering.</summary>
     public const string Auth = "auth";
 
-    /// <summary>Looking somebody up through Riot.</summary>
+    /// <summary>Finding somebody this server tracks.</summary>
     public const string Search = "search";
+
+    /// <summary>Reading, by somebody who is not signed in. Members pass untouched.</summary>
+    public const string Reader = "reader";
 
     public static IServiceCollection AddFoxfireRateLimits(this IServiceCollection services)
     {
@@ -37,6 +41,14 @@ public static class RateLimits
         {
             options.AddPolicy(Auth, http => PerAddress(http, limits => limits.AuthPerMinute));
             options.AddPolicy(Search, http => PerAddress(http, limits => limits.SearchPerMinute));
+
+            // Decided by whether authentication found a member, which is why
+            // the limiter runs after it — see Program.cs. Before, a request
+            // carrying any Authorization header at all could have claimed to be
+            // one and walked past the limit.
+            options.AddPolicy(Reader, http => http.User.Identity?.IsAuthenticated == true
+                ? RateLimitPartition.GetNoLimiter("member")
+                : PerAddress(http, limits => limits.ReaderPerMinute));
 
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.OnRejected = async (context, cancellationToken) =>
@@ -65,7 +77,7 @@ public static class RateLimits
                     new
                     {
                         error = "rate_limited",
-                        message = $"Too many attempts from this address. Try again in {seconds} seconds."
+                        message = $"Too many requests from this address. Try again in {seconds} seconds."
                     },
                     cancellationToken);
             };

@@ -138,6 +138,11 @@ describe('paths', () => {
     expect(paths.tft(FAKER, { queue: 1160, match: 'KR_9' })).toBe('/players/Faker-KR1/tft?queue=1160&match=KR_9')
     expect(paths.tftRank(FAKER, { queue: 'double-up' })).toBe('/players/Faker-KR1/tft/rank?queue=double-up')
   })
+
+  it("puts a share link's token on the profile's own address", () => {
+    expect(paths.player(FAKER, { share: 'abc.def' })).toBe('/players/Faker-KR1?share=abc.def')
+    expect(paths.tft(FAKER, { share: 'abc.def' })).toBe('/players/Faker-KR1/tft?share=abc.def')
+  })
 })
 
 describe('gameOfPlayerPath', () => {

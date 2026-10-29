@@ -11,7 +11,7 @@ import {
 import { paths, playerSlug } from '@foxfire/core/routes'
 import { DashboardPage, type ContextMenuState, type MatchFocus } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
-import { useIsHeadAdmin } from '../client/useConnection'
+import { useIsHeadAdmin, useViewer } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
 import { matchContextItems, withoutServerRecording } from '../match/matchMenu'
 import { MatchDetailPanel } from '../match/MatchDetailPanel'
@@ -21,6 +21,7 @@ import { useChampionStats } from '../queries/championStats'
 import { useFavorites, useRefreshFavorites, useToggleFavorite } from '../queries/favorites'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
+import { useShareProfile } from '../queries/shareProfile'
 import { queueSearchFor, rankQueueSearchFor } from '../routes/params'
 import { isSyncing, syncCooldownUntil, useSyncProgress } from '../store/syncProgress'
 import { MoreLink } from './MoreLink'
@@ -76,6 +77,8 @@ export function DashboardScreen({
 
   const recordings = useRecordingActions(account)
   const isHeadAdmin = useIsHeadAdmin()
+  const { outsider, viaLink } = useViewer()
+  const shareProfile = useShareProfile(account, (token) => paths.player(account, { share: token }))
 
   const progress = useSyncProgress(account.id)
   const syncing = isSyncing(progress)
@@ -119,7 +122,7 @@ export function DashboardScreen({
   // server's: who you keep in the search box, and which profile opens first.
   const { available: canStar, isFavorite } = useFavorites()
   const toggleFavorite = useToggleFavorite()
-  const home = useHomeAccount()
+  const home = useHomeAccount({ enabled: !viaLink })
   const setHome = useMutation({
     mutationFn: () => client.accounts.setHome(account.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts() })
@@ -199,8 +202,9 @@ export function DashboardScreen({
         },
         // On a server the history is everybody's and the writes are not, so the
         // menu has to know whose account this is — and whether a head admin,
-        // who may type LP on it anyway, is the one asking.
-        { isMine: account.isMine, isHeadAdmin, ...recordings.menuContext }
+        // who may type LP on it anyway, or somebody signed out, who may write
+        // nothing, is the one asking.
+        { isMine: account.isMine, isHeadAdmin, ...recordings.menuContext, outsider }
       )
     })
   }
@@ -214,20 +218,24 @@ export function DashboardScreen({
   return (
     <>
       {recordings.dialogs}
+      {shareProfile.dialog}
       <DashboardPage
         account={dashboard.data?.account ?? account}
         leagueEntries={dashboard.data?.leagueEntries ?? []}
         syncProgress={progress}
         syncing={syncing}
-        onSync={() => sync.mutate()}
+        onSync={outsider ? undefined : () => sync.mutate()}
         syncCooldownUntil={cooldownUntil}
+        // One or the other: where Share is offered, a plain link would only
+        // reach members, so Share takes its place.
         onCopyProfileLink={
-          share
+          share && !shareProfile.onShare
             ? () => share(paths.player(account, { queue: queueId === DEFAULT_QUEUE_FILTER ? undefined : queueId }))
             : undefined
         }
+        onShareProfile={shareProfile.onShare}
         favorite={
-          canStar
+          canStar && !viaLink
             ? {
                 starred,
                 onToggle: () =>
@@ -241,11 +249,15 @@ export function DashboardScreen({
               }
             : undefined
         }
-        home={{
-          isHome: home.data?.id === account.id,
-          onSetHome: () => setHome.mutate(),
-          where: platform.kind === 'web' ? 'this browser' : 'this PC'
-        }}
+        home={
+          viaLink
+            ? undefined
+            : {
+                isHome: home.data?.id === account.id,
+                onSetHome: () => setHome.mutate(),
+                where: platform.kind === 'web' ? 'this browser' : 'this PC'
+              }
+        }
         soloTrend={soloTrend.data}
         rankMore={
           // Solo/Duo, and no range: thirty days is where the Rank page opens.

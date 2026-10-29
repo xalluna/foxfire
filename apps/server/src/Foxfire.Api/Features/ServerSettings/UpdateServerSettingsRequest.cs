@@ -15,14 +15,17 @@ namespace Foxfire.Api.Features.ServerSettings;
 /// <param name="BackfillTarget">Null leaves it alone.</param>
 /// <param name="ReplayByteCap">Null leaves it alone. Zero removes the cap.</param>
 /// <param name="TftBackfillTarget">Null leaves it alone.</param>
+/// <param name="PublicAccess">Null leaves it alone.</param>
 public sealed record UpdateServerSettingsRequest(
     bool? PublicSignup,
     int? BackfillTarget,
     long? ReplayByteCap,
-    int? TftBackfillTarget = null) : IValidatedRequest<ServerSettingsResponse>;
+    int? TftBackfillTarget = null,
+    bool? PublicAccess = null) : IValidatedRequest<ServerSettingsResponse>;
 
 internal sealed class UpdateServerSettingsRequestHandler(
     ServerSettingsService settings,
+    IIdentityContext me,
     ILogger<UpdateServerSettingsRequestHandler> logger)
     : IValidatedRequestHandler<UpdateServerSettingsRequest, ServerSettingsResponse>
 {
@@ -42,6 +45,15 @@ internal sealed class UpdateServerSettingsRequestHandler(
             await settings.SetPublicSignupAsync(publicSignup, cancellationToken);
             logger.LogInformation(
                 "Public signup is now {State}", publicSignup ? "open" : "closed — invites only");
+        }
+
+        if (request.PublicAccess is { } publicAccess)
+        {
+            await settings.SetPublicAccessAsync(publicAccess, cancellationToken);
+            logger.LogInformation(
+                "{Admin} made reading this server {State}",
+                me.Username,
+                publicAccess ? "open to anybody, signed in or not" : "members only");
         }
 
         if (request.BackfillTarget is { } target)

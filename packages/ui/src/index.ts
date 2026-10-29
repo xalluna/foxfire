@@ -27,6 +27,7 @@ export {
   type ContextMenuState
 } from './components/ContextMenu'
 export { CopyLinkButton } from './components/CopyLinkButton'
+export { ShareLinkDialog, ShareProfileButton, type ShareLinkView } from './components/ShareLinkDialog'
 export { ConfirmDialog, Dialog, DialogActions } from './components/Dialog'
 export { Disclaimer } from './components/Disclaimer'
 export { EmptyState } from './components/EmptyState'

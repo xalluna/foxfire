@@ -1,7 +1,9 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
+import { absoluteUrl, paths } from '@foxfire/core/routes'
 import { InvitesPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useConnection } from '../client/useConnection'
 import { useAccountEmail } from '../queries/accountEmail'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
@@ -9,11 +11,12 @@ import { nextOffset, pageItems } from '../queries/paging'
 /** Used invites per page. */
 const PAGE_SIZE = 50
 
-/** How somebody gets an account on the server you administer. */
+/** How somebody gets an account on the server you administer, and how somebody without one looks in. */
 export function InvitesScreen(): JSX.Element {
   const client = useClient()
   const platform = usePlatform()
   const queryClient = useQueryClient()
+  const publicUrl = useConnection()?.publicUrl ?? null
 
   // The open ones whole — they expire, so there are never many — and the used
   // ones, which are everybody who ever joined this way, a page at a time.
@@ -32,6 +35,14 @@ export function InvitesScreen(): JSX.Element {
   const settings = useQuery({
     queryKey: queryKeys.admin.settings(),
     queryFn: () => client.admin.getSettings()
+  })
+
+  // Any member may share, so how many are open grows with the community.
+  const shareLinks = useInfiniteQuery({
+    queryKey: queryKeys.admin.shareLinks(),
+    queryFn: ({ pageParam }) => client.admin.shareLinks({ limit: PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: nextOffset
   })
 
   // Whether the server sends mail is on every member's own address answer.
@@ -68,6 +79,21 @@ export function InvitesScreen(): JSX.Element {
       onCopy={(text) => void platform.copyText(text)}
       mailEnabled={mail.data?.mailEnabled ?? false}
       onEmailInvite={(id) => thenRefresh(client.admin.emailInvite(id))}
+      publicAccess={settings.data?.publicAccess}
+      onSetPublicAccess={async (on) => {
+        await thenRefresh(client.admin.setSettings({ publicAccess: on }))
+      }}
+      shareLinks={pageItems(shareLinks.data, (link) => link.id)}
+      shareLinksLoading={shareLinks.isPending}
+      hasMoreShareLinks={shareLinks.hasNextPage}
+      loadingMoreShareLinks={shareLinks.isFetchingNextPage}
+      onShowMoreShareLinks={() => void shareLinks.fetchNextPage()}
+      onCopyShareLink={
+        publicUrl
+          ? (link) => void platform.copyText(absoluteUrl(publicUrl, paths.player(link, { share: link.token })))
+          : undefined
+      }
+      onRevokeShareLink={(id) => thenRefresh(client.shares.revoke(id))}
     />
   )
 }

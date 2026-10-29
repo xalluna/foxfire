@@ -84,7 +84,8 @@ internal sealed class SearchPlayersRequestHandler(FoxfireDbContext db, IIdentity
             accounts = accounts.Where(a => a.OwnerId == userId);
         }
 
-        if (request.Claimed) accounts = accounts.Where(a => a.OwnerId != null);
+        // Not for an outsider, who is never told which accounts members claimed.
+        if (request.Claimed && me.UserId is not null) accounts = accounts.Where(a => a.OwnerId != null);
 
         if (needle.Length > 0)
         {

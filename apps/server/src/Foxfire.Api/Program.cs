@@ -167,6 +167,10 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+// Who may read: a member, anybody while the server is open, or a share link's
+// holder for the profile it opens. See Auth/ReaderAccess.cs.
+builder.Services.AddFoxfireReaderAccess();
+
 // One hub for everything the server pushes. The desktop holds a single
 // connection to a single active server, and every event on it is addressed
 // the same way, so splitting by concern would multiply connections without
@@ -333,13 +337,18 @@ app.UseForwardedHeaders();
 spa.UseFiles(app);
 
 app.UseRouting();
-app.UseRateLimiter();
 
 // Before authentication: a client this server does not speak to should be told
 // so, not handed an authentication failure it cannot act on.
 app.UseDesktopVersionGate();
 
 app.UseAuthentication();
+
+// After authentication, because the outsiders' limit is only for outsiders and
+// it is authentication that says who is a member. Checking a token's signature
+// is cheap enough to do before turning somebody away.
+app.UseRateLimiter();
+
 app.UseRequestLogContext();
 app.UseAuthorization();
 
@@ -364,6 +373,7 @@ api.MapDashboardEndpoints();
 api.MapRankEndpoints();
 api.MapTftEndpoints();
 api.MapSearchEndpoints();
+api.MapShareLinkEndpoints();
 api.MapReplayEndpoints();
 
 // Only in a build made with YouTube — see Foxfire.Core/BuildFeatures.cs. Without it

@@ -77,6 +77,46 @@ A server that has not been updated refuses a desktop newer than anything it know
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
 
+## Who can read a server
+
+Everything on a server is readable by every member — that has not changed — and two kinds of
+**outsider**, somebody with no member's token, can read too:
+
+- **Anybody, on an open server.** `access.public` in `ServerSettings`, off unless an admin turns it
+  on (Invites › "Anyone can look without signing in"), published as `publicAccess` on `/version`.
+- **Whoever holds a share link**, for one profile. Any member can make one (`POST /api/shares`); it
+  lasts `Auth__ShareLinkLifetime` (a week), sharing the same profile within a day hands back the
+  same link, and its creator or an admin withdraws it. The link is the profile's own address with
+  `?share=<token>`; the web client opens it once (`POST /api/shares/open`, token in the body), takes
+  it off the address before the router reads it, keeps it in the tab's session storage, and sends it
+  as `X-Foxfire-Share` on every request. The token is a `ShareToken` over a `ShareLinks` row, on a
+  key derived from the invite key, checked against its row every request.
+
+How the server decides, in `Foxfire.Api/Auth/ReaderAccess.cs`: a read route asks for
+`FoxfirePolicies.Reader` through **`AllowOutsiders(coverage)`**, which a member always passes, an
+outsider passes on an open server, and a share link passes only where the route's `ShareCoverage`
+says it reads that link's account — `Account` (the route's account id), `LeagueGame`/`TftGame` (a
+game it played), `Lookup` (its Riot ID) or `Reference` (seasons). **A new read route picks a
+coverage or leaves it out** — without one it is open on an open server and never to a link — and
+**every write stays `RequireAuthorization()`**. Outsiders' reads are limited per address at
+`RateLimit__ReaderPerMinute`; members are never counted, which is why `UseRateLimiter` runs after
+authentication.
+
+What an outsider is never given, decided in the handlers by there being no user: who claimed an
+account (`RiotAccountResponse.Describe`), a row's YouTube recording or shared replay
+(`Reads/OutsiderView`), and a Riot call (`GetMasteryRequest` serves what is stored). Nothing that
+writes, syncs, downloads, or reaches the hub. The shared screens follow suit through `useViewer`:
+an outsider is offered no Sync, LP, recording or download, and a 401 on a player or game is a
+"members only" page rather than an error. The desktop never reads as an outsider — it always signs
+in — but it can make share links, and offers Share only where `publicAccess` is off, in Copy link's
+place rather than beside it.
+
+A read refused to somebody carrying a link says why, in the 401's body (`ShareRefusalResults`):
+`share_link_expired`, `share_link_withdrawn`, `share_link_invalid`, or `not_shared` for a working
+link asked for something it does not open. Anybody else refused gets the bare 401 they always did.
+The web client takes the first three — at load, or from any read while the profile is open
+(`onOutsiderRefused` on the session) — to `/shared-link`, which says which, rather than to sign-in.
+
 ## Games
 
 Foxfire tracks two Riot titles on one Riot ID: League of Legends and Teamfight Tactics. A game is
@@ -146,8 +186,9 @@ history (`/api/riot-accounts/{id}/matches`), TFT's history
 (`/api/riot-accounts/{id}/tft/matches`), the members (`/api/admin/users`, searched on the
 server by `q`), used invites (`/api/admin/invites/used`), the replay library
 (`/api/admin/storage/replays`), the server's recent log lines (`/api/admin/insights/logs`), the
-email log and suppressions (`/api/admin/email/messages`, `/api/admin/email/suppressions`), and on
-the desktop the Captures tabs' recordings and replays.
+email log and suppressions (`/api/admin/email/messages`, `/api/admin/email/suppressions`), the open
+share links (`/api/admin/shares` — any member may share, so they grow with the community even though
+each lapses in a week), and on the desktop the Captures tabs' recordings and replays.
 
 - **The answer** is `{ items, total }` — `Page<T>` in `Foxfire.Api/Common` and in `@foxfire/core`.
   `total` counts the list under the same filters, so a screen says "120 members" rather than "50+"

@@ -73,7 +73,7 @@ public sealed record GetTftMatchesRequest(Guid RiotAccountId, int? Limit, int? O
     public const int DefaultLimit = 20;
 }
 
-internal sealed class GetTftMatchesRequestHandler(FoxfireDbContext db, TftReads tft)
+internal sealed class GetTftMatchesRequestHandler(FoxfireDbContext db, TftReads tft, IIdentityContext me)
     : IDomainRequestHandler<GetTftMatchesRequest, Page<TftMatchSummaryResponse>>
 {
     public async Task<Response<Page<TftMatchSummaryResponse>>> Handle(
@@ -100,7 +100,7 @@ internal sealed class GetTftMatchesRequestHandler(FoxfireDbContext db, TftReads 
                 puuid, request.RiotAccountId, page.Limit, page.Offset, request.QueueId,
                 cancellationToken: cancellationToken);
 
-        return new Page<TftMatchSummaryResponse>(rows, total);
+        return new Page<TftMatchSummaryResponse>(OutsiderView.For(me.UserId, rows), total);
     }
 }
 
@@ -108,7 +108,7 @@ internal sealed class GetTftMatchesRequestHandler(FoxfireDbContext db, TftReads 
 public sealed record GetTftMatchSummaryRequest(Guid RiotAccountId, string MatchId)
     : IDomainRequest<TftMatchSummaryResponse>;
 
-internal sealed class GetTftMatchSummaryRequestHandler(FoxfireDbContext db, TftReads tft)
+internal sealed class GetTftMatchSummaryRequestHandler(FoxfireDbContext db, TftReads tft, IIdentityContext me)
     : IDomainRequestHandler<GetTftMatchSummaryRequest, TftMatchSummaryResponse>
 {
     public async Task<Response<TftMatchSummaryResponse>> Handle(
@@ -129,7 +129,7 @@ internal sealed class GetTftMatchSummaryRequestHandler(FoxfireDbContext db, TftR
             puuid, request.RiotAccountId, limit: 1, offset: 0, queueId: null, matchId: request.MatchId,
             cancellationToken: cancellationToken);
 
-        return rows.Count == 0 ? Response<TftMatchSummaryResponse>.NotFound() : rows[0];
+        return rows.Count == 0 ? Response<TftMatchSummaryResponse>.NotFound() : OutsiderView.For(me.UserId, rows)[0];
     }
 }
 

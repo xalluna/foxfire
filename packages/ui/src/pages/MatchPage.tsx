@@ -21,7 +21,8 @@ export function MatchPage({
   detail,
   detailLoading,
   trackedPuuid,
-  notFound
+  notFound,
+  membersOnly = false
 }: {
   /** The way back to whoever the link was about — a link, drawn by whoever routes. */
   back?: ReactNode
@@ -35,6 +36,8 @@ export function MatchPage({
   trackedPuuid: string | null
   /** Nothing on this server by that id at all. */
   notFound: boolean
+  /** A game somebody reading without an account may not see — not one the profile they were shared played. */
+  membersOnly?: boolean
 }): JSX.Element {
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-4 max-md:p-2">
@@ -45,7 +48,13 @@ export function MatchPage({
         </div>
       )}
 
-      {notFound ? (
+      {membersOnly ? (
+        <EmptyState
+          icon={<Icon.Shield />}
+          title="Only this server's members can see this game"
+          description="The link you were given opens one profile and the games it played. Signing in shows the rest of this server."
+        />
+      ) : notFound ? (
         <EmptyState
           icon={<Icon.Search />}
           title="No game by that id"

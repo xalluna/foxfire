@@ -5,15 +5,18 @@ import type {
   InvitePreview,
   PasswordResetPreview,
   SessionUser,
+  ShareLinkOpen,
   VersionInfo
 } from '@foxfire/core'
-import { paths, rankQueueParam } from '@foxfire/core/routes'
+import { ServerError } from '@foxfire/core/server'
+import { isPlayer, paths, rankQueueParam } from '@foxfire/core/routes'
 import type { Platform, RecordingTarget } from '@foxfire/screens'
 import { createFakeYouTubeMount, createFixtureClient, runFixtureImport, scenario } from '@foxfire/screens/dev'
 import { YOUTUBE_ENABLED } from '../features'
 import { createWebYouTubeMount } from '../platform/youtubePlayer'
 import { replaceServerInfoSource } from '../serverInfo'
 import { useAuth } from '../session/session'
+import { LAPSED } from '../session/share'
 
 /*
  * The design harness — `npm run dev:mock -w @foxfire/web`.
@@ -28,9 +31,20 @@ import { useAuth } from '../session/session'
  * does not, because there is no server to ask. The same goes for a reset link:
  * /reset-password/<anything long> shows the form, and setting a password needs
  * a server.
+ *
+ * Three scenarios start with nobody signed in. ?scenario=public-signed-out is an
+ * open server, read by a visitor. ?scenario=shared-link is somebody who was
+ * handed a link to Faker#NA1's profile, which is all the harness lets them
+ * read — anybody else answers the way the server would, with a 401.
+ * ?scenario=shared-link-ended is that link after its week is up.
  */
 
 const SERVER_NAME = 'The Fox Den'
+
+const PUBLIC_ACCESS = scenario === 'public-signed-out'
+
+/** The profile ?scenario=shared-link was handed, as the server described it. */
+const SHARED = { gameName: 'Faker', tagLine: 'NA1' }
 
 // Faker is the configured head admin; ?scenario=server-admin signs in as Sova,
 // a plain one, to see the pages the way they do.
@@ -49,8 +63,12 @@ const VERSION: VersionInfo = {
   apiBase: '/api',
   publicUrl: window.location.origin,
   // ?scenario=email-off is a server with no provider: no "Forgot password?".
-  email: scenario !== 'email-off'
+  email: scenario !== 'email-off',
+  publicAccess: PUBLIC_ACCESS
 }
+
+/** What the server says a share link refused to an outsider looks like. */
+const membersOnly = (): Promise<never> => Promise.reject(new ServerError('Unauthorized', 401))
 
 export function startMock(navigate: (path: string) => void): { client: FoxfireClient; platform: Platform } {
   const fixture = createFixtureClient()
@@ -65,6 +83,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
       session: user
         ? { username: user.username, email: user.email, isAdmin: user.isAdmin, isHeadAdmin: user.isHeadAdmin ?? false }
         : null,
+      publicAccess: PUBLIC_ACCESS,
       riotKeyRejected: false,
       upgradeRequired: null
     }
@@ -72,8 +91,16 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
 
   useAuth.subscribe(() => listeners.forEach((listener) => listener(connection())))
 
+  // On a share link, signed out, the one profile and the games it played are
+  // all there is; everybody else is the server's refusal.
+  const onLinkOnly = (): boolean => scenario === 'shared-link' && useAuth.getState().user === null
+
   const client: FoxfireClient = {
     ...fixture,
+    accounts: {
+      ...fixture.accounts,
+      find: (riotId) => (onLinkOnly() && !isPlayer(riotId, SHARED) ? membersOnly() : fixture.accounts.find(riotId))
+    },
     connection: {
       get: async () => connection(),
       onChanged: (listener) => {
@@ -125,10 +152,47 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
         purpose: 'verify',
         message: 'Your email is confirmed. If you ever forget your password, you can reset it yourself from the sign-in page.'
       }
-    }
+    },
+
+    // A short token is a link that was withdrawn; anything longer opens Faker.
+    openShare: async (token): Promise<ShareLinkOpen> =>
+      token.length < 20
+        ? {
+            usable: false,
+            message: 'This link was withdrawn. Ask whoever sent it for a new one.',
+            reason: 'withdrawn',
+            riotAccountId: null,
+            gameName: null,
+            tagLine: null,
+            expiresAt: null
+          }
+        : {
+            usable: true,
+            message: 'Ready to use.',
+            riotAccountId: '1',
+            ...SHARED,
+            expiresAt: new Date(Date.now() + 5 * 24 * 3600_000).toISOString()
+          }
   })
 
-  useAuth.setState({ user: USER, ready: true })
+  if (scenario === 'public-signed-out') {
+    useAuth.setState({ user: null, ready: true, publicAccess: true })
+  } else if (scenario === 'shared-link-ended') {
+    useAuth.setState({ user: null, ready: true, share: null, shareRefused: LAPSED })
+  } else if (scenario === 'shared-link') {
+    useAuth.setState({
+      user: null,
+      ready: true,
+      share: {
+        token: 'harness-share-token-aaaaaaaa',
+        accountId: '1',
+        ...SHARED,
+        expiresAt: new Date(Date.now() + 5 * 24 * 3600_000).toISOString()
+      }
+    })
+  } else {
+    useAuth.setState({ user: USER, ready: true })
+  }
 
   const platform: Platform = {
     kind: 'web',

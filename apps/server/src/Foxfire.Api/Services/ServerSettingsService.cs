@@ -1,6 +1,7 @@
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Foxfire.Api.Services;
 
@@ -11,8 +12,26 @@ namespace Foxfire.Api.Services;
 /// written, so a fresh database behaves like a configured one and seeding is a
 /// convenience rather than a precondition.
 /// </summary>
-public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time)
+public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time, IMemoryCache cache)
 {
+    /// <summary>
+    /// Off unless somebody has turned it on. See <see cref="ServerSettingKeys.PublicAccess"/>.
+    /// </summary>
+    public const bool PublicAccessDefault = false;
+
+    /// <summary>
+    /// How long one process trusts its last reading of <see cref="ServerSettingKeys.PublicAccess"/>.
+    ///
+    /// The reader policy asks on every request without a member's token, which
+    /// on an open server is most of them, and every other setting here is a
+    /// query. Turning it off in this process is immediate, because the write
+    /// drops the reading; another process overlapping a deploy catches up
+    /// within this.
+    /// </summary>
+    public static readonly TimeSpan PublicAccessCacheLifetime = TimeSpan.FromSeconds(15);
+
+    private const string PublicAccessCacheKey = "settings:" + ServerSettingKeys.PublicAccess;
+
     /// <summary>
     /// On unless somebody has turned it off.
     ///
@@ -40,6 +59,23 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
 
     public Task SetPublicSignupAsync(bool enabled, CancellationToken cancellationToken = default) =>
         WriteAsync(ServerSettingKeys.PublicSignup, enabled ? "true" : "false", cancellationToken);
+
+    public async Task<bool> IsPublicAccessEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        if (cache.TryGetValue(PublicAccessCacheKey, out bool cached)) return cached;
+
+        var raw = await ReadAsync(ServerSettingKeys.PublicAccess, cancellationToken);
+        var enabled = raw is null ? PublicAccessDefault : raw == "true";
+
+        cache.Set(PublicAccessCacheKey, enabled, PublicAccessCacheLifetime);
+        return enabled;
+    }
+
+    public async Task SetPublicAccessAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        await WriteAsync(ServerSettingKeys.PublicAccess, enabled ? "true" : "false", cancellationToken);
+        cache.Remove(PublicAccessCacheKey);
+    }
 
     public Task SetBackfillTargetAsync(int matches, CancellationToken cancellationToken = default) =>
         WriteAsync(ServerSettingKeys.BackfillTarget, matches.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);

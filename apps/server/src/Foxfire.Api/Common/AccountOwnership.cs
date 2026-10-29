@@ -9,8 +9,9 @@ namespace Foxfire.Api.Common;
 /// Whether the Riot account a handler is about belongs to whoever is asking.
 ///
 /// Reads never come through here: everything on a Foxfire server is readable by
-/// every member, so a read has nothing to check beyond being signed in. Writes
-/// do, and they all check the same thing.
+/// every member, and who else may read is the reader policy's question, asked
+/// before a handler runs (Auth/ReaderAccess.cs). Writes do, and they all check
+/// the same thing.
 ///
 /// Admins are deliberately not special-cased. An admin spending the
 /// community's Riot budget on somebody's behalf, or recording a reading for an

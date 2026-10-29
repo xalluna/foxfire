@@ -45,6 +45,7 @@ import type {
   ServerLogEntry,
   ServerLogQuery,
   ServerStorageUsage,
+  ShareLink,
   SyncProgressEvent,
   SyncState,
   TftDashboard,
@@ -296,6 +297,14 @@ export interface ConnectionState {
    * buttons that act against another admin.
    */
   session: { username: string; email: string; isAdmin: boolean; isHeadAdmin: boolean } | null
+  /**
+   * Whether the server can be read without signing in.
+   *
+   * What decides whether "Copy link" already reaches anybody, or whether a
+   * profile has to be shared to reach somebody outside. False in local-only
+   * mode and from a server too old to say.
+   */
+  publicAccess: boolean
   /** The server's own Riot key has been refused — the host's to fix, not the reader's. */
   riotKeyRejected: boolean
   /** Set when the server refused this client outright, with the version it wants. */
@@ -334,6 +343,18 @@ export interface FoxfireClient extends FoxfireData {
     cancelEmailChange: () => Promise<AccountEmailResult>
   }
   /**
+   * Opening one profile to somebody who is not a member.
+   *
+   * Any member may share any profile. Sharing the same one again within a day
+   * hands back the link made then. Only offered on a server, signed in, and
+   * where the server is not already open to everybody — see ConnectionState.
+   */
+  shares: {
+    create: (accountId: string) => Promise<ShareLink>
+    /** Withdraws a link: its creator's, or anybody's for an admin. */
+    revoke: (id: string) => Promise<AdminActionResult>
+  }
+  /**
    * Administering a server. Only offered to somebody the connection says is an
    * admin, and only ever authoritative because the server checks the role
    * itself on every request. Reads throw; writes answer with a result, because
@@ -366,6 +387,8 @@ export interface FoxfireClient extends FoxfireData {
     emailInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
+    /** A page of the share links that still open something, newest first. */
+    shareLinks: (page?: PageOptions) => Promise<Page<ShareLink>>
     storage: () => Promise<ServerStorageUsage>
     /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
     storedReplays: (page?: PageOptions) => Promise<Page<AdminReplay>>
