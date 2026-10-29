@@ -150,6 +150,9 @@ version 3 still, and a desktop from before TFT is served as it always was.
 - `styles/contrast.test.ts` in `@foxfire/ui` holds every text colour in the
   palette, tier colours included, to 4.5:1 against every background and every
   control outline to 3:1, so a colour change that falls short fails the build.
+- The Insights test that counts a request under its status sums the window
+  rather than reading its last ten seconds, which three requests could straddle,
+  so it no longer fails at random in CI.
 
 ## [0.5.1] — 2026-09-27
 

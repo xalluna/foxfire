@@ -137,7 +137,10 @@ public sealed class InsightsTests(FoxfireServerFixture server)
         Assert.DoesNotContain(requests.Routes, r => r.Route.Contains("hub", StringComparison.Ordinal));
         Assert.DoesNotContain(requests.Routes, r => r.Route.Contains("insights", StringComparison.Ordinal));
         Assert.True(requests.Total >= 3);
-        Assert.Contains(requests.ByStatus, s => s.Key == "2xx" && s.Values[^1] >= 3);
+        // Summed over the window rather than read off its last ten seconds: the
+        // three requests can land either side of a bucket's edge, and a new one
+        // can open before the read, which left the last bucket short of three.
+        Assert.Contains(requests.ByStatus, s => s.Key == "2xx" && s.Values.Sum(v => v ?? 0) >= 3);
     }
 
     [Fact]
