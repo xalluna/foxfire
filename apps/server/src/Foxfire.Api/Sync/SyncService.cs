@@ -66,6 +66,26 @@ public sealed partial class SyncService(
     }
 
     /// <summary>
+    /// The newest match in this account's history of one game with nothing
+    /// missing before it — the marker a delta starts from. A run moves it forward
+    /// only once everything newer has landed, whoever stored it; null until the
+    /// first run that got that far.
+    /// </summary>
+    public async Task<string?> MostRecentMatchIdAsync(
+        Guid riotAccountId,
+        Game game,
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        return await db.SyncStates.AsNoTracking()
+            .Where(s => s.RiotAccountId == riotAccountId && s.Game == game)
+            .Select(s => s.MostRecentMatchId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Syncs an account, joining a run already under way rather than starting a
     /// second one.
     ///

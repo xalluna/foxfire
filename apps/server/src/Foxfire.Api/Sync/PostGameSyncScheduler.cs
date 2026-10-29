@@ -12,11 +12,12 @@ namespace Foxfire.Api.Sync;
 /// therefore usually finds nothing, which is exactly the failure this exists to
 /// remove: it would look fixed most evenings and broken on the rest.
 ///
-/// So it retries on a widening schedule until the match lands. A delta sync is
-/// two requests plus one per genuinely new match, so the cost of being patient
-/// is small even against one shared personal key. The last attempt sits at ten
-/// minutes because a match that has not appeared by then will not be caught by
-/// trying once more — the next sync for that account will get it.
+/// So it retries on a widening schedule until the match lands in the account's
+/// history, whichever sync put it there. A delta sync is two requests plus one
+/// per genuinely new match, so the cost of being patient is small even against
+/// one shared personal key. The last attempt sits at ten minutes because a match
+/// that has not appeared by then will not be caught by trying once more — the
+/// next sync for that account will get it.
 ///
 /// The ladder moved to the server from the desktop for a reason beyond tidiness:
 /// it has to keep running after the person who played closes their laptop, and
@@ -123,18 +124,51 @@ public sealed class PostGameSyncScheduler(
 
         try
         {
+            // Where the account's history stood when its game ended. Any sync of
+            // the account that moves it on has found the game, so there is
+            // nothing left to wait for — this ladder's own, or the owner pressing
+            // Sync now.
+            var before = await sync.MostRecentMatchIdAsync(riotAccountId, game, cancellationToken);
+
+            async Task<bool> MovedOnAsync() =>
+                await sync.MostRecentMatchIdAsync(riotAccountId, game, cancellationToken) != before;
+
             for (var attempt = 0; attempt < delays.Count; attempt++)
             {
                 await Task.Delay(delays[attempt], time, cancellationToken);
 
                 try
                 {
+                    if (await MovedOnAsync())
+                    {
+                        log.LogInformation(
+                            "Post-game sync for {RiotAccountId} stopped before attempt {Attempt}: another sync found the game",
+                            riotAccountId,
+                            attempt + 1);
+
+                        return;
+                    }
+
                     var result = await sync.SyncAsync(riotAccountId, game, SyncTrigger.Auto, cancellationToken);
                     if (result.Stored > 0)
                     {
                         log.LogInformation(
                             "Post-game sync stored {Stored} match(es) for {RiotAccountId} on attempt {Attempt}",
                             result.Stored,
+                            riotAccountId,
+                            attempt + 1);
+
+                        return;
+                    }
+
+                    // Found, but stored by somebody else. Two members in one game
+                    // each run a ladder, and the first to find the match stores it
+                    // for both — participants are shared — so the second's sync
+                    // stores nothing and only moves the marker past it.
+                    if (await MovedOnAsync())
+                    {
+                        log.LogInformation(
+                            "Post-game sync for {RiotAccountId} found the game already stored on attempt {Attempt}",
                             riotAccountId,
                             attempt + 1);
 
@@ -163,6 +197,13 @@ public sealed class PostGameSyncScheduler(
         {
             // Superseded by a later game, or the server is stopping. Either way
             // there is nothing to report.
+        }
+        catch (Exception ex)
+        {
+            // Only the first reading of where the history stood can land here —
+            // each attempt catches its own failures — and without it there is no
+            // telling the game arriving from the game already being here.
+            log.LogDebug(ex, "Post-game sync could not start for {RiotAccountId}", riotAccountId);
         }
         finally
         {
