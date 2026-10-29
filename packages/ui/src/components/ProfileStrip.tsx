@@ -54,7 +54,7 @@ export function ProfileStrip({
             rounded="rounded-md"
           />
           {account.summonerLevel !== null && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full border border-accent-dim bg-canvas px-1.5 text-[9px] font-medium tabular-nums text-accent">
+            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full border border-accent-dim bg-canvas px-1.5 text-2xs font-medium tabular-nums text-accent">
               {account.summonerLevel}
             </span>
           )}

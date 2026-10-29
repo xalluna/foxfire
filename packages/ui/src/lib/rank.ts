@@ -17,22 +17,28 @@ import challenger from '../assets/ranks/challenger.png'
  *
  * These hexes are deliberately literal rather than theme tokens: they are
  * League's semantics, not this app's, and must stay recognisable even if the
- * palette in styles/index.css is later swapped.
+ * palette in styles/foxfire.css is later swapped.
+ *
+ * They are League's hues, though not always League's lightness. Each one is
+ * also the colour a tier's name is written in, so the four that read below
+ * 4.5:1 on the app's panels — Iron, Bronze, Master and Grandmaster — were
+ * lightened within their own hue in 0.17.0 until they did; styles/contrast.test.ts
+ * holds them to it. The crests are Riot's art and untouched.
  *
  * Crests are fetched and downscaled by scripts/fetch-assets.mjs. Vite emits
  * them into the renderer bundle, so they load from the 'self' origin the CSP
  * already allows.
  */
 const TIERS = {
-  IRON: { crest: iron, color: '#6B5F5B', label: 'Iron' },
-  BRONZE: { crest: bronze, color: '#A66A3F', label: 'Bronze' },
+  IRON: { crest: iron, color: '#958782', label: 'Iron' },
+  BRONZE: { crest: bronze, color: '#BC7B4D', label: 'Bronze' },
   SILVER: { crest: silver, color: '#9AAEB5', label: 'Silver' },
   GOLD: { crest: gold, color: '#E1B961', label: 'Gold' },
   PLATINUM: { crest: platinum, color: '#4EA5A2', label: 'Platinum' },
   EMERALD: { crest: emerald, color: '#2FB577', label: 'Emerald' },
   DIAMOND: { crest: diamond, color: '#7B8FE8', label: 'Diamond' },
-  MASTER: { crest: master, color: '#B558E8', label: 'Master' },
-  GRANDMASTER: { crest: grandmaster, color: '#E05656', label: 'Grandmaster' },
+  MASTER: { crest: master, color: '#BA63EA', label: 'Master' },
+  GRANDMASTER: { crest: grandmaster, color: '#E26161', label: 'Grandmaster' },
   CHALLENGER: { crest: challenger, color: '#4FD3F0', label: 'Challenger' }
 } as const
 
@@ -123,13 +129,13 @@ export function queueLabel(queueType: QueueType): string {
 /**
  * Hyper Roll's colours, which are its tiers: the rating band somebody is in,
  * named and drawn as the client draws them. Literal for the same reason as
- * League's tiers above.
+ * League's tiers above, and Purple lightened for the same reason too.
  */
 const RATED_TIERS: Record<string, { color: string; label: string }> = {
   GRAY: { color: '#8D97A3', label: 'Gray' },
   GREEN: { color: '#2FB577', label: 'Green' },
   BLUE: { color: '#3D8BFD', label: 'Blue' },
-  PURPLE: { color: '#B05CF0', label: 'Purple' },
+  PURPLE: { color: '#B565F1', label: 'Purple' },
   ORANGE: { color: '#F08A3C', label: 'Orange' }
 }
 

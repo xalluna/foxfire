@@ -29,7 +29,7 @@ export function TraitBadge({ trait, labelled = false }: { trait: TftTrait; label
       {icon ? (
         <img src={icon} alt="" className="h-4 w-4 object-contain" />
       ) : (
-        <span className="flex h-4 min-w-4 items-center justify-center text-[9px] font-semibold uppercase">
+        <span className="flex h-4 min-w-4 items-center justify-center text-2xs font-semibold uppercase">
           {name.slice(0, 1)}
         </span>
       )}
@@ -82,7 +82,7 @@ export function UnitTile({ unit, size = 'md' }: { unit: TftUnit; size?: 'sm' | '
         {portrait ? (
           <img src={portrait} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-text-dim">
+          <span className="flex h-full w-full items-center justify-center text-2xs font-semibold text-text-dim">
             {initials(name)}
           </span>
         )}
@@ -92,6 +92,9 @@ export function UnitTile({ unit, size = 'md' }: { unit: TftUnit; size?: 'sm' | '
   )
 }
 
+// The one size under the 11px floor, deliberately: the stars are a mark drawn
+// across the top of a 28px portrait, not words, and at 11px four of them are
+// wider than the unit they sit on. The count is in the title and the label.
 function Stars({ count, color }: { count: number; color: string }): JSX.Element {
   return (
     <span
@@ -166,7 +169,7 @@ export function PlacementCell({ placement, top }: { placement: number; top: numb
   return (
     <span
       className={clsx(
-        'flex h-5 w-5 items-center justify-center rounded text-[10px] font-semibold tabular-nums',
+        'flex h-5 w-5 items-center justify-center rounded text-2xs font-semibold tabular-nums',
         tone === 'first'
           ? 'bg-gold text-canvas'
           : tone === 'top'

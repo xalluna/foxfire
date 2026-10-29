@@ -184,7 +184,7 @@ export function EventTimeline({
               >
                 <RoleGlyph role={lead.role} />
                 {item.events.length > 1 && (
-                  <span className="absolute -right-1 -top-1 text-[8px] font-medium tabular-nums text-text">
+                  <span className="absolute -right-1.5 -top-1.5 rounded-full bg-canvas px-0.5 text-2xs font-medium leading-none tabular-nums text-text">
                     {item.events.length}
                   </span>
                 )}

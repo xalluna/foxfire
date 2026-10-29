@@ -83,7 +83,7 @@ export function WebShell(): JSX.Element {
             </Link>
             <button
               onClick={() => void signOut()}
-              className="shrink-0 whitespace-nowrap rounded-md border border-hairline px-2.5 py-1 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
+              className="shrink-0 whitespace-nowrap rounded-md border border-edge px-2.5 py-1 text-sm text-text-dim transition hover:border-accent hover:text-accent"
             >
               Sign out
             </button>

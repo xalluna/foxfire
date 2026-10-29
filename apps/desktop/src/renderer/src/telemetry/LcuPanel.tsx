@@ -39,7 +39,7 @@ function PostGameTools(): JSX.Element {
               return `Attributed LP to ${n} game${n === 1 ? '' : 's'}.`
             })
           }
-          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-50"
+          className="rounded-md border border-edge bg-surface px-3 py-1.5 text-xs text-text-dim transition hover:border-accent hover:text-accent disabled:opacity-50"
         >
           Replay LP attribution
         </button>
@@ -54,7 +54,7 @@ function PostGameTools(): JSX.Element {
                 : 'No account to sync.'
             })
           }
-          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-2xs text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-50"
+          className="rounded-md border border-edge bg-surface px-3 py-1.5 text-xs text-text-dim transition hover:border-accent hover:text-accent disabled:opacity-50"
         >
           Simulate game end
         </button>
@@ -113,7 +113,7 @@ export function LcuPanel({ windowMs }: { windowMs: number }): JSX.Element {
         )}
       >
         <span className="font-mono text-2xs uppercase tracking-widest">{state}</span>
-        <span className="text-2xs opacity-80">
+        <span className="text-2xs">
           {latency.length > 0
             ? `last sampled poll ${formatMs(latency[latency.length - 1].ms)}`
             : 'no polls sampled in this window'}

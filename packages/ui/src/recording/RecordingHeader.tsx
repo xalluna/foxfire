@@ -159,7 +159,7 @@ function PlacementChip({ placement, team }: { placement: number; team: boolean }
 
 /** The button style the header's actions share. */
 export const recordingActionClass =
-  'rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent disabled:cursor-not-allowed disabled:opacity-40'
+  'rounded-md border border-edge px-3 py-1.5 text-sm text-text-dim transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40'
 
 export const recordingPrimaryActionClass =
   'rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20'

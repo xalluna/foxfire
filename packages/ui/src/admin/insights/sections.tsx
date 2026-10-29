@@ -473,7 +473,7 @@ export function SyncTab({ data }: { data: InsightsSync }): JSX.Element {
             cell: (r) => (
               <div className="min-w-0">
                 <span className="text-text">{r.riotId ?? r.accountId.slice(0, 8)}</span>
-                {r.error && <p className="mt-0.5 max-w-xs text-2xs text-red">{r.error}</p>}
+                {r.error && <p className="mt-0.5 max-w-xs text-xs text-red">{r.error}</p>}
               </div>
             )
           },

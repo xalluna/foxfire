@@ -161,6 +161,14 @@ export const CH = {
     get: 'background:get',
     set: 'background:set'
   },
+  // How large this PC draws the interface. `changed` is pushed whatever moved
+  // it — the settings page or the zoom keys in any window — so an open Display
+  // page shows the size every window is actually at.
+  display: {
+    get: 'display:get',
+    set: 'display:set',
+    changed: 'display:changed'
+  },
   // Recording the game as it is played. Settings and status are separate reads
   // for the same reason telemetry splits them: the status pill polls, and the
   // settings form does not.

@@ -75,7 +75,7 @@ export function AttachLinkDialog({
           className={`${inputClass} mt-1.5 w-full`}
         />
 
-        <p className="mt-2 text-2xs leading-relaxed text-text-mute">
+        <p className="mt-2 text-xs leading-relaxed text-text-mute">
           {typedSomething && !videoId
             ? 'That is not a YouTube video link.'
             : withMarkers
