@@ -10,8 +10,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Foxfire.Api.Tests;
 
 /// <summary>
-/// The per-address limits on signing in and searching, and who gets to say what
-/// an address is.
+/// The per-address limits on signing in, searching and reading signed out, and
+/// who gets to say what an address is.
 ///
 /// Runs its own host, with limits low enough to reach in a test and a reverse
 /// proxy it trusts. The in-memory test server has no network, so every request
@@ -22,6 +22,8 @@ namespace Foxfire.Api.Tests;
 public sealed class RateLimitTests(FoxfireServerFixture server) : IAsyncLifetime
 {
     private const int AuthLimit = 3;
+
+    private const int ReaderLimit = 3;
 
     /// <summary>The one proxy this host believes.</summary>
     private const string TrustedProxy = "10.9.8.7";
@@ -39,6 +41,7 @@ public sealed class RateLimitTests(FoxfireServerFixture server) : IAsyncLifetime
             host.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["RateLimit:AuthPerMinute"] = AuthLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["RateLimit:ReaderPerMinute"] = ReaderLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["Server:TrustedProxies"] = TrustedProxy
             }));
             host.ConfigureServices(services => services.AddTransient<IStartupFilter, RemoteAddressFromHeader>());
@@ -137,6 +140,73 @@ public sealed class RateLimitTests(FoxfireServerFixture server) : IAsyncLifetime
             var response = await client.GetAsync(new Uri("/api/version", UriKind.Relative));
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task An_outsider_reading_past_the_limit_is_turned_away_and_a_member_never_is()
+    {
+        // A profile shared with somebody outside, read from one address.
+        var stem = Guid.NewGuid().ToString("N")[..8];
+        using var member = server.Client();
+        var session = await server.RegisterAsync(member, $"Limit{stem}", $"limit-{stem}@example.com");
+        FoxfireServerFixture.Authenticated(member, session);
+
+        var accountId = await TrackAsync();
+        var share = await member.PostAsJsonAsync(new Uri("/api/shares", UriKind.Relative), new { riotAccountId = accountId });
+        share.EnsureSuccessStatusCode();
+        var token = (await share.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("token").GetString()!;
+
+        var dashboard = new Uri($"/api/riot-accounts/{accountId}/dashboard", UriKind.Relative);
+
+        using var outsider = From("192.0.2.50");
+        outsider.DefaultRequestHeaders.Add(Auth.ShareAccess.Header, token);
+
+        for (var i = 0; i < ReaderLimit; i++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await outsider.GetAsync(dashboard)).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await outsider.GetAsync(dashboard)).StatusCode);
+
+        // A member from the same address reads as much as they like — and a
+        // bearer header nobody issued does not make an outsider one.
+        using var signedIn = From("192.0.2.50");
+        FoxfireServerFixture.Authenticated(signedIn, session);
+
+        for (var i = 0; i < ReaderLimit * 3; i++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await signedIn.GetAsync(dashboard)).StatusCode);
+        }
+
+        using var pretender = From("192.0.2.50");
+        pretender.DefaultRequestHeaders.Add(Auth.ShareAccess.Header, token);
+        pretender.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "not-a-token");
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await pretender.GetAsync(dashboard)).StatusCode);
+    }
+
+    private async Task<Guid> TrackAsync()
+    {
+        await using var scope = server.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Foxfire.Data.FoxfireDbContext>();
+        var now = DateTimeOffset.UtcNow;
+
+        var account = new Foxfire.Data.Entities.RiotAccount
+        {
+            Id = Guid.CreateVersion7(now),
+            Puuid = $"puuid-{Guid.NewGuid():N}",
+            GameName = $"Limited{Guid.NewGuid().ToString("N")[..8]}",
+            TagLine = "NA1",
+            Platform = "na1",
+            RegionalRoute = "americas",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.RiotAccounts.Add(account);
+        await db.SaveChangesAsync();
+        return account.Id;
     }
 
     /// <summary>Gives a request the remote address its test header names, before the server's own pipeline runs.</summary>

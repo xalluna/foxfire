@@ -145,6 +145,7 @@ export const queryKeys = {
     openInvites: () => ['admin', 'invites', 'open'] as const,
     usedInvites: () => ['admin', 'invites', 'used'] as const,
     settings: () => ['admin', 'settings'] as const,
+    shareLinks: () => ['admin', 'shareLinks'] as const,
     storage: () => ['admin', 'storage'] as const,
     replays: () => ['admin', 'replays'] as const,
     /** One tab of the insights page over one window. Polled while open, never invalidated. */

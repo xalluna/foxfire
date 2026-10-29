@@ -274,6 +274,45 @@ describe('matchContextItems on a platform that cannot do everything', () => {
 })
 
 /**
+ * Somebody reading without an account: an open server's visitor, or a share
+ * link's holder. The server refuses them every write and every download, so a
+ * menu offering one would only be a refusal waiting for a click.
+ */
+describe('matchContextItems for somebody who is not signed in', () => {
+  const EVERYTHING = {
+    onCopyId: () => {},
+    onOpenDetails: () => {},
+    onCopyLink: () => {},
+    onEditLp: () => {},
+    onClearLp: () => {},
+    onWatchRecording: () => {},
+    onUploadRecording: () => {},
+    onAttachRecordingLink: () => {},
+    onDetachRecording: () => {},
+    onWatchReplay: () => {},
+    onDownloadReplay: () => {}
+  }
+
+  it('offers looking and copying, and nothing that writes or downloads', () => {
+    const shared = { ...MATCH, sharedReplay: { patch: '15.14', fileBytes: 31_000_000 } }
+
+    expect(
+      matchContextItems(shared, EVERYTHING, { isMine: false, serverMode: true, outsider: true }).map(
+        (item) => item.label
+      )
+    ).toEqual(['Copy link', 'Copy match ID', 'Open match details'])
+  })
+
+  it('offers no way to clear a figure somebody typed, either', () => {
+    const typed = { ...MATCH, hasManualRank: true }
+
+    expect(
+      matchContextItems(typed, EVERYTHING, { isMine: false, outsider: true }).map((item) => item.label)
+    ).not.toContain('Clear LP edit')
+  })
+})
+
+/**
  * Recordings, and whose they are.
  *
  * A recording is one player's screen, so every item here follows the row's

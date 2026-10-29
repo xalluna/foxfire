@@ -29,19 +29,25 @@ import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
 import { InvitePage } from './pages/auth/InvitePage'
 import { RegisterPage } from './pages/auth/RegisterPage'
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
+import { SharedLinkPage } from './pages/auth/SharedLinkPage'
 import { SignInPage } from './pages/auth/SignInPage'
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
+import { paths } from '@foxfire/core/routes'
 import { YOUTUBE_ENABLED } from './features'
 import { safeRedirect } from './routes/redirect'
-import { useAuth } from './session/session'
+import { canBrowse, useAuth } from './session/session'
 
 /*
  * Every page of the web client.
  *
- * Three are for somebody not signed in — signing in, registering, and an
- * invite — and everything else sits behind `_authed`, which sends anybody else
- * to sign in and back again after. Sharing is for members only: a link to a
- * profile or a game asks whoever opens it to sign in first.
+ * A handful are for somebody not signed in — signing in, registering, an
+ * invite, a reset, a share link that has stopped working — and everything else
+ * sits behind `_authed`, which sends
+ * anybody who may not read to sign in and back again after. Who may read is a
+ * member; anybody, on a server that is open; and somebody a member shared a
+ * profile with, for that profile — the server enforces which, and the pages
+ * say so when it refuses. Your account and the admin pages are members' only,
+ * whatever else is open.
  *
  * The player pages and the match page come from @foxfire/screens, the same
  * routes the desktop builds its "Copy link" addresses against.
@@ -108,18 +114,41 @@ const verifyEmail = createRoute({
   component: VerifyEmailPage
 })
 
+// Unguarded: where a share link that opens nothing lands, saying why.
+const sharedLink = createRoute({
+  getParentRoute: () => root,
+  path: 'shared-link',
+  component: SharedLinkPage
+})
+
+/** For the pages only a member has: to sign in, and back here after. */
+function requireSignIn({ location }: { location: { href: string } }): void {
+  if (!signedIn()) throw redirect({ to: '/sign-in', search: { redirect: location.href }, replace: true })
+}
+
 const authed = createRoute({
   getParentRoute: () => root,
   id: '_authed',
   beforeLoad: ({ location }) => {
-    if (!signedIn()) {
-      throw redirect({ to: '/sign-in', search: { redirect: location.href }, replace: true })
-    }
+    if (canBrowse()) return
+
+    // Here on a link that has stopped working: say that, not "sign in".
+    if (useAuth.getState().shareRefused) throw redirect({ to: '/shared-link', replace: true })
+    throw redirect({ to: '/sign-in', search: { redirect: location.href }, replace: true })
   },
   component: WebShell
 })
 
-const home = createRoute({ getParentRoute: () => authed, path: '/', component: HomePage })
+const home = createRoute({
+  getParentRoute: () => authed,
+  path: '/',
+  // Somebody here on a share link has one profile to see, and that is it.
+  beforeLoad: () => {
+    const { share } = useAuth.getState()
+    if (!signedIn() && share) throw redirect({ href: paths.player(share), replace: true })
+  },
+  component: HomePage
+})
 
 /**
  * Where the Players page was. Finding somebody is the header's search box now,
@@ -138,9 +167,19 @@ const player = createPlayerRoutes(authed, { layout: WebPlayerLayout })
 
 const match = createMatchRoute(authed)
 
-const account = createRoute({ getParentRoute: () => authed, path: 'account', component: AccountPage })
+const account = createRoute({
+  getParentRoute: () => authed,
+  path: 'account',
+  beforeLoad: requireSignIn,
+  component: AccountPage
+})
 
-const admin = createRoute({ getParentRoute: () => authed, path: 'admin', component: AdminLayout })
+const admin = createRoute({
+  getParentRoute: () => authed,
+  path: 'admin',
+  beforeLoad: requireSignIn,
+  component: AdminLayout
+})
 const adminMembers = createRoute({ getParentRoute: () => admin, path: '/', component: MembersScreen })
 const adminInvites = createRoute({ getParentRoute: () => admin, path: 'invites', component: InvitesScreen })
 const adminAccounts = createRoute({
@@ -163,6 +202,7 @@ const routeTree = root.addChildren([
   resetPassword,
   forgotPassword,
   verifyEmail,
+  sharedLink,
   authed.addChildren([
     home,
     players,

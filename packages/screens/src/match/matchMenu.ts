@@ -169,13 +169,30 @@ export interface MatchMenuContext {
   isHeadAdmin?: boolean
   /** Connected to a server, where a link can be attached with nothing on this disk behind it. */
   serverMode?: boolean
+  /**
+   * Reading without an account — an open server, or a share link. Every item
+   * beyond looking and copying is a write or a member's download, which the
+   * server refuses an outsider, so none of them is offered.
+   */
+  outsider?: boolean
 }
 
 export function matchContextItems(
   match: MenuMatch,
-  actions: MatchMenuActions,
-  { expandable = true, isMine, isAdmin = false, isHeadAdmin = false, serverMode = false }: MatchMenuContext = {}
+  given: MatchMenuActions,
+  {
+    expandable = true,
+    isMine,
+    isAdmin = false,
+    isHeadAdmin = false,
+    serverMode = false,
+    outsider = false
+  }: MatchMenuContext = {}
 ): ContextMenuItem[] {
+  const actions: MatchMenuActions = outsider
+    ? { onCopyId: given.onCopyId, onOpenDetails: given.onOpenDetails, onCopyLink: given.onCopyLink }
+    : given
+
   const blocked = lpEditBlockedReason(match, isMine, isHeadAdmin)
   const notYours = lpWriteBlockedReason(isMine, isHeadAdmin)
   const noRecording = recordingBlockedReason(match)

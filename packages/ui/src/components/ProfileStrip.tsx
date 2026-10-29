@@ -4,6 +4,7 @@ import { profileIconUrl } from '../lib/assets'
 import { Asset } from './Asset'
 import { CopyLinkButton } from './CopyLinkButton'
 import { ProfileMarks, type FavoriteMark, type HomeMark } from './ProfileMarks'
+import { ShareProfileButton } from './ShareLinkDialog'
 import { SyncButton } from './SyncButton'
 import { SyncProgressBar } from './SyncProgressBar'
 
@@ -25,11 +26,13 @@ export function ProfileStrip({
   cooldownUntil,
   progress,
   onCopyLink,
+  onShare,
   favorite,
   home
 }: {
   account: Account
-  onRefresh: () => void
+  /** Absent for somebody reading without signing in, who cannot sync. */
+  onRefresh?: () => void
   refreshing: boolean
   /** When the server takes a sync of this account again. Null when nothing holds it back. */
   cooldownUntil: string | null
@@ -37,6 +40,8 @@ export function ProfileStrip({
   progress?: SyncProgressEvent
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyLink?: () => Promise<void> | void
+  /** Opens this profile to somebody outside. Absent where there is nobody it could add. */
+  onShare?: () => void
   /** The star. Absent where nobody can be starred. */
   favorite?: FavoriteMark
   /** The house, for opening on this account. */
@@ -74,12 +79,15 @@ export function ProfileStrip({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <ProfileMarks favorite={favorite} home={home} />
           {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="py-1.5" />}
-          <SyncButton
-            onSync={onRefresh}
-            syncing={refreshing}
-            cooldownUntil={cooldownUntil}
-            className="shrink-0"
-          />
+          {onShare && <ShareProfileButton onShare={onShare} className="py-1.5" />}
+          {onRefresh && (
+            <SyncButton
+              onSync={onRefresh}
+              syncing={refreshing}
+              cooldownUntil={cooldownUntil}
+              className="shrink-0"
+            />
+          )}
         </div>
       </div>
 

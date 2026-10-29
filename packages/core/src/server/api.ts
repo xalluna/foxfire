@@ -42,6 +42,7 @@ import type {
   ServerLogEntry,
   ServerLogQuery,
   ServerStorageUsage,
+  ShareLink,
   TftDashboard,
   TftEditableMatch,
   TftLobby,
@@ -552,6 +553,10 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       setSettings: (patch: Partial<ServerAdminSettings>) =>
         request<ServerAdminSettings>('/admin/settings/', { method: 'PATCH', body: patch }),
 
+      /** A page of the share links that still open something, newest first. */
+      shareLinks: (page: PageOptions = {}) =>
+        request<Page<ShareLink>>(withQuery('/admin/shares', { limit: page.limit, offset: page.offset })),
+
       /**
        * One tab of the insights page, over a window.
        *
@@ -630,6 +635,19 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
       cancelEmailChange: () =>
         accountEmail(() => request<AccountEmail>('/account/email/pending', { method: 'DELETE' }))
+    },
+
+    /**
+     * Opening a profile to somebody who is not a member. Making one throws
+     * rather than answering with a result, like an invite: the screen has
+     * nothing to show without the link it asked for.
+     */
+    shares: {
+      create: (accountId: string) =>
+        request<ShareLink>('/shares', { method: 'POST', body: { riotAccountId: accountId } }),
+
+      revoke: (id: string) =>
+        attempt(() => request<void>(`/shares/${encodeURIComponent(id)}`, { method: 'DELETE' }))
     },
 
     /** The endpoints an old stats.db is pushed through. See import/statsDbImporter. */

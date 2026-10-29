@@ -16,7 +16,9 @@ namespace Foxfire.Api.Sync;
 ///
 /// Nobody subscribes to anything. Every member sees every account's data, so
 /// there are no groups to join and nothing to filter — a progress event carries
-/// the account it is about, which is what the renderer already keys on.
+/// the account it is about, which is what the renderer already keys on. That is
+/// also why the hub is members' only, even on a server open to anybody: an
+/// outsider reads pages, and is told about nobody's sync.
 /// </summary>
 public static class HubEvents
 {

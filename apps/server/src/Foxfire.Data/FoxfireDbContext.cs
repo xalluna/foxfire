@@ -30,6 +30,9 @@ public sealed class FoxfireDbContext(DbContextOptions<FoxfireDbContext> options)
     public DbSet<RiotAccount> RiotAccounts => Set<RiotAccount>();
     public DbSet<ServerSetting> ServerSettings => Set<ServerSetting>();
 
+    // A profile opened to somebody who is not a member. See ShareLink.
+    public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
+
     // The shared half of the schema: games, ranks, and how far through fetching
     // them the server is.
     //

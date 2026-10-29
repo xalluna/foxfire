@@ -8,7 +8,9 @@ import { ScreensProvider, createQueryClient, type Platform } from '@foxfire/scre
 import { createWebClient } from './client'
 import { createWebPlatform } from './platform/webPlatform'
 import { createWebRouter } from './router'
+import { prepareAccess } from './serverInfo'
 import { restore } from './session/session'
+import { takeShareFromAddress } from './session/share'
 import './styles.css'
 
 const RELOADED_KEY = 'foxfire:reloaded-for-assets'
@@ -46,6 +48,10 @@ function recoverFromStaleAssets(): void {
 async function start(): Promise<void> {
   recoverFromStaleAssets()
 
+  // Before the router exists, so no page ever reads a share link's token off
+  // the address. The harness has no server to open one with.
+  const shareToken = import.meta.env.MODE === 'mock' ? null : takeShareFromAddress()
+
   const queryClient = createQueryClient()
   const router = createWebRouter()
   const navigate = (href: string): void => void router.navigate({ href })
@@ -64,9 +70,11 @@ async function start(): Promise<void> {
     platform = createWebPlatform({ api: web.api, navigate })
 
     // Before the first route renders, so the router knows whether anybody is
-    // signed in. No session, or a server that cannot be reached, is somebody
-    // signed out — the sign-in page says the rest.
+    // signed in — and, if nobody is, whether they may read anyway. No session,
+    // or a server that cannot be reached, is somebody signed out; the sign-in
+    // page says the rest.
     await restore().catch(() => undefined)
+    await prepareAccess(shareToken)
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(

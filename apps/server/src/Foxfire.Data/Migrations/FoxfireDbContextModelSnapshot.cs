@@ -966,6 +966,38 @@ namespace Foxfire.Data.Migrations
                     b.ToTable("ServerSettings");
                 });
 
+            modelBuilder.Entity("Foxfire.Data.Entities.ShareLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("RiotAccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("RiotAccountId", "CreatedByUserId");
+
+                    b.ToTable("ShareLinks");
+                });
+
             modelBuilder.Entity("Foxfire.Data.Entities.SharedReplay", b =>
                 {
                     b.Property<string>("MatchId")
@@ -1469,6 +1501,25 @@ namespace Foxfire.Data.Migrations
                         .HasForeignKey("RiotAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("RiotAccount");
+                });
+
+            modelBuilder.Entity("Foxfire.Data.Entities.ShareLink", b =>
+                {
+                    b.HasOne("Foxfire.Data.Entities.FoxfireUser", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Foxfire.Data.Entities.RiotAccount", "RiotAccount")
+                        .WithMany()
+                        .HasForeignKey("RiotAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
 
                     b.Navigation("RiotAccount");
                 });

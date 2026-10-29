@@ -95,6 +95,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         // RateLimitTests runs its own host with low ones.
         Environment.SetEnvironmentVariable("RateLimit__AuthPerMinute", "100000");
         Environment.SetEnvironmentVariable("RateLimit__SearchPerMinute", "100000");
+        Environment.SetEnvironmentVariable("RateLimit__ReaderPerMinute", "100000");
 
         // Dozens of hosts share this database, and each would write its own
         // minutes of insights and prune everybody else's. The insights tests
@@ -293,7 +294,8 @@ public sealed record VersionInfo(
     string RecommendedDesktop,
     bool PublicSignup,
     string ApiBase,
-    string PublicUrl);
+    string PublicUrl,
+    bool PublicAccess = false);
 
 /// <summary>An invite, as an admin sees it.</summary>
 public sealed record InviteInfo(
@@ -312,7 +314,7 @@ public sealed record InviteInfo(
 
 public sealed record InvitePreview(bool Usable, string ServerName, string? Email, string Message);
 
-public sealed record ServerSettings(bool PublicSignup, int BackfillTarget, long ReplayByteCap);
+public sealed record ServerSettings(bool PublicSignup, int BackfillTarget, long ReplayByteCap, bool PublicAccess = false);
 
 /// <summary>
 /// One server for the whole assembly.

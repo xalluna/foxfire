@@ -17,10 +17,15 @@ export function useMyAccounts(): UseQueryResult<Account[]> {
   return useQuery({ queryKey: queryKeys.myAccounts(), queryFn: () => client.accounts.mine() })
 }
 
-/** The account this machine or browser opens on, which may be somebody else's. */
-export function useHomeAccount(): UseQueryResult<Account | null> {
+/**
+ * The account this machine or browser opens on, which may be somebody else's.
+ *
+ * Not asked for somebody on a share link, who has no accounts of their own to
+ * fall back on and whose server would refuse to say so.
+ */
+export function useHomeAccount({ enabled = true }: { enabled?: boolean } = {}): UseQueryResult<Account | null> {
   const client = useClient()
-  return useQuery({ queryKey: queryKeys.homeAccount(), queryFn: () => client.accounts.getHome() })
+  return useQuery({ queryKey: queryKeys.homeAccount(), queryFn: () => client.accounts.getHome(), enabled })
 }
 
 /** One account by id. Waits, rather than asking, while there is no id. */

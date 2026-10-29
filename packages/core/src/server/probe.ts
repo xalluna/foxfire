@@ -44,6 +44,7 @@ export async function probeServer(
     publicSignup: null,
     publicUrl: null,
     email: null,
+    publicAccess: null,
     compatibility: 'unknown'
   })
 
@@ -62,6 +63,7 @@ export async function probeServer(
       publicSignup: version.publicSignup,
       publicUrl: version.publicUrl ?? null,
       email: version.email ?? null,
+      publicAccess: version.publicAccess ?? null,
       compatibility:
         identity.kind === 'desktop'
           ? judge(identity.version, version.minimumDesktop, version.recommendedDesktop)

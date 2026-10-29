@@ -9,6 +9,7 @@ export {
 } from './identity'
 export {
   DEFAULT_TIMEOUT_MS,
+  SHARE_HEADER,
   createTransport,
   type RequestOptions,
   type Transport,

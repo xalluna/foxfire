@@ -33,6 +33,7 @@ import type {
   SeasonInput,
   ServerAdminSettings,
   ServerStorageUsage,
+  ShareLink,
   SyncProgressEvent,
   SyncState,
   GameId,
@@ -277,6 +278,7 @@ const connection: ConnectionState =
         publicUrl: MOCK_SERVER_URL,
         serverName: 'The Fox Den',
         session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
+        publicAccess: false,
         riotKeyRejected: scenario === 'server-degraded',
         upgradeRequired: null
       }
@@ -286,6 +288,7 @@ const connection: ConnectionState =
           publicUrl: MOCK_SERVER_URL,
           serverName: 'The Fox Den',
           session: { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false },
+          publicAccess: false,
           riotKeyRejected: false,
           upgradeRequired: null
         }
@@ -295,17 +298,30 @@ const connection: ConnectionState =
             publicUrl: MOCK_SERVER_URL,
             serverName: 'The Fox Den',
             session: { username: 'Faker', email: 'faker@example.com', isAdmin: false, isHeadAdmin: false },
+            publicAccess: false,
             riotKeyRejected: false,
             upgradeRequired: '0.14.0'
           }
-        : {
-            mode: 'local',
-            publicUrl: null,
-            serverName: null,
-            session: null,
-            riotKeyRejected: false,
-            upgradeRequired: null
-          }
+        : scenario === 'public-signed-out' || scenario === 'shared-link'
+          ? {
+              // Nobody signed in: reading an open server, or one profile on a link.
+              mode: 'server',
+              publicUrl: MOCK_SERVER_URL,
+              serverName: 'The Fox Den',
+              session: null,
+              publicAccess: scenario === 'public-signed-out',
+              riotKeyRejected: false,
+              upgradeRequired: null
+            }
+          : {
+              mode: 'local',
+              publicUrl: null,
+              serverName: null,
+              session: null,
+              publicAccess: false,
+              riotKeyRejected: false,
+              upgradeRequired: null
+            }
 
 /**
  * Why the person signed in may not do this to somebody, as the server words
@@ -620,10 +636,34 @@ function isMemberMatch(user: AdminUser, needle: string): boolean {
 // Uncapped, which is the default a host has to choose away from.
 let mockServerSettings: ServerAdminSettings = {
   publicSignup: true,
+  publicAccess: false,
   backfillTarget: 200,
   tftBackfillTarget: 200,
   replayByteCap: 0
 }
+
+const DAY_MS = 24 * 3600_000
+
+/** A profile a member shared, as the server describes one: a week from when it was made. */
+function shareLinkFor(account: Pick<Account, 'id' | 'gameName' | 'tagLine'>, createdBy: string, daysAgo: number): ShareLink {
+  const createdAt = Date.now() - daysAgo * DAY_MS
+  return {
+    id: `share-${account.id}-${createdBy}`,
+    riotAccountId: account.id,
+    gameName: account.gameName,
+    tagLine: account.tagLine,
+    token: `${account.id}-${createdBy}-harness-share-token`,
+    createdAt: new Date(createdAt).toISOString(),
+    expiresAt: new Date(createdAt + 7 * DAY_MS).toISOString(),
+    createdBy
+  }
+}
+
+/** Two open links, so the admin list has something in it. */
+let mockShareLinks: ShareLink[] = [
+  shareLinkFor({ id: '1', gameName: 'Faker', tagLine: 'NA1' }, 'Faker', 1),
+  shareLinkFor({ id: 'c2', gameName: 'Fakest', tagLine: 'NA1' }, 'Sova', 5)
+]
 
 export interface FixtureClientOptions {
   /**
@@ -900,6 +940,33 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       email: fixtureAccountEmail,
       resendEmailConfirmation: fixtureResendConfirmation,
       cancelEmailChange: fixtureCancelEmailChange
+    },
+
+    // As the server does it: the same member sharing the same profile within a
+    // day is handed the link they already have.
+    shares: {
+      create: async (accountId: string): Promise<ShareLink> => {
+        const who = connection.session?.username ?? 'Faker'
+        const existing = mockShareLinks.find(
+          (link) =>
+            link.riotAccountId === accountId &&
+            link.createdBy === who &&
+            Date.now() - Date.parse(link.createdAt) < DAY_MS
+        )
+        if (existing) return delay(existing, 300, false)
+
+        const account = [...ACCOUNTS, ...COMMUNITY].find((a) => a.id === accountId)
+        if (!account) return fail('There is no such account on this server.')
+
+        const link = { ...shareLinkFor(account, who, 0), id: `share-${accountId}-${Date.now()}` }
+        mockShareLinks = [link, ...mockShareLinks]
+        return delay(link, 300, false)
+      },
+
+      revoke: (id: string): Promise<AdminActionResult> => {
+        mockShareLinks = mockShareLinks.filter((link) => link.id !== id)
+        return delay({ ok: true, error: null }, 200, false)
+      }
     },
 
     champions: {
@@ -1293,7 +1360,17 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       setSettings: (patch: Partial<ServerAdminSettings>): Promise<ServerAdminSettings> => {
         mockServerSettings = { ...mockServerSettings, ...patch }
         return delay(mockServerSettings, 180, false)
-      }
+      },
+
+      shareLinks: (page?: PageOptions): Promise<Page<ShareLink>> =>
+        delay(
+          pageOf(
+            [...mockShareLinks].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+            page
+          ),
+          200,
+          false
+        )
     },
 
     events: {

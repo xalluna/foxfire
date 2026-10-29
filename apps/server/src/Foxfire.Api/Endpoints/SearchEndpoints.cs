@@ -1,3 +1,4 @@
+using Foxfire.Api.Auth;
 using Foxfire.Api.Common;
 using Foxfire.Api.Features.Search;
 using Foxfire.Api.Startup;
@@ -11,6 +12,9 @@ namespace Foxfire.Api.Endpoints;
 /// Still rate limited per address, though it no longer calls Riot: the query is
 /// an unindexed substring scan over every tracked account, and the limit that
 /// used to protect the API key now protects the database.
+///
+/// Open to outsiders only on an open server. A share link opens one profile,
+/// and a finder is the way to every other one.
 /// </summary>
 public static class SearchEndpoints
 {
@@ -27,6 +31,6 @@ public static class SearchEndpoints
                     new SearchPlayersRequest(q, mine ?? false, claimed ?? false, limit, offset),
                     cancellationToken))
             .WithTags("Search")
-            .RequireAuthorization()
+            .AllowOutsiders()
             .RequireRateLimiting(RateLimits.Search);
 }

@@ -221,6 +221,7 @@ let serverState: ServerState =
         },
         upgradeRequired: null,
         serverOutdated: false,
+        publicAccess: false,
         riotKeyRejected: scenario === 'server-degraded'
       }
     : scenario === 'server-outdated' || scenario === 'server-behind'
@@ -243,10 +244,11 @@ let serverState: ServerState =
           },
           upgradeRequired: scenario === 'server-outdated' ? '0.14.0' : null,
           serverOutdated: scenario === 'server-behind',
+          publicAccess: false,
           riotKeyRejected: false
         }
       : { activeUrl: null, servers: [], session: null, publicUrl: null, upgradeRequired: null,
-        serverOutdated: false, riotKeyRejected: false }
+        serverOutdated: false, publicAccess: false, riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
@@ -393,6 +395,7 @@ export const mockApi: Api = {
               publicSignup: null,
               publicUrl: null,
               email: null,
+              publicAccess: null,
               compatibility: 'unknown'
             }
           : {
@@ -408,6 +411,8 @@ export const mockApi: Api = {
               publicUrl: url,
               // "no-mail" is a server with no email provider: no "Forgot password?".
               email: !url.includes('no-mail'),
+              // "open" is a server anybody can read without signing in.
+              publicAccess: url.includes('open'),
               // "too-old" is this build behind the server; "old-server" is the
               // server behind this build.
               compatibility: url.includes('too-old')
@@ -459,6 +464,7 @@ export const mockApi: Api = {
             publicUrl: url,
             upgradeRequired: null,
             serverOutdated: false,
+            publicAccess: false,
             riotKeyRejected: false
           })
         },
@@ -490,6 +496,7 @@ export const mockApi: Api = {
                 publicUrl: url,
                 upgradeRequired: null,
                 serverOutdated: false,
+                publicAccess: false,
                 riotKeyRejected: false
               })
             },
@@ -506,6 +513,7 @@ export const mockApi: Api = {
           publicUrl: null,
           upgradeRequired: null,
           serverOutdated: false,
+          publicAccess: false,
           riotKeyRejected: false
         }),
         300,
@@ -543,6 +551,8 @@ export const mockApi: Api = {
     accountEmail: fixture.account.email,
     resendEmailConfirmation: fixture.account.resendEmailConfirmation,
     cancelEmailChange: fixture.account.cancelEmailChange,
+    createShareLink: fixture.shares.create,
+    revokeShareLink: fixture.shares.revoke,
 
     changeUsername: (username: string): Promise<ServerAuthResult> =>
       delay(
@@ -567,6 +577,7 @@ export const mockApi: Api = {
           publicUrl: url,
           upgradeRequired: null,
           serverOutdated: false,
+          publicAccess: false,
           riotKeyRejected: false
         }),
         200,
@@ -582,6 +593,7 @@ export const mockApi: Api = {
           publicUrl: serverState.activeUrl === url ? null : serverState.publicUrl,
           upgradeRequired: null,
           serverOutdated: false,
+          publicAccess: false,
           riotKeyRejected: false
         }),
         200,

@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import type { AccountEmail, AccountEmailResult, SessionUser } from '@foxfire/core'
+import type { AccountEmail, AccountEmailResult, AdminActionResult, SessionUser, ShareLink } from '@foxfire/core'
 import {
   ServerError,
   createServerApi,
@@ -88,6 +88,13 @@ interface StoredServer {
    * "Copy link" stays hidden.
    */
   publicUrl?: string | null
+
+  /**
+   * Whether the server can be read without signing in — and so whether a
+   * profile needs sharing to reach somebody outside, or "Copy link" already
+   * does. Read when the publicUrl is, and kept current by an admin's own switch.
+   */
+  publicAccess?: boolean | null
 }
 
 /**
@@ -305,6 +312,7 @@ export function getServerState(): ServerState {
     servers,
     session,
     publicUrl: activeServer?.publicUrl ?? null,
+    publicAccess: activeServer?.publicAccess ?? false,
     upgradeRequired: active ? upgradeRequired : null,
     serverOutdated: active ? serverOutdated : false,
     riotKeyRejected: active ? riotKeyRejected : false
@@ -374,9 +382,27 @@ export async function refreshServerInfo(): Promise<void> {
   if (!stored) return
 
   const name = probed.serverName ?? stored.name
-  if (stored.publicUrl === probed.publicUrl && stored.name === name) return
+  const publicAccess = probed.publicAccess ?? false
+  if (stored.publicUrl === probed.publicUrl && stored.name === name && (stored.publicAccess ?? false) === publicAccess) {
+    return
+  }
 
-  writeKnown(readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl } : s)))
+  writeKnown(
+    readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl, publicAccess } : s))
+  )
+  announce()
+}
+
+/**
+ * Keeps an admin's own switch, so this window stops offering to share profiles
+ * the moment the server is open to everybody, rather than at the next connect.
+ */
+export function rememberPublicAccess(publicAccess: boolean): void {
+  const url = readActive()
+  const stored = url ? readKnown().find((s) => s.url === url) : undefined
+  if (!stored || (stored.publicAccess ?? false) === publicAccess) return
+
+  writeKnown(readKnown().map((s) => (s.url === url ? { ...s, publicAccess } : s)))
   announce()
 }
 
@@ -466,6 +492,7 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
       publicSignup: null,
       publicUrl: null,
       email: null,
+      publicAccess: null,
       compatibility: 'unknown'
     }
   }
@@ -548,7 +575,8 @@ async function authenticate(
       email: user.email,
       isAdmin: user.isAdmin,
       isHeadAdmin: user.isHeadAdmin ?? false,
-      publicUrl: probed.publicUrl
+      publicUrl: probed.publicUrl,
+      publicAccess: probed.publicAccess
     })
 
     writeKnown(known)
@@ -650,6 +678,22 @@ export async function resendEmailConfirmation(): Promise<AccountEmailResult> {
 export async function cancelEmailChange(): Promise<AccountEmailResult> {
   if (!isServerMode()) return notConnected
   return serverApi().account.cancelEmailChange()
+}
+
+/**
+ * Opens a profile to somebody outside, for a week, as the member signed in.
+ * Only ever offered in server mode; a local-only install has nobody to share
+ * with and no web client for a link to open.
+ */
+export async function createShareLink(accountId: string): Promise<ShareLink> {
+  if (!isServerMode()) throw new Error('Not connected to a Foxfire server.')
+  return serverApi().shares.create(accountId)
+}
+
+/** Withdraws a share link: your own, or anybody's for an admin. */
+export async function revokeShareLink(id: string): Promise<AdminActionResult> {
+  if (!isServerMode()) return { ok: false, error: 'Not connected to a Foxfire server.' }
+  return serverApi().shares.revoke(id)
 }
 
 /**

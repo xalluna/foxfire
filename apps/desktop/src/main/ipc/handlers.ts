@@ -15,7 +15,9 @@ import {
   changeEmail,
   changePassword,
   changeUsername,
+  createShareLink,
   resendEmailConfirmation,
+  revokeShareLink,
   forgetServer,
   getServerState,
   login as serverLogin,
@@ -44,6 +46,7 @@ import {
   removeStoredReplay,
   getSettings as getServerAdminSettings,
   listOpenInvites,
+  listShareLinks,
   listUsedInvites,
   listUsers,
   revokeInvite,
@@ -204,6 +207,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.server.accountEmail, () => accountEmail())
   ipcMain.handle(CH.server.resendEmailConfirmation, () => resendEmailConfirmation())
   ipcMain.handle(CH.server.cancelEmailChange, () => cancelEmailChange())
+  ipcMain.handle(CH.server.createShareLink, (_e, accountId: string) => createShareLink(accountId))
+  ipcMain.handle(CH.server.revokeShareLink, (_e, id: string) => revokeShareLink(id))
   ipcMain.handle(CH.server.setActive, (_e, url: string | null) => setActiveServer(url))
   ipcMain.handle(CH.server.forget, (_e, url: string) => forgetServer(url))
 
@@ -231,6 +236,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.serverAdmin.clearEmailSuppression, (_e, id: string) => clearEmailSuppression(id))
   ipcMain.handle(CH.serverAdmin.sendTestEmail, (_e, to: string) => sendTestEmail(to))
   ipcMain.handle(CH.serverAdmin.getSettings, () => getServerAdminSettings())
+  ipcMain.handle(CH.serverAdmin.shareLinks, (_e, page?: PageOptions) => listShareLinks(page))
   ipcMain.handle(CH.serverAdmin.storage, () => getStorageUsage())
   ipcMain.handle(CH.serverAdmin.storedReplays, (_e, page?: PageOptions) => listStoredReplays(page))
   ipcMain.handle(CH.serverAdmin.removeReplay, (_e, matchId: string) => removeStoredReplay(matchId))

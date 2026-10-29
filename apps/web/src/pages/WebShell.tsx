@@ -1,8 +1,8 @@
 import { useEffect, type ReactNode } from 'react'
-import { Link, Outlet, useRouter } from '@tanstack/react-router'
+import { Link, Outlet, useRouter, useRouterState } from '@tanstack/react-router'
 import { Icon, Logo } from '@foxfire/ui'
 import { PlayerSearchBox, useConnection } from '@foxfire/screens'
-import { signOut, useAuth } from '../session/session'
+import { canBrowse, signOut, useAuth } from '../session/session'
 import { EmailBanner } from './EmailBanner'
 
 function NavLink({ to, children }: { to: '/admin'; children: ReactNode }): JSX.Element {
@@ -19,15 +19,21 @@ function NavLink({ to, children }: { to: '/admin'; children: ReactNode }): JSX.E
 }
 
 /**
- * Everything after signing in: the server's name, where to go, finding
- * somebody, who you are.
+ * Everything around a page: the server's name, where to go, finding somebody,
+ * who you are — or, for somebody reading without an account, the way to sign
+ * in.
  *
  * Also where a session that ends underneath the page is noticed — revoked by an
  * admin, signed out in another tab, expired — and turned into the sign-in page,
- * with the way back to where it was.
+ * with the way back to where it was. Unless the page is one they may still
+ * read signed out, and then it simply stays — or they were reading on a share
+ * link that has just stopped working, and then they are told that instead.
  */
 export function WebShell(): JSX.Element {
   const user = useAuth((s) => s.user)
+  const browsable = useAuth(canBrowse)
+  const linkEnded = useAuth((s) => s.shareRefused !== null)
+  const publicAccess = useAuth((s) => s.publicAccess)
   const connection = useConnection()
   const router = useRouter()
 
@@ -36,11 +42,18 @@ export function WebShell(): JSX.Element {
   // under way, and following the address would send it again from the
   // sign-in page itself, a redirect inside a redirect.
   useEffect(() => {
-    if (user) return
+    if (user || browsable) return
     const { href, pathname } = router.state.location
-    if (pathname === '/sign-in') return
+    if (pathname === '/sign-in' || pathname === '/shared-link') return
+    if (linkEnded) {
+      void router.navigate({ to: '/shared-link', replace: true })
+      return
+    }
     void router.navigate({ to: '/sign-in', search: { redirect: href }, replace: true })
-  }, [user, router])
+  }, [user, browsable, linkEnded, router])
+
+  // Where "Sign in" comes back to: the page being read when it was pressed.
+  const here = useRouterState({ select: (state) => state.location.href })
 
   return (
     <div className="min-h-screen bg-canvas text-text">
@@ -69,24 +82,42 @@ export function WebShell(): JSX.Element {
             )}
           </div>
 
-          <PlayerSearchBox className="w-full min-w-0 max-w-[360px]" />
+          {/* The finder is the way to everybody, which somebody on a share
+              link was not given: theirs is one profile. */}
+          {user || publicAccess ? (
+            <PlayerSearchBox className="w-full min-w-0 max-w-[360px]" />
+          ) : (
+            <div className="w-full min-w-0 max-w-[360px]" />
+          )}
 
           <div className="flex flex-1 basis-0 items-center justify-end gap-3 whitespace-nowrap">
-            {/* The name is the way to the account page, which is where a name
-                stops being a label and starts being a thing you can change. */}
-            <Link
-              to="/account"
-              className="rounded px-2 py-1 text-sm text-text-dim transition hover:bg-surface hover:text-text max-sm:hidden"
-              activeProps={{ className: 'bg-accent/10 text-accent' }}
-            >
-              {user?.username}
-            </Link>
-            <button
-              onClick={() => void signOut()}
-              className="shrink-0 whitespace-nowrap rounded-md border border-edge px-2.5 py-1 text-sm text-text-dim transition hover:border-accent hover:text-accent"
-            >
-              Sign out
-            </button>
+            {user ? (
+              <>
+                {/* The name is the way to the account page, which is where a name
+                    stops being a label and starts being a thing you can change. */}
+                <Link
+                  to="/account"
+                  className="rounded px-2 py-1 text-sm text-text-dim transition hover:bg-surface hover:text-text max-sm:hidden"
+                  activeProps={{ className: 'bg-accent/10 text-accent' }}
+                >
+                  {user.username}
+                </Link>
+                <button
+                  onClick={() => void signOut()}
+                  className="shrink-0 whitespace-nowrap rounded-md border border-edge px-2.5 py-1 text-sm text-text-dim transition hover:border-accent hover:text-accent"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/sign-in"
+                search={{ redirect: here }}
+                className="shrink-0 whitespace-nowrap rounded-md border border-edge px-2.5 py-1 text-sm text-text-dim transition hover:border-accent hover:text-accent"
+              >
+                Sign in
+              </Link>
+            )}
           </div>
         </div>
       </header>

@@ -13,6 +13,7 @@ import { isPlayer, parsePlayerSlug, playerSlug } from '@foxfire/core/routes'
 import { EmptyState, Icon, type MatchFocus } from '@foxfire/ui'
 import { PlayerBackLink } from './PlayerBackLink'
 import { useAccount, useAccountByRiotId } from '../queries/accounts'
+import { isRefused } from '../queries/queryClient'
 import { ChampionsScreen } from '../screens/ChampionsScreen'
 import { DashboardScreen } from '../screens/DashboardScreen'
 import { LpEditorScreen } from '../screens/LpEditorScreen'
@@ -221,6 +222,10 @@ function PlayerBoundary({ layout: Layout }: { layout: ComponentType<PlayerLayout
   }
 
   if (found.isError) {
+    // Somebody reading without an account, through a link to one profile,
+    // who followed it to another — a teammate on a scoreboard, say.
+    if (isRefused(found.error)) return <MembersOnly Layout={Layout} />
+
     return (
       <Layout account={null}>
         <EmptyState
@@ -271,6 +276,19 @@ function NoSuchPlayer({
             ? `Nobody here plays as ${riotId.gameName}#${riotId.tagLine}. If they changed their Riot ID, look for them under the new one.`
             : 'This link does not name a Riot ID.'
         }
+      />
+    </Layout>
+  )
+}
+
+/** A player the server keeps for its members, asked for by somebody who is not one. */
+function MembersOnly({ Layout }: { Layout: ComponentType<PlayerLayoutProps> }): JSX.Element {
+  return (
+    <Layout account={null}>
+      <EmptyState
+        icon={<Icon.Shield />}
+        title="Only this server's members can see this player"
+        description="The link you were given opens one profile, and this is another. Signing in shows the rest of this server."
       />
     </Layout>
   )

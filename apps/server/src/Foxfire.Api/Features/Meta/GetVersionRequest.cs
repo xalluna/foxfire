@@ -27,6 +27,11 @@ namespace Foxfire.Api.Features.Meta;
 /// Whether this server sends mail — and so whether its sign-in page can offer
 /// "Forgot password?". Missing from a server from before it could.
 /// </param>
+/// <param name="PublicAccess">
+/// Whether this server can be read without signing in — and so whether the web
+/// client opens its pages to somebody who has not, or sends them to sign in.
+/// Missing from a server from before it could, which means no.
+/// </param>
 public sealed record VersionResponse(
     string ServerName,
     string ServerVersion,
@@ -36,7 +41,8 @@ public sealed record VersionResponse(
     bool PublicSignup,
     string ApiBase,
     string PublicUrl,
-    bool Email);
+    bool Email,
+    bool PublicAccess);
 
 /// <summary>
 /// The handshake.
@@ -48,9 +54,9 @@ public sealed record VersionResponse(
 /// desktop's updater asks, on a schedule and before anybody has signed in:
 /// <c>recommendedDesktop</c> is the build it will install.
 ///
-/// It gives away the server's name, its version and whether signup is open. All
-/// three are things anybody who could register would see anyway, and none of
-/// them says who is on it.
+/// It gives away the server's name, its version, whether signup is open and
+/// whether it can be read signed out. All of them are things anybody who could
+/// register or look would see anyway, and none of them says who is on it.
 /// </summary>
 public sealed record GetVersionRequest : IDomainRequest<VersionResponse>;
 
@@ -72,7 +78,8 @@ internal sealed class GetVersionRequestHandler(
             PublicSignup: await settings.IsPublicSignupEnabledAsync(cancellationToken),
             ApiBase: ApiPaths.Base,
             PublicUrl: server.Value.PublicUrl.TrimEnd('/'),
-            Email: email.IsEnabled);
+            Email: email.IsEnabled,
+            PublicAccess: await settings.IsPublicAccessEnabledAsync(cancellationToken));
 }
 
 /// <summary>Whether the server can currently reach Riot, and how busy the queue is.</summary>

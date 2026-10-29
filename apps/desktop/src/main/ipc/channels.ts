@@ -31,6 +31,8 @@ export const CH = {
     accountEmail: 'server:accountEmail',
     resendEmailConfirmation: 'server:resendEmailConfirmation',
     cancelEmailChange: 'server:cancelEmailChange',
+    createShareLink: 'server:createShareLink',
+    revokeShareLink: 'server:revokeShareLink',
     setActive: 'server:setActive',
     forget: 'server:forget',
     changed: 'server:changed'
@@ -57,6 +59,7 @@ export const CH = {
     sendTestEmail: 'serverAdmin:sendTestEmail',
     getSettings: 'serverAdmin:getSettings',
     setSettings: 'serverAdmin:setSettings',
+    shareLinks: 'serverAdmin:shareLinks',
     storage: 'serverAdmin:storage',
     storedReplays: 'serverAdmin:storedReplays',
     removeReplay: 'serverAdmin:removeReplay',

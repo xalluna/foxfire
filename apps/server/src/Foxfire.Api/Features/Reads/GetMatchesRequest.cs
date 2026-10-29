@@ -24,7 +24,7 @@ public sealed record GetMatchesRequest(Guid RiotAccountId, int? Limit, int? Offs
     public const int DefaultLimit = 20;
 }
 
-internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads matches)
+internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads matches, IIdentityContext me)
     : IDomainRequestHandler<GetMatchesRequest, Page<MatchSummaryResponse>>
 {
     public async Task<Response<Page<MatchSummaryResponse>>> Handle(
@@ -51,7 +51,8 @@ internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads m
                 request.QueueId,
                 cancellationToken: cancellationToken);
 
-        return Response<Page<MatchSummaryResponse>>.Success(new Page<MatchSummaryResponse>(rows, total));
+        return Response<Page<MatchSummaryResponse>>.Success(
+            new Page<MatchSummaryResponse>(OutsiderView.For(me.UserId, rows), total));
     }
 }
 
@@ -66,7 +67,7 @@ internal sealed class GetMatchesRequestHandler(FoxfireDbContext db, MatchReads m
 public sealed record GetMatchSummaryRequest(Guid RiotAccountId, string MatchId)
     : IDomainRequest<MatchSummaryResponse>;
 
-internal sealed class GetMatchSummaryRequestHandler(FoxfireDbContext db, MatchReads matches)
+internal sealed class GetMatchSummaryRequestHandler(FoxfireDbContext db, MatchReads matches, IIdentityContext me)
     : IDomainRequestHandler<GetMatchSummaryRequest, MatchSummaryResponse>
 {
     public async Task<Response<MatchSummaryResponse>> Handle(
@@ -89,7 +90,7 @@ internal sealed class GetMatchSummaryRequestHandler(FoxfireDbContext db, MatchRe
             matchId: request.MatchId,
             cancellationToken: cancellationToken);
 
-        return rows.Count == 0 ? Response<MatchSummaryResponse>.NotFound() : rows[0];
+        return rows.Count == 0 ? Response<MatchSummaryResponse>.NotFound() : OutsiderView.For(me.UserId, rows)[0];
     }
 }
 

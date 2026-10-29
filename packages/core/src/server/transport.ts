@@ -12,8 +12,17 @@ export interface RequestOptions {
   body?: unknown
   /** Sent as a bearer token when present. */
   accessToken?: string | null
+  /**
+   * A share link's token, for somebody reading one profile without an
+   * account. A header rather than part of the path, so it is never written
+   * into a request line on the server.
+   */
+  shareToken?: string | null
   signal?: AbortSignal
 }
+
+/** The header a share link's token travels in. */
+export const SHARE_HEADER = 'X-Foxfire-Share'
 
 export interface TransportOptions {
   /**
@@ -60,6 +69,7 @@ export function createTransport(options: TransportOptions): Transport {
 
       if (request.body !== undefined) headers['Content-Type'] = 'application/json'
       if (request.accessToken) headers.Authorization = `Bearer ${request.accessToken}`
+      if (request.shareToken) headers[SHARE_HEADER] = request.shareToken
 
       let response: Response
       try {

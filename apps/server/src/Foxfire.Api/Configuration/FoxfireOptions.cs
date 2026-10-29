@@ -69,6 +69,16 @@ public sealed class RateLimitOptions
     /// Thirty would have run out inside a couple of names.
     /// </summary>
     public int SearchPerMinute { get; set; } = 120;
+
+    /// <summary>
+    /// Reads by somebody who is not signed in: a visitor to an open server, or
+    /// whoever was handed a share link. Members are never counted against it.
+    ///
+    /// Opening a profile is about ten requests and each game expanded on it one
+    /// more, so this is a dozen profiles a minute from one address — far more
+    /// than a person reading, and a ceiling on anybody scraping the server.
+    /// </summary>
+    public int ReaderPerMinute { get; set; } = 120;
 }
 
 /// <summary>The one Riot API key this server has.</summary>
@@ -168,6 +178,15 @@ public sealed class AuthOptions
     /// to read the message it arrived in.
     /// </summary>
     public TimeSpan PasswordResetLifetime { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// How long a share link opens its profile for.
+    ///
+    /// A week, the same for every link: long enough for whoever it was sent to
+    /// to get round to it, short enough that a link posted somewhere and
+    /// forgotten stops working on its own.
+    /// </summary>
+    public TimeSpan ShareLinkLifetime { get; set; } = TimeSpan.FromDays(7);
 
     public byte[] JwtSigningKeyBytes => Encoding.UTF8.GetBytes(JwtSigningKey);
 
