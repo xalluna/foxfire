@@ -276,12 +276,12 @@ public sealed partial class SyncService(
         await RefreshProfileAsync(profile, account, priority);
         await ReplayAttributionAsync(attribution, riotAccountId, puuid);
 
-        // Everybody else in those games, whose own reading nothing else takes.
-        // Not after a backfill: that is history, and a reading taken now says
-        // nothing about any game in it.
+        // Everybody else in those games, whose own history nothing else fetches.
+        // Not after a backfill: that is history, and finding somebody in a game
+        // from months ago says nothing about whether they have played since.
         if (!isBackfill && stored > 0)
         {
-            await ReadCoPlayersAsync(services.GetRequiredService<CoPlayerRanks>(), account, idsToFetch, priority);
+            await QueueCoPlayersAsync(services.GetRequiredService<CoPlayerSyncs>(), Game.Lol, account, idsToFetch);
         }
 
         // Only advance the marker when everything landed. Leaving it alone on a
@@ -443,24 +443,28 @@ public sealed partial class SyncService(
     }
 
     /// <summary>
-    /// Reads rank for the other tracked accounts in the games just stored — see
-    /// <see cref="CoPlayerRanks"/>. Never fails the sync, for the same reason as
-    /// the reading above.
+    /// Queues a sync for the other tracked accounts in the games just stored —
+    /// see <see cref="CoPlayerSyncs"/>. Never fails the sync, for the same reason
+    /// as the reading above.
     /// </summary>
-    private async Task ReadCoPlayersAsync(
-        CoPlayerRanks coPlayers,
+    private async Task QueueCoPlayersAsync(
+        CoPlayerSyncs coPlayers,
+        Game game,
         RiotAccount account,
-        IReadOnlyList<string> matchIds,
-        RiotRequestPriority priority)
+        IReadOnlyList<string> matchIds)
     {
         try
         {
-            var read = await coPlayers.ReadAsync(account.Id, matchIds, IsSyncing, priority);
-            if (read > 0) log.LogDebug("Read rank for {Count} co-player(s) of {RiotId}", read, account.RiotId);
+            var queued = await coPlayers.QueueAsync(game, account.Id, matchIds);
+            if (queued > 0)
+            {
+                log.LogInformation(
+                    "Queued a {Game} sync for {Count} co-player(s) of {RiotId}", game.Slug(), queued, account.RiotId);
+            }
         }
         catch (Exception ex)
         {
-            log.LogDebug(ex, "Reading co-players' rank failed after syncing {RiotId}", account.RiotId);
+            log.LogDebug(ex, "Queueing co-players' syncs failed after syncing {RiotId}", account.RiotId);
         }
     }
 

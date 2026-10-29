@@ -104,9 +104,10 @@ public interface IServerEvents
 
     /// <summary>
     /// A rank was read for an account outside its own sync: a running League
-    /// client reported one that moved, or another member's sync read it after a
-    /// game the two shared (<see cref="CoPlayerRanks"/>). The wire name still
-    /// says "lcu", which is where it started.
+    /// client reported one that moved. The wire name says "lcu", which is where
+    /// it started. Another member's sync does not raise it: it queues the account
+    /// a sync of its own (<see cref="CoPlayerSyncs"/>), and that run's finished
+    /// event refreshes everything this would have.
     /// </summary>
     Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default);
 

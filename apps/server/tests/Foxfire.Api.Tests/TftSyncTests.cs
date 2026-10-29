@@ -408,4 +408,63 @@ public class TftSyncTests(FoxfireServerFixture server)
         Assert.Equal(RatedTier.Blue, reading.RatedTier);
         Assert.Equal(2810, reading.LadderPosition);
     }
+
+    [Fact]
+    public async Task A_tft_sync_queues_one_for_the_other_members_in_a_lobby_it_stored()
+    {
+        // League's rule on TFT's tables: the other member's own TFT sync, which
+        // fetches the game they played on their own, and no League sync at all.
+        var mine = UniquePuuid();
+        var theirs = UniquePuuid();
+        var earlier = UniqueMatchId();
+        var theirEarlier = UniqueMatchId();
+        var since = UniqueMatchId();
+        var shared = UniqueMatchId();
+
+        var riot = new FakeRiot()
+            .WithTftMatchIds(mine, earlier)
+            .WithTftMatchIds(theirs, theirEarlier)
+            .WithTftMatch(earlier, TftPayloads.Lobby(earlier, T0 - 7_200_000, 1100, [mine]))
+            .WithTftMatch(theirEarlier, TftPayloads.Lobby(theirEarlier, T0 - 7_200_000, 1100, [theirs]))
+            .WithTftMatch(since, TftPayloads.Lobby(since, T0 - 3_600_000, 1100, [theirs]))
+            .WithTftMatch(shared, TftPayloads.Lobby(shared, T0, 1100, [mine, theirs]));
+
+        await using var rig = Start(riot);
+
+        Guid myId, theirId;
+        await using (var scope = rig.Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            myId = (await AddAccountAsync(db, mine)).Id;
+            theirId = (await AddAccountAsync(db, theirs)).Id;
+        }
+
+        await rig.Sync.SyncAsync(myId, Game.Tft, SyncTrigger.Manual);
+        await rig.Sync.SyncAsync(theirId, Game.Tft, SyncTrigger.Manual);
+
+        riot.WithTftMatchIds(mine, shared, earlier).WithTftMatchIds(theirs, shared, since, theirEarlier);
+        Assert.Equal(1, (await rig.Sync.SyncAsync(myId, Game.Tft, SyncTrigger.Auto)).Stored);
+
+        // Under way before the sync that started it returned, so once it is not,
+        // it is over.
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+        while (rig.Sync.IsSyncing(theirId, Game.Tft))
+        {
+            Assert.True(DateTimeOffset.UtcNow < deadline, "their TFT sync never finished");
+            await Task.Delay(25);
+        }
+
+        Assert.Equal(1, riot.MatchFetchCount(since));
+        Assert.Equal(1, riot.MatchFetchCount(shared));
+
+        await using var check = rig.Scope();
+        var checkDb = check.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        Assert.True(await checkDb.TftParticipants.AnyAsync(p => p.MatchId == since && p.Puuid == theirs));
+
+        var states = await checkDb.SyncStates.AsNoTracking().Where(s => s.RiotAccountId == theirId).ToListAsync();
+        var tft = Assert.Single(states);
+        Assert.Equal(Game.Tft, tft.Game);
+        Assert.Equal(shared, tft.MostRecentMatchId);
+    }
 }

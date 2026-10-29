@@ -62,6 +62,8 @@ public class SyncTests(FoxfireServerFixture server)
     {
         public SyncService Sync => host.Services.GetRequiredService<SyncService>();
 
+        public PostGameSyncScheduler Ladders => host.Services.GetRequiredService<PostGameSyncScheduler>();
+
         public AsyncServiceScope Scope() => host.Services.CreateAsyncScope();
 
         public async ValueTask DisposeAsync() => await host.DisposeAsync();
@@ -486,15 +488,35 @@ public class SyncTests(FoxfireServerFixture server)
     private static int LeagueReads(FakeRiot riot, string puuid) =>
         riot.Requests.Count(r => r.Contains($"/league/v4/entries/by-puuid/{puuid}", StringComparison.Ordinal));
 
+    private static int MatchListReads(FakeRiot riot, string puuid) =>
+        riot.Requests.Count(r => r.StartsWith($"/lol/match/v5/matches/by-puuid/{puuid}/ids", StringComparison.Ordinal));
+
     private const string TheirGoldII62 =
         """
         [{"queueType":"RANKED_SOLO_5x5","tier":"GOLD","rank":"II","leaguePoints":62,"wins":31,"losses":28}]
         """;
 
     /// <summary>
+    /// Waits for an account's sync to finish — one somebody else's sync started,
+    /// which runs on its own and is nobody's to await. It is under way before the
+    /// sync that started it returns, so once it is not, it is over.
+    /// </summary>
+    private static async Task SettledAsync(Rig rig, Guid riotAccountId)
+    {
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+
+        while (rig.Sync.IsSyncing(riotAccountId))
+        {
+            if (DateTimeOffset.UtcNow > deadline) throw new TimeoutException($"{riotAccountId} was still syncing");
+            await Task.Delay(25);
+        }
+    }
+
+    /// <summary>
     /// Two members, a game only the first had before, and one they then queued
     /// into together — so the first's next sync is a delta that finds it, the
-    /// shape of the post-game sync one client asked for.
+    /// shape of the post-game sync one client asked for. The second has synced
+    /// before, and has played <paramref name="theirsSince"/> since, on their own.
     /// </summary>
     private static async Task<(Guid Mine, Guid Theirs)> SyncASharedGameAsync(
         Rig rig,
@@ -502,12 +524,26 @@ public class SyncTests(FoxfireServerFixture server)
         string mine,
         string theirs,
         string shared,
+        string[] theirsSince,
         Action<FoxfireDbContext, Guid>? seedTheirs = null)
     {
         var earlier = UniqueMatchId();
+        var theirEarlier = UniqueMatchId();
+
         riot.WithMatchIds(mine, earlier)
-            .WithMatch(earlier, MatchPayloads.TenPlayerGame(earlier, T0 - 3_600_000, 420, [mine]))
+            .WithMatchIds(theirs, theirEarlier)
+            .WithMatch(earlier, MatchPayloads.TenPlayerGame(earlier, T0 - 5_400_000, 420, [mine]))
+            .WithMatch(theirEarlier, MatchPayloads.TenPlayerGame(theirEarlier, T0 - 5_400_000, 420, [theirs]))
             .WithMatch(shared, MatchPayloads.TenPlayerGame(shared, T0, 420, [mine, theirs]));
+
+        // Newest first, the way Riot lists them, and all of them before the
+        // shared game.
+        for (var i = 0; i < theirsSince.Length; i++)
+        {
+            riot.WithMatch(
+                theirsSince[i],
+                MatchPayloads.TenPlayerGame(theirsSince[i], T0 - ((i + 1) * 1_200_000), 420, [theirs]));
+        }
 
         Guid myId, theirId;
         await using (var scope = rig.Scope())
@@ -515,72 +551,128 @@ public class SyncTests(FoxfireServerFixture server)
             var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
             myId = (await AddAccountAsync(db, mine)).Id;
             theirId = (await AddAccountAsync(db, theirs)).Id;
+            await db.SaveChangesAsync();
+        }
+
+        // Each one's first sync, a backfill, which finds nobody else.
+        await rig.Sync.SyncAsync(myId, SyncTrigger.Manual);
+        await rig.Sync.SyncAsync(theirId, SyncTrigger.Manual);
+
+        await using (var scope = rig.Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
             seedTheirs?.Invoke(db, theirId);
             await db.SaveChangesAsync();
         }
 
-        await rig.Sync.SyncAsync(myId, SyncTrigger.Manual);
-        riot.WithMatchIds(mine, shared, earlier);
+        // Ranked from here on, so the only reading after the seeded one is what
+        // the shared game's sync led to.
+        riot.WithMatchIds(mine, shared, earlier)
+            .WithMatchIds(theirs, [shared, .. theirsSince, theirEarlier])
+            .WithLeagueEntries(theirs, TheirGoldII62);
+
         await rig.Sync.SyncAsync(myId, SyncTrigger.Auto);
 
         return (myId, theirId);
     }
 
     [Fact]
-    public async Task A_sync_reads_rank_for_the_other_members_in_a_ranked_game_it_stored()
+    public async Task A_sync_queues_one_for_the_other_members_in_a_game_it_stored()
     {
-        // Two members queue together and only one client reports the game. The
-        // other's history gains it from the same payload, and nothing used to
-        // read where it left them — their next reading came games later, and the
-        // stretch in between could not be split.
+        // Alluna and Yoshi queue together, and only Alluna's client reports the
+        // game. Yoshi's history gains it from the same payload — but Yoshi has
+        // played three games since his last sync, and nothing fetched those. A
+        // rank reading taken for him on the spot closed the stretch since his
+        // last one with only the shared game in it, which handed it the LP of
+        // all four.
         var mine = UniquePuuid();
         var theirs = UniquePuuid();
         var shared = UniqueMatchId();
-        var riot = new FakeRiot().WithLeagueEntries(theirs, TheirGoldII62);
+        string[] since = [UniqueMatchId(), UniqueMatchId(), UniqueMatchId()];
+        var riot = new FakeRiot();
 
         await using var rig = Start(riot);
         var (_, theirId) = await SyncASharedGameAsync(
-            rig, riot, mine, theirs, shared, (db, id) => db.RankSnapshots.Add(GoldII(id, 41, T0 - 60_000)));
+            rig, riot, mine, theirs, shared, since, (db, id) => db.RankSnapshots.Add(GoldII(id, 41, T0 - 3_700_000)));
 
-        Assert.Equal(1, LeagueReads(riot, theirs));
+        await SettledAsync(rig, theirId);
+
+        // Their own sync, not a reading: the list asked for again, the games they
+        // played on their own fetched, the shared one not fetched a second time.
+        Assert.Equal(2, MatchListReads(riot, theirs));
+        Assert.All(since, id => Assert.Equal(1, riot.MatchFetchCount(id)));
+        Assert.Equal(1, riot.MatchFetchCount(shared));
 
         await using var scope = rig.Scope();
         var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
 
-        var attributed = await db.MatchRanks.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.MatchId == shared && r.RiotAccountId == theirId);
+        Assert.Equal(3, await db.MatchParticipants.CountAsync(p => since.Contains(p.MatchId) && p.Puuid == theirs));
 
-        Assert.NotNull(attributed);
-        Assert.Equal(21, attributed.LpDelta);
+        var state = await db.SyncStates.AsNoTracking().FirstAsync(s => s.RiotAccountId == theirId && s.Game == Game.Lol);
+        Assert.Equal(shared, state.MostRecentMatchId);
 
-        // Their standing moved on the profile card too, not only in the history.
+        // Read once the games were in, so the stretch holds all four and is
+        // left alone rather than put on the one that happened to be shared.
+        Assert.False(await db.MatchRanks.AnyAsync(r => r.RiotAccountId == theirId));
+
         var entry = await db.LeagueEntries.AsNoTracking()
             .FirstAsync(l => l.RiotAccountId == theirId && l.QueueType == "RANKED_SOLO_5x5");
         Assert.Equal(62, entry.LeaguePoints);
     }
 
     [Fact]
-    public async Task A_member_already_read_since_the_game_ended_is_not_read_again()
+    public async Task A_member_with_nothing_else_new_gets_the_shared_game_attributed()
     {
-        // Their own League client reported the game's result, so a reading from
-        // here would only be the same value again — a request spent for nothing.
+        // The shared game was the only one they played, so the stretch from the
+        // reading before it to the one their sync took holds exactly it.
         var mine = UniquePuuid();
         var theirs = UniquePuuid();
-        var riot = new FakeRiot().WithLeagueEntries(theirs, TheirGoldII62);
+        var shared = UniqueMatchId();
+        var riot = new FakeRiot();
 
         await using var rig = Start(riot);
-        await SyncASharedGameAsync(
-            rig, riot, mine, theirs, UniqueMatchId(), (db, id) => db.RankSnapshots.Add(GoldII(id, 62, T0 + 2_400_000)));
+        var (_, theirId) = await SyncASharedGameAsync(
+            rig, riot, mine, theirs, shared, [], (db, id) => db.RankSnapshots.Add(GoldII(id, 41, T0 - 60_000)));
 
-        Assert.Equal(0, LeagueReads(riot, theirs));
+        await SettledAsync(rig, theirId);
+
+        await using var scope = rig.Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+
+        var attributed = await db.MatchRanks.AsNoTracking()
+            .SingleAsync(r => r.RiotAccountId == theirId);
+
+        Assert.Equal(shared, attributed.MatchId);
+        Assert.Equal(21, attributed.LpDelta);
     }
 
     [Fact]
-    public async Task A_backfill_reads_nobody_else()
+    public async Task A_member_whose_own_ladder_is_waiting_is_left_to_it()
     {
-        // A backfill is history. A reading taken now says nothing about any game
-        // in it, and a new member's first sync would otherwise read everybody
-        // they ever queued with.
+        // Their own client said their game ended, so their own post-game ladder
+        // is already going to sync them. A second run beside it would spend the
+        // same requests twice.
+        var mine = UniquePuuid();
+        var theirs = UniquePuuid();
+        var riot = new FakeRiot();
+
+        await using var rig = Start(riot);
+        var ladders = rig.Ladders;
+
+        var (_, theirId) = await SyncASharedGameAsync(
+            rig, riot, mine, theirs, UniqueMatchId(), [UniqueMatchId()], (_, id) => ladders.Schedule(id));
+
+        Assert.True(ladders.IsScheduled(theirId));
+        Assert.False(rig.Sync.IsSyncing(theirId));
+        Assert.Equal(1, MatchListReads(riot, theirs));
+    }
+
+    [Fact]
+    public async Task A_backfill_syncs_nobody_else()
+    {
+        // A backfill is history. Finding somebody in a game from months ago says
+        // nothing about whether they have played since, and a new member's first
+        // sync would otherwise sync everybody they ever queued with.
         var mine = UniquePuuid();
         var theirs = UniquePuuid();
         var shared = UniqueMatchId();
@@ -592,16 +684,27 @@ public class SyncTests(FoxfireServerFixture server)
 
         await using var rig = Start(riot);
 
-        Guid myId;
+        Guid myId, theirId;
         await using (var scope = rig.Scope())
         {
             var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
             myId = (await AddAccountAsync(db, mine)).Id;
-            await AddAccountAsync(db, theirs);
+            theirId = (await AddAccountAsync(db, theirs)).Id;
         }
 
         Assert.Equal(1, (await rig.Sync.SyncAsync(myId, SyncTrigger.Manual)).Stored);
+
+        // A sync it had started would be under way still, or would have made
+        // their sync state by now.
+        Assert.False(rig.Sync.IsSyncing(theirId));
+        Assert.Equal(0, MatchListReads(riot, theirs));
         Assert.Equal(0, LeagueReads(riot, theirs));
+
+        await using (var scope = rig.Scope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            Assert.False(await db.SyncStates.AnyAsync(s => s.RiotAccountId == theirId));
+        }
     }
 
     [Fact]
