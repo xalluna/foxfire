@@ -70,6 +70,7 @@ export function TelemetryApp(): JSX.Element {
             {WINDOW_OPTIONS.map((option) => (
               <button
                 key={option.label}
+                aria-pressed={windowMs === option.ms}
                 onClick={() => setWindowMs(option.ms)}
                 className={clsx(
                   'rounded-md px-2 py-1 text-xs font-medium transition',
@@ -85,20 +86,27 @@ export function TelemetryApp(): JSX.Element {
         </div>
 
         <nav className="flex items-center gap-1 border-t border-hairline px-4">
-          {TABS.map((entry) => (
-            <button
-              key={entry.id}
-              onClick={() => setTab(entry.id)}
-              className={clsx(
-                'border-b-2 px-3 py-2 text-xs font-medium transition',
-                tab === entry.id
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-text-mute hover:text-text-dim'
-              )}
-            >
-              {entry.label}
-            </button>
-          ))}
+          {/* Tabs, as on Captures. The figures beside them are not, so they
+              sit outside the tablist rather than in it. */}
+          <div role="tablist" aria-label="Telemetry" className="flex items-center gap-1">
+            {TABS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === entry.id}
+                onClick={() => setTab(entry.id)}
+                className={clsx(
+                  'border-b-2 px-3 py-2 text-xs font-medium transition',
+                  tab === entry.id
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-text-mute hover:text-text-dim'
+                )}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
 
           {data && (
             <div className="ml-auto flex items-center gap-4 py-1.5 text-2xs text-text-mute">

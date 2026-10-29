@@ -153,6 +153,7 @@ export function YouTubeSettings(): JSX.Element {
             description="Unlisted is anybody with the link, which is everybody on your server and nobody who is not."
             control={
               <select
+                aria-label="Who can watch"
                 value={settings.data.defaultPrivacy}
                 onChange={(event) => save.mutate({ defaultPrivacy: event.target.value as YouTubePrivacy })}
                 className={selectClass}
@@ -266,6 +267,7 @@ function TitleTemplate({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={defaultTemplate}
+          aria-label={label}
           className={`${inputClass} flex-1`}
         />
         <button type="button" className={ghostButtonClass} disabled={!dirty} onClick={() => onSave(draft)}>

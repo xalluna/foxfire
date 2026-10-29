@@ -32,6 +32,22 @@ export function runeIconUrl(m: AssetManifest, runeId: number): string | null {
   return `${m.cdn}/img/${rune.icon}`
 }
 
+// Names for the icons, for whatever reads them aloud or shows them on hover.
+// An item's name can be missing where its icon is not — see itemById — so it
+// falls back to saying what it is.
+
+export function itemName(m: AssetManifest, itemId: number): string {
+  return m.itemById?.[itemId]?.name ?? 'Item'
+}
+
+export function spellName(m: AssetManifest, spellId: number): string {
+  return m.spellById[spellId]?.name ?? 'Summoner spell'
+}
+
+export function runeName(m: AssetManifest, runeId: number): string {
+  return m.runeById[runeId]?.name ?? 'Rune'
+}
+
 export function profileIconUrl(m: AssetManifest, iconId: number | null): string | null {
   if (iconId === null) return null
   return `${m.cdn}/${m.version}/img/profileicon/${iconId}.png`

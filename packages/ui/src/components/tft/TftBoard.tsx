@@ -29,11 +29,13 @@ export function TraitBadge({ trait, labelled = false }: { trait: TftTrait; label
       {icon ? (
         <img src={icon} alt="" className="h-4 w-4 object-contain" />
       ) : (
-        <span className="flex h-4 min-w-4 items-center justify-center text-2xs font-semibold uppercase">
+        <span aria-hidden className="flex h-4 min-w-4 items-center justify-center text-2xs font-semibold uppercase">
           {name.slice(0, 1)}
         </span>
       )}
-      {labelled && <span className="whitespace-nowrap">{name}</span>}
+      {/* Named in words either way: unlabelled, the icon is all a sighted
+          reader gets, and a screen reader gets nothing from it. */}
+      {labelled ? <span className="whitespace-nowrap">{name}</span> : <span className="sr-only">{name}</span>}
       {trait.numUnits}
     </span>
   )
@@ -77,12 +79,13 @@ export function UnitTile({ unit, size = 'md' }: { unit: TftUnit; size?: 'sm' | '
 
   return (
     <div className="flex shrink-0 flex-col items-center" title={`${name} · ${'★'.repeat(unit.tier)}`}>
+      <span className="sr-only">{`${name}, ${unit.tier} star`}</span>
       <Stars count={unit.tier} color={color} />
       <div className={clsx('relative overflow-hidden rounded-md border-2 bg-surface-2', box)} style={{ borderColor: color }}>
         {portrait ? (
           <img src={portrait} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center text-2xs font-semibold text-text-dim">
+          <span aria-hidden className="flex h-full w-full items-center justify-center text-2xs font-semibold text-text-dim">
             {initials(name)}
           </span>
         )}
@@ -100,7 +103,8 @@ function Stars({ count, color }: { count: number; color: string }): JSX.Element 
     <span
       className="h-3 text-[9px] leading-3 tracking-[-1px]"
       style={{ color: count >= 3 ? color : undefined }}
-      aria-label={`${count} star`}
+      // The tile says how many in words; a row of ★ read out says nothing.
+      aria-hidden
     >
       <span className={count >= 3 ? undefined : 'text-text-dim'}>{'★'.repeat(Math.min(count, 4))}</span>
     </span>
@@ -117,9 +121,15 @@ function Items({ items }: { items: string[] }): JSX.Element {
         const asset = tftAsset(manifest, 'items', item)
         const name = tftName(manifest, 'items', item)
         return asset?.image ? (
-          <img key={`${item}-${i}`} src={asset.image} alt="" title={name} className="h-3 w-3 rounded-[2px] object-cover" />
+          <img key={`${item}-${i}`} src={asset.image} alt={name} title={name} className="h-3 w-3 rounded-[2px] object-cover" />
         ) : (
-          <span key={`${item}-${i}`} title={name} className="h-3 w-3 rounded-[2px] bg-surface-2 ring-1 ring-hairline" />
+          <span
+            key={`${item}-${i}`}
+            role="img"
+            aria-label={name}
+            title={name}
+            className="h-3 w-3 rounded-[2px] bg-surface-2 ring-1 ring-hairline"
+          />
         )
       })}
     </span>

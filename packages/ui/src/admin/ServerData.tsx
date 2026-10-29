@@ -304,6 +304,7 @@ function ReplayCapRow({
               if (e.key === 'Enter') commit()
             }}
             placeholder="none"
+            aria-label="Replay storage cap, in GB"
             inputMode="decimal"
             className={clsx(inputClass, 'w-20 text-right tabular-nums')}
           />

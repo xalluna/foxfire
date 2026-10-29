@@ -15,6 +15,10 @@ interface SummonerJson {
   data: Record<string, { id: string; key: string; name: string }>
 }
 
+interface ItemJson {
+  data: Record<string, { name?: string }>
+}
+
 interface RuneTreeJson {
   id: number
   key: string
@@ -82,8 +86,32 @@ async function buildTftAssets(
 }
 
 /**
- * The current patch's champions, summoner spells and runes, keyed the way
- * match data refers to them — and TFT's units, traits, items and augments.
+ * Items' names by id, or undefined when Data Dragon will not give them.
+ *
+ * Settled on its own, like TFT's: an item's icon is drawn from its id alone,
+ * so a missing item.json costs the icons their names and nothing else.
+ */
+async function buildItemNames(
+  fetchJson: <T>(url: string) => Promise<T>,
+  cdn: string,
+  version: string
+): Promise<Record<number, { name: string }> | undefined> {
+  try {
+    const items = await fetchJson<ItemJson>(`${cdn}/${version}/data/en_US/item.json`)
+    const itemById: Record<number, { name: string }> = {}
+    for (const [id, item] of Object.entries(items.data ?? {})) {
+      if (item.name) itemById[Number(id)] = { name: item.name }
+    }
+    return itemById
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The current patch's champions, summoner spells, runes and items' names,
+ * keyed the way match data refers to them — and TFT's units, traits, items
+ * and augments.
  *
  * Built fresh on every call. Caching is the caller's, because how long one is
  * worth keeping differs: the desktop keeps it for the life of the process, a
@@ -100,10 +128,11 @@ export async function buildAssetManifest(fetchImpl: typeof fetch = fetch): Promi
   const version = realm.v
   const cdn = realm.cdn
 
-  const [champions, spells, runeTrees, tft] = await Promise.all([
+  const [champions, spells, runeTrees, itemById, tft] = await Promise.all([
     fetchJson<ChampionJson>(`${cdn}/${version}/data/en_US/champion.json`),
     fetchJson<SummonerJson>(`${cdn}/${version}/data/en_US/summoner.json`),
     fetchJson<RuneTreeJson[]>(`${cdn}/${version}/data/en_US/runesReforged.json`),
+    buildItemNames(fetchJson, cdn, version),
     buildTftAssets(fetchJson, cdn, version)
   ])
 
@@ -129,5 +158,13 @@ export async function buildAssetManifest(fetchImpl: typeof fetch = fetch): Promi
     }
   }
 
-  return { version, cdn, championById, spellById, runeById, ...(tft ? { tft } : {}) }
+  return {
+    version,
+    cdn,
+    championById,
+    spellById,
+    runeById,
+    ...(itemById ? { itemById } : {}),
+    ...(tft ? { tft } : {})
+  }
 }

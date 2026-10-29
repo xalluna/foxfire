@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { format } from 'date-fns'
 import type { RankCloses, RankTrendPoint } from '@foxfire/core'
 import { ratedBandBoundaries, ratedTierAt, tierBandBoundaries } from '@foxfire/core'
+import { chartCursorProps } from '../lib/chartCursor'
 import { roundedPath } from '../lib/curve'
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth'
 import { ratedTierColor, ratedTierLabel, tierColor, tierLabel } from '../lib/rank'
@@ -141,6 +142,14 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
 
   const active = hover === null ? null : points[hover]
 
+  // What the tooltip says, in the order it says it. A close's time is when it
+  // was drawn, not when its game was played: a day's close names the day, and
+  // six hours' the moment they ended.
+  const rankOf = (p: Plotted): string => (rated ? ratedTierLabel(bandOf(p)) : tierLabel(p.tier, p.rank))
+  const pointsOf = (p: Plotted): string =>
+    rated ? `${p.ladderPosition.toLocaleString()} rating` : `${p.leaguePoints ?? 0} LP`
+  const whenOf = (p: Plotted): string => format(p.at, closes.step < DAY_MS ? 'MMM d, HH:mm' : 'MMM d')
+
   return (
     <div ref={frame} className="relative">
       <svg
@@ -148,8 +157,10 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
         width="100%"
         height={height}
         className="block"
-        role="img"
         aria-label="Rank over time"
+        {...chartCursorProps(points.length, hover, setHover, (i) =>
+          [rankOf(points[i]), pointsOf(points[i]), whenOf(points[i])].join(', ')
+        )}
         onMouseLeave={() => setHover(null)}
       >
         <defs>
@@ -325,16 +336,10 @@ export function RankChart({ closes, rated = false }: { closes: RankCloses; rated
           }}
         >
           <p className="font-medium" style={{ color: colorOf(bandOf(active)) }}>
-            {rated ? ratedTierLabel(bandOf(active)) : tierLabel(active.tier, active.rank)}
+            {rankOf(active)}
           </p>
-          <p className="tabular-nums text-text-dim">
-            {rated ? `${active.ladderPosition.toLocaleString()} rating` : `${active.leaguePoints ?? 0} LP`}
-          </p>
-          {/* When the close was drawn, not when its game was played: a day's
-              close names the day, and six hours' the moment they ended. */}
-          <p className="tabular-nums text-text-mute">
-            {format(active.at, closes.step < DAY_MS ? 'MMM d, HH:mm' : 'MMM d')}
-          </p>
+          <p className="tabular-nums text-text-dim">{pointsOf(active)}</p>
+          <p className="tabular-nums text-text-mute">{whenOf(active)}</p>
         </div>
       )}
     </div>

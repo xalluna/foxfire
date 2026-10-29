@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import type { RankTrend, RankTrendPoint } from '@foxfire/core'
 import { RANK_TREND_DAYS, rankAtPosition, ratedTierAt } from '@foxfire/core'
+import { chartCursorProps } from '../lib/chartCursor'
 import { roundedPath } from '../lib/curve'
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth'
 import { formatTierShort, ratedTierColor, ratedTierLabel, tierColor, tierLabel } from '../lib/rank'
@@ -135,6 +136,12 @@ export function RankTrendChart({
   const active = hover === null ? null : points[hover]
   const latest = points[points.length - 1]
 
+  // What the tooltip says, in the order it says it.
+  const rankOf = (p: Plotted): string => (rated ? ratedTierLabel(band(p)) : tierLabel(p.tier, p.rank))
+  const pointsOf = (p: Plotted): string =>
+    rated ? `${p.ladderPosition.toLocaleString()} rating` : `${p.leaguePoints ?? 0} LP`
+  const whenOf = (p: Plotted): string => daysAgo(Math.round((trend.to - p.at) / DAY_MS))
+
   return (
     <div ref={frame} className="relative">
       <svg
@@ -142,8 +149,10 @@ export function RankTrendChart({
         width="100%"
         height={HEIGHT}
         className="block"
-        role="img"
         aria-label="Rank over the last 30 days"
+        {...chartCursorProps(points.length, hover, setHover, (i) =>
+          [rankOf(points[i]), pointsOf(points[i]), whenOf(points[i])].join(', ')
+        )}
         onMouseLeave={() => setHover(null)}
       >
         <defs>
@@ -302,14 +311,10 @@ export function RankTrendChart({
           }}
         >
           <p className="font-medium" style={{ color: colorOf(active) }}>
-            {rated ? ratedTierLabel(band(active)) : tierLabel(active.tier, active.rank)}
+            {rankOf(active)}
           </p>
-          <p className="tabular-nums text-text-dim">
-            {rated ? `${active.ladderPosition.toLocaleString()} rating` : `${active.leaguePoints ?? 0} LP`}
-          </p>
-          <p className="tabular-nums text-text-mute">
-            {daysAgo(Math.round((trend.to - active.at) / DAY_MS))}
-          </p>
+          <p className="tabular-nums text-text-dim">{pointsOf(active)}</p>
+          <p className="tabular-nums text-text-mute">{whenOf(active)}</p>
         </div>
       )}
     </div>

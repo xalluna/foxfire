@@ -189,6 +189,7 @@ function ArchiveRow({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="15.14"
+            aria-label="Patch"
             className="w-20 rounded-md border border-edge bg-canvas px-2 py-1 text-sm tabular-nums text-text"
           />
           <button

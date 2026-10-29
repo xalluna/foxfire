@@ -11,6 +11,9 @@ const FILES: Record<string, unknown> = {
   [`${CDN}/16.16.1/data/en_US/summoner.json`]: {
     data: { SummonerFlash: { id: 'SummonerFlash', key: '4', name: 'Flash' } }
   },
+  [`${CDN}/16.16.1/data/en_US/item.json`]: {
+    data: { '3031': { name: 'Infinity Edge' }, '3364': { name: 'Oracle Lens' } }
+  },
   [`${CDN}/16.16.1/data/en_US/runesReforged.json`]: [
     {
       id: 8100,
@@ -45,6 +48,23 @@ describe('buildAssetManifest', () => {
 
     expect(manifest.runeById[8100].name).toBe('Domination')
     expect(manifest.runeById[8112]).toEqual({ icon: 'perk-images/Electrocute.png', name: 'Electrocute' })
+  })
+
+  it("names items by the numeric ids a match's inventory uses", async () => {
+    const manifest = await buildAssetManifest(fakeFetch)
+
+    expect(manifest.itemById?.[3031]).toEqual({ name: 'Infinity Edge' })
+    expect(manifest.itemById?.[3364]?.name).toBe('Oracle Lens')
+  })
+
+  it('leaves item names out rather than failing when item.json will not come', async () => {
+    const noItems = (async (input: string | URL | Request) =>
+      String(input).endsWith('/item.json') ? new Response('gone', { status: 503 }) : fakeFetch(input)) as typeof fetch
+
+    const manifest = await buildAssetManifest(noItems)
+
+    expect(manifest.itemById).toBeUndefined()
+    expect(manifest.spellById[4]?.name).toBe('Flash')
   })
 
   it('leaves TFT out rather than failing when Data Dragon has none of its files', async () => {

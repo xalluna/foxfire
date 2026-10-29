@@ -85,9 +85,15 @@ export function TftMatchListRow({
             const icon = tftAsset(manifest, 'augments', augment)?.image ?? null
             const name = tftName(manifest, 'augments', augment)
             return icon ? (
-              <img key={augment} src={icon} alt="" title={name} className="h-4 w-4 rounded-full object-cover" />
+              <img key={augment} src={icon} alt={name} title={name} className="h-4 w-4 rounded-full object-cover" />
             ) : (
-              <span key={augment} title={name} className="h-4 w-4 rounded-full bg-surface-2 ring-1 ring-hairline" />
+              <span
+                key={augment}
+                role="img"
+                aria-label={name}
+                title={name}
+                className="h-4 w-4 rounded-full bg-surface-2 ring-1 ring-hairline"
+              />
             )
           })}
         </div>

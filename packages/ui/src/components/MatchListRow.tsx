@@ -2,7 +2,7 @@ import type React from 'react'
 import clsx from 'clsx'
 import type { MatchSummary } from '@foxfire/core'
 import { useAssetManifest } from '../context/assetManifest'
-import { championIconUrl, championName, runeIconUrl, spellIconUrl } from '../lib/assets'
+import { championIconUrl, championName, runeIconUrl, runeName, spellIconUrl, spellName } from '../lib/assets'
 import { positionIcon, positionLabel } from '../lib/positions'
 import { queueName } from '../lib/queues'
 import { runeIds } from '../lib/runes'
@@ -75,7 +75,8 @@ export function MatchListRow({
       onContextMenu={onContextMenu}
       aria-expanded={expandable ? expanded : undefined}
       className={clsx(
-        'flex h-[72px] w-full items-center gap-2 border-l-[3px] pl-2.5 pr-3 text-left transition',
+        // The list clips to its card's corners, so the focus ring goes inside.
+        'flex h-[72px] w-full items-center gap-2 border-l-[3px] pl-2.5 pr-3 text-left transition focus-visible:outline-offset-[-2px]',
         expandable && 'cursor-pointer',
         match.isRemake
           ? 'border-l-hairline bg-surface/40 hover:bg-surface'
@@ -108,6 +109,8 @@ export function MatchListRow({
         <div className="relative">
           <Asset
             src={assets ? championIconUrl(assets, match.championId) : null}
+            // Named here as well as beside it: on a phone the name beside it goes.
+            alt={name}
             className="h-11 w-11"
             rounded="rounded-full"
             title={name}
@@ -122,10 +125,12 @@ export function MatchListRow({
         <div className="flex flex-col gap-[3px] max-sm:hidden">
           <Asset
             src={assets && match.summoner1Id !== null ? spellIconUrl(assets, match.summoner1Id) : null}
+            alt={assets && match.summoner1Id !== null ? spellName(assets, match.summoner1Id) : undefined}
             className="h-[19px] w-[19px]"
           />
           <Asset
             src={assets && match.summoner2Id !== null ? spellIconUrl(assets, match.summoner2Id) : null}
+            alt={assets && match.summoner2Id !== null ? spellName(assets, match.summoner2Id) : undefined}
             className="h-[19px] w-[19px]"
           />
         </div>
@@ -133,11 +138,13 @@ export function MatchListRow({
         <div className="flex flex-col gap-[3px] max-sm:hidden">
           <Asset
             src={assets && keystone !== null ? runeIconUrl(assets, keystone) : null}
+            alt={assets && keystone !== null ? runeName(assets, keystone) : undefined}
             className="h-[19px] w-[19px] bg-canvas"
             rounded="rounded-full"
           />
           <Asset
             src={assets && secondary !== null ? runeIconUrl(assets, secondary) : null}
+            alt={assets && secondary !== null ? runeName(assets, secondary) : undefined}
             className="h-[19px] w-[19px]"
             rounded="rounded-full"
           />

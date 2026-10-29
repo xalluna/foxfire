@@ -71,6 +71,13 @@ record your games by itself, with no OBS to install.
   layout larger together — 100%, 110%, 125% or 150% — in every Foxfire window, and keeps it after a
   restart. Ctrl + = and Ctrl + − step it from any window and Ctrl + 0 puts it back, where those
   keys used to be forgotten the moment the app closed.
+- **Charts you can read from the keyboard.** Tab to a rank graph — the profile's, the Rank
+  page's — or a telemetry chart, and the arrow keys step through its readings with the same
+  tooltip the pointer shows; Home and End go to the first and the latest. A screen reader hears
+  each reading as you move.
+- **Right-click menus from the keyboard.** The menu key or Shift+F10 on a match row opens its menu
+  with focus inside it; the arrow keys walk it, and Escape or choosing an item puts you back on the
+  row. An item that cannot be used yet can still be reached, so its reason is read out.
 
 ### Changed
 
@@ -108,6 +115,11 @@ record your games by itself, with no OBS to install.
 - **Tier colours read on dark panels.** Iron, Bronze, Master and Grandmaster — and Hyper Roll's
   Purple — are lighter shades of the same colours, so a tier's name is as easy to read as any
   other. The crests are untouched.
+- **Things told apart by colour are told apart by shape as well.** The telemetry charts draw their
+  second line dashed and their third dotted, and the legend matches. An assist on a recording's
+  timeline is a shield, where it was the kill's crossed swords in a quieter colour. The scoreboard
+  names its columns — KDA, CS, Gold, Damage, Taken — so the two damage bars are not told apart by
+  colour alone.
 
 ### Fixed
 
@@ -124,6 +136,26 @@ record your games by itself, with no OBS to install.
   in whatever order the game's data happened to arrive, which on a server was no order at all.
 - **The arrow that opens a match is back inside its row.** In a window 1280 wide, with the profile
   beside the list, it sat past the edge of the list and was cut off.
+- **The account rail opens to the keyboard.** Tabbing into it slides it open with the names and
+  the Set home and Remove buttons, which until now only a pointer could reach.
+- **Focus rings are no longer cut off** on match rows, period and queue toggles, settings rows that
+  open a window, the "Rank history" and "All champions" links under the profile's cards, and
+  right-click menu items. Each is drawn inside the control where the card around it clips.
+- **Screen readers hear what the icons are:** champions, summoner spells, runes and items in match
+  history and on the scoreboard, each player's lane on the scoreboard, and TFT's units, stars,
+  traits, items and augments. Items are also named when you hover them.
+- **LP is read out as gained or lost** — "gained 19 LP", "lost 17 LP", "promoted to Gold III" — where
+  a screen reader heard "19 LP" for a win and a loss alike.
+- **Fields a screen reader can name.** The server address, invite, username, email and password
+  fields in Settings › Server, the Riot ID when adding an account, a patch typed in on Archived
+  clients, the telemetry panel's filters, YouTube's privacy and title templates, a size limit in
+  gigabytes, and the admin pages' invite email, test email and replay cap were named only by their
+  placeholder, or not at all.
+- **Smaller things a screen reader got wrong.** The Champions table reads its sort off its column
+  headers, the telemetry panel's tabs are tabs, the tier track under a rank says how far it is to
+  the next tier, and a recording's event markers — which sat inside the seek bar, where nothing is
+  read out — are buttons of their own, named by what happened. Home and End jump to either end of
+  the seek bar.
 
 ### Under the hood
 
@@ -204,6 +236,10 @@ record your games by itself, with no OBS to install.
   outline to 3:1, so a colour change that falls short fails the build.
 - The interface size is `display.zoom` in the app settings, applied as each window's zoom factor;
   Windows' caption buttons are resized with it so they stay level with the title strip.
+- The asset manifest carries item names, from Data Dragon's `item.json` — one more file each time
+  it is built, fetched on its own so that a missing one costs the icons their names and nothing
+  else. A chart's keyboard cursor is `chartCursor` in `@foxfire/ui`, tested in plain node, and the
+  charts are sliders to a screen reader, which is what hands it the arrow keys.
 
 ## [0.16.1] — 2026-09-27
 

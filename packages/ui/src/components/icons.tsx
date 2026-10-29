@@ -223,6 +223,21 @@ export function Skull(props: IconProps): JSX.Element {
   )
 }
 
+/**
+ * An assist on the recording timeline: a hand in somebody else's kill.
+ *
+ * Its own shape, filled like Skull, rather than the kill's crossed swords in
+ * a quieter colour — on a 10px seek bar the colour was the only difference,
+ * and that is not one everybody can see.
+ */
+export function Shield(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M12 2 4 5v6.2c0 5 3.4 9.4 8 10.8 4.6-1.4 8-5.8 8-10.8V5z" />
+    </Icon>
+  )
+}
+
 export function Play(props: IconProps): JSX.Element {
   return (
     <Icon fill="currentColor" stroke="none" {...props}>

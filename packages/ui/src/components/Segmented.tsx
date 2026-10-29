@@ -10,6 +10,9 @@ import clsx from 'clsx'
  *
  * `sm` is for a card in the profile's 320px rail, where the page-sized control
  * leaves no room beside it; `stretch` shares the width out between the options.
+ *
+ * The focus ring is drawn inside each option: the group clips to its rounded
+ * border, and a ring outside an option would be cut off by it.
  */
 export function Segmented<T extends string>({
   options,
@@ -38,7 +41,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === key}
           onClick={() => onChange(key)}
           className={clsx(
-            'whitespace-nowrap transition',
+            'whitespace-nowrap transition focus-visible:outline-offset-[-2px]',
             size === 'sm' ? 'px-2.5' : 'px-3',
             stretch && 'flex-1',
             value === key ? 'bg-accent/10 text-accent' : 'text-text-dim hover:bg-surface'
