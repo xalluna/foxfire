@@ -134,6 +134,14 @@ version 3 still, and a desktop from before TFT is served as it always was.
   `?game=tft`; `POST /api/sync/game-ended` and `/api/rank-readings` take a
   `game`, and without one mean League, which is what a desktop from before TFT
   sends. Progress events carry the game.
+- A post-game ladder stops once the account's history has moved past where it
+  stood when the game ended, whichever sync moved it, rather than only when its
+  own sync stored something. Two members in one game each run a ladder, and the
+  first to find the match stores it for both; the second's sync then found it
+  already stored and kept looking, spending a delta's worth of Riot requests on
+  every attempt it had left — up to four of League's five, five of TFT's six. A
+  Sync now pressed while a ladder waits ends it the same way, before it asks
+  Riot again.
 - A TFT game is placed at its player's own elimination, not the end of its
   lobby. TFT moves LP the moment somebody is knocked out, and the lobby can play
   on for twenty minutes.
