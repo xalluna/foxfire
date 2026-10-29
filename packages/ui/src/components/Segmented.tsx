@@ -30,7 +30,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={clsx(
-        'flex overflow-hidden rounded-md border border-hairline',
+        'flex overflow-hidden rounded-md border border-edge',
         size === 'sm' ? 'h-7 text-xs' : 'h-8 text-sm'
       )}
     >

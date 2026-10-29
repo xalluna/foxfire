@@ -43,7 +43,7 @@ export function SettingsRow({
       <div className="min-w-0 flex-1">
         <span className="block text-sm text-text">{label}</span>
         {description !== undefined && (
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
         )}
       </div>
       {control !== undefined && <div className="flex shrink-0 items-center gap-2">{control}</div>}
@@ -69,7 +69,7 @@ export function SettingsBlock({
     <div className={clsx('px-4 py-3', className)}>
       {label !== undefined && <span className="block text-sm text-text">{label}</span>}
       {description !== undefined && (
-        <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
       )}
       <div className={titled ? 'mt-2.5' : undefined}>{children}</div>
     </div>
@@ -98,17 +98,19 @@ export function ToggleRow({
   disabled: boolean
   onChange: (value: boolean) => void
 }): JSX.Element {
+  // Disabled dims the label and the box, never the description: it is usually
+  // what says why the switch cannot be used yet, so it stays readable.
   return (
     <label
       className={clsx(
         'flex cursor-pointer items-center gap-4 px-4 py-3 transition hover:bg-surface-2/40',
-        disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent'
+        disabled && 'cursor-not-allowed hover:bg-transparent'
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm text-text">{label}</span>
+        <span className={clsx('block text-sm', disabled ? 'text-text-mute' : 'text-text')}>{label}</span>
         {description !== undefined && (
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
         )}
       </span>
       <input
@@ -245,7 +247,7 @@ export function LinkRow({
       <span className="min-w-0 flex-1">
         <span className="block text-sm text-text">{label}</span>
         {description !== undefined && (
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
         )}
       </span>
       <Icon.ExternalLink className="shrink-0 text-text-mute" width={14} height={14} />

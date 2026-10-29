@@ -31,7 +31,7 @@ export function CopyLinkButton({
         void Promise.resolve(onCopy()).then(() => setCopied(true))
       }}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 text-2xs transition',
+        'inline-flex items-center justify-center gap-1.5 rounded-md border border-edge px-2.5 py-1 text-xs transition',
         copied ? 'border-teal/40 text-teal' : 'text-text-dim hover:border-accent-dim hover:text-accent',
         className
       )}

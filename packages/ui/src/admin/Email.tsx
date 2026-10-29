@@ -229,7 +229,7 @@ function Meter({ label, window }: { label: string; window: EmailQuotaWindow }): 
         </div>
       )}
 
-      <p className="mt-1.5 text-2xs leading-relaxed text-text-mute">
+      <p className="mt-1.5 text-xs leading-relaxed text-text-mute">
         {latched
           ? `The provider says this is spent; nothing goes until ${formatWhen(window.latchedUntil!)}.`
           : `Resets ${formatWhen(window.resetsAt)}.`}{' '}

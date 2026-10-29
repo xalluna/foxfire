@@ -30,6 +30,7 @@ import {
 } from '@foxfire/screens'
 import { AccountSettings } from '../components/AccountSettings'
 import { CaptureSettings } from '../components/CaptureSettings'
+import { DisplaySettings } from '../components/DisplaySettings'
 import { ServerSettings } from '../components/ServerSettings'
 import { useServerHealth } from '../hooks/useKeyStatus'
 import { ReplaySettings } from '../components/ReplaySettings'
@@ -62,6 +63,7 @@ export type SettingsCategory =
   | 'capture'
   | 'youtube'
   | 'replays'
+  | 'display'
   | 'telemetry'
   | 'about'
 
@@ -106,8 +108,8 @@ interface NavItem extends SettingsNavItem<SettingsCategory> {
  * The sidebar, in groups.
  *
  * Grouped the way the app is: where its data comes from, what it records off
- * your machine, and the two pages that are about Foxfire itself rather than
- * about League.
+ * your machine, and the pages that are about Foxfire itself rather than about
+ * League — how it is drawn, what it measures of itself, and what it is.
  */
 const GROUPS: NavItem[][] = [
   [
@@ -131,6 +133,7 @@ const GROUPS: NavItem[][] = [
     { id: 'replays', label: 'Riot replays', icon: <Icon.Replay /> }
   ],
   [
+    { id: 'display', label: 'Display', icon: <Icon.Display /> },
     { id: 'telemetry', label: 'Developer telemetry', icon: <Icon.Activity /> },
     { id: 'about', label: 'About', icon: <Icon.Info /> }
   ]
@@ -213,6 +216,7 @@ export function Settings({ category }: { category?: string }): JSX.Element {
         {active === 'capture' && <CaptureSettings />}
         {YOUTUBE_ENABLED && active === 'youtube' && <YouTubeSettings />}
         {active === 'replays' && <ReplaySettings />}
+        {active === 'display' && <DisplaySettings />}
         {active === 'telemetry' && <TelemetrySettings />}
         {active === 'about' && <AboutSettings />}
       </div>

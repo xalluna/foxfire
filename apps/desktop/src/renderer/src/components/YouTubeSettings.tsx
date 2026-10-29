@@ -124,7 +124,7 @@ export function YouTubeSettings(): JSX.Element {
         )}
 
         <SettingsBlock>
-          <p className="text-2xs leading-relaxed text-text-mute">
+          <p className="text-xs leading-relaxed text-text-mute">
             Uploading means agreeing to the{' '}
             <ExternalLink href={YOUTUBE_LINKS.terms}>YouTube Terms of Service</ExternalLink>. Google handles
             what you upload under the <ExternalLink href={YOUTUBE_LINKS.googlePrivacy}>Google Privacy Policy</ExternalLink>

@@ -214,7 +214,7 @@ function Member({
             {user.isDisabled && <Badge tone="red">Disabled</Badge>}
             {isYou && <Badge tone="mute">You</Badge>}
           </span>
-          <span className="mt-0.5 flex items-center gap-2 text-2xs leading-relaxed text-text-mute">
+          <span className="mt-0.5 flex items-center gap-2 text-xs leading-relaxed text-text-mute">
             <span className="truncate">{user.email}</span>
             {user.emailSuppressed ? (
               <Badge tone="red">Email bounces</Badge>
@@ -233,14 +233,14 @@ function Member({
 
       {expanded && (
         <div className="space-y-3 border-t border-hairline px-4 py-3">
-          <p className="text-2xs leading-relaxed text-text-mute">
+          <p className="text-xs leading-relaxed text-text-mute">
             {plural(user.linkedRiotAccounts, 'League account')} · {plural(user.activeSessions, 'session')} ·
             joined {new Date(user.createdAt).toLocaleDateString()}
           </p>
 
           {user.passwordReset !== null && (
             <div className="rounded-md border border-hairline bg-surface-2 p-3">
-              <p className="text-2xs leading-relaxed text-text-mute">
+              <p className="text-xs leading-relaxed text-text-mute">
                 A reset link is outstanding, good until{' '}
                 <span className="text-text-dim">
                   {new Date(user.passwordReset.expiresAt).toLocaleString()}
@@ -271,7 +271,7 @@ function Member({
 
           {user.requestedReset && (
             <div className="rounded-md border border-hairline bg-surface-2 p-3">
-              <p className="text-2xs leading-relaxed text-text-mute">
+              <p className="text-xs leading-relaxed text-text-mute">
                 They asked for a reset link from the sign-in page, and it went to their email — good until{' '}
                 <span className="text-text-dim">{new Date(user.requestedReset.expiresAt).toLocaleString()}</span>.
                 Only they have it; making a new one here replaces it.
@@ -283,13 +283,13 @@ function Member({
           )}
 
           {user.isDisabled && !guarded && (
-            <p className="text-2xs leading-relaxed text-text-mute">
+            <p className="text-xs leading-relaxed text-text-mute">
               Disabled accounts cannot sign in, so there is no reset link to send. Enable them first.
             </p>
           )}
 
           {pinned && (
-            <p className="text-2xs leading-relaxed text-text-mute">
+            <p className="text-xs leading-relaxed text-text-mute">
               This server&apos;s configuration names them as its head admin, so nobody can demote,
               disable or remove them from here. Handing the server over means changing ADMIN_EMAIL
               and restarting it.
@@ -297,7 +297,7 @@ function Member({
           )}
 
           {guarded && (
-            <p className="text-2xs leading-relaxed text-text-mute">
+            <p className="text-xs leading-relaxed text-text-mute">
               Only a head admin can demote, disable or remove another admin, or make them a reset
               link.
             </p>
@@ -342,7 +342,7 @@ function Member({
 
             {pinned || guarded ? null : confirming ? (
               <>
-                <span className="self-center text-2xs text-red">Remove {user.username}?</span>
+                <span className="self-center text-xs text-red">Remove {user.username}?</span>
                 <button
                   type="button"
                   disabled={busy}
@@ -407,14 +407,14 @@ function ResetNotEmailed({ reason }: { reason: string | null }): JSX.Element | n
         ? 'Not emailed: mail to their address bounced. Pass it on yourself.'
         : null
 
-  return text === null ? null : <p className="mt-1.5 text-2xs leading-relaxed text-amber">{text}</p>
+  return text === null ? null : <p className="mt-1.5 text-xs leading-relaxed text-amber">{text}</p>
 }
 
 function Badge({ tone, children }: { tone: 'accent' | 'red' | 'mute'; children: string }): JSX.Element {
   return (
     <span
       className={clsx(
-        'shrink-0 rounded border px-1.5 py-0.5 text-[10px]',
+        'shrink-0 rounded border px-1.5 py-0.5 text-2xs',
         tone === 'accent' && 'border-accent-dim/40 bg-accent/10 text-accent',
         tone === 'red' && 'border-red/30 bg-red/10 text-red',
         tone === 'mute' && 'border-hairline text-text-mute'

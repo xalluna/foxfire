@@ -288,7 +288,7 @@ function Select({
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-md border border-hairline bg-canvas px-2 py-1 text-2xs text-text-dim outline-none focus:border-accent-dim"
+      className="rounded-md border border-edge bg-canvas px-2 py-1 text-xs text-text-dim outline-none focus:border-accent"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>

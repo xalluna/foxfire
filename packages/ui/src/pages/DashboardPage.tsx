@@ -261,7 +261,7 @@ export function DashboardPage({
 
       {notice !== null && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber/30 bg-surface px-4 py-3 shadow-flyout">
-          <p className="max-w-md text-2xs leading-relaxed text-amber">{notice}</p>
+          <p className="max-w-md text-xs leading-relaxed text-amber">{notice}</p>
           <button
             type="button"
             onClick={onDismissNotice}

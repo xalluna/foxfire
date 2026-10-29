@@ -30,6 +30,7 @@ import type {
   ArchiveResult,
   AssetManifest,
   BackgroundSettings,
+  DisplaySettings,
   CaptureMicrophone,
   CaptureSettings,
   CaptureStatus,
@@ -308,6 +309,12 @@ export interface Api {
   background: {
     get: () => Promise<BackgroundSettings>
     set: (patch: Partial<BackgroundSettings>) => Promise<BackgroundSettings>
+  }
+  /** How large every window is drawn. Ctrl+= / Ctrl+- / Ctrl+0 change it too. */
+  display: {
+    get: () => Promise<DisplaySettings>
+    set: (patch: Partial<DisplaySettings>) => Promise<DisplaySettings>
+    onChanged: (cb: (settings: DisplaySettings) => void) => () => void
   }
   /**
    * Recording games as they are played — through a local OBS over its

@@ -119,7 +119,7 @@ function ResetForm({ token, email }: { token: string; email: string | null }): J
           onChange={(e) => setPassword(e.target.value)}
           className={`${inputClass} w-full`}
         />
-        <span className="block text-2xs text-text-mute">At least {MINIMUM_PASSWORD} characters.</span>
+        <span className="block text-xs text-text-mute">At least {MINIMUM_PASSWORD} characters.</span>
       </label>
 
       <label className="block space-y-1">

@@ -14,7 +14,7 @@ export interface HomeMark {
 }
 
 const markClass =
-  'inline-flex shrink-0 items-center justify-center rounded-md border border-hairline p-1.5 transition'
+  'inline-flex shrink-0 items-center justify-center rounded-md border border-edge p-1.5 transition'
 
 /**
  * The star and the house on a profile: keep this player in the search box,

@@ -2,13 +2,17 @@ import { useId, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { chartCursorProps } from '../lib/chartCursor'
 import { roundedPath, type Point } from '../lib/curve'
+import { useMeasuredWidth } from '../hooks/useMeasuredWidth'
 
-const WIDTH = 720
-const HEIGHT = 200
-const PAD = { top: 10, right: 12, bottom: 22, left: 52 }
-
-const PLOT_W = WIDTH - PAD.left - PAD.right
-const PLOT_H = HEIGHT - PAD.top - PAD.bottom
+// Drawn at the width it is shown at, measured, as RankChart is, so the axis
+// labels are a real 11px however wide the card. The height keeps the old
+// 720 × 200 proportion, held between a floor a line still reads at and a
+// ceiling that leaves room for the next chart down.
+const FALLBACK_WIDTH = 720
+const ASPECT = 720 / 200
+const MIN_HEIGHT = 150
+const MAX_HEIGHT = 260
+const PAD = { top: 10, right: 12, bottom: 24, left: 60 }
 
 export interface Series {
   label: string
@@ -77,12 +81,20 @@ export function TimeSeriesChart({
   // Per chart, so two filled charts on one page each find their own gradient
   // rather than both drawing the first one's.
   const gradientId = `ts${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const [frame, width] = useMeasuredWidth(FALLBACK_WIDTH)
+  const height = Math.round(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, width / ASPECT)))
+  const plotW = width - PAD.left - PAD.right
+  const plotH = height - PAD.top - PAD.bottom
 
   const all = series.flatMap((s) => s.points)
   const values = all.map((p) => p.value).filter((v): v is number => v !== null)
 
   if (values.length === 0) {
-    return <p className="px-4 py-10 text-center text-sm text-text-mute">{emptyText}</p>
+    return (
+      <p ref={frame} className="px-4 py-10 text-center text-sm text-text-mute">
+        {emptyText}
+      </p>
+    )
   }
 
   const tMin = Math.min(...all.map((p) => p.at))
@@ -94,8 +106,8 @@ export function TimeSeriesChart({
   // never approaches it.
   const yMax = Math.max(1, yMaxOverride ?? Math.max(...values, threshold?.value ?? 0) * 1.1)
 
-  const x = (t: number): number => PAD.left + ((t - tMin) / tSpan) * PLOT_W
-  const y = (v: number): number => PAD.top + (1 - Math.min(v, yMax) / yMax) * PLOT_H
+  const x = (t: number): number => PAD.left + ((t - tMin) / tSpan) * plotW
+  const y = (v: number): number => PAD.top + (1 - Math.min(v, yMax) / yMax) * plotH
 
   const gridValues = [0, 0.25, 0.5, 0.75, 1].map((f) => f * yMax)
 
@@ -109,10 +121,12 @@ export function TimeSeriesChart({
     `${formatAt(at)}: ${series.map((s) => `${s.label} ${readAt(s, at, formatValue, 'no reading')}`).join(', ')}`
 
   return (
-    <div className="relative">
+    <div ref={frame} className="relative">
       <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="w-full"
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height={height}
+        className="block"
         aria-label={ariaLabel}
         {...chartCursorProps(times.length, hover, setHover, (i) => describeAt(times[i]))}
         onMouseLeave={() => setHover(null)}
@@ -130,7 +144,7 @@ export function TimeSeriesChart({
           <g key={v}>
             <line
               x1={PAD.left}
-              x2={WIDTH - PAD.right}
+              x2={width - PAD.right}
               y1={y(v)}
               y2={y(v)}
               stroke="rgb(var(--hairline))"
@@ -138,9 +152,9 @@ export function TimeSeriesChart({
             />
             <text
               x={PAD.left - 8}
-              y={y(v) + 3}
+              y={y(v) + 4}
               textAnchor="end"
-              className="fill-[rgb(var(--text-mute))] text-[9px]"
+              className="fill-[rgb(var(--text-mute))] text-2xs"
             >
               {formatValue(v)}
             </text>
@@ -153,7 +167,7 @@ export function TimeSeriesChart({
             x1={x(at)}
             x2={x(at)}
             y1={PAD.top}
-            y2={PAD.top + PLOT_H}
+            y2={PAD.top + plotH}
             stroke="rgb(var(--red))"
             strokeWidth="1"
             strokeOpacity="0.5"
@@ -165,7 +179,7 @@ export function TimeSeriesChart({
           <>
             <line
               x1={PAD.left}
-              x2={WIDTH - PAD.right}
+              x2={width - PAD.right}
               y1={y(threshold.value)}
               y2={y(threshold.value)}
               stroke="rgb(var(--red))"
@@ -173,10 +187,10 @@ export function TimeSeriesChart({
               strokeDasharray="4 3"
             />
             <text
-              x={WIDTH - PAD.right}
+              x={width - PAD.right}
               y={y(threshold.value) - 4}
               textAnchor="end"
-              className="fill-[rgb(var(--red))] text-[9px]"
+              className="fill-[rgb(var(--red))] text-2xs"
             >
               {threshold.label}
             </text>
@@ -186,7 +200,7 @@ export function TimeSeriesChart({
         {series.map((s, i) => {
           const runs = buildRuns(s, x, y)
           if (runs.length === 0) return null
-          const floor = PAD.top + PLOT_H
+          const floor = PAD.top + plotH
           return (
             <g key={s.label}>
               {s.fill && (
@@ -213,10 +227,10 @@ export function TimeSeriesChart({
         {times.map((at, i) => (
           <rect
             key={at}
-            x={x(at) - PLOT_W / Math.max(times.length, 1) / 2}
+            x={x(at) - plotW / Math.max(times.length, 1) / 2}
             y={PAD.top}
-            width={PLOT_W / Math.max(times.length, 1)}
-            height={PLOT_H}
+            width={plotW / Math.max(times.length, 1)}
+            height={plotH}
             fill="transparent"
             onMouseEnter={() => setHover(i)}
           />
@@ -224,14 +238,14 @@ export function TimeSeriesChart({
 
         {timeAxis && (
           <>
-            <text x={PAD.left} y={HEIGHT - 6} className="fill-[rgb(var(--text-mute))] text-[9px]">
+            <text x={PAD.left} y={height - 7} className="fill-[rgb(var(--text-mute))] text-2xs">
               {formatAt(tMin)}
             </text>
             <text
-              x={WIDTH - PAD.right}
-              y={HEIGHT - 6}
+              x={width - PAD.right}
+              y={height - 7}
               textAnchor="end"
-              className="fill-[rgb(var(--text-mute))] text-[9px]"
+              className="fill-[rgb(var(--text-mute))] text-2xs"
             >
               {formatAt(tMax)}
             </text>
@@ -243,7 +257,7 @@ export function TimeSeriesChart({
             x1={x(hoverAt)}
             x2={x(hoverAt)}
             y1={PAD.top}
-            y2={PAD.top + PLOT_H}
+            y2={PAD.top + plotH}
             stroke="rgb(var(--accent))"
             strokeWidth="1"
             strokeOpacity="0.5"

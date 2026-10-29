@@ -4,6 +4,7 @@ import type {
   Account,
   AppSettingsPublic,
   BackgroundSettings,
+  DisplaySettings,
   CaptureMicrophone,
   CaptureSettings,
   CaptureStatus,
@@ -742,6 +743,26 @@ export const mockApi: Api = {
     set: (patch): Promise<BackgroundSettings> =>
       delay({ runInTray: false, launchAtStartup: false, lcuInstallPath: null, ...patch }, 150)
   },
+
+  // Remembered for the page, and that is all: the size is Electron's zoom,
+  // which a browser tab has no equivalent of. Use the browser's own zoom to see
+  // a layout at another size.
+  display: (() => {
+    let settings: DisplaySettings = { zoom: 1 }
+    const listeners = new Set<(settings: DisplaySettings) => void>()
+    return {
+      get: (): Promise<DisplaySettings> => delay(settings, 50),
+      set: (patch: Partial<DisplaySettings>): Promise<DisplaySettings> => {
+        settings = { ...settings, ...patch }
+        for (const listener of listeners) listener(settings)
+        return delay(settings, 50)
+      },
+      onChanged: (cb: (settings: DisplaySettings) => void) => {
+        listeners.add(cb)
+        return () => listeners.delete(cb)
+      }
+    }
+  })(),
 
   search: fixture.search,
   favorites: fixture.favorites,

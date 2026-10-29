@@ -67,6 +67,10 @@ record your games by itself, with no OBS to install.
   history" on a TFT recording opens its game on the TFT profile. TFT is a program of its own now,
   not League's: Foxfire's own OBS setup captures both, and a scene of your own needs a game capture
   of `TFTClient-Win64-Shipping.exe` beside League's.
+- **One size for the whole app, in Settings › Display.** Interface size draws the text and the
+  layout larger together — 100%, 110%, 125% or 150% — in every Foxfire window, and keeps it after a
+  restart. Ctrl + = and Ctrl + − step it from any window and Ctrl + 0 puts it back, where those
+  keys used to be forgotten the moment the app closed.
 - **Charts you can read from the keyboard.** Tab to a rank graph — the profile's, the Rank
   page's — or a telemetry chart, and the arrow keys step through its readings with the same
   tooltip the pointer shows; Home and End go to the first and the latest. A screen reader hears
@@ -96,6 +100,21 @@ record your games by itself, with no OBS to install.
 - **The Champions page drops its subtitle.** The line under the heading that counted your synced
   games and noted that remakes are left out is gone; the season and queue pickers beside it already
   say what the table covers.
+- **Easier to read.** Secondary text — captions, timestamps, column headers, the description under
+  every setting — is a lighter grey that holds up against every panel, where before it was barely
+  there, and every colour text is written in now meets the WCAG AA contrast guideline. Text is a
+  size larger throughout, and no word or number is smaller than 11px: the 9px badges on match rows
+  have grown, and the explanations that were set at the smallest size are a step up. A setting that
+  cannot be changed yet dims its name, not the explanation of why.
+- **Edges you can see.** Panels sit a shade further off the background with an outline you can make
+  out, text boxes, dropdowns and buttons have an outline of their own, and a field you are typing
+  in turns bright blue. Checkboxes and dropdowns are drawn dark rather than white.
+- **Chart labels keep their size.** The rank graph and the telemetry charts used to scale their
+  labels with the window, to almost nothing in a narrow one. They are drawn at a fixed, readable
+  size now.
+- **Tier colours read on dark panels.** Iron, Bronze, Master and Grandmaster — and Hyper Roll's
+  Purple — are lighter shades of the same colours, so a tier's name is as easy to read as any
+  other. The crests are untouched.
 - **Things told apart by colour are told apart by shape as well.** The telemetry charts draw their
   second line dashed and their third dotted, and the legend matches. An assist on a recording's
   timeline is a shield, where it was the kill's crossed swords in a quieter colour. The scoreboard
@@ -115,6 +134,8 @@ record your games by itself, with no OBS to install.
   game capture to hook as fast as OBS allows.
 - **An opened match lists each team by lane** — top, jungle, mid, bot, then support — rather than
   in whatever order the game's data happened to arrive, which on a server was no order at all.
+- **The arrow that opens a match is back inside its row.** In a window 1280 wide, with the profile
+  beside the list, it sat past the edge of the list and was cut off.
 - **The account rail opens to the keyboard.** Tabbing into it slides it open with the names and
   the Set home and Remove buttons, which until now only a pointer could reach.
 - **Focus rings are no longer cut off** on match rows, period and queue toggles, settings rows that
@@ -210,6 +231,11 @@ record your games by itself, with no OBS to install.
 - A ladder's rank history carries the season's best reading from before the range it covers, so a
   30-day view can tell a first time from a return. This PC reads it from its own database, and a
   server answers it from 0.6.0; against an older server, a peak is judged from the range alone.
+- `styles/contrast.test.ts` in `@foxfire/ui` reads the palette out of the stylesheet and holds
+  every text colour, tier colours included, to 4.5:1 against every background and every control
+  outline to 3:1, so a colour change that falls short fails the build.
+- The interface size is `display.zoom` in the app settings, applied as each window's zoom factor;
+  Windows' caption buttons are resized with it so they stay level with the title strip.
 - The asset manifest carries item names, from Data Dragon's `item.json` — one more file each time
   it is built, fetched on its own so that a missing one costs the icons their names and nothing
   else. A chart's keyboard cursor is `chartCursor` in `@foxfire/ui`, tested in plain node, and the

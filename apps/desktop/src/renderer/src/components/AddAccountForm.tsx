@@ -64,7 +64,7 @@ export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Eleme
           aria-label="Riot ID"
           spellCheck={false}
           autoFocus
-          className="w-full rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-sm text-text outline-none transition placeholder:text-text-mute focus:border-accent-dim"
+          className="w-full rounded-md border border-edge bg-surface px-2.5 py-1.5 text-sm text-text outline-none transition placeholder:text-text-mute focus:border-accent"
         />
         <button
           type="submit"
@@ -74,7 +74,7 @@ export function AddAccountForm({ onAdded }: { onAdded?: () => void }): JSX.Eleme
           {add.isPending ? 'Adding…' : 'Add account'}
         </button>
       </form>
-      {error && <p className="mt-1.5 text-2xs leading-snug text-red">{error}</p>}
+      {error && <p className="mt-1.5 text-xs leading-snug text-red">{error}</p>}
     </div>
   )
 }

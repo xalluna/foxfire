@@ -2,6 +2,7 @@ import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { windowRoutes } from '@shared/windowRoutes'
 import { loadRoute } from './rendererUrl'
+import { attachZoom, currentZoom } from './zoom'
 
 /**
  * Managing archived League installs, in a window of its own.
@@ -39,7 +40,8 @@ export function openArchivesWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      zoomFactor: currentZoom()
     }
   })
 
@@ -52,6 +54,7 @@ export function openArchivesWindow(): void {
     return { action: 'deny' }
   })
 
+  attachZoom(window)
   loadRoute(window, windowRoutes.archives())
 
   archivesWindow = window

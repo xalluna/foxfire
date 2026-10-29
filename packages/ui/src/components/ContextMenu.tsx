@@ -154,7 +154,7 @@ export function ContextMenu({
           }}
           className={clsx(
             // The menu clips to its corners, so the focus ring goes inside.
-            'block w-full px-3 py-1.5 text-left text-2xs transition focus-visible:outline-offset-[-2px]',
+            'block w-full px-3 py-1.5 text-left text-xs transition focus-visible:outline-offset-[-2px]',
             item.disabledReason === undefined
               ? 'text-text-dim hover:bg-accent/10 hover:text-accent'
               : 'cursor-not-allowed text-text-mute'
@@ -162,7 +162,7 @@ export function ContextMenu({
         >
           {item.label}
           {item.disabledReason !== undefined && (
-            <span className="mt-0.5 block text-2xs leading-snug text-text-mute/70">
+            <span className="mt-0.5 block text-xs leading-snug text-text-mute">
               {item.disabledReason}
             </span>
           )}
