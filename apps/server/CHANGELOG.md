@@ -93,6 +93,12 @@ version 3 still, and a desktop from before TFT is served as it always was.
   Champions table reads its sort off its column headers, the tier track says
   how far it is to the next tier, and a recording's event markers are buttons
   of their own rather than sitting unread inside the seek bar.
+- **A friend's games arrive with the one you played together.** When your sync
+  finds another member of the server in a game — a duo, a five-stack, a TFT
+  lobby, ranked or not — their history is synced too, where it used to only
+  read their rank. Somebody who had played three games on their own since
+  their last sync found those missing until they pressed Sync now, and the
+  game you shared was given the LP of all four.
 
 ### Under the hood
 
@@ -128,7 +134,7 @@ version 3 still, and a desktop from before TFT is served as it always was.
   docker-compose and `.env.example`.
 - Syncs are per account and per game. A TFT sync fetches TFT's games and
   boards, reads TFT's ladders (Hyper Roll's colour and rating included),
-  attributes LP and reads co-players, on its own sync state, its own cooldown
+  attributes LP and syncs co-players, on its own sync state, its own cooldown
   and its own post-game ladder — a longer one, since Riot publishes a TFT match
   only when its whole lobby is done. `POST /api/sync/{id}` and `GET` take
   `?game=tft`; `POST /api/sync/game-ended` and `/api/rank-readings` take a
@@ -180,6 +186,17 @@ version 3 still, and a desktop from before TFT is served as it always was.
 - The Insights test that counts a request under its status sums the window
   rather than reading its last ten seconds, which three requests could straddle,
   so it no longer fails at random in CI.
+- `CoPlayerRanks` is `CoPlayerSyncs`. After a sync that is not a backfill
+  stores games, every other tracked account in them — League's from the
+  participants, TFT's from the boards, any queue — is started on a sync of its
+  own for that game, as an automatic one, so its requests go as post-game work.
+  An account whose own sync is under way, or whose own post-game ladder is
+  waiting, is left to it. The run stores what was missing before it reads rank,
+  which is what keeps the reading from closing an interval on games that had not
+  arrived. That trades one league-v4 request per co-player for their delta — the
+  id list, the reading, the profile and whatever is new — and the account's own
+  finished event refreshes its screens, so `lcu:rankChanged` is no longer raised
+  for it.
 
 ## [0.5.1] — 2026-09-27
 

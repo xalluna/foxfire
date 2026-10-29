@@ -210,7 +210,7 @@ builder.Services.AddScoped<TftIdentity>();
 builder.Services.AddScoped<RankRecorder>();
 builder.Services.AddScoped<AccountProfile>();
 builder.Services.AddScoped<AttributionRunner>();
-builder.Services.AddScoped<CoPlayerRanks>();
+builder.Services.AddScoped<CoPlayerSyncs>();
 builder.Services.AddScoped<IdentityRepair>();
 
 // The read half. Every screen the desktop draws in server mode comes

@@ -145,17 +145,7 @@ public sealed partial class SyncService
 
         if (!isBackfill && stored > 0)
         {
-            try
-            {
-                var coPlayers = services.GetRequiredService<CoPlayerRanks>();
-                var read = await coPlayers.ReadAsync(
-                    Game.Tft, account.Id, idsToFetch, id => IsSyncing(id, Game.Tft), priority);
-                if (read > 0) log.LogDebug("Read TFT rank for {Count} co-player(s) of {RiotId}", read, account.RiotId);
-            }
-            catch (Exception ex)
-            {
-                log.LogDebug(ex, "Reading TFT co-players' rank failed after syncing {RiotId}", account.RiotId);
-            }
+            await QueueCoPlayersAsync(services.GetRequiredService<CoPlayerSyncs>(), Game.Tft, account, idsToFetch);
         }
 
         if (failed == 0) await MarkSyncedAsync(db, state, isBackfill, newest);
