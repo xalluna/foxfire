@@ -50,6 +50,17 @@ export interface ImportBatchOutcome {
   unplaced: number
 }
 
+/** One page of the server working out LP, as it answers. */
+export interface ImportFinishPage {
+  /** Accounts this page worked out. */
+  accounts: number
+  attributed: number
+  /** Every account on the server — absent from a server that does them all at once. */
+  total?: number | null
+  /** Where the next page starts; absent or null once the last account is done. */
+  nextOffset?: number | null
+}
+
 export interface ImportSeasonRow {
   label: string
   startsAt: number

@@ -170,6 +170,12 @@ record your games by itself, with no OBS to install.
   the next tier, and a recording's event markers — which sat inside the seek bar, where nothing is
   read out — are buttons of their own, named by what happened. Home and End jump to either end of
   the seek bar.
+- **A big import to a server no longer says it failed after it landed.** Working out LP now goes a
+  page of accounts at a time and counts them as it goes, and if it stops part-way the result says
+  everything was added and to import the same file again to finish.
+- **Saving seasons works the LP out again**, on a server for both games and on this PC for your
+  own accounts — a boundary added late used to leave the numbers on match rows describing the old
+  one. The editor says while it saves that this takes a while, and a refusal shows why.
 
 ### Under the hood
 

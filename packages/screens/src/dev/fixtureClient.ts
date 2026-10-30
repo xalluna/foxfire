@@ -1424,8 +1424,9 @@ let fixtureImportRuns = 0
  *
  * Each run is a different outcome, in turn, so all of them can be looked at by
  * pressing the button: the first import of a file, the same file again three
- * days later (mostly already there, some new, a few problems), and the same
- * file again with nothing new in it.
+ * days later (mostly already there, some new, a few problems), the same file
+ * again with nothing new in it, and a run whose last step — working out LP —
+ * stopped after everything had landed.
  */
 export async function runFixtureImport(
   onProgress: (progress: ImportProgress) => void
@@ -1444,8 +1445,12 @@ export async function runFixtureImport(
     }
   }
 
+  // A page of accounts at a time, counted, as a server from 0.6.0 answers.
   onProgress({ phase: 'finishing', current: 0, total: 0 })
-  await new Promise((resolve) => setTimeout(resolve, 400))
+  for (const current of [10, 20, 30, 34]) {
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    onProgress({ phase: 'finishing', current, total: 34 })
+  }
   onProgress({ phase: 'done', current: 0, total: 0 })
 
   return outcome.result
@@ -1521,6 +1526,28 @@ const FIXTURE_IMPORTS: Array<{
       // Stops where the last copy did — what a file read without its
       // write-ahead log looks like.
       newest: { matchAt: Date.now() - 3 * DAY, readingAt: Date.now() - 3 * DAY }
+    }
+  },
+  {
+    total: 450,
+    matches: 19,
+    readings: 12,
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 19,
+      readings: 12,
+      seasons: 0,
+      attributed: 6,
+      // Everything landed; the server stopped answering while it worked out LP.
+      lpUnfinished: true,
+      unresolved: [],
+      alreadyThere: { matches: 431, readings: 190, seasons: 1 },
+      matchesFailed: 0,
+      readingsUnplaced: 0,
+      healed: 0,
+      newest: { matchAt: Date.now() - 600_000, readingAt: Date.now() - 600_000 }
     }
   }
 ]

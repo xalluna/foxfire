@@ -131,6 +131,19 @@ version 3 still, and a desktop from before TFT is served as it always was.
   read their rank. Somebody who had played three games on their own since
   their last sync found those missing until they pressed Sync now, and the
   game you shared was given the LP of all four.
+- **A big import no longer says it failed after it landed.** Its last step,
+  working out LP, was one request for the whole server, and on a big community
+  a client stopped waiting for it after fifteen seconds — so an admin was told
+  the import failed when every row had arrived. It now goes a page of accounts
+  at a time, the progress counts them ("Working out LP — 120 of 480
+  accounts"), and if it stops part-way the result says everything was added
+  and to import the same file again to finish.
+- **Saving the season table can't leave somebody's LP half-rebuilt.** The
+  rebuild carries on if the page stops waiting for it, where it could stop
+  between deleting an account's figures and working them out again — and
+  saving TFT's sets now rebuilds TFT's LP, which it did not at all. The editor
+  says while it saves that it is working LP out again, and a refusal shows the
+  server's reason.
 
 ### Under the hood
 
@@ -264,6 +277,12 @@ version 3 still, and a desktop from before TFT is served as it always was.
   an `sp_getapplock` that the email dispatcher now takes through the same
   `SqlAppLock`. `Sync__Background=false` keeps a process from sweeping at all,
   which is the test fixture's: its hosts share one database.
+- `POST /api/admin/import/finish` takes `offset` and `limit` (at most 25
+  accounts) and answers `total` and `nextOffset`; asked for neither, it does
+  the whole server as before, so an older desktop's import still finishes.
+  The import's finish and a season save each run every account in a scope of
+  its own, on the host's shutdown token rather than the request's. Saving
+  seasons is logged at Warning with the admin who did it.
 
 ## [0.5.1] — 2026-09-27
 
