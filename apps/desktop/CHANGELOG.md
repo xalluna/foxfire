@@ -254,6 +254,10 @@ record your games by itself, with no OBS to install.
   it is built, fetched on its own so that a missing one costs the icons their names and nothing
   else. A chart's keyboard cursor is `chartCursor` in `@foxfire/ui`, tested in plain node, and the
   charts are sliders to a screen reader, which is what hands it the arrow keys.
+- The browser harness's server is community-sized: League accounts and Invites › Shared profiles
+  have pages, and Data & storage counts the accounts it lists. `?scenario=server-member` signs in
+  as a member with no admin pages, and `?scenario=server-fresh` as the owner of a server set up
+  today — alone in it, with no mail provider or replay store yet.
 
 ## [0.16.1] — 2026-09-27
 

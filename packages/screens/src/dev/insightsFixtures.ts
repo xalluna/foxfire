@@ -56,7 +56,8 @@ function frameFor(window: InsightsWindow, now: number): InsightsFrame {
 
   const startedAt = now - 40 * MINUTE
   const downFrom = startedAt - 3 * MINUTE
-  const historyStart = now - 9 * DAY
+  // A server set up today has measured nothing from before it first started.
+  const historyStart = scenario === 'server-fresh' ? startedAt : now - 9 * DAY
 
   const up = Array.from({ length: points }, (_, i) => {
     const at = from + i * step

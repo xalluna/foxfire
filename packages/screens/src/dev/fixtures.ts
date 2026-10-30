@@ -128,6 +128,55 @@ function communityAccount(
   }
 }
 
+/**
+ * The members the fixture client generates behind its hand-written ones, so the
+ * Members page has pages. Here rather than there because the accounts below are
+ * claimed by them: each owns as many as their Members row says it does.
+ */
+export const GENERATED_MEMBER_COUNT = 117
+
+export const generatedMemberName = (index: number): string => `Summoner${String(index + 1).padStart(3, '0')}`
+
+export const generatedMemberClaims = (index: number): number => index % 3
+
+const NAME_HEADS = ['Ash', 'Brine', 'Cinder', 'Dusk', 'Ember', 'Frost', 'Gale', 'Iron', 'Jade', 'Kestrel', 'Lark', 'Mire',
+  'North', 'Onyx', 'Pale', 'Quartz', 'Rook', 'Slate', 'Thorn', 'Umber', 'Vale', 'Wren', 'Yarrow', 'Zephyr']
+const NAME_TAILS = ['wind', 'song', 'blade', 'step', 'heart', 'light', 'shade', 'root', 'watch', 'crest']
+const GENERATED_ICONS = [4834, 588, 3379, 5212, 29, 4568, 685, 1394, 5367, 7, 6299, 5788, 3505]
+
+function generatedAccount(index: number, ownerUsername: string | null): Account {
+  const name = NAME_HEADS[index % NAME_HEADS.length] + NAME_TAILS[Math.floor(index / NAME_HEADS.length) % NAME_TAILS.length]
+  const tag = index % 9 === 4 ? 'EUW' : index % 13 === 7 ? 'KR1' : 'NA1'
+  return communityAccount(
+    `g${index + 1}`,
+    `${name}#${tag}`,
+    GENERATED_ICONS[index % GENERATED_ICONS.length],
+    30 + ((index * 37) % 400),
+    ownerUsername
+  )
+}
+
+/**
+ * A community that has been running a while, behind the hand-written accounts:
+ * every generated member's claims, and some accounts nobody has claimed.
+ *
+ * Scale lives in the default data rather than in a scenario, as it does for the
+ * members, used invites and replays in the fixture client, so the admin lists
+ * page in every connected harness. The next list that grows is padded the same
+ * way. Built from the index, so every load is the same, and with no "fak" in any
+ * name, so the finder's ranking above still holds.
+ */
+const GENERATED_COMMUNITY: Account[] = (() => {
+  const rows: Account[] = []
+  for (let member = 0; member < GENERATED_MEMBER_COUNT; member++) {
+    for (let claim = 0; claim < generatedMemberClaims(member); claim++) {
+      rows.push(generatedAccount(rows.length, generatedMemberName(member)))
+    }
+  }
+  for (let unclaimed = 0; unclaimed < 30; unclaimed++) rows.push(generatedAccount(rows.length, null))
+  return rows
+})()
+
 export const COMMUNITY: Account[] = [
   communityAccount('c1', 'Faker#KR1', 4834, 590, 'hideonbush'),
   communityAccount('c2', 'Fakest#NA1', 588, 121, 'fakest'),
@@ -141,7 +190,8 @@ export const COMMUNITY: Account[] = [
   communityAccount('c10', 'Emberlyn#NA1', 7, 98, 'ember'),
   communityAccount('c11', 'Vexwind#NA1', 6299, 211, null),
   communityAccount('c12', 'Lumen#NA1', 5788, 55, 'lumen'),
-  communityAccount('c13', 'Hollowpine#NA1', 3505, 167, 'pine')
+  communityAccount('c13', 'Hollowpine#NA1', 3505, 167, 'pine'),
+  ...GENERATED_COMMUNITY
 ]
 
 const soloEntry = (tier: string, rank: string, leaguePoints: number): LeagueEntry[] => [
