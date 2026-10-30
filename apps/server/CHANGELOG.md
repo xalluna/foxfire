@@ -127,6 +127,18 @@ version 3 still, and a desktop from before TFT is served as it always was.
   and only another admin can lift it, so one misclick on your own row locked an
   admin out. The server refuses it (`self_disable`) and Members no longer offers
   it on your own row; stepping down and removing your account are unchanged.
+- **A new server starts invite-only.** Sign-up used to be open until somebody
+  closed it, and nothing in an owner's first session said so — anybody with the
+  address could make an account and read everything a member can. A server
+  starting on an empty database now writes sign-up off; its owner can still
+  register with `ADMIN_EMAIL`, and opens it, or invites people, from Invites.
+  A server that already has members keeps what it had.
+- **An older server whose owner never chose is asked.** Open by a default
+  nobody was told about, it shows "Who can join" at the top of Members and
+  Invites, in the web client and on the desktop, until an admin picks "Invite
+  only" or "Keep it open". `/api/admin/settings` says `publicSignupChosen`.
+  The Joining and Looking in rows say what an open sign-up lets a stranger
+  read.
 
 ### Fixed
 

@@ -39,11 +39,14 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
     private const string PublicAccessCacheKey = "settings:" + ServerSettingKeys.PublicAccess;
 
     /// <summary>
-    /// On unless somebody has turned it off.
+    /// What a server that never chose reads sign-up as: open.
     ///
-    /// A community server nobody can join is the less useful way to be wrong by
-    /// accident, and the admin account is seeded from configuration, so an open
-    /// server is never also an unclaimed one.
+    /// Only a server from before new servers started invite-only can be in that
+    /// state now — <see cref="Foxfire.Api.Startup.DatabasePreparation"/> writes the setting
+    /// off when it finds an empty database — and it keeps the behaviour it has
+    /// always had rather than closing under a community that joins freely. The
+    /// admin pages ask its owner to choose (<see cref="IsPublicSignupChosenAsync"/>),
+    /// because nothing ever told them it was open.
     /// </summary>
     public const bool PublicSignupDefault = true;
 
@@ -62,6 +65,10 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
         var raw = await ReadAsync(ServerSettingKeys.PublicSignup, cancellationToken);
         return raw is null ? PublicSignupDefault : raw == "true";
     }
+
+    /// <summary>Whether somebody has decided sign-up either way, rather than it being open by default.</summary>
+    public async Task<bool> IsPublicSignupChosenAsync(CancellationToken cancellationToken = default) =>
+        await ReadAsync(ServerSettingKeys.PublicSignup, cancellationToken) is not null;
 
     public Task SetPublicSignupAsync(bool enabled, CancellationToken cancellationToken = default) =>
         WriteAsync(ServerSettingKeys.PublicSignup, enabled ? "true" : "false", cancellationToken);

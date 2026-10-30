@@ -287,7 +287,8 @@ const connection: ConnectionState =
   scenario === 'email-held' ||
   scenario === 'unverified' ||
   scenario === 'email-change-pending' ||
-  scenario === 'admin-email-pinned'
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
@@ -660,8 +661,13 @@ function isMemberMatch(user: AdminUser, needle: string): boolean {
 }
 
 // Uncapped, which is the default a host has to choose away from.
+//
+// Sign-up is open and chosen — a host who decided to keep it so. A server set up
+// today starts invite-only, as a real one does; ?scenario=signup-unchosen is an
+// older server, open by a default nobody chose, which the admin pages ask about.
 let mockServerSettings: ServerAdminSettings = {
-  publicSignup: true,
+  publicSignup: !FRESH,
+  publicSignupChosen: scenario !== 'signup-unchosen',
   publicAccess: false,
   backfillTarget: 200,
   tftBackfillTarget: 200,
@@ -1421,7 +1427,7 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           )
         }
 
-        mockServerSettings = next
+        mockServerSettings = { ...next, publicSignupChosen: next.publicSignupChosen || patch.publicSignup !== undefined }
         return delay(mockServerSettings, 180, false)
       },
 
