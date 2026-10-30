@@ -110,6 +110,19 @@ version 3 still, and a desktop from before TFT is served as it always was.
 
 ### Fixed
 
+- **A big import no longer says it failed after it landed.** Its last step,
+  working out LP, was one request for the whole server, and on a big community
+  a client stopped waiting for it after fifteen seconds — so an admin was told
+  the import failed when every row had arrived. It now goes a page of accounts
+  at a time, the progress counts them ("Working out LP — 120 of 480
+  accounts"), and if it stops part-way the result says everything was added
+  and to import the same file again to finish.
+- **Saving the season table can't leave somebody's LP half-rebuilt.** The
+  rebuild carries on if the page stops waiting for it, where it could stop
+  between deleting an account's figures and working them out again — and
+  saving TFT's sets now rebuilds TFT's LP, which it did not at all. The editor
+  says while it saves that it is working LP out again, and a refusal shows the
+  server's reason.
 - **An opened match lists each team by lane** in the web client — top,
   jungle, mid, bot, then support — rather than in no particular order.
 - **Focus rings are no longer cut off** in the web client, on match rows,
@@ -269,6 +282,12 @@ version 3 still, and a desktop from before TFT is served as it always was.
   the accounts it lists. `?scenario=server-member` signs in as a member who is no
   admin, and `?scenario=server-fresh` as the owner on the day a server was set
   up — alone in it, with no mail provider or replay store yet.
+- `POST /api/admin/import/finish` takes `offset` and `limit` (at most 25
+  accounts) and answers `total` and `nextOffset`; asked for neither, it does
+  the whole server as before, so an older desktop's import still finishes.
+  The import's finish and a season save each run every account in a scope of
+  its own, on the host's shutdown token rather than the request's. Saving
+  seasons is logged at Warning with the admin who did it.
 
 ## [0.5.1] — 2026-09-27
 

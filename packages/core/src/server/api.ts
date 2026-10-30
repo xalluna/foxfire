@@ -55,6 +55,7 @@ import type {
   ImportAccountResult,
   ImportAccountRow,
   ImportBatchOutcome,
+  ImportFinishPage,
   ImportMatchRow,
   ImportReadingRow,
   ImportSeasonRow
@@ -683,8 +684,10 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
       rankReadings: (rows: ImportReadingRow[]) => importBatch('/admin/import/rank-readings', rows),
 
-      finish: () =>
-        request<{ accounts: number; attributed: number }>('/admin/import/finish', { method: 'POST' })
+      finish: (page: { offset: number; limit: number }) =>
+        request<ImportFinishPage>(`/admin/import/finish?offset=${page.offset}&limit=${page.limit}`, {
+          method: 'POST'
+        })
     }
   }
 }

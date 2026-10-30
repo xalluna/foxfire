@@ -444,4 +444,51 @@ describe('importStatsDb', () => {
 
     expect(result).toMatchObject({ ok: false, message: 'The server refused a page of matches.' })
   })
+
+  it('works LP out a page of accounts at a time, counting them as it goes', async () => {
+    // The whole server in one request took longer than a client waits.
+    const { target } = recordingTarget()
+    const asked: Array<{ offset: number; limit: number }> = []
+    target.finish = async (page) => {
+      asked.push(page)
+      const accounts = Math.min(page.limit, 25 - page.offset)
+      const next = page.offset + accounts
+      return { accounts, attributed: accounts * 2, total: 25, nextOffset: next < 25 ? next : null }
+    }
+    const progress: ImportProgress[] = []
+
+    const result = await importStatsDb(
+      fakeDb({ accounts: ACCOUNTS, matches: [{ match_id: 'KR_1', raw_json: '{}', game_creation: 1 }] }),
+      target,
+      (p) => progress.push(p)
+    )
+
+    expect(asked.map((p) => p.offset)).toEqual([0, 10, 20])
+    expect(result).toMatchObject({ ok: true, attributed: 50 })
+    expect(result.lpUnfinished).toBe(false)
+    expect(progress.filter((p) => p.phase === 'finishing').map((p) => `${p.current}/${p.total}`)).toEqual([
+      '0/0',
+      '10/25',
+      '20/25',
+      '25/25'
+    ])
+  })
+
+  it('keeps the tally when working out LP stops after everything landed', async () => {
+    // Every batch is on the server; importing the same file again finishes it.
+    const { target } = recordingTarget()
+    let pages = 0
+    target.finish = async (page) => {
+      if (pages++ > 0) throw new Error('did not answer in time')
+      return { accounts: 10, attributed: 4, total: 30, nextOffset: page.offset + 10 }
+    }
+
+    const result = await importStatsDb(
+      fakeDb({ accounts: ACCOUNTS, matches: [{ match_id: 'KR_1', raw_json: '{}', game_creation: 1 }] }),
+      target,
+      () => {}
+    )
+
+    expect(result).toMatchObject({ ok: true, matches: 1, attributed: 4, lpUnfinished: true })
+  })
 })

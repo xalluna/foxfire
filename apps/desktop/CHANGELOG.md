@@ -137,6 +137,12 @@ record your games by itself, with no OBS to install.
 
 ### Fixed
 
+- **A big import to a server no longer says it failed after it landed.** Working out LP now goes a
+  page of accounts at a time and counts them as it goes, and if it stops part-way the result says
+  everything was added and to import the same file again to finish.
+- **Saving seasons works the LP out again**, on a server for both games and on this PC for your
+  own accounts — a boundary added late used to leave the numbers on match rows describing the old
+  one. The editor says while it saves that this takes a while, and a refusal shows why.
 - **Recordings start when the game does.** Foxfire only looked for the start of a game every two
   seconds, so a recording began up to two seconds in, and a quick loading screen could be missed
   altogether, since the League client itself was only checked every ten seconds. Now, from the
