@@ -70,13 +70,16 @@ import {
 import {
   ACCOUNTS,
   COMMUNITY,
+  GENERATED_MEMBER_COUNT,
   LEAGUE_ENTRIES,
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
   MATCH_RECORDINGS,
   RANK_SNAPSHOTS,
-  championStatsFor
+  championStatsFor,
+  generatedMemberClaims,
+  generatedMemberName
 } from './fixtures'
 import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
 import { fixtureInsights, fixtureServerLogs } from './insightsFixtures'
@@ -164,8 +167,17 @@ function peakBeforeOf(series: RankSnapshot[], sinceMs: number | null, seasons: S
   return peak
 }
 
+/**
+ * ?scenario=server-fresh: a server on the day it was set up. Its owner has
+ * signed in and nobody else has; nothing is claimed, invited, shared or stored,
+ * and there is no mail provider or replay store yet. Seeded below rather than
+ * branched in each read, so making the first invite or changing a setting
+ * still works.
+ */
+const FRESH = scenario === 'server-fresh'
+
 function accounts(): Account[] {
-  return scenario === 'no-accounts' ? [] : ACCOUNTS
+  return scenario === 'no-accounts' || FRESH ? [] : ACCOUNTS
 }
 
 function matchesFor(accountId: string): MatchSummary[] {
@@ -261,12 +273,14 @@ function runFakeSync(accountId: string, game: GameId = 'lol'): void {
  * Where the harness says its data comes from.
  *
  * Local-only by default, which is the desktop's ordinary state. The server
- * scenarios are the connected shapes: the head admin on a healthy server, a
- * plain admin on one, a server whose own Riot key has expired, and a server that
- * has been upgraded past this client.
+ * scenarios are the connected shapes: the head admin on a healthy server, or
+ * on one set up today; a plain admin on one; a member who is no admin at all; a
+ * server whose own Riot key has expired; and a server that has been upgraded
+ * past this client.
  */
 const connection: ConnectionState =
   scenario === 'server-connected' ||
+  scenario === 'server-fresh' ||
   scenario === 'server-degraded' ||
   scenario === 'insights-unsupported' ||
   scenario === 'email-off' ||
@@ -282,12 +296,15 @@ const connection: ConnectionState =
         riotKeyRejected: scenario === 'server-degraded',
         upgradeRequired: null
       }
-    : scenario === 'server-admin'
+    : scenario === 'server-admin' || scenario === 'server-member'
       ? {
           mode: 'server',
           publicUrl: MOCK_SERVER_URL,
           serverName: 'The Fox Den',
-          session: { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false },
+          session:
+            scenario === 'server-admin'
+              ? { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
+              : { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false },
           publicAccess: false,
           riotKeyRejected: false,
           upgradeRequired: null
@@ -400,6 +417,8 @@ const MOCK_STORED_REPLAYS: AdminReplay[] = [
  * appears, withdraw an invite and it leaves the list. Reachable under
  * ?scenario=server-connected, whose session is Faker, the configured head
  * admin, and ?scenario=server-admin, whose session is Sova, a plain admin.
+ * ?scenario=server-member is phantomduval, who sees none of it; and
+ * ?scenario=server-fresh is Faker on the day the server was set up, alone in it.
  */
 let mockUsers: AdminUser[] = [
   {
@@ -502,18 +521,20 @@ let mockUsers: AdminUser[] = [
     emailSuppressed: MAIL_ON
   },
   // Enough more that the page has pages: 120 people, in three of them.
-  ...Array.from({ length: 117 }, (_, i): AdminUser => {
+  // Their claims are the generated accounts in COMMUNITY, which is why the count
+  // and the names come from there.
+  ...Array.from({ length: GENERATED_MEMBER_COUNT }, (_, i): AdminUser => {
     const n = String(i + 1).padStart(3, '0')
     return {
       id: `u-gen-${n}`,
-      username: `Summoner${n}`,
+      username: generatedMemberName(i),
       email: `summoner${n}@example.net`,
       isAdmin: false,
       isHeadAdmin: false,
       isConfiguredAdmin: false,
       isDisabled: i % 23 === 0,
       createdAt: new Date(Date.UTC(2026, 5, 1) + i * 3_600_000 * 11).toISOString(),
-      linkedRiotAccounts: i % 3,
+      linkedRiotAccounts: generatedMemberClaims(i),
       activeSessions: i % 4 === 0 ? 0 : 1,
       passwordReset: null,
       emailConfirmed: i % 5 !== 0
@@ -662,11 +683,28 @@ function shareLinkFor(account: Pick<Account, 'id' | 'gameName' | 'tagLine'>, cre
   }
 }
 
-/** Two open links, so the admin list has something in it. */
+/** The open links the admin list shows: two written by hand, the rest generated. */
 let mockShareLinks: ShareLink[] = [
   shareLinkFor({ id: '1', gameName: 'Faker', tagLine: 'NA1' }, 'Faker', 1),
-  shareLinkFor({ id: 'c2', gameName: 'Fakest', tagLine: 'NA1' }, 'Sova', 5)
+  shareLinkFor({ id: 'c2', gameName: 'Fakest', tagLine: 'NA1' }, 'Sova', 5),
+  // A community's worth behind those, every one still inside its week, so the
+  // list has pages. One per account, so no two share an id.
+  ...COMMUNITY.filter((account) => account.id.startsWith('g'))
+    .slice(0, 60)
+    .map((account, i) =>
+      shareLinkFor(account, ['Faker', 'Sova', 'phantomduval', account.ownerUsername ?? 'Faker'][i % 4], i % 7)
+    )
 ]
+
+// The day-one server: everything above, emptied, with the owner alone in it.
+if (FRESH) {
+  mockUsers = mockUsers
+    .filter((user) => user.isConfiguredAdmin)
+    .map((user) => ({ ...user, linkedRiotAccounts: 0, activeSessions: 1, emailConfirmed: false }))
+  mockInvites = []
+  mockShareLinks = []
+  MOCK_STORED_REPLAYS.length = 0
+}
 
 export interface FixtureClientOptions {
   /**
@@ -677,7 +715,7 @@ export interface FixtureClientOptions {
   /**
    * Whether everybody else on the harness's server is there to be found. Not
    * on a desktop playing at being local-only, whose database has nobody but
-   * its own accounts. Always, when left out.
+   * its own accounts. Always when left out, except on a server set up today.
    */
   community?: () => boolean
 }
@@ -714,7 +752,7 @@ function seededFavorites(): string {
 
 export function createFixtureClient(options: FixtureClientOptions = {}): FoxfireClient {
   const describe = options.describe ?? ((account: Account) => account)
-  const community = options.community ?? (() => true)
+  const community = options.community ?? (() => !FRESH)
   const everyone = (): Account[] => [...accounts(), ...(community() ? COMMUNITY : [])].map(describe)
 
   // Kept the way a browser keeps them, for as long as the page is open.
@@ -1126,22 +1164,26 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       // Numbers a host would actually be looking at: a match history that is
       // nowhere near troubling a 10 GB database, beside replays that are the
-      // thing which will fill a volume.
-      storage: (): Promise<ServerStorageUsage> =>
-        delay(
+      // thing which will fill a volume. The accounts are counted off the finder's
+      // list, so "Accounts tracked" agrees with the page beside it and moves when
+      // one is added or unlinked here.
+      storage: (): Promise<ServerStorageUsage> => {
+        const tracked = everyone()
+        return delay(
           {
-            replaysConfigured: true,
+            replaysConfigured: !FRESH,
             replayCount: MOCK_STORED_REPLAYS.length,
             replayBytes: MOCK_STORED_REPLAYS.reduce((total, replay) => total + (replay.fileBytes ?? 0), 0),
             replayRecords: MOCK_STORED_REPLAYS.length,
-            matches: 4_812,
-            matchParticipants: 48_120,
-            riotAccounts: 7,
-            unclaimedAccounts: 2,
-            rankReadings: 1_904
+            matches: FRESH ? 0 : 4_812,
+            matchParticipants: FRESH ? 0 : 48_120,
+            riotAccounts: tracked.length,
+            unclaimedAccounts: tracked.filter((account) => account.ownerUsername == null).length,
+            rankReadings: FRESH ? 0 : 1_904
           },
           220
-        ),
+        )
+      },
 
       storedReplays: (page?: PageOptions): Promise<Page<AdminReplay>> =>
         delay(pageOf(MOCK_STORED_REPLAYS, page), 240),

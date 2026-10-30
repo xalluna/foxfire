@@ -37,6 +37,11 @@ import { LAPSED } from '../session/share'
  * handed a link to Faker#NA1's profile, which is all the harness lets them
  * read — anybody else answers the way the server would, with a 401.
  * ?scenario=shared-link-ended is that link after its week is up.
+ *
+ * Two more are about who is at the keyboard. ?scenario=server-member is a member
+ * who is no admin, to see the nav without Admin and /admin's "Administrators
+ * only". ?scenario=server-fresh is the owner on the day the server was set up,
+ * with nobody else in it and no mail provider yet.
  */
 
 const SERVER_NAME = 'The Fox Den'
@@ -47,11 +52,14 @@ const PUBLIC_ACCESS = scenario === 'public-signed-out'
 const SHARED = { gameName: 'Faker', tagLine: 'NA1' }
 
 // Faker is the configured head admin; ?scenario=server-admin signs in as Sova,
-// a plain one, to see the pages the way they do.
+// a plain one, to see the pages the way they do, and ?scenario=server-member as
+// phantomduval, who is no admin at all.
 const USER: SessionUser =
   scenario === 'server-admin'
     ? { id: 'u-sova', username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
-    : { id: 'u-faker', username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
+    : scenario === 'server-member'
+      ? { id: 'u-2', username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false }
+      : { id: 'u-faker', username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
 
 const VERSION: VersionInfo = {
   serverName: SERVER_NAME,
@@ -63,7 +71,8 @@ const VERSION: VersionInfo = {
   apiBase: '/api',
   publicUrl: window.location.origin,
   // ?scenario=email-off is a server with no provider: no "Forgot password?".
-  email: scenario !== 'email-off',
+  // So is ?scenario=server-fresh, which has not set one up yet.
+  email: scenario !== 'email-off' && scenario !== 'server-fresh',
   publicAccess: PUBLIC_ACCESS
 }
 

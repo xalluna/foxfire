@@ -29,6 +29,13 @@ export type Scenario =
   // Signed in as an admin who is not the head admin: the Members page with
   // other admins' rows closed to them, and the import card saying why not.
   | 'server-admin'
+  // Signed in as a member who is no admin at all: no admin pages on the
+  // desktop, and "Administrators only" at /admin on the web.
+  | 'server-member'
+  // The owner, signed in to a server set up today: nobody else in it, nothing
+  // claimed, invited or stored, and no mail provider or replay store yet. Day
+  // one, which every admin page has to make sense of.
+  | 'server-fresh'
   // Signed in to a server older than this build, which refuses it — the case
   // where the remedy is the host's, not anybody's download.
   | 'server-behind'
