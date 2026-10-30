@@ -62,8 +62,9 @@ export interface InvitesPageProps {
  * gets to look.
  *
  * The switch and the invite list are one page because they are one decision:
- * invites only matter while public sign-up is off, and turning it off is what
- * makes them the way in. Who is already here is the Members page — a server
+ * while public sign-up is off, invites are the only way in. An invite is spent
+ * whichever way sign-up is set, so the used list says who joined through which
+ * link either way. Who is already here is the Members page — a server
  * with forty people on it should not make an admin scroll past all of them to
  * reach the box that sends an invite.
  *
@@ -339,7 +340,7 @@ function Invites({
       title="Invites"
       description={
         publicSignup
-          ? 'Anyone can register while public sign-up is on, so these are only needed once you turn it off.'
+          ? 'Anyone can register while public sign-up is on. A link still lets one person in, and shows here as used by whoever joins with it.'
           : undefined
       }
     >

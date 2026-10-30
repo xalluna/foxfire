@@ -1,17 +1,20 @@
+using System.Net;
 using FluentValidation;
 using Foxfire.Api.Common;
 using Foxfire.Api.Configuration;
 using Foxfire.Api.Email;
+using Foxfire.Api.Features.PasswordResets;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Email;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Foxfire.Api.Features.Invites;
 
 /// <summary>
-/// Permission for one person to register while public signup is off.
+/// Permission for one person to register, and a record of who it brought in.
 ///
 /// The address is optional. Without one the invite is a link for whoever opens
 /// it first — the admin pastes it into Discord. With one, registration must use
@@ -30,6 +33,7 @@ internal sealed class CreateInviteRequestValidator : AbstractValidator<CreateInv
 
 internal sealed class CreateInviteRequestHandler(
     FoxfireDbContext db,
+    UserManager<FoxfireUser> users,
     EmailOutbox outbox,
     IIdentityContext me,
     IOptions<ServerOptions> server,
@@ -46,6 +50,24 @@ internal sealed class CreateInviteRequestHandler(
 
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
         var now = time.GetUtcNow();
+
+        // An address with an account can never register again, so an invite
+        // to it would only reach somebody who cannot use it. Refused before
+        // anything is saved or queued, naming who it belongs to — an admin is
+        // allowed to know who their members are.
+        if (email is not null && await users.FindByEmailAsync(email) is { } member)
+        {
+            logger.LogInformation(
+                "{Actor} tried to invite {Email}, which is already {Username}'s", me.Username, email, member.UserName);
+
+            var disabled = PasswordResetLookup.IsDisabled(member, now)
+                ? " Their account is disabled; turn it back on from Members."
+                : "";
+
+            return Response<InviteResponse>.Failure(
+                new Error("email_taken", $"That address belongs to {member.UserName}, who is already a member.{disabled}"),
+                HttpStatusCode.Conflict);
+        }
 
         // An outstanding invite for this address is handed back rather than
         // duplicated. An admin who cannot remember whether they already sent one

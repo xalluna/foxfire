@@ -175,6 +175,21 @@ version 3 still, and a desktop from before TFT is served as it always was.
   for it**: on the sign-in page, on their own row in Members ("Reset link below
   makes you one"), and first in `.env.example`'s `ADMIN_EMAIL` notes, which now
   also finish the spare-address route — set it back and remove the spare.
+- **Joining through an invite while sign-up is open uses the invite up**, so it
+  shows under Used with who joined, and a link shared in a channel lets in one
+  person, as it says. An invite to an address that then joins another way is
+  closed too, rather than offering to email a member a link they cannot use.
+- **An invite can't be made for an address that already has an account.** It
+  is refused, naming the member, before anything is saved or emailed; one
+  waiting to be sent when that address joins is dropped ("that address joined
+  another way"). Registering with a taken address says to sign in or reset the
+  password, instead of Identity's own sentence.
+- **A dead invite or reset link says so, and what to do next**, in the web
+  client: its title follows the state ("This invite can't be used"), every
+  reason carries its own next step — a used invite says to sign in, a mistyped
+  one to check it was copied whole — and on a server anybody can join, a spent
+  invite points at making an account without it. The reset page no longer adds
+  "ask for a new one" to reasons it does not fit.
 
 ### Under the hood
 

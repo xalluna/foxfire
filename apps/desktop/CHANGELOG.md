@@ -183,6 +183,9 @@ record your games by itself, with no OBS to install.
   with the address by a default nobody was told about; Settings › Server, Members and Invites now
   ask an admin to choose "Invite only" or "Keep it open", and Invites says what an open sign-up
   lets a stranger read. New servers start invite-only.
+- **Inviting an address that already has an account is refused, naming the member**, and an
+  invite used while sign-up is open now shows under Used with who joined. A mistyped invite code
+  says to check it was copied whole.
 
 ### Under the hood
 

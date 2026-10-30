@@ -5,6 +5,7 @@ using Foxfire.Api.Features.RiotAccounts;
 using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Foxfire.Api.Tests;
@@ -398,6 +399,102 @@ public class InviteTests(FoxfireServerFixture server)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
         Assert.Equal("invalid_email", error?.Error);
+    }
+
+    private static string Username(string prefix) => $"{prefix}{Guid.NewGuid():N}"[..16];
+
+    private async Task<Invite> StoredAsync(Guid id)
+    {
+        using var scope = server.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<FoxfireDbContext>()
+            .Invites.AsNoTracking().SingleAsync(i => i.Id == id);
+    }
+
+    private static async Task<List<InviteInfo>> OpenAsync(HttpClient admin) =>
+        (await admin.GetFromJsonAsync<List<InviteInfo>>(new Uri("/api/admin/invites/", UriKind.Relative)))!;
+
+    [Fact]
+    public async Task An_invite_used_while_sign_up_is_open_is_spent()
+    {
+        // Sign-up is open here, so the invite was not the permission — but it is
+        // still the record of who joined through which link.
+        using var admin = await AdminAsync();
+        var invite = await CreateInviteAsync(admin, null);
+
+        using var client = server.Client();
+        var member = await server.RegisterAsync(client, Username("Spent"), $"{Unique("spent")}@example.com", invite.Token);
+
+        Assert.Equal(member.User.Id, (await StoredAsync(invite.Id)).RedeemedByUserId);
+        Assert.DoesNotContain(await OpenAsync(admin), i => i.Id == invite.Id);
+    }
+
+    [Fact]
+    public async Task A_spent_link_does_not_stop_anybody_joining_an_open_server()
+    {
+        using var admin = await AdminAsync();
+        var invite = await CreateInviteAsync(admin, null);
+
+        using var first = server.Client();
+        await server.RegisterAsync(first, Username("First"), $"{Unique("first")}@example.com", invite.Token);
+
+        using var second = server.Client();
+        var after = await server.RegisterAsync(second, Username("Second"), $"{Unique("second")}@example.com", invite.Token);
+
+        Assert.NotEqual(after.User.Id, (await StoredAsync(invite.Id)).RedeemedByUserId);
+    }
+
+    [Fact]
+    public async Task An_addressed_invite_closes_when_its_address_joins_another_way()
+    {
+        // It could never register anybody again, so it should not sit there
+        // offering to email a member an invite they cannot use.
+        using var admin = await AdminAsync();
+        var email = $"{Unique("elsewhere")}@example.com";
+        var invite = await CreateInviteAsync(admin, email);
+
+        using var client = server.Client();
+        var member = await server.RegisterAsync(client, Username("Other"), email);
+
+        Assert.Equal(member.User.Id, (await StoredAsync(invite.Id)).RedeemedByUserId);
+        Assert.DoesNotContain(await OpenAsync(admin), i => i.Id == invite.Id);
+    }
+
+    [Fact]
+    public async Task An_address_that_already_has_an_account_is_not_invited()
+    {
+        using var admin = await AdminAsync();
+        var email = $"{Unique("taken")}@example.com";
+        var username = Username("Taken");
+        using var client = server.Client();
+        await server.RegisterAsync(client, username, email);
+
+        var response = await admin.PostAsJsonAsync(new Uri("/api/admin/invites/", UriKind.Relative), new { email });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("email_taken", error?.Error);
+        Assert.Contains(username, error?.Message ?? "", StringComparison.Ordinal);
+
+        using var scope = server.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        Assert.False(await db.Invites.AnyAsync(i => i.Email == email && i.RedeemedAt == null));
+        Assert.False(await db.EmailMessages.AnyAsync(m => m.Recipient == email));
+    }
+
+    [Fact]
+    public async Task A_spent_invite_says_what_to_do_instead()
+    {
+        using var admin = await AdminAsync();
+        var invite = await CreateInviteAsync(admin, null);
+        using var client = server.Client();
+        await server.RegisterAsync(client, Username("Gone"), $"{Unique("gone")}@example.com", invite.Token);
+
+        using var anyone = server.AnonymousClient();
+        var preview = await anyone.GetFromJsonAsync<InvitePreview>(
+            new Uri($"/api/invites/{invite.Token}/preview", UriKind.Relative));
+
+        Assert.False(preview?.Usable);
+        Assert.Contains("sign in instead", preview?.Message ?? "", StringComparison.Ordinal);
     }
 
     [Fact]
