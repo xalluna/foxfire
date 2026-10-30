@@ -185,7 +185,7 @@ public sealed class InsightsMemoryTests
     {
         var problems = ConfigurationCheck.Validate(
             "Server=db;Database=Foxfire",
-            new ServerOptions { PublicUrl = "https://foxfire.example.com" },
+            new ServerOptions { PublicUrl = "https://test.example.com" },
             new RiotOptions { ApiKey = "RGAPI-test" },
             new AuthOptions
             {

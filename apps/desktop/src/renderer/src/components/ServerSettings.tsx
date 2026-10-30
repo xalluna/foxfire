@@ -17,6 +17,9 @@ import {
 import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
 import { absoluteUrl, paths } from '@foxfire/core/routes'
 
+/** How to stand a server up: the settings file, every one of them explained in place. */
+const SERVER_SETUP_URL = 'https://github.com/xalluna/foxfire/blob/main/apps/server/docker/.env.example'
+
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'
 
@@ -480,6 +483,12 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                   in a browser.
                 </p>
               )}
+              {/* For the one person there is nobody to ask. */}
+              <p className="mt-1 text-xs leading-relaxed text-text-mute">
+                Run this server yourself? If you&apos;re still signed in anywhere, Members › your own
+                row makes you a reset link. If not, ADMIN_EMAIL in the server&apos;s .env says how to
+                get back in.
+              </p>
             </SettingsBlock>
           )}
 
@@ -506,8 +515,12 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
       <SettingsCard title="Running your own">
         <SettingsRow
           label="Foxfire Server"
-          description="Docker Compose, a Riot API key and about ten minutes. There is no central Foxfire service — every community runs their own."
-          control={<span className="text-2xs text-text-mute">See apps/server in the repo</span>}
+          description="Docker Compose, a Riot API key and about ten minutes. There is no central Foxfire service — every community runs their own. Make your own account with the address you put in ADMIN_EMAIL: that account runs the server."
+          control={
+            <a href={SERVER_SETUP_URL} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+              Setting one up
+            </a>
+          }
         />
       </SettingsCard>
     </SettingsPage>

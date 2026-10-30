@@ -204,6 +204,18 @@ internal sealed class RegisterRequestHandler(
             "Registered {Username} ({Email}){Admin}",
             username, email, isSeededAdmin ? " as this server's head admin" : "");
 
+        // The owner who signed up under any other address than the configured
+        // one is an ordinary member, and nothing on screen says why. While the
+        // server has no head admin at all, that is the likely story.
+        if (!isSeededAdmin && (await users.GetUsersInRoleAsync(FoxfireRoles.HeadAdmin)).Count == 0)
+        {
+            logger.LogWarning(
+                "{Email} registered, but this server has no head admin: {AdminEmail} has not registered. If this is "
+                + "the owner's account, set ADMIN_EMAIL (Admin__Email) to its address and restart, or register the "
+                + "configured one.",
+                email, adminOptions.Value.Email.Trim());
+        }
+
         // After the account is committed rather than inside its transaction: a
         // link sent for an account that then rolled back would confirm nothing.
         // Standard mail, not security — twenty sign-ups a minute from one

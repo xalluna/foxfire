@@ -13,6 +13,12 @@ namespace Foxfire.Api.Features.Account;
 /// <param name="CanResendAt">When another link may be asked for, or null when one may be now.</param>
 /// <param name="MailEnabled">Whether this server sends mail at all. Nothing here can be confirmed without it.</param>
 /// <param name="Suppressed">Mail to their address bounced or was reported, and is no longer sent.</param>
+/// <param name="AddressPinned">
+/// The address is the one this server's configuration names as its head admin,
+/// so it is changed there rather than here. The members list already tells every
+/// admin which account that is, and the one holding it learns nothing new — so a
+/// card can say so instead of asking for a password and then refusing.
+/// </param>
 public sealed record AccountEmailResponse(
     string Email,
     bool EmailConfirmed,
@@ -21,7 +27,8 @@ public sealed record AccountEmailResponse(
     DateTimeOffset? LastSentAt,
     DateTimeOffset? CanResendAt,
     bool MailEnabled,
-    bool Suppressed);
+    bool Suppressed,
+    bool AddressPinned);
 
 /// <summary>
 /// Confirming addresses: making the links, and how often somebody may ask.
@@ -143,6 +150,7 @@ internal static class AccountEmail
         FoxfireDbContext db,
         EmailOutbox outbox,
         FoxfireUser user,
+        string? configuredAdminEmail,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -167,6 +175,7 @@ internal static class AccountEmail
             last,
             await NextAllowedAsync(db, user.Id, now, gap: true, cancellationToken),
             outbox.IsEnabled,
-            email.Length > 0 && await outbox.IsSuppressedAsync(email, cancellationToken));
+            email.Length > 0 && await outbox.IsSuppressedAsync(email, cancellationToken),
+            Accounts.IsConfiguredAdmin(email, configuredAdminEmail));
     }
 }

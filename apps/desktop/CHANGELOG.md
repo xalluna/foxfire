@@ -176,6 +176,12 @@ record your games by itself, with no OBS to install.
   Foxfire the servers you are still signed in to accept, and an update already downloaded is taken
   back — off the window and the tray, and not installed on quit — as soon as the active server would
   refuse it.
+- **The configured head admin's Account page says their address is set in the server's
+  configuration**, instead of asking for their password and then refusing the change.
+- **A server's owner can find their way back in.** Settings › Server's sign-in form says how to
+  get back in after a forgotten password, and so does the owner's own row in Members. "Running
+  your own" links to the server's settings file and says to make your account with the address
+  you put in `ADMIN_EMAIL` — the account that runs the server.
 
 ### Under the hood
 

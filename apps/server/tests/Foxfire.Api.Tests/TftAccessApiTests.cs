@@ -81,7 +81,7 @@ public class TftAccessApiTests(FoxfireServerFixture server)
         static IReadOnlyList<string> Check(TftRiotOptions tft) =>
             ConfigurationCheck.Validate(
                 "Server=db;Database=Foxfire",
-                new ServerOptions { PublicUrl = "https://foxfire.example.com" },
+                new ServerOptions { PublicUrl = "https://test.example.com" },
                 new RiotOptions { ApiKey = "RGAPI-test", Tft = tft },
                 new AuthOptions
                 {

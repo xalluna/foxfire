@@ -107,6 +107,17 @@ version 3 still, and a desktop from before TFT is served as it always was.
   dotted, and the legend matches; an assist on a recording's timeline is a
   shield rather than the kill's swords in a quieter colour; and the scoreboard
   names its columns, so the two damage bars are not told apart by colour alone.
+- **A server still set to the example admin address no longer starts.**
+  `.env.example` shipped `ADMIN_EMAIL=you@example.com`, and whoever registered
+  that address became head admin — registering proves nothing about the
+  mailbox — so a server started from the untouched file belonged to anybody who
+  had read it. The file now ships `ADMIN_EMAIL` and `SERVER_PUBLIC_URL` blank,
+  and a server whose `Admin__Email` is still `you@example.com` or has no `@`, or
+  whose `Server__PublicUrl` is still `https://foxfire.example.com`, refuses to
+  start and says why. **If yours was deployed from the old file:** set the
+  address to one you own and restart, then check Members for a head admin you
+  don't recognise — an account that registered the example address keeps the
+  role until a head admin demotes it.
 
 ### Fixed
 
@@ -131,6 +142,18 @@ version 3 still, and a desktop from before TFT is served as it always was.
   read their rank. Somebody who had played three games on their own since
   their last sync found those missing until they pressed Sync now, and the
   game you shared was given the LP of all four.
+- **The configured head admin's Account page says their address is set in the
+  server's configuration**, instead of asking for their password and then
+  refusing the change.
+- **An owner who signed up under another address is told why the admin pages
+  never appeared.** The web client's "Administrators only" page says the head
+  admin is the account in `ADMIN_EMAIL` and how to change it; trying to move an
+  account onto that address says the same; and the server logs a Warning, at
+  startup and at the next registration, while it has accounts and no head admin.
+- **The way back after a forgotten password is written where an owner will look
+  for it**: on the sign-in page, on their own row in Members ("Reset link below
+  makes you one"), and first in `.env.example`'s `ADMIN_EMAIL` notes, which now
+  also finish the spare-address route — set it back and remove the spare.
 
 ### Under the hood
 
