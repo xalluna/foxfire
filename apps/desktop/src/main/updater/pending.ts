@@ -29,6 +29,15 @@ export function setPendingInstall(pending: PendingInstall): void {
   setSetting(getDb(), PENDING_SETTING, JSON.stringify(pending))
 }
 
+/**
+ * Forgets a download that will not be installed after all — withdrawn because
+ * the server would refuse it. Left behind, it would only be cleared at the next
+ * launch, as an install that did not happen.
+ */
+export function clearPendingInstall(): void {
+  setSetting(getDb(), PENDING_SETTING, null)
+}
+
 /** Records where the window was, at the moment the restart was asked for. */
 export function markRelaunchHidden(hidden: boolean): void {
   const pending = readPending()

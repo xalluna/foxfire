@@ -170,6 +170,12 @@ record your games by itself, with no OBS to install.
   the next tier, and a recording's event markers — which sat inside the seek bar, where nothing is
   read out — are buttons of their own, named by what happened. Home and End jump to either end of
   the seek bar.
+- **Switching servers no longer installs a Foxfire your server refuses.** Every switch passes
+  through "Use this PC", which fetched the newest release, and it installed on the next quit even
+  though the server you went back to would turn it away. Using this PC is now held to the oldest
+  Foxfire the servers you are still signed in to accept, and an update already downloaded is taken
+  back — off the window and the tray, and not installed on quit — as soon as the active server would
+  refuse it.
 
 ### Under the hood
 
