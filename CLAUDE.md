@@ -406,9 +406,15 @@ by swapping the version inside that URL, and the version appears in both the tag
   build past the server's allow list would be refused by it, so an update would lock somebody out
   of their own community.
 - **Local-only** — install the newest desktop release, found from `releases/latest` (which answers
-  JSON with the tag on it, and costs none of `api.github.com`'s hourly budget).
+  JSON with the tag on it, and costs none of `api.github.com`'s hourly budget) — unless the
+  install is still signed in to a server. "Use this PC" keeps the sign-in, and every switch between
+  servers passes through local-only, so it is capped at the strictest server it is signed in to, and
+  holds while any of them is unreachable.
 - **Server unreachable** — do nothing. Falling back to the newest release the moment a host's
   machine is down installs the one build that server might refuse when it comes back.
+- **A build already downloaded** is asked about again on every server change, when it finishes
+  downloading, and on every scheduled check, and withdrawn (`autoInstallOnAppQuit` off, which
+  electron-updater reads at quit) once its server would refuse it.
 
 Nothing installs while the app is open except on request: the download is quiet, the offer sits in
 the window and the tray, and it is refused while a game is on or a recording is running. Otherwise
