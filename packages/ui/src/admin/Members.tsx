@@ -88,7 +88,7 @@ export function MembersPage({
   return (
     <SettingsPage
       title="Members"
-      intro="Everybody with an account on this server. Any admin can make somebody an admin or let them back in; demoting, disabling or removing another admin is a head admin's, and so is making anybody a head admin. Changing somebody's role or disabling them signs them out, so the change takes effect now rather than whenever their session happens to renew."
+      intro="Everybody with an account on this server. Any admin can make somebody an admin or let them back in; demoting, disabling or removing another admin is a head admin's, and so is making anybody a head admin. A new role reaches them the next time their app renews its session, within fifteen minutes, and does not sign them out. Disabling somebody signs them out everywhere; whatever they have open stops working within the same fifteen minutes."
     >
       {error !== null && (
         <SettingsCard>
@@ -312,6 +312,15 @@ function Member({
             </p>
           )}
 
+          {/* Disabling yourself would outlive every session you have, with only
+              another admin able to undo it, so the server refuses it. */}
+          {isYou && !pinned && !user.isDisabled && (
+            <p className="text-xs leading-relaxed text-text-mute">
+              This is you. You can step down or remove your own account, but not disable it — change
+              your password from Account if you think it has leaked.
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {!pinned && !guarded && (
               <button
@@ -333,7 +342,7 @@ function Member({
                 {user.isHeadAdmin ? 'Remove head admin' : 'Make head admin'}
               </button>
             )}
-            {!pinned && (!guarded || user.isDisabled) && (
+            {!pinned && (!guarded || user.isDisabled) && (!isYou || user.isDisabled) && (
               <button
                 type="button"
                 disabled={busy}

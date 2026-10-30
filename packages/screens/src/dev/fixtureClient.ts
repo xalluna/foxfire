@@ -361,6 +361,10 @@ function mockRefusal(target: AdminUser | undefined, change: AdminUserPatch | 'de
     return `${target.username} is the head admin this server's configuration names, so they cannot be ${verb} from here. Change Admin__Email and restart the server to hand it to somebody else.`
   }
 
+  if (isYou && disabling) {
+    return 'You cannot disable your own account. Ask another admin, or change your password if you think it has leaked.'
+  }
+
   if (me?.isHeadAdmin) return null
   if (patch.isHeadAdmin !== undefined) {
     return 'Only a head admin can make somebody a head admin, or stop them being one.'

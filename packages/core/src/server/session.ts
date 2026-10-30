@@ -74,8 +74,9 @@ export interface ServerSessionOptions {
    * After every renewal, with who the server now says you are.
    *
    * A refresh re-reads the account rather than trusting the old token's claims,
-   * so this is where a change of role lands: the server revokes the sessions of
-   * anybody whose role changes, and the next renewal carries the new answer.
+   * so this is where a change of role lands: the next renewal carries the new
+   * answer. Nothing is revoked for it — the access token in hand cannot be cut
+   * short, so revoking would only have signed the member out.
    */
   onUserRefreshed?(user: SessionUser): void
 
