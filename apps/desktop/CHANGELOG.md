@@ -170,6 +170,22 @@ record your games by itself, with no OBS to install.
   the next tier, and a recording's event markers — which sat inside the seek bar, where nothing is
   read out — are buttons of their own, named by what happened. Home and End jump to either end of
   the seek bar.
+- **The configured head admin's Account page says their address is set in the server's
+  configuration**, instead of asking for their password and then refusing the change.
+- **A server's owner can find their way back in.** Settings › Server's sign-in form says how to
+  get back in after a forgotten password, and so does the owner's own row in Members. "Running
+  your own" links to the server's settings file and says to make your account with the address
+  you put in `ADMIN_EMAIL` — the account that runs the server.
+- **Members no longer offers to disable your own account**, which locked you out until another
+  admin let you back in, and its intro now says what really happens: a new role reaches somebody
+  within fifteen minutes without signing them out, and only disabling signs them out everywhere.
+- **A server whose owner never chose who can join asks them.** Older servers were open to anybody
+  with the address by a default nobody was told about; Settings › Server, Members and Invites now
+  ask an admin to choose "Invite only" or "Keep it open", and Invites says what an open sign-up
+  lets a stranger read. New servers start invite-only.
+- **Inviting an address that already has an account is refused, naming the member**, and an
+  invite used while sign-up is open now shows under Used with who joined. A mistyped invite code
+  says to check it was copied whole.
 
 ### Under the hood
 
@@ -254,6 +270,10 @@ record your games by itself, with no OBS to install.
   it is built, fetched on its own so that a missing one costs the icons their names and nothing
   else. A chart's keyboard cursor is `chartCursor` in `@foxfire/ui`, tested in plain node, and the
   charts are sliders to a screen reader, which is what hands it the arrow keys.
+- The browser harness's server is community-sized: League accounts and Invites › Shared profiles
+  have pages, and Data & storage counts the accounts it lists. `?scenario=server-member` signs in
+  as a member with no admin pages, and `?scenario=server-fresh` as the owner of a server set up
+  today — alone in it, with no mail provider or replay store yet.
 
 ## [0.16.1] — 2026-09-27
 

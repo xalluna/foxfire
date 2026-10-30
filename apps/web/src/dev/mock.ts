@@ -37,6 +37,11 @@ import { LAPSED } from '../session/share'
  * handed a link to Faker#NA1's profile, which is all the harness lets them
  * read — anybody else answers the way the server would, with a 401.
  * ?scenario=shared-link-ended is that link after its week is up.
+ *
+ * Two more are about who is at the keyboard. ?scenario=server-member is a member
+ * who is no admin, to see the nav without Admin and /admin's "Administrators
+ * only". ?scenario=server-fresh is the owner on the day the server was set up,
+ * with nobody else in it and no mail provider yet.
  */
 
 const SERVER_NAME = 'The Fox Den'
@@ -47,11 +52,14 @@ const PUBLIC_ACCESS = scenario === 'public-signed-out'
 const SHARED = { gameName: 'Faker', tagLine: 'NA1' }
 
 // Faker is the configured head admin; ?scenario=server-admin signs in as Sova,
-// a plain one, to see the pages the way they do.
+// a plain one, to see the pages the way they do, and ?scenario=server-member as
+// phantomduval, who is no admin at all.
 const USER: SessionUser =
   scenario === 'server-admin'
     ? { id: 'u-sova', username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
-    : { id: 'u-faker', username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
+    : scenario === 'server-member'
+      ? { id: 'u-2', username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false }
+      : { id: 'u-faker', username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
 
 const VERSION: VersionInfo = {
   serverName: SERVER_NAME,
@@ -59,11 +67,13 @@ const VERSION: VersionInfo = {
   apiVersion: 1,
   minimumDesktop: '0.12.0',
   recommendedDesktop: '0.12.0',
-  publicSignup: true,
+  // A server set up today starts invite-only.
+  publicSignup: scenario !== 'server-fresh',
   apiBase: '/api',
   publicUrl: window.location.origin,
   // ?scenario=email-off is a server with no provider: no "Forgot password?".
-  email: scenario !== 'email-off',
+  // So is ?scenario=server-fresh, which has not set one up yet.
+  email: scenario !== 'email-off' && scenario !== 'server-fresh',
   publicAccess: PUBLIC_ACCESS
 }
 
@@ -114,7 +124,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
     version: async () => VERSION,
     previewInvite: async (token): Promise<InvitePreview> =>
       token.length < 20
-        ? { usable: false, serverName: SERVER_NAME, email: null, message: 'This invite link is not valid for this server.' }
+        ? { usable: false, serverName: SERVER_NAME, email: null, message: 'This invite link is not valid for this server. Check that you copied all of it.' }
         : { usable: true, serverName: SERVER_NAME, email: 'invitee@example.com', message: 'Ready to use.' },
 
     // A short token is the unusable state, the same way the invite preview
@@ -127,7 +137,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
             serverName: SERVER_NAME,
             username: null,
             email: null,
-            message: 'This link has already been used.'
+            message: 'This link has already been used. If it was you, sign in with the password you set.'
           }
         : {
             usable: true,

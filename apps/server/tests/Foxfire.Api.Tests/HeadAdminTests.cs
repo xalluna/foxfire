@@ -120,6 +120,37 @@ public class HeadAdminTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task Nobody_can_disable_themselves()
+    {
+        // The lockout outlives every session, so one misclick would lock an admin
+        // out until another admin let them back in. Stepping down stays theirs.
+        var (plain, me) = await server.PlainAdminAsync("Careful");
+        using var _plain = plain;
+        await AssertRefusedAsync(
+            await plain.PatchAsJsonAsync(UserUri(me.User.Id), new { isDisabled = true }),
+            HttpStatusCode.BadRequest,
+            "self_disable");
+
+        // A head admin, too — one the configuration does not name, whose refusal
+        // would otherwise be the configured admin's.
+        var (head, _) = await server.AdminAsync();
+        using var _head = head;
+        var (second, secondSession) = await server.PlainAdminAsync("Deputy");
+        using var _second = second;
+        (await head.PatchAsJsonAsync(UserUri(secondSession.User.Id), new { isHeadAdmin = true })).EnsureSuccessStatusCode();
+        var renewed = await second.PostAsJsonAsync(
+            Api("/api/auth/refresh"), new { refreshToken = secondSession.RefreshToken });
+        renewed.EnsureSuccessStatusCode();
+        FoxfireServerFixture.Authenticated(second, (await renewed.Content.ReadFromJsonAsync<Session>())!);
+
+        await AssertRefusedAsync(
+            await second.PatchAsJsonAsync(UserUri(secondSession.User.Id), new { isDisabled = true }),
+            HttpStatusCode.BadRequest,
+            "self_disable");
+        Assert.False((await ListedAsync(head, secondSession)).IsDisabled);
+    }
+
+    [Fact]
     public async Task A_plain_admin_can_enable_an_admin_somebody_disabled()
     {
         var (plain, _) = await server.PlainAdminAsync("Rescuer");

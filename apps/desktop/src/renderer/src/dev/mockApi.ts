@@ -88,8 +88,9 @@ import {
  */
 const fixture = createFixtureClient({
   describe: ownedAs,
-  // Everybody else is on the server; a local database has only its own.
-  community: () => serverState.session !== null
+  // Everybody else is on the server; a local database has only its own, and a
+  // server set up today has nobody else yet.
+  community: () => serverState.session !== null && scenario !== 'server-fresh'
 })
 
 /**
@@ -190,17 +191,30 @@ function mockSettings(): AppSettingsPublic {
  *
  * Reachable by ?scenario=server-connected, which is how the connected shape of
  * the Server settings page is reviewed without standing a .NET server up — as
- * the head admin, or as a plain admin under ?scenario=server-admin.
+ * the head admin, or as a plain admin under ?scenario=server-admin, a member
+ * with no admin pages under ?scenario=server-member, and the owner of a server
+ * set up today under ?scenario=server-fresh.
  */
+const SIGNED_IN_AS =
+  scenario === 'server-admin'
+    ? { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
+    : scenario === 'server-member'
+      ? { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false }
+      : { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
+
 let serverState: ServerState =
   scenario === 'server-connected' ||
+  scenario === 'server-fresh' ||
   scenario === 'server-degraded' ||
   scenario === 'server-admin' ||
+  scenario === 'server-member' ||
   scenario === 'insights-unsupported' ||
   scenario === 'email-off' ||
   scenario === 'email-held' ||
   scenario === 'unverified' ||
-  scenario === 'email-change-pending'
+  scenario === 'email-change-pending' ||
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
@@ -208,17 +222,11 @@ let serverState: ServerState =
           {
             url: MOCK_SERVER_URL,
             name: 'The Fox Den',
-            username: scenario === 'server-admin' ? 'Sova' : 'Faker',
+            username: SIGNED_IN_AS.username,
             isActive: true
           }
         ],
-        session: {
-          url: MOCK_SERVER_URL,
-          username: scenario === 'server-admin' ? 'Sova' : 'Faker',
-          email: scenario === 'server-admin' ? 'sova@example.com' : 'faker@example.com',
-          isAdmin: true,
-          isHeadAdmin: scenario !== 'server-admin'
-        },
+        session: { url: MOCK_SERVER_URL, ...SIGNED_IN_AS },
         upgradeRequired: null,
         serverOutdated: false,
         publicAccess: false,
@@ -432,7 +440,7 @@ export const mockApi: Api = {
               usable: false,
               serverName: 'The Fox Den',
               email: null,
-              message: 'This invite link is not valid for this server.'
+              message: 'This invite link is not valid for this server. Check that you copied all of it.'
             }
           : {
               usable: true,

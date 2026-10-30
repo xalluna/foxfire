@@ -74,10 +74,13 @@ export function ChangeUsernameCard({
 /**
  * Changing the address you sign in with.
  *
- * One address this refuses to move is the one a server's configuration names as
- * its administrator, and that refusal comes from the server: Admin__Email is
- * configuration, so no client can see it, and a card that guessed would either
- * be wrong or need the server to publish it.
+ * One address this cannot move is the one a server's configuration names as its
+ * head admin. The card used to leave that to the server, on the grounds that
+ * Admin__Email is configuration no client can see — and so it asked the owner
+ * for their password and then refused. The server now says so with the address
+ * (`addressPinned`): the members list already tells every admin which account
+ * that is, and the one holding it learns nothing new. A server too old to say
+ * still refuses on save, as before.
  *
  * On a server that sends mail, saving does not move you yet: a link goes to the
  * new address, and the move happens when it is opened — so a typo cannot leave
@@ -100,13 +103,11 @@ export function ChangeEmailCard({
   /** Stops a move that has not been confirmed. */
   onCancelPending?: () => Promise<AccountSaveResult>
 }): JSX.Element {
-  const [value, setValue] = useState(email)
-  const [password, setPassword] = useState('')
-  const save = useSave()
   const other = useSave()
 
   const mail = status?.mailEnabled ?? false
   const pending = status?.pendingEmail ?? null
+  const pinned = status?.addressPinned ?? false
 
   return (
     <SettingsCard title="Email">
@@ -163,6 +164,39 @@ export function ChangeEmailCard({
 
       <Outcome outcome={other.outcome} />
 
+      {pinned ? (
+        <>
+          <SettingsBlock label="Email" description="What you sign in with.">
+            <p className="truncate text-sm text-text">{email}</p>
+          </SettingsBlock>
+          <StatusRow tone="mute">
+            This server&apos;s configuration names this address as its head admin, so it is set there rather
+            than here. Moving it means changing ADMIN_EMAIL (Admin__Email) and restarting the server.
+          </StatusRow>
+        </>
+      ) : (
+        <ChangeEmailForm email={email} mail={mail} onSave={onSave} />
+      )}
+    </SettingsCard>
+  )
+}
+
+/** The address and the password that move it, for everybody whose address is theirs to move. */
+function ChangeEmailForm({
+  email,
+  mail,
+  onSave
+}: {
+  email: string
+  mail: boolean
+  onSave: (change: EmailChange) => Promise<AccountSaveResult>
+}): JSX.Element {
+  const [value, setValue] = useState(email)
+  const [password, setPassword] = useState('')
+  const save = useSave()
+
+  return (
+    <>
       <SettingsBlock label="Email" description="What you sign in with.">
         <input
           type="email"
@@ -209,7 +243,7 @@ export function ChangeEmailCard({
       </SettingsBlock>
 
       <Outcome outcome={save.outcome} />
-    </SettingsCard>
+    </>
   )
 }
 

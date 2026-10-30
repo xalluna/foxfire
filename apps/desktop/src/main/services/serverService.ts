@@ -68,8 +68,8 @@ interface StoredServer {
    * Asking the server would make it async and every one of those an await.
    *
    * Refreshed from the session every time a token is renewed, which is how a
-   * promotion or a demotion arrives: the server revokes the sessions of anybody
-   * whose role changes, so the next renewal carries the new answer.
+   * promotion or a demotion arrives: a renewal reads the roles afresh, so the
+   * next one carries the new answer without signing anybody out.
    *
    * Optional because a server remembered by an older build has none of them.
    */

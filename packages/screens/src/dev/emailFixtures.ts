@@ -19,12 +19,13 @@ import { delay, scenario } from './scenario'
  * A server's mail, for the harness: the Email page's quota, queue, log and
  * suppressions, and the signed-in member's own address.
  *
- * `email-off` is a server with no provider; `email-held` one whose day is spent
- * and whose mail is waiting; `unverified` a member who never confirmed their
- * address; `email-change-pending` one moving to a new one. Everything else is a
- * server with mail on, most of the day's allowance still there.
+ * `email-off` is a server with no provider, and so is `server-fresh`, which has
+ * not got round to one; `email-held` one whose day is spent and whose mail is
+ * waiting; `unverified` a member who never confirmed their address;
+ * `email-change-pending` one moving to a new one. Everything else is a server
+ * with mail on, most of the day's allowance still there.
  */
-export const MAIL_ON = scenario !== 'email-off'
+export const MAIL_ON = scenario !== 'email-off' && scenario !== 'server-fresh'
 
 const HOUR = 3_600_000
 const now = Date.now()
@@ -280,7 +281,8 @@ let accountEmail: AccountEmail = {
   lastSentAt: scenario === 'unverified' || scenario === 'email-change-pending' ? iso(now - 2 * HOUR) : null,
   canResendAt: null,
   mailEnabled: MAIL_ON,
-  suppressed: false
+  suppressed: false,
+  addressPinned: scenario === 'admin-email-pinned'
 }
 
 /** The signed-in member's address. The screens ask only when somebody is signed in to a server. */

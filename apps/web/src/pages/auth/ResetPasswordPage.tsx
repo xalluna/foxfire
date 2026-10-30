@@ -28,9 +28,18 @@ export function ResetPasswordPage(): JSX.Element {
   const { token } = useParams({ from: '/reset-password/$token' })
   const preview = usePasswordResetPreview(token)
 
+  // Each of the server's reasons carries its own next step, so nothing is
+  // added here: "ask for a new one" reads wrong after "it has already been
+  // used" or "that account is disabled", and doubled after "it has expired".
+  const title = preview.isError
+    ? "Couldn't check this link"
+    : preview.data && !preview.data.usable
+      ? "This link can't be used"
+      : 'Set a new password'
+
   return (
     <AuthLayout
-      title="Set a new password"
+      title={title}
       subtitle={
         preview.data?.usable
           ? `For ${preview.data.username ?? 'your account'} on ${preview.data.serverName}. Everything else signed in to this account will be signed out.`
@@ -53,7 +62,7 @@ export function ResetPasswordPage(): JSX.Element {
       ) : preview.isError ? (
         <FormError message="This server could not be reached to check the link. Try it again in a moment." />
       ) : !preview.data.usable ? (
-        <FormError message={`${preview.data.message} Ask whoever sent it for a new one.`} />
+        <FormError message={preview.data.message} />
       ) : (
         <ResetForm token={token} email={preview.data.email} />
       )}
