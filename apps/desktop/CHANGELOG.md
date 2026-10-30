@@ -176,6 +176,9 @@ record your games by itself, with no OBS to install.
   get back in after a forgotten password, and so does the owner's own row in Members. "Running
   your own" links to the server's settings file and says to make your account with the address
   you put in `ADMIN_EMAIL` — the account that runs the server.
+- **Members no longer offers to disable your own account**, which locked you out until another
+  admin let you back in, and its intro now says what really happens: a new role reaches somebody
+  within fifteen minutes without signing them out, and only disabling signs them out everywhere.
 
 ### Under the hood
 

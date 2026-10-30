@@ -118,6 +118,15 @@ version 3 still, and a desktop from before TFT is served as it always was.
   address to one you own and restart, then check Members for a head admin you
   don't recognise — an account that registered the example address keeps the
   role until a head admin demotes it.
+- **Promoting or demoting somebody no longer signs them out of every device.**
+  It never made the change land any sooner — a role lives in a token nothing
+  can cut short, and the next renewal, within fifteen minutes, reads it
+  afresh — so all it did was end a member's sessions, and drop a desktop to
+  local-only mid-game. Disabling somebody still signs them out everywhere.
+- **Nobody can disable their own account.** The lockout outlives every session
+  and only another admin can lift it, so one misclick on your own row locked an
+  admin out. The server refuses it (`self_disable`) and Members no longer offers
+  it on your own row; stepping down and removing your account are unchanged.
 
 ### Fixed
 

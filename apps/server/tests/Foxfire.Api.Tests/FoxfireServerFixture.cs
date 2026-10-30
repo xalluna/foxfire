@@ -231,7 +231,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     /// <summary>
     /// A client signed in as a new admin who is not a head admin: registered,
     /// promoted by the configured head admin, then signed in again — the
-    /// promotion ended the session it registered with.
+    /// session it registered with carries a member's roles until it renews.
     /// </summary>
     public async Task<(HttpClient Client, Session Session)> PlainAdminAsync(string name = "Plain")
     {
