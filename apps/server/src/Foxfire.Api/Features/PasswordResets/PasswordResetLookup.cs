@@ -54,7 +54,7 @@ internal static class PasswordResetLookup
         var now = time.GetUtcNow();
         var verified = ResetToken.Verify(token, auth.InviteSigningKeyBytes, now);
 
-        const string Unknown = "This password reset link is not valid for this server.";
+        const string Unknown = "This password reset link is not valid for this server. Check that you copied all of it.";
         const string Gone = "This link has expired. Ask whoever sent it for a new one.";
 
         switch (verified.Status)
@@ -73,8 +73,8 @@ internal static class PasswordResetLookup
             .FirstOrDefaultAsync(r => r.Id == verified.ResetId, cancellationToken);
 
         if (reset?.User is null) return (null, Unknown);
-        if (reset.RedeemedAt is not null) return (null, "This link has already been used.");
-        if (reset.RevokedAt is not null) return (null, "This link was withdrawn, or replaced by a newer one.");
+        if (reset.RedeemedAt is not null) return (null, "This link has already been used. If it was you, sign in with the password you set.");
+        if (reset.RevokedAt is not null) return (null, "This link was withdrawn, or replaced by a newer one. Ask whoever sent it for a new one.");
         if (reset.ExpiresAt <= now) return (null, Gone);
 
         if (IsDisabled(reset.User, now))
@@ -86,7 +86,7 @@ internal static class PasswordResetLookup
         // underneath it — a password, email or username change all rotate it.
         if (!string.Equals(reset.User.SecurityStamp, reset.SecurityStamp, StringComparison.Ordinal))
         {
-            return (null, "This link is out of date, because that account has changed since it was made.");
+            return (null, "This link is out of date, because that account has changed since it was made. Ask whoever sent it for a new one.");
         }
 
         return (reset, "Ready to use.");

@@ -1361,6 +1361,17 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       createInvite: (email?: string): Promise<AdminInvite> => {
         const address = email?.trim() || null
+
+        // An address with an account is refused, in the server's words.
+        const member = address === null ? undefined : mockUsers.find((u) => u.email.toLowerCase() === address.toLowerCase())
+        if (member) {
+          return Promise.reject(
+            new Error(
+              `That address belongs to ${member.username}, who is already a member.${member.isDisabled ? ' Their account is disabled; turn it back on from Members.' : ''}`
+            )
+          )
+        }
+
         // Only an address is deduplicated, as on the server: each link without
         // one is for a different somebody.
         const existing = address === null ? undefined : mockInvites.find((i) => i.email === address && i.isOpen)

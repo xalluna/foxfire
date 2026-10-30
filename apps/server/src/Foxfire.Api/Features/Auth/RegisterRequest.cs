@@ -97,14 +97,16 @@ internal sealed class RegisterRequestHandler(
 
         var now = time.GetUtcNow();
 
-        // Registering through an invite that was emailed to this very address is
-        // proof enough that the address is theirs — they read the mail it came
-        // in. Only when the mail actually went: an invite with an address that
-        // an admin copied into a chat proves nothing about the mailbox.
+        // The invite a registration came with, looked at whenever a token comes
+        // along — even on a server with public signup, which needs no invite and
+        // so never resolved it above. It is spent either way, so the admin sees
+        // who joined through it and a link shared in a channel lets in one
+        // person, as it says it will, whether or not sign-up happened to be open.
         //
-        // Looked at whenever a token comes with the registration, even on a
-        // server with public signup, which needs no invite and so never
-        // resolved it above.
+        // It is also the proof of the mailbox, when it was emailed to this very
+        // address — they read the mail it came in. Only when the mail actually
+        // went: an invite with an address an admin copied into a chat proves
+        // nothing about who owns it.
         var offered = invite ?? (string.IsNullOrWhiteSpace(request.InviteToken)
             ? null
             : await ResolveInviteAsync(request.InviteToken, email, cancellationToken));
@@ -126,9 +128,13 @@ internal sealed class RegisterRequestHandler(
         // left outside: a transient failure while minting them would otherwise
         // retry the whole block and try to create the account a second time,
         // which is a far worse outcome than one failed sign-in.
+        Guid? spent = null;
+
         var (failure, user) = await db.Database.CreateExecutionStrategy().ExecuteAsync(
             async ct =>
             {
+                spent = null;
+
                 var candidate = new FoxfireUser
                 {
                     Id = Guid.CreateVersion7(now),
@@ -151,11 +157,21 @@ internal sealed class RegisterRequestHandler(
                     // under that box instead of in a banner.
                     var taken = created.Errors.Any(e => e.Code == "DuplicateUserName");
 
+                    // Identity's own sentence for a taken address is written for
+                    // a developer; somebody holding an invite to an address that
+                    // already has an account wants to know where to go instead.
+                    var addressTaken = created.Errors.Any(e => e.Code == "DuplicateEmail");
+
                     var error = taken
                         ? new Error("username_taken", "Somebody on this server already goes by that name.")
-                        : new Error(
-                            "registration_failed",
-                            string.Join(" ", created.Errors.Select(e => e.Description)));
+                        : addressTaken
+                            ? new Error(
+                                "email_taken",
+                                "There is already an account for that address here. Sign in, or reset your password "
+                                + "from the sign-in page.")
+                            : new Error(
+                                "registration_failed",
+                                string.Join(" ", created.Errors.Select(e => e.Description)));
 
                     return ((Error?)error, (FoxfireUser?)null);
                 }
@@ -165,21 +181,25 @@ internal sealed class RegisterRequestHandler(
                     await users.AddToRolesAsync(candidate, [FoxfireRoles.Admin, FoxfireRoles.HeadAdmin]);
                 }
 
-                if (invite is not null)
+                if (offered is not null)
                 {
                     // A conditional UPDATE rather than a read-then-write. Both
                     // halves of a race read the invite as open a moment ago; this
                     // is the write that decides, because SQL Server serialises it
                     // on the row and the loser matches nothing.
                     var claimed = await db.Invites
-                        .Where(i => i.Id == invite.Id && i.RedeemedAt == null && i.RevokedAt == null)
+                        .Where(i => i.Id == offered.Id && i.RedeemedAt == null && i.RevokedAt == null)
                         .ExecuteUpdateAsync(
                             setters => setters
                                 .SetProperty(i => i.RedeemedByUserId, candidate.Id)
                                 .SetProperty(i => i.RedeemedAt, (DateTimeOffset?)now),
                             ct);
 
-                    if (claimed == 0)
+                    if (claimed > 0) spent = offered.Id;
+
+                    // On an open server the invite was never the permission, so
+                    // losing the race for it costs only the record of it.
+                    if (claimed == 0 && invite is not null)
                     {
                         // Somebody else got there first. The account goes back
                         // with the transaction, so they can try again with a
@@ -192,6 +212,19 @@ internal sealed class RegisterRequestHandler(
                     }
                 }
 
+                // Any other open invite to this address can never register
+                // anybody now — the address has an account — so it is closed as
+                // this account's rather than left open, offering to email a
+                // member an invite they cannot use.
+                await db.Invites
+                    .Where(i => i.Email == email && i.Id != spent)
+                    .Where(Invite.OpenAt(now))
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(i => i.RedeemedByUserId, candidate.Id)
+                            .SetProperty(i => i.RedeemedAt, (DateTimeOffset?)now),
+                        ct);
+
                 await transaction.CommitAsync(ct);
                 return ((Error?)null, (FoxfireUser?)candidate);
             },
@@ -200,9 +233,18 @@ internal sealed class RegisterRequestHandler(
         if (failure is not null) return failure;
         if (user is null) return new Error("registration_failed", "The account could not be created.");
 
-        logger.LogInformation(
-            "Registered {Username} ({Email}){Admin}",
-            username, email, isSeededAdmin ? " as this server's head admin" : "");
+        if (spent is { } inviteId)
+        {
+            logger.LogInformation(
+                "Registered {Username} ({Email}){Admin} through invite {InviteId}",
+                username, email, isSeededAdmin ? " as this server's head admin" : "", inviteId);
+        }
+        else
+        {
+            logger.LogInformation(
+                "Registered {Username} ({Email}){Admin}",
+                username, email, isSeededAdmin ? " as this server's head admin" : "");
+        }
 
         // The owner who signed up under any other address than the configured
         // one is an ordinary member, and nothing on screen says why. While the

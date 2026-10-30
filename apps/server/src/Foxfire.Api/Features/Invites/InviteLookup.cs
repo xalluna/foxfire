@@ -66,16 +66,16 @@ internal static class InviteLookup
                 return (null, "This invite has expired. Ask whoever sent it for a new one.");
             case SignedTokenStatus.Malformed:
             case SignedTokenStatus.BadSignature:
-                return (null, "This invite link is not valid for this server.");
+                return (null, "This invite link is not valid for this server. Check that you copied all of it.");
             default:
                 break;
         }
 
         var invite = await db.Invites.FirstOrDefaultAsync(i => i.Id == verified.InviteId, cancellationToken);
 
-        if (invite is null) return (null, "This invite link is not valid for this server.");
-        if (invite.RedeemedAt is not null) return (null, "This invite has already been used.");
-        if (invite.RevokedAt is not null) return (null, "This invite was withdrawn.");
+        if (invite is null) return (null, "This invite link is not valid for this server. Check that you copied all of it.");
+        if (invite.RedeemedAt is not null) return (null, "This invite has already been used. If it was you, sign in instead.");
+        if (invite.RevokedAt is not null) return (null, "This invite was withdrawn. Ask whoever sent it for a new one.");
         if (invite.ExpiresAt <= now) return (null, "This invite has expired. Ask whoever sent it for a new one.");
 
         return (invite, "Ready to use.");
