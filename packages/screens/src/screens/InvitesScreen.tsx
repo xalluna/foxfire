@@ -1,12 +1,13 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
 import { absoluteUrl, paths } from '@foxfire/core/routes'
-import { InvitesPage } from '@foxfire/ui'
+import { InvitesPage, SignupChoiceNotice } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useConnection } from '../client/useConnection'
 import { useAccountEmail } from '../queries/accountEmail'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
+import { useSignupChoice } from '../queries/signupChoice'
 
 /** Used invites per page. */
 const PAGE_SIZE = 50
@@ -48,6 +49,9 @@ export function InvitesScreen(): JSX.Element {
   // Whether the server sends mail is on every member's own address answer.
   const mail = useAccountEmail()
 
+  // The same settings read as above, so asking costs nothing.
+  const signup = useSignupChoice()
+
   /** Under one key, because taking an invite adds a member and spends the invite. */
   const refresh = (): void => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.admin.all() })
@@ -63,6 +67,7 @@ export function InvitesScreen(): JSX.Element {
 
   return (
     <InvitesPage
+      notice={signup.unchosen ? <SignupChoiceNotice onChoose={signup.choose} /> : undefined}
       outstanding={outstanding.data ?? []}
       used={pageItems(used.data, (invite) => invite.id)}
       invitesLoading={outstanding.isPending || used.isPending}

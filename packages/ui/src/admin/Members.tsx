@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import type { AdminActionResult, AdminPasswordReset, AdminUser, AdminUserPatch } from '@foxfire/core'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
@@ -39,6 +39,8 @@ export interface MembersPageProps {
   onCreatePasswordReset: (id: string) => Promise<AdminPasswordReset>
   onRevokePasswordReset: (id: string) => Promise<AdminActionResult>
   onCopy: (text: string) => void
+  /** Something the server needs its admins to decide, drawn above everything else. */
+  notice?: ReactNode
 }
 
 /**
@@ -68,7 +70,8 @@ export function MembersPage({
   onDeleteUser,
   onCreatePasswordReset,
   onRevokePasswordReset,
-  onCopy
+  onCopy,
+  notice
 }: MembersPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -90,6 +93,8 @@ export function MembersPage({
       title="Members"
       intro="Everybody with an account on this server. Any admin can make somebody an admin or let them back in; demoting, disabling or removing another admin is a head admin's, and so is making anybody a head admin. A new role reaches them the next time their app renews its session, within fifteen minutes, and does not sign them out. Disabling somebody signs them out everywhere; whatever they have open stops working within the same fifteen minutes."
     >
+      {notice}
+
       {error !== null && (
         <SettingsCard>
           <StatusRow tone="error">{error}</StatusRow>

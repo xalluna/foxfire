@@ -67,7 +67,8 @@ const VERSION: VersionInfo = {
   apiVersion: 1,
   minimumDesktop: '0.12.0',
   recommendedDesktop: '0.12.0',
-  publicSignup: true,
+  // A server set up today starts invite-only.
+  publicSignup: scenario !== 'server-fresh',
   apiBase: '/api',
   publicUrl: window.location.origin,
   // ?scenario=email-off is a server with no provider: no "Forgot password?".

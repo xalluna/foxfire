@@ -185,6 +185,10 @@ record your games by itself, with no OBS to install.
 - **Members no longer offers to disable your own account**, which locked you out until another
   admin let you back in, and its intro now says what really happens: a new role reaches somebody
   within fifteen minutes without signing them out, and only disabling signs them out everywhere.
+- **A server whose owner never chose who can join asks them.** Older servers were open to anybody
+  with the address by a default nobody was told about; Settings › Server, Members and Invites now
+  ask an admin to choose "Invite only" or "Keep it open", and Invites says what an open sign-up
+  lets a stranger read. New servers start invite-only.
 
 ### Under the hood
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import type { AdminActionResult, AdminInvite, ShareLink } from '@foxfire/core'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
@@ -53,6 +53,8 @@ export interface InvitesPageProps {
   /** Copies a link. Absent where the server does not say where its web client is. */
   onCopyShareLink?: (link: ShareLink) => void
   onRevokeShareLink: (id: string) => Promise<AdminActionResult>
+  /** Something the server needs its admins to decide, drawn above everything else. */
+  notice?: ReactNode
 }
 
 /**
@@ -92,7 +94,8 @@ export function InvitesPage({
   loadingMoreShareLinks,
   onShowMoreShareLinks,
   onCopyShareLink,
-  onRevokeShareLink
+  onRevokeShareLink,
+  notice
 }: InvitesPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -115,6 +118,8 @@ export function InvitesPage({
           : "Who can make an account here, and the links that let them in. This server doesn't send mail, so an invite is a link you pass on yourself — in Discord, or wherever your community talks."
       }
     >
+      {notice}
+
       {error !== null && (
         <SettingsCard>
           <StatusRow tone="error">{error}</StatusRow>
@@ -126,7 +131,7 @@ export function InvitesPage({
           label="Anyone can make an account"
           description={
             publicSignup
-              ? 'Anybody who knows this address can register.'
+              ? 'Anybody who knows this address can register, and then read everything a member can — including who claimed which League account — and claim any account nobody has yet.'
               : 'Only people you send an invite to can register.'
           }
           control={
@@ -156,7 +161,9 @@ export function InvitesPage({
             description={
               publicAccess
                 ? 'Anybody who knows this address can read every profile, game and rank here — but not sync, edit or download anything. Who claimed which account and what members attached stay hidden.'
-                : 'Only members can read this server, and whoever a member shares one profile with.'
+                : publicSignup
+                  ? 'Only members can read this server, and whoever a member shares one profile with — but while anyone can make an account, anybody with this address can become a member.'
+                  : 'Only members can read this server, and whoever a member shares one profile with.'
             }
             control={
               <button

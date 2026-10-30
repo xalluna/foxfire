@@ -866,14 +866,45 @@ public class AdminSettingsTests(FoxfireServerFixture server)
     private async Task<HttpClient> AdminAsync() => (await server.AdminAsync()).Client;
 
     [Fact]
-    public async Task Public_signup_is_on_by_default()
+    public void A_new_server_starts_invite_only() => Assert.True(server.StartedInviteOnly);
+
+    [Fact]
+    public async Task Settings_say_sign_up_was_chosen_once_somebody_chose_it()
     {
+        // The fixture opened it, as a host who wanted it open would.
         using var admin = await AdminAsync();
 
         var settings = await admin.GetFromJsonAsync<ServerSettings>(new Uri("/api/admin/settings/", UriKind.Relative));
 
         Assert.True(settings?.PublicSignup);
+        Assert.True(settings?.PublicSignupChosen);
         Assert.Equal(200, settings?.BackfillTarget);
+    }
+
+    [Fact]
+    public async Task A_server_that_never_chose_is_open_and_says_so()
+    {
+        // A server from before new ones started invite-only: no row at all,
+        // which keeps the open default it always had and asks its owner.
+        using var admin = await AdminAsync();
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            db.ServerSettings.RemoveRange(db.ServerSettings.Where(s => s.Key == ServerSettingKeys.PublicSignup));
+            await db.SaveChangesAsync();
+        }
+
+        try
+        {
+            var settings = await admin.GetFromJsonAsync<ServerSettings>(new Uri("/api/admin/settings/", UriKind.Relative));
+
+            Assert.True(settings?.PublicSignup);
+            Assert.False(settings?.PublicSignupChosen);
+        }
+        finally
+        {
+            await admin.PatchAsJsonAsync(new Uri("/api/admin/settings/", UriKind.Relative), new { publicSignup = true });
+        }
     }
 
     [Fact]

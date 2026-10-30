@@ -44,11 +44,10 @@ public static class ServerSettingKeys
     /// <summary>
     /// Whether anybody may register without an invite. "true" or "false".
     ///
-    /// Defaults to on, per the design: a community server that nobody can join
-    /// is the less useful mistake to make by accident. A host who wants it shut
-    /// turns it off and hands out invites, and the admin account is seeded from
-    /// configuration either way, so there is no window in which an open server
-    /// is also an unclaimed one.
+    /// A new server writes "false" when it first starts on an empty database, so
+    /// it is invite-only until its owner opens it. Absent means a server from
+    /// before that, which reads as open — the old default — and whose owner the
+    /// admin pages ask to choose, since nothing ever told them it was open.
     /// </summary>
     public const string PublicSignup = "signup.public";
 

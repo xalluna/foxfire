@@ -1,4 +1,5 @@
 using Foxfire.Api.Configuration;
+using Foxfire.Api.Services;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -35,7 +36,34 @@ public static class DatabasePreparation
         }
 
         await SeedRolesAsync(scope.ServiceProvider, log, cancellationToken);
+        await StartInviteOnlyAsync(scope.ServiceProvider, db, log, cancellationToken);
         await PromoteSeededAdminAsync(scope.ServiceProvider, log, cancellationToken);
+    }
+
+    /// <summary>
+    /// A brand-new server starts invite-only.
+    ///
+    /// Sign-up used to be open until somebody closed it, and nothing in an
+    /// owner's first session said so: anybody with the address could make an
+    /// account and read everything a member can. Writing the setting itself,
+    /// rather than changing the default, means a server from before this — with
+    /// members, and never having chosen — keeps the open sign-up it has always
+    /// had, and is asked to choose instead. The owner can always register: the
+    /// configured admin's address skips the invite.
+    /// </summary>
+    private static async Task StartInviteOnlyAsync(
+        IServiceProvider services,
+        FoxfireDbContext db,
+        ILogger log,
+        CancellationToken cancellationToken)
+    {
+        if (await db.Users.AnyAsync(cancellationToken)) return;
+
+        var settings = services.GetRequiredService<ServerSettingsService>();
+        if (await settings.IsPublicSignupChosenAsync(cancellationToken)) return;
+
+        await settings.SetPublicSignupAsync(false, cancellationToken);
+        log.LogInformation("New server: sign-up starts invite-only. Open it, or invite people, from the Invites page.");
     }
 
     private static async Task SeedRolesAsync(IServiceProvider services, ILogger log, CancellationToken cancellationToken)

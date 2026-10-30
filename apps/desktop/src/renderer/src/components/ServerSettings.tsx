@@ -12,8 +12,10 @@ import {
   ghostButtonClass,
   inputClass,
   primaryButtonClass,
+  SignupChoiceNotice,
   Icon
 } from '@foxfire/ui'
+import { useSignupChoice } from '@foxfire/screens'
 import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
 import { absoluteUrl, paths } from '@foxfire/core/routes'
 
@@ -64,6 +66,9 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const session = state.session!
   const active = state.servers.find((s) => s.url === state.activeUrl)
+  // Where Settings opens while connected, so the one place an owner is sure to
+  // see it before any admin page.
+  const signup = useSignupChoice(session.isAdmin)
 
   return (
     <SettingsPage
@@ -94,6 +99,8 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           </StatusRow>
         </SettingsCard>
       )}
+
+      {session.isAdmin && signup.unchosen && <SignupChoiceNotice onChoose={signup.choose} />}
 
       <SettingsCard title="Signed in">
         <SettingsRow

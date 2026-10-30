@@ -213,7 +213,8 @@ let serverState: ServerState =
   scenario === 'email-held' ||
   scenario === 'unverified' ||
   scenario === 'email-change-pending' ||
-  scenario === 'admin-email-pinned'
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,

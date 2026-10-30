@@ -71,6 +71,9 @@ export type Scenario =
   // The configured head admin's own Account page, whose address is set in the
   // server's configuration rather than in the app.
   | 'admin-email-pinned'
+  // A server from before new ones started invite-only: open by a default nobody
+  // chose, which Members, Invites and the desktop's Server page ask about.
+  | 'signup-unchosen'
   // A server whose Riot key cannot reach TFT: every TFT page says so, and its
   // history is whatever was stored before.
   | 'tft-no-access'

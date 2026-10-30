@@ -414,6 +414,13 @@ export interface ShareLinkOpen {
 export interface ServerAdminSettings {
   publicSignup: boolean
   /**
+   * Whether somebody has decided sign-up either way. False only on a server
+   * from before new ones started invite-only, open by a default nobody was told
+   * about. Absent from a server older than the field, and read as chosen, so
+   * nothing asks a question that server cannot record.
+   */
+  publicSignupChosen?: boolean
+  /**
    * Whether anybody can read the server without signing in. Absent from a
    * server older than the switch, which never could.
    */
