@@ -323,6 +323,15 @@ version 3 still, and a desktop from before TFT is served as it always was.
   an `sp_getapplock` that the email dispatcher now takes through the same
   `SqlAppLock`. `Sync__Background=false` keeps a process from sweeping at all,
   which is the test fixture's: its hosts share one database.
+- Admin actions name who did them, and to whom, in the log — so the Insights
+  Logs tab and the stored logs answer "who unlinked this?". An unlink names
+  the admin and the former owner by name rather than a user id (and an account
+  already unclaimed is left alone without a line); adding an account, making
+  and withdrawing invites, removing somebody's replay, and every settings
+  change — sign-up, backfill, the replay cap, which logged nothing before —
+  carry `{Actor}`, which replaces the two `{Admin}` properties. A claim reads
+  `{Username} claimed {RiotId}`, and a registration says which invite let
+  somebody in.
 - The web client's design harness administers a community-sized server: League
   accounts and Invites › Shared profiles have pages, and Data & storage counts
   the accounts it lists. `?scenario=server-member` signs in as a member who is no

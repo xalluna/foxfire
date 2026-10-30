@@ -122,11 +122,11 @@ internal sealed class CreateInviteRequestHandler(
 
         if (email is null)
         {
-            logger.LogInformation("Created invite {InviteId} for whoever opens the link", invite.Id);
+            logger.LogInformation("{Actor} created invite {InviteId} for whoever opens the link", me.Username, invite.Id);
         }
         else
         {
-            logger.LogInformation("Created invite {InviteId} for {Email}", invite.Id, email);
+            logger.LogInformation("{Actor} created invite {InviteId} for {Email}", me.Username, invite.Id, email);
         }
 
         return (await InviteLookup.DescribeWithMailAsync(

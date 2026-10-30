@@ -131,7 +131,7 @@ internal sealed class AddTrackedAccountRequestHandler(
         }
 
         logger.LogInformation(
-            "Admin {UserId} started tracking {RiotId}, unclaimed", me.UserId, account.RiotId);
+            "{Actor} started tracking {RiotId}, unclaimed", me.Username, account.RiotId);
 
         // Cosmetic and best-effort, exactly as when linking: an account that
         // appears with an empty frame and no level reads as one that did not
