@@ -42,6 +42,7 @@ public sealed record ForceUnlinkRiotAccountRequest(Guid Id) : IEmptyDomainReques
 
 internal sealed class ForceUnlinkRiotAccountRequestHandler(
     FoxfireDbContext db,
+    IIdentityContext me,
     ILogger<ForceUnlinkRiotAccountRequestHandler> logger)
     : IDomainRequestHandler<ForceUnlinkRiotAccountRequest>
 {
@@ -51,15 +52,21 @@ internal sealed class ForceUnlinkRiotAccountRequestHandler(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var account = await db.RiotAccounts.FirstOrDefaultAsync(a => a.Id == request.Id, cancellationToken);
+        var account = await db.RiotAccounts
+            .Include(a => a.Owner)
+            .FirstOrDefaultAsync(a => a.Id == request.Id, cancellationToken);
         if (account is null) return Response.NotFound();
 
-        var previous = account.OwnerId;
+        // Already nobody's — another admin got there first. Nothing to write,
+        // and nothing to say in the log.
+        if (account.OwnerId is null) return Response.Success();
+
+        var previous = account.Owner?.UserName ?? account.OwnerId.ToString();
         account.OwnerId = null;
         account.LinkedAt = null;
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogWarning("An admin unlinked {RiotId} from user {UserId}", account.RiotId, previous);
+        logger.LogWarning("{Actor} unlinked {RiotId} from {Username}", me.Username, account.RiotId, previous);
 
         return Response.Success();
     }
