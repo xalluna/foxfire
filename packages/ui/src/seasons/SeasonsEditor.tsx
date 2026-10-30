@@ -122,7 +122,8 @@ export function SeasonsEditor({
 }): JSX.Element {
   const [rows, setRows] = useState<Draft[] | null>(null)
   const [saving, setSaving] = useState(false)
-  const [failed, setFailed] = useState(false)
+  // The refusal's own words: a boundary the server will not take says why.
+  const [failed, setFailed] = useState<string | null>(null)
 
   // Seeded once from the server, then owned locally until saved.
   useEffect(() => {
@@ -131,13 +132,13 @@ export function SeasonsEditor({
 
   const save = {
     isPending: saving,
-    isError: failed,
+    error: failed,
     mutate: (next: SeasonInput[]): void => {
       setSaving(true)
-      setFailed(false)
+      setFailed(null)
       onSave(next)
         .then((saved) => setRows(saved.map(toDraft)))
-        .catch(() => setFailed(true))
+        .catch((err: unknown) => setFailed(err instanceof Error ? err.message : String(err)))
         .finally(() => setSaving(false))
     }
   }
@@ -244,8 +245,28 @@ export function SeasonsEditor({
         </div>
 
         {problem && !unchanged && <p className="mt-3 text-sm text-red">{problem}</p>}
-        {save.isError && (
-          <p className="mt-3 text-sm text-red">Could not save the {tft ? 'sets' : 'seasons'}.</p>
+
+        {/* Saving works every account's LP out again, which on a big server
+            is the slow part — said while it runs, so a long wait is expected. */}
+        {save.isPending && (
+          <p className="mt-3 text-xs leading-relaxed text-text-mute">
+            Saving, then working out LP again for every account — on a big server this takes a while.
+          </p>
+        )}
+
+        {save.error !== null && (
+          <div className="mt-3 space-y-1">
+            <p className="text-sm text-red">
+              Could not save the {tft ? 'sets' : 'seasons'}: {save.error}
+            </p>
+            {/* The table is stored before the LP is worked out again, so a
+                server that stopped answering may have saved it. Saving again
+                is safe either way: it redoes the rebuild. */}
+            <p className="text-xs leading-relaxed text-text-mute">
+              If the server was slow to answer they may have saved, with the LP not yet worked out
+              again. Save again to finish.
+            </p>
+          </div>
         )}
       </SettingsBlock>
     </SettingsCard>

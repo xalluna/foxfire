@@ -4,6 +4,7 @@ import type {
   ImportAccountResult,
   ImportAccountRow,
   ImportBatchOutcome,
+  ImportFinishPage,
   ImportMatchRow,
   ImportReadingRow,
   ImportSeasonRow
@@ -75,8 +76,21 @@ export interface ImportTarget {
   /** TFT's payloads, which the server files apart from League's. */
   tftMatches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome>
   rankReadings(rows: ImportReadingRow[]): Promise<ImportBatchOutcome>
-  finish(): Promise<{ accounts: number; attributed: number }>
+  /**
+   * Works the LP out, a page of accounts at a time. A server older than the
+   * paging ignores the page, does every account at once, and names no next.
+   */
+  finish(page: { offset: number; limit: number }): Promise<ImportFinishPage>
 }
+
+/**
+ * Accounts per finishing request.
+ *
+ * Small, because each is a year of replays, and a page has to answer well
+ * inside the client's wait — the whole server in one request did not, on a big
+ * community, and the admin was told an import that had landed had failed.
+ */
+export const IMPORT_FINISH_PAGE = 10
 
 /**
  * How many rows go in one request.
@@ -351,7 +365,23 @@ async function run(
 
   report({ phase: 'finishing', current: 0, total: 0 })
 
-  const summary = await target.finish()
+  // Every batch has landed by now, so a failure from here is not a failed
+  // import: what is missing is LP for the accounts not yet reached, and
+  // importing the same file again sends nothing twice and finishes them.
+  let attributed = 0
+  let lpUnfinished = false
+  try {
+    let offset: number | null = 0
+    while (offset !== null) {
+      const page: ImportFinishPage = await target.finish({ offset, limit: IMPORT_FINISH_PAGE })
+      attributed += page.attributed
+      if (page.total != null) report({ phase: 'finishing', current: offset + page.accounts, total: page.total })
+      offset = page.nextOffset ?? null
+    }
+  } catch (err) {
+    log.error('Working out LP stopped after the import landed', err)
+    lpUnfinished = true
+  }
 
   report({ phase: 'done', current: 0, total: 0 })
 
@@ -363,14 +393,16 @@ async function run(
     matchesFailed: result.matchesFailed,
     readingsUnplaced: result.readingsUnplaced,
     healed: result.healed,
-    attributed: summary.attributed
+    attributed,
+    lpUnfinished
   })
 
   return {
     ...result,
     ok: true,
     message: null,
-    attributed: summary.attributed
+    attributed,
+    lpUnfinished
   }
 }
 

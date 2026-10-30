@@ -650,6 +650,7 @@ function ProgressRow({ progress }: { progress: ImportProgress }): JSX.Element {
         <span className="tabular-nums">
           {' — '}
           {progress.current} of {progress.total}
+          {progress.phase === 'finishing' && ' accounts'}
         </span>
       )}
     </StatusRow>
@@ -701,6 +702,16 @@ function ResultRows({ result }: { result: ImportResult }): JSX.Element {
         {nothingAdded &&
           ' If that is older than you expected, this copy is missing Foxfire’s latest changes — close Foxfire on that PC and choose the file again.'}
       </StatusRow>
+
+      {result.lpUnfinished && (
+        // Everything landed; only the last step stopped. Saying so is the
+        // difference between an admin re-importing and an admin assuming the
+        // whole run failed.
+        <StatusRow tone="warn">
+          Everything was added, but LP was not worked out for every account. Import the same file
+          again to finish — nothing is sent twice.
+        </StatusRow>
+      )}
 
       {result.healed > 0 && (
         // Games an earlier run stored when it could not yet tell whose they

@@ -755,6 +755,38 @@ public class ImportTests(FoxfireServerFixture server)
         [.. accounts.Select(a => new { gameName = a.GameName, tagLine = "NA1", platform = "na1", puuid = a.Puuid })];
 
     /// <summary>Posts a batch and reads the answer, failing the test on anything but success.</summary>
+    [Fact]
+    public async Task Finishing_works_a_page_of_accounts_at_a_time_when_asked()
+    {
+        // The whole server in one request took longer than a client waits on a
+        // big community. A client from before the paging asks for no page.
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var first = await PostAsync<ImportSummary>(client, "/api/admin/import/finish?offset=0&limit=1", null);
+
+        Assert.NotNull(first.Total);
+        Assert.True(first.Accounts <= 1);
+        Assert.Equal(first.Total > first.Accounts ? first.Accounts : null, first.NextOffset);
+
+        var whole = await PostAsync<ImportSummary>(client, "/api/admin/import/finish", null);
+
+        Assert.Null(whole.Total);
+        Assert.Null(whole.NextOffset);
+        Assert.Equal(first.Total, whole.Accounts);
+    }
+
+    [Fact]
+    public async Task A_page_is_never_more_than_the_most_a_client_can_wait_for()
+    {
+        var (client, _) = await server.AdminAsync();
+        using var _client = client;
+
+        var page = await PostAsync<ImportSummary>(client, "/api/admin/import/finish?offset=0&limit=10000", null);
+
+        Assert.True(page.Accounts <= FinishImportRequest.MaximumPage);
+    }
+
     private static async Task<T> PostAsync<T>(HttpClient client, string path, object? body)
     {
         var response = body is null
