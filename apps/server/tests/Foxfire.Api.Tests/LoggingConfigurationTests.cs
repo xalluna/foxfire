@@ -68,7 +68,7 @@ public class LoggingConfigurationTests
     private static IReadOnlyList<string> Check(LogOptions logs) =>
         ConfigurationCheck.Validate(
             "Server=db;Database=Foxfire",
-            new ServerOptions { PublicUrl = "https://foxfire.example.com" },
+            new ServerOptions { PublicUrl = "https://test.example.com" },
             new RiotOptions { ApiKey = "RGAPI-test" },
             new AuthOptions
             {

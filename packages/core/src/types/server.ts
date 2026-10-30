@@ -518,6 +518,12 @@ export interface AccountEmail {
   mailEnabled: boolean
   /** Mail to your address bounced or was reported, and is no longer sent. */
   suppressed: boolean
+  /**
+   * Your address is the one the server's configuration names as its head admin,
+   * so it is changed there rather than here. Absent from a server older than
+   * the field, which refuses the change on save instead.
+   */
+  addressPinned?: boolean
 }
 
 /**

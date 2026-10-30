@@ -68,6 +68,9 @@ export type Scenario =
   | 'email-held'
   | 'unverified'
   | 'email-change-pending'
+  // The configured head admin's own Account page, whose address is set in the
+  // server's configuration rather than in the app.
+  | 'admin-email-pinned'
   // A server whose Riot key cannot reach TFT: every TFT page says so, and its
   // history is whatever was stored before.
   | 'tft-no-access'

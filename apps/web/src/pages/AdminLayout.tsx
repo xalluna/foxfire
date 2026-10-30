@@ -52,7 +52,7 @@ export function AdminLayout(): JSX.Element {
       <EmptyState
         icon={<Icon.Settings />}
         title="Administrators only"
-        description="These pages run the server. Ask whoever set it up if something here needs changing."
+        description="These pages run the server. Ask whoever set it up if something here needs changing. Set it up yourself? Its head admin is the account whose address is in ADMIN_EMAIL — set that to the address you signed up with and restart the server, or register that address too."
       />
     )
   }

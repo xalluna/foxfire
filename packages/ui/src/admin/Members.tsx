@@ -296,6 +296,15 @@ function Member({
             </p>
           )}
 
+          {/* The owner's way back, written where they will be when they need
+              it next: signed in somewhere, with no head admin above them. */}
+          {pinned && isYou && (
+            <p className="text-xs leading-relaxed text-text-mute">
+              Forgotten your password? While you&apos;re signed in, Reset link below makes you one.
+              If you&apos;re the only head admin, nobody else here can.
+            </p>
+          )}
+
           {guarded && (
             <p className="text-xs leading-relaxed text-text-mute">
               Only a head admin can demote, disable or remove another admin, or make them a reset

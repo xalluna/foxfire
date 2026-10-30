@@ -86,9 +86,29 @@ public static class DatabasePreparation
 
         if (user is null)
         {
-            log.LogInformation(
-                "{Email} is this server's admin and has not registered yet. It becomes an admin as soon as it does.",
-                configured);
+            // A server with accounts and no head admin is usually an owner who
+            // signed up under another address — a typo, another domain, a gmail
+            // dot — and is now an ordinary member wondering where the admin pages
+            // went. That is worth a host's attention; a handover in progress,
+            // with another head admin still there, is not.
+            var accounts = await users.Users.CountAsync(cancellationToken);
+            var headAdmins = await users.GetUsersInRoleAsync(FoxfireRoles.HeadAdmin);
+
+            if (accounts > 0 && headAdmins.Count == 0)
+            {
+                log.LogWarning(
+                    "{Email} is this server's head admin and has not registered, and none of its {Accounts} accounts "
+                    + "is a head admin. Register that address, or set ADMIN_EMAIL (Admin__Email) to the address you "
+                    + "signed up with and restart.",
+                    configured, accounts);
+            }
+            else
+            {
+                log.LogInformation(
+                    "{Email} is this server's admin and has not registered yet. It becomes an admin as soon as it does.",
+                    configured);
+            }
+
             return;
         }
 
