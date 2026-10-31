@@ -286,7 +286,9 @@ const connection: ConnectionState =
   scenario === 'email-off' ||
   scenario === 'email-held' ||
   scenario === 'unverified' ||
-  scenario === 'email-change-pending'
+  scenario === 'email-change-pending' ||
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
@@ -358,6 +360,10 @@ function mockRefusal(target: AdminUser | undefined, change: AdminUserPatch | 'de
   if (target.isConfiguredAdmin && (demoting || disabling || change === 'delete')) {
     const verb = change === 'delete' ? 'removed' : demoting ? 'demoted' : 'disabled'
     return `${target.username} is the head admin this server's configuration names, so they cannot be ${verb} from here. Change Admin__Email and restart the server to hand it to somebody else.`
+  }
+
+  if (isYou && disabling) {
+    return 'You cannot disable your own account. Ask another admin, or change your password if you think it has leaked.'
   }
 
   if (me?.isHeadAdmin) return null
@@ -655,8 +661,13 @@ function isMemberMatch(user: AdminUser, needle: string): boolean {
 }
 
 // Uncapped, which is the default a host has to choose away from.
+//
+// Sign-up is open and chosen — a host who decided to keep it so. A server set up
+// today starts invite-only, as a real one does; ?scenario=signup-unchosen is an
+// older server, open by a default nobody chose, which the admin pages ask about.
 let mockServerSettings: ServerAdminSettings = {
-  publicSignup: true,
+  publicSignup: !FRESH,
+  publicSignupChosen: scenario !== 'signup-unchosen',
   publicAccess: false,
   backfillTarget: 200,
   tftBackfillTarget: 200,
@@ -1350,6 +1361,17 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       createInvite: (email?: string): Promise<AdminInvite> => {
         const address = email?.trim() || null
+
+        // An address with an account is refused, in the server's words.
+        const member = address === null ? undefined : mockUsers.find((u) => u.email.toLowerCase() === address.toLowerCase())
+        if (member) {
+          return Promise.reject(
+            new Error(
+              `That address belongs to ${member.username}, who is already a member.${member.isDisabled ? ' Their account is disabled; turn it back on from Members.' : ''}`
+            )
+          )
+        }
+
         // Only an address is deduplicated, as on the server: each link without
         // one is for a different somebody.
         const existing = address === null ? undefined : mockInvites.find((i) => i.email === address && i.isOpen)
@@ -1416,7 +1438,7 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           )
         }
 
-        mockServerSettings = next
+        mockServerSettings = { ...next, publicSignupChosen: next.publicSignupChosen || patch.publicSignup !== undefined }
         return delay(mockServerSettings, 180, false)
       },
 

@@ -85,23 +85,33 @@ public class AdminUserTests(FoxfireServerFixture server)
     }
 
     [Fact]
-    public async Task A_role_change_ends_their_sessions()
+    public async Task A_role_change_reaches_them_at_their_next_renewal()
     {
-        // Roles live in an access token that cannot be revoked and lasts fifteen
-        // minutes. Cutting the sessions is what makes a demotion mean something
-        // before the quarter hour is up.
+        // Roles live in an access token nothing can cut short, so revoking the
+        // sessions made a change land no sooner — it only signed the member out
+        // everywhere. Renewing reads the roles afresh, and that is how it lands.
         using var admin = await AdminAsync();
         using var client = server.Client();
-        var member = await server.RegisterAsync(client, "Cut", $"{Unique("cut")}@example.com");
+        var member = await server.RegisterAsync(client, "Renewed", $"{Unique("renew")}@example.com");
 
         await admin.PatchAsJsonAsync(
             new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = true });
 
-        var refresh = await client.PostAsJsonAsync(
+        var promoted = await client.PostAsJsonAsync(
             new Uri("/api/auth/refresh", UriKind.Relative),
             new { refreshToken = member.RefreshToken });
+        promoted.EnsureSuccessStatusCode();
+        var asAdmin = (await promoted.Content.ReadFromJsonAsync<Session>())!;
+        Assert.True(asAdmin.User.IsAdmin);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+        await admin.PatchAsJsonAsync(
+            new Uri($"/api/admin/users/{member.User.Id}", UriKind.Relative), new { isAdmin = false });
+
+        var demoted = await client.PostAsJsonAsync(
+            new Uri("/api/auth/refresh", UriKind.Relative),
+            new { refreshToken = asAdmin.RefreshToken });
+        demoted.EnsureSuccessStatusCode();
+        Assert.False((await demoted.Content.ReadFromJsonAsync<Session>())!.User.IsAdmin);
     }
 
     [Fact]

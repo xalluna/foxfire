@@ -54,14 +54,14 @@ internal sealed class UpdateServerSettingsRequestHandler(
         {
             await settings.SetPublicSignupAsync(publicSignup, cancellationToken);
             logger.LogInformation(
-                "Public signup is now {State}", publicSignup ? "open" : "closed — invites only");
+                "{Actor} made signup {State}", me.Username, publicSignup ? "open" : "closed — invites only");
         }
 
         if (request.PublicAccess is { } publicAccess)
         {
             await settings.SetPublicAccessAsync(publicAccess, cancellationToken);
             logger.LogInformation(
-                "{Admin} made reading this server {State}",
+                "{Actor} made reading this server {State}",
                 me.Username,
                 publicAccess ? "open to anybody, signed in or not" : "members only");
         }
@@ -69,18 +69,27 @@ internal sealed class UpdateServerSettingsRequestHandler(
         if (request.BackfillTarget is { } target)
         {
             await settings.SetBackfillTargetAsync(target, cancellationToken);
-            logger.LogInformation("Backfill target is now {Target} matches", target);
+            logger.LogInformation("{Actor} set the League backfill to {Target} matches", me.Username, target);
         }
 
         if (request.ReplayByteCap is { } cap)
         {
             await settings.SetReplayByteCapAsync(cap, cancellationToken);
+
+            if (cap > 0)
+            {
+                logger.LogInformation("{Actor} set the replay storage cap to {Bytes} bytes", me.Username, cap);
+            }
+            else
+            {
+                logger.LogInformation("{Actor} removed the replay storage cap", me.Username);
+            }
         }
 
         if (request.TftBackfillTarget is { } tftTarget)
         {
             await settings.SetTftBackfillTargetAsync(tftTarget, cancellationToken);
-            logger.LogInformation("TFT backfill target is now {Target} matches", tftTarget);
+            logger.LogInformation("{Actor} set the TFT backfill to {Target} matches", me.Username, tftTarget);
         }
 
         if (request.BackgroundSync is { } backgroundSync)
@@ -107,7 +116,7 @@ internal sealed class UpdateServerSettingsRequestHandler(
         {
             var now = await settings.GetBackgroundSyncAsync(cancellationToken);
             logger.LogInformation(
-                "{Admin} set background sync {State}, every {Minutes} minutes, leaving alone accounts synced in the last {SkipMinutes} minutes",
+                "{Actor} set background sync {State}, every {Minutes} minutes, leaving alone accounts synced in the last {SkipMinutes} minutes",
                 me.Username,
                 now.Enabled ? "on" : "off",
                 now.Interval.TotalMinutes,

@@ -281,7 +281,8 @@ let accountEmail: AccountEmail = {
   lastSentAt: scenario === 'unverified' || scenario === 'email-change-pending' ? iso(now - 2 * HOUR) : null,
   canResendAt: null,
   mailEnabled: MAIL_ON,
-  suppressed: false
+  suppressed: false,
+  addressPinned: scenario === 'admin-email-pinned'
 }
 
 /** The signed-in member's address. The screens ask only when somebody is signed in to a server. */

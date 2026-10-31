@@ -127,6 +127,7 @@ export { ServerDataPage, type ServerDataPageProps } from './admin/ServerData'
 export { InvitesPage, type InvitesPageProps } from './admin/Invites'
 export { LeagueAccountsPage, type LeagueAccountsPageProps } from './admin/LeagueAccounts'
 export { MembersPage, type MembersPageProps } from './admin/Members'
+export { SignupChoiceNotice } from './admin/SignupChoiceNotice'
 export { EmailAdminPage, type EmailAdminPageProps, type EmailLogFilters } from './admin/Email'
 export { MailStatus, describeMail } from './admin/mailStatus'
 export {

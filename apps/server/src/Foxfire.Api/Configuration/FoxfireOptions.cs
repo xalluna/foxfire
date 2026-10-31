@@ -205,7 +205,10 @@ public sealed class AdminOptions
     /// because public signup is on by default: a server reachable before its
     /// owner has got round to registering would otherwise belong to whoever
     /// found it. There is no window here — the claim is decided before the
-    /// server accepts its first request.
+    /// server accepts its first request — but only because the address is the
+    /// host's own. Registering it proves nothing about the mailbox, so the
+    /// example address .env.example used to ship would have handed the server to
+    /// anybody who had read that file; <see cref="ConfigurationCheck"/> refuses it.
     ///
     /// It also survives an accident. An admin who deletes themselves can
     /// register again and be an admin again.
@@ -373,6 +376,18 @@ public static class ConfigurationCheck
     /// <summary>Signing keys shorter than this are not worth the name.</summary>
     private const int MinimumSigningKeyLength = 32;
 
+    /// <summary>
+    /// The examples .env.example shipped as values before it shipped them blank.
+    ///
+    /// A server deployed from that file starts with them filled in, and the
+    /// address is the dangerous one: whoever registers it becomes head admin,
+    /// with no proof they own the mailbox. Matched exactly rather than by the
+    /// example.com domain, so a test or a host who really uses it is not refused.
+    /// </summary>
+    private const string ExampleAdminEmail = "you@example.com";
+
+    private const string ExamplePublicUrl = "https://foxfire.example.com";
+
     public static IReadOnlyList<string> Validate(
         string? connectionString,
         ServerOptions server,
@@ -413,6 +428,12 @@ public static class ConfigurationCheck
                 $"Server__PublicUrl is '{server.PublicUrl}'. Anything other than localhost must be https — "
                 + "passwords and account tokens travel over this.");
         }
+        else if (string.Equals(server.PublicUrl.Trim().TrimEnd('/'), ExamplePublicUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            problems.Add(
+                $"Server__PublicUrl is still {ExamplePublicUrl}, the example from .env.example. Set it to the "
+                + "address your members reach this server at — invite and reset links are built from it.");
+        }
 
         if (string.IsNullOrWhiteSpace(riot.ApiKey))
         {
@@ -445,6 +466,22 @@ public static class ConfigurationCheck
             problems.Add(
                 "Admin__Email is not set. It names the account that becomes this server's admin when it "
                 + "registers — without it nobody can administer the server.");
+        }
+        else if (!admin.Email.Contains('@', StringComparison.Ordinal))
+        {
+            // Registration refuses an address without one, so nobody could ever
+            // become this server's admin.
+            problems.Add(
+                $"Admin__Email is '{admin.Email}', which is not an email address. It names the account that "
+                + "becomes this server's admin when it registers, and nobody can register without an @.");
+        }
+        else if (string.Equals(admin.Email.Trim(), ExampleAdminEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            problems.Add(
+                $"Admin__Email is still {ExampleAdminEmail}, the example from .env.example, and anybody who has "
+                + "read that file could register it and become this server's head admin. Set it to an address "
+                + "you own and restart. An account that already registered with it stays a head admin until a "
+                + "head admin demotes it on the Members page.");
         }
 
         foreach (var address in ServerOptions.Split(server.TrustedProxies))

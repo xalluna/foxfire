@@ -212,7 +212,9 @@ let serverState: ServerState =
   scenario === 'email-off' ||
   scenario === 'email-held' ||
   scenario === 'unverified' ||
-  scenario === 'email-change-pending'
+  scenario === 'email-change-pending' ||
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
@@ -438,7 +440,7 @@ export const mockApi: Api = {
               usable: false,
               serverName: 'The Fox Den',
               email: null,
-              message: 'This invite link is not valid for this server.'
+              message: 'This invite link is not valid for this server. Check that you copied all of it.'
             }
           : {
               usable: true,

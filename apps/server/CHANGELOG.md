@@ -107,6 +107,38 @@ version 3 still, and a desktop from before TFT is served as it always was.
   dotted, and the legend matches; an assist on a recording's timeline is a
   shield rather than the kill's swords in a quieter colour; and the scoreboard
   names its columns, so the two damage bars are not told apart by colour alone.
+- **A server still set to the example admin address no longer starts.**
+  `.env.example` shipped `ADMIN_EMAIL=you@example.com`, and whoever registered
+  that address became head admin — registering proves nothing about the
+  mailbox — so a server started from the untouched file belonged to anybody who
+  had read it. The file now ships `ADMIN_EMAIL` and `SERVER_PUBLIC_URL` blank,
+  and a server whose `Admin__Email` is still `you@example.com` or has no `@`, or
+  whose `Server__PublicUrl` is still `https://foxfire.example.com`, refuses to
+  start and says why. **If yours was deployed from the old file:** set the
+  address to one you own and restart, then check Members for a head admin you
+  don't recognise — an account that registered the example address keeps the
+  role until a head admin demotes it.
+- **Promoting or demoting somebody no longer signs them out of every device.**
+  It never made the change land any sooner — a role lives in a token nothing
+  can cut short, and the next renewal, within fifteen minutes, reads it
+  afresh — so all it did was end a member's sessions, and drop a desktop to
+  local-only mid-game. Disabling somebody still signs them out everywhere.
+- **Nobody can disable their own account.** The lockout outlives every session
+  and only another admin can lift it, so one misclick on your own row locked an
+  admin out. The server refuses it (`self_disable`) and Members no longer offers
+  it on your own row; stepping down and removing your account are unchanged.
+- **A new server starts invite-only.** Sign-up used to be open until somebody
+  closed it, and nothing in an owner's first session said so — anybody with the
+  address could make an account and read everything a member can. A server
+  starting on an empty database now writes sign-up off; its owner can still
+  register with `ADMIN_EMAIL`, and opens it, or invites people, from Invites.
+  A server that already has members keeps what it had.
+- **An older server whose owner never chose is asked.** Open by a default
+  nobody was told about, it shows "Who can join" at the top of Members and
+  Invites, in the web client and on the desktop, until an admin picks "Invite
+  only" or "Keep it open". `/api/admin/settings` says `publicSignupChosen`.
+  The Joining and Looking in rows say what an open sign-up lets a stranger
+  read.
 
 ### Fixed
 
@@ -131,6 +163,33 @@ version 3 still, and a desktop from before TFT is served as it always was.
   read their rank. Somebody who had played three games on their own since
   their last sync found those missing until they pressed Sync now, and the
   game you shared was given the LP of all four.
+- **The configured head admin's Account page says their address is set in the
+  server's configuration**, instead of asking for their password and then
+  refusing the change.
+- **An owner who signed up under another address is told why the admin pages
+  never appeared.** The web client's "Administrators only" page says the head
+  admin is the account in `ADMIN_EMAIL` and how to change it; trying to move an
+  account onto that address says the same; and the server logs a Warning, at
+  startup and at the next registration, while it has accounts and no head admin.
+- **The way back after a forgotten password is written where an owner will look
+  for it**: on the sign-in page, on their own row in Members ("Reset link below
+  makes you one"), and first in `.env.example`'s `ADMIN_EMAIL` notes, which now
+  also finish the spare-address route — set it back and remove the spare.
+- **Joining through an invite while sign-up is open uses the invite up**, so it
+  shows under Used with who joined, and a link shared in a channel lets in one
+  person, as it says. An invite to an address that then joins another way is
+  closed too, rather than offering to email a member a link they cannot use.
+- **An invite can't be made for an address that already has an account.** It
+  is refused, naming the member, before anything is saved or emailed; one
+  waiting to be sent when that address joins is dropped ("that address joined
+  another way"). Registering with a taken address says to sign in or reset the
+  password, instead of Identity's own sentence.
+- **A dead invite or reset link says so, and what to do next**, in the web
+  client: its title follows the state ("This invite can't be used"), every
+  reason carries its own next step — a used invite says to sign in, a mistyped
+  one to check it was copied whole — and on a server anybody can join, a spent
+  invite points at making an account without it. The reset page no longer adds
+  "ask for a new one" to reasons it does not fit.
 
 ### Under the hood
 
@@ -264,6 +323,15 @@ version 3 still, and a desktop from before TFT is served as it always was.
   an `sp_getapplock` that the email dispatcher now takes through the same
   `SqlAppLock`. `Sync__Background=false` keeps a process from sweeping at all,
   which is the test fixture's: its hosts share one database.
+- Admin actions name who did them, and to whom, in the log — so the Insights
+  Logs tab and the stored logs answer "who unlinked this?". An unlink names
+  the admin and the former owner by name rather than a user id (and an account
+  already unclaimed is left alone without a line); adding an account, making
+  and withdrawing invites, removing somebody's replay, and every settings
+  change — sign-up, backfill, the replay cap, which logged nothing before —
+  carry `{Actor}`, which replaces the two `{Admin}` properties. A claim reads
+  `{Username} claimed {RiotId}`, and a registration says which invite let
+  somebody in.
 - The web client's design harness administers a community-sized server: League
   accounts and Invites › Shared profiles have pages, and Data & storage counts
   the accounts it lists. `?scenario=server-member` signs in as a member who is no

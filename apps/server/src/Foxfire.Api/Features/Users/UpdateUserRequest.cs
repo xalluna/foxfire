@@ -20,7 +20,10 @@ namespace Foxfire.Api.Features.Users;
 ///
 /// Disabling is Identity's lockout with no end date rather than a flag of our
 /// own — SignInManager already consults it on every attempt, and a second
-/// boolean beside it would be a second answer to the same question.
+/// boolean beside it would be a second answer to the same question. Nobody may
+/// disable themselves: the lockout outlives every session they have, so it is a
+/// way to lock yourself out that only another admin can undo. Stepping down and
+/// removing your own account stay yours to do.
 /// </summary>
 public sealed record UpdateUserRequest(bool? IsAdmin, bool? IsHeadAdmin, bool? IsDisabled) : IEmptyDomainRequest
 {
@@ -75,6 +78,14 @@ internal sealed class UpdateUserRequestHandler(
             }
         }
 
+        if (disabling && me.UserId == user.Id)
+        {
+            return new Error(
+                "self_disable",
+                "You cannot disable your own account. Ask another admin, or change your password if you think it "
+                + "has leaked.");
+        }
+
         if (!me.IsInRole(FoxfireRoles.HeadAdmin))
         {
             var isYou = me.UserId == user.Id;
@@ -85,7 +96,7 @@ internal sealed class UpdateUserRequestHandler(
                     Administrators.HeadAdminOnly("demote another admin"), Administrators.HeadAdminOnlyStatus);
             }
 
-            if (disabling && wasAdmin && !isYou)
+            if (disabling && wasAdmin)
             {
                 return Response.Failure(
                     Administrators.HeadAdminOnly("disable another admin"), Administrators.HeadAdminOnlyStatus);
@@ -118,11 +129,12 @@ internal sealed class UpdateUserRequestHandler(
             if (losesHeadAdmin) await users.RemoveFromRoleAsync(user, FoxfireRoles.HeadAdmin);
             if (losesAdmin) await users.RemoveFromRoleAsync(user, FoxfireRoles.Admin);
 
-            // Roles live in the access token, which is not revocable and lasts
-            // fifteen minutes. Cutting the sessions makes the change take effect
-            // now rather than at some point in the next quarter of an hour —
-            // which matters a great deal more for a demotion than a promotion.
-            await tokens.RevokeAllAsync(request.Id, cancellationToken);
+            // Nothing is revoked. Roles live in the access token, which nothing
+            // can cut short, so the change lands when it is next renewed — within
+            // Auth__AccessTokenLifetime — and renewing reads the roles afresh.
+            // Revoking the sessions as well made it land no sooner; it only signed
+            // the member out of every device, so a promotion felt like a
+            // punishment and a demotion dropped a desktop to local-only mid-game.
 
             logger.LogWarning(
                 "{Actor} made {Username} {Role}",

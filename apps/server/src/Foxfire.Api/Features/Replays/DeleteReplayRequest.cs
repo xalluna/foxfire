@@ -29,6 +29,7 @@ internal sealed class DeleteReplayRequestHandler(
         ArgumentNullException.ThrowIfNull(request);
 
         var replay = await db.SharedReplays
+            .Include(r => r.UploadedBy)
             .FirstOrDefaultAsync(r => r.MatchId == request.MatchId, cancellationToken);
 
         if (replay is null) return Response.NotFound();
@@ -58,10 +59,20 @@ internal sealed class DeleteReplayRequestHandler(
             }
         }
 
+        var uploader = replay.UploadedBy?.UserName;
+        var theirs = replay.UploadedByUserId == me.UserId;
+
         db.SharedReplays.Remove(replay);
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Replay for {MatchId} removed by {UserId}", request.MatchId, me.UserId);
+        if (theirs || uploader is null)
+        {
+            logger.LogInformation("{Actor} removed {Whose} replay for {MatchId}", me.Username, theirs ? "their" : "an unattributed", request.MatchId);
+        }
+        else
+        {
+            logger.LogInformation("{Actor} removed {Uploader}'s replay for {MatchId}", me.Username, uploader, request.MatchId);
+        }
 
         return Response.Success();
     }

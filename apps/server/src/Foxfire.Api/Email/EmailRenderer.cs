@@ -85,6 +85,15 @@ public sealed class EmailRenderer(
         if (invite.ExpiresAt <= now) return (null, "expired");
         if (!SameAddress(invite.Email, message.Recipient)) return (null, "stale");
 
+        // Somebody joined with this address since the invite was made — another
+        // way in, while it waited over a limit. It could not register them now.
+        // Identity's normalised form, as it looks the address up itself.
+        if (invite.Email is { } invited)
+        {
+            var normalized = invited.Trim().ToUpperInvariant();
+            if (await db.Users.AnyAsync(u => u.NormalizedEmail == normalized, cancellationToken)) return (null, "member");
+        }
+
         return (EmailTemplates.Invite(name, InviteLookup.LinkFor(invite, server.Value, auth.Value), invite.ExpiresAt), null);
     }
 

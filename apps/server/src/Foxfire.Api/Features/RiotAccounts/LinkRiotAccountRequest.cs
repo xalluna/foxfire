@@ -152,7 +152,7 @@ internal sealed class LinkRiotAccountRequestHandler(
             return AlreadyLinked("Somebody else just linked that account.");
         }
 
-        logger.LogInformation("Linked {RiotId} to user {UserId}", account.RiotId, userId);
+        logger.LogInformation("{Username} claimed {RiotId}", me.Username, account.RiotId);
 
         // The icon and level, now rather than at the end of the first sync.
         // Claiming an account is the one moment somebody is looking straight at

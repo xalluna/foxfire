@@ -67,7 +67,8 @@ const VERSION: VersionInfo = {
   apiVersion: 1,
   minimumDesktop: '0.12.0',
   recommendedDesktop: '0.12.0',
-  publicSignup: true,
+  // A server set up today starts invite-only.
+  publicSignup: scenario !== 'server-fresh',
   apiBase: '/api',
   publicUrl: window.location.origin,
   // ?scenario=email-off is a server with no provider: no "Forgot password?".
@@ -123,7 +124,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
     version: async () => VERSION,
     previewInvite: async (token): Promise<InvitePreview> =>
       token.length < 20
-        ? { usable: false, serverName: SERVER_NAME, email: null, message: 'This invite link is not valid for this server.' }
+        ? { usable: false, serverName: SERVER_NAME, email: null, message: 'This invite link is not valid for this server. Check that you copied all of it.' }
         : { usable: true, serverName: SERVER_NAME, email: 'invitee@example.com', message: 'Ready to use.' },
 
     // A short token is the unusable state, the same way the invite preview
@@ -136,7 +137,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
             serverName: SERVER_NAME,
             username: null,
             email: null,
-            message: 'This link has already been used.'
+            message: 'This link has already been used. If it was you, sign in with the password you set.'
           }
         : {
             usable: true,

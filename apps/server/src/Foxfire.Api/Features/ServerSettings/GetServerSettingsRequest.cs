@@ -12,6 +12,11 @@ namespace Foxfire.Api.Features.ServerSettings;
 /// <param name="BackgroundSync">Whether the server syncs every tracked account by itself.</param>
 /// <param name="BackgroundSyncMinutes">Between the starts of two background sweeps.</param>
 /// <param name="BackgroundSyncSkipMinutes">A sweep leaves alone an account synced this recently.</param>
+/// <param name="PublicSignupChosen">
+/// Whether somebody has decided sign-up either way. False only on a server from
+/// before new servers started invite-only, open by default and never told so —
+/// which is what the admin pages ask its owner to settle.
+/// </param>
 public sealed record ServerSettingsResponse(
     bool PublicSignup,
     int BackfillTarget,
@@ -20,7 +25,8 @@ public sealed record ServerSettingsResponse(
     bool PublicAccess,
     bool BackgroundSync,
     int BackgroundSyncMinutes,
-    int BackgroundSyncSkipMinutes)
+    int BackgroundSyncSkipMinutes,
+    bool PublicSignupChosen)
 {
     /// <summary>
     /// Reads every switch, so the two handlers that answer with this cannot
@@ -36,7 +42,8 @@ public sealed record ServerSettingsResponse(
             await settings.IsPublicAccessEnabledAsync(cancellationToken),
             await settings.IsBackgroundSyncEnabledAsync(cancellationToken),
             await settings.GetBackgroundSyncMinutesAsync(cancellationToken),
-            await settings.GetBackgroundSyncSkipMinutesAsync(cancellationToken));
+            await settings.GetBackgroundSyncSkipMinutesAsync(cancellationToken),
+            await settings.IsPublicSignupChosenAsync(cancellationToken));
 }
 
 /// <summary>What this server currently allows.</summary>
