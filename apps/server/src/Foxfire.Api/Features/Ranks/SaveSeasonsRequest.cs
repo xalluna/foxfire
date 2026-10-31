@@ -60,7 +60,9 @@ internal sealed class SaveSeasonsRequestValidator : AbstractValidator<SaveSeason
 
 internal sealed class SaveSeasonsRequestHandler(
     FoxfireDbContext db,
-    AttributionRunner attribution,
+    IServiceScopeFactory scopes,
+    IHostApplicationLifetime lifetime,
+    IIdentityContext me,
     ILogger<SaveSeasonsRequestHandler> logger)
     : IValidatedRequestHandler<SaveSeasonsRequest>
 {
@@ -94,25 +96,36 @@ internal sealed class SaveSeasonsRequestHandler(
         // leaving them alone would mean the graph and the season picker agreed
         // with the new boundaries while the numbers on the match rows still
         // described the old ones.
-        var accounts = await db.RiotAccounts.AsNoTracking()
-            .Select(a => new { a.Id, a.Puuid })
-            .ToListAsync(cancellationToken);
+        var accounts = await db.RiotAccounts.AsNoTracking().ToListAsync(cancellationToken);
 
-        // TFT's LP is not attributed until its syncs are, so a TFT list has
-        // nothing derived from it to rebuild yet.
-        if (game == Game.Lol)
+        foreach (var account in accounts)
         {
-            foreach (var account in accounts)
+            // A rebuild deletes a ladder's figures and then works them out
+            // again, so it runs on the host's token rather than the request's:
+            // a client that stops waiting must not leave an account between the
+            // two with its LP gone. And a scope per account, so the rows one
+            // rebuild tracks are gone before the next begins.
+            await using var scope = scopes.CreateAsyncScope();
+            var attribution = scope.ServiceProvider.GetRequiredService<AttributionRunner>();
+            var stopping = lifetime.ApplicationStopping;
+
+            // TFT's games are filed under the TFT key's id where there is one,
+            // and an account never resolved under it has none to rebuild yet.
+            var puuid = game == Game.Tft
+                ? await scope.ServiceProvider.GetRequiredService<TftIdentity>().KnownPuuidAsync(account, stopping)
+                : account.Puuid;
+            if (puuid is null) continue;
+
+            foreach (var queue in RankedQueues.Of(game))
             {
-                foreach (var queue in RankedQueues.Of(Game.Lol))
-                {
-                    await attribution.RebuildAsync(account.Id, account.Puuid, queue, cancellationToken);
-                }
+                await attribution.RebuildAsync(account.Id, puuid, queue, stopping);
             }
         }
 
-        logger.LogInformation(
-            "An admin rewrote the {Game} season table ({Count} boundaries); LP was recomputed for {Accounts} account(s)",
+        // A Warning, because it rewrites every member's LP history.
+        logger.LogWarning(
+            "{Actor} rewrote the {Game} season table ({Count} boundaries); LP was recomputed for {Accounts} account(s)",
+            me.Username,
             game.Slug(),
             request.Seasons.Count,
             accounts.Count);

@@ -151,7 +151,11 @@ export interface ImportProgress {
    */
   phase: 'accounts' | 'comparing' | 'matches' | 'readings' | 'finishing' | 'done'
   current: number
-  /** Zero while finishing, which has no countable work. */
+  /**
+   * How many there are. While finishing, the server's accounts once its first
+   * page says — and zero until then, and throughout against a server that
+   * works them all out in one request.
+   */
   total: number
 }
 
@@ -177,6 +181,11 @@ export interface ImportResult {
   seasons: number
   /** Games the server worked LP out for once everything had arrived. */
   attributed: number
+  /**
+   * Everything landed, but working out LP stopped before every account was
+   * done. Importing the same file again sends nothing twice and finishes it.
+   */
+  lpUnfinished?: boolean
   /**
    * Riot IDs the server could not resolve, almost always renames.
    *

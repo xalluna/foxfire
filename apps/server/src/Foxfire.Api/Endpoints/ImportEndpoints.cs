@@ -88,7 +88,7 @@ public static class ImportEndpoints
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ImportSeasonsRequest(seasons), cancellationToken));
 
-        group.MapPost("/finish", (ISender sender, CancellationToken cancellationToken) =>
-            sender.SendAsync(new FinishImportRequest(), cancellationToken));
+        group.MapPost("/finish", (int? offset, int? limit, ISender sender, CancellationToken cancellationToken) =>
+            sender.SendAsync(new FinishImportRequest(offset, limit), cancellationToken));
     }
 }

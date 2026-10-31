@@ -1,7 +1,7 @@
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { getDb } from '../db'
-import { getAccountById, getLeagueEntries } from '../db/repositories/accounts.repo'
+import { getAccountById, getLeagueEntries, listAccounts } from '../db/repositories/accounts.repo'
 import { countMatchSummaries, getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
 import {
@@ -19,6 +19,7 @@ import {
   clearManualRank,
   getEditableMatches,
   getEditableTftMatches,
+  rebuildAttribution,
   saveManualRanks
 } from '../services/manualRankService'
 import {
@@ -28,10 +29,11 @@ import {
   getTftMatchSummary
 } from '../db/repositories/tftMatches.repo'
 import { accountsByTftPuuid, getTftDashboard } from '../services/tftService'
-import { tftPuuidOf } from '../services/tftIdentity'
+import { puuidForGame, tftPuuidOf } from '../services/tftIdentity'
 import {
   clampPage,
   compareSearchResults,
+  laddersOf,
   MATCH_PAGE_LIMIT_DEFAULT,
   pageOf,
   rangeBounds,
@@ -281,7 +283,20 @@ export const localApi: ServerBackedApi = {
 
   seasons: {
     list: async (game) => listSeasons(getDb(), game ?? 'lol'),
-    save: async (seasons, game) => saveSeasons(getDb(), seasons, game ?? 'lol')
+    // Every LP figure was worked out against the table as it stood, and a
+    // replay only adds — so a boundary corrected late would leave the numbers
+    // on the match rows describing the old one. Each of this PC's accounts is
+    // worked out again, as a server does for its own.
+    save: async (seasons, game) => {
+      const db = getDb()
+      const which = game ?? 'lol'
+      const saved = saveSeasons(db, seasons, which)
+      for (const account of listAccounts(db)) {
+        const puuid = puuidForGame(db, account, which)
+        for (const ladder of laddersOf(which)) rebuildAttribution(db, account.id, puuid, ladder)
+      }
+      return saved
+    }
   },
 
   /**
