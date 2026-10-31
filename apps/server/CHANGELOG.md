@@ -264,6 +264,11 @@ version 3 still, and a desktop from before TFT is served as it always was.
   an `sp_getapplock` that the email dispatcher now takes through the same
   `SqlAppLock`. `Sync__Background=false` keeps a process from sweeping at all,
   which is the test fixture's: its hosts share one database.
+- The web client's design harness administers a community-sized server: League
+  accounts and Invites › Shared profiles have pages, and Data & storage counts
+  the accounts it lists. `?scenario=server-member` signs in as a member who is no
+  admin, and `?scenario=server-fresh` as the owner on the day a server was set
+  up — alone in it, with no mail provider or replay store yet.
 
 ## [0.5.1] — 2026-09-27
 
