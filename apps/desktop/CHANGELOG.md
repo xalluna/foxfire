@@ -152,6 +152,12 @@ record your games by itself, with no OBS to install.
   play began — Foxfire switched OBS into its own setup as recording started, and OBS's game capture
   then took its time finding the game. Foxfire now switches over while the game loads, and sets its
   game capture to hook as fast as OBS allows.
+- **Foxfire no longer starts a second OBS beside the one you already have open.** It only asked
+  whether OBS was answering on its websocket, which OBS does once it has finished loading — so an
+  OBS you had just opened, or one starting with Windows, looked like no OBS at all, and the copy
+  Foxfire launched sat on OBS's "already running" prompt. Changing a setting while it was still
+  checking could launch two as well. A running OBS is now left alone, and Foxfire connects to it as
+  soon as it is ready.
 - **An opened match lists each team by lane** — top, jungle, mid, bot, then support — rather than
   in whatever order the game's data happened to arrive, which on a server was no order at all.
 - **The arrow that opens a match is back inside its row.** In a window 1280 wide, with the profile
