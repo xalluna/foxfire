@@ -202,7 +202,8 @@ export function Settings({ category }: { category?: string }): JSX.Element {
         onSelect={(id) => void navigate({ to: '/settings/{-$category}', params: { category: id } })}
       />
 
-      <div ref={pane} className="min-w-0 flex-1 overflow-y-auto">
+      {/* Positioned for the reason Main is: a second scrollbar otherwise. */}
+      <div ref={pane} className="relative min-w-0 flex-1 overflow-y-auto">
         {active === 'server' && <ServerSettings />}
         {active === 'account' && <AccountSettings />}
         {active === 'server-members' && <MembersScreen />}

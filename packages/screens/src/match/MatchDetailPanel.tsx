@@ -19,8 +19,10 @@ export function MatchDetailPanel({
   })
 
   // On a phone the scoreboard keeps its columns and scrolls sideways on its own.
+  // Positioned, so its screen-reader text scrolls with it rather than widening
+  // the page.
   return (
-    <div className="max-md:overflow-x-auto">
+    <div className="relative max-md:overflow-x-auto">
       <div className="max-md:min-w-[720px]">
         <MatchDetailTable detail={data} loading={isLoading} trackedPuuid={trackedPuuid} />
       </div>

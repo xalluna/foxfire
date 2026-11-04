@@ -25,8 +25,10 @@ export function TftLobbyTable({
 }): JSX.Element {
   const doubleUp = lobby.queueId === DOUBLE_UP_QUEUE_ID
 
+  // Positioned, so the boards' screen-reader text scrolls with the table rather
+  // than widening the page.
   return (
-    <div className="overflow-x-auto border-t border-hairline bg-canvas/40">
+    <div className="relative overflow-x-auto border-t border-hairline bg-canvas/40">
       <table className="w-full text-left text-sm">
         <tbody className="divide-y divide-hairline/60">
           {lobby.participants.map((p) => {

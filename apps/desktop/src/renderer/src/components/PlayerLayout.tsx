@@ -4,9 +4,16 @@ import { GameSwitch, useMyAccounts, type PlayerLayoutProps } from '@foxfire/scre
 import { useLastPlayer } from '../store/lastPlayer'
 import { AccountSwitcher } from './AccountSwitcher'
 
-/** The scrolling content area every main-window page draws into. */
+/**
+ * The scrolling content area every main-window page draws into.
+ *
+ * Positioned so it is the containing block of everything absolute inside it —
+ * screen-reader text above all. A scroller that is not positioned clips none of
+ * that: it is placed against the page, the page grows past the window, and the
+ * window gets a second scrollbar beside this one.
+ */
 export function Main({ children }: { children: ReactNode }): JSX.Element {
-  return <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+  return <main className="relative min-w-0 flex-1 overflow-y-auto">{children}</main>
 }
 
 /**
