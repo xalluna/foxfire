@@ -77,15 +77,118 @@ A server that has not been updated refuses a desktop newer than anything it know
 newest it does know — an older one. The desktop reads that as the server being behind rather than
 as a version to install; see `judge` in `packages/core/src/server/probe.ts`.
 
+## Who can read a server
+
+Everything on a server is readable by every member — that has not changed — and two kinds of
+**outsider**, somebody with no member's token, can read too:
+
+- **Anybody, on an open server.** `access.public` in `ServerSettings`, off unless an admin turns it
+  on (Invites › "Anyone can look without signing in"), published as `publicAccess` on `/version`.
+- **Whoever holds a share link**, for one profile. Any member can make one (`POST /api/shares`); it
+  lasts `Auth__ShareLinkLifetime` (a week), sharing the same profile within a day hands back the
+  same link, and its creator or an admin withdraws it. The link is the profile's own address with
+  `?share=<token>`; the web client opens it once (`POST /api/shares/open`, token in the body), takes
+  it off the address before the router reads it, keeps it in the tab's session storage, and sends it
+  as `X-Foxfire-Share` on every request. The token is a `ShareToken` over a `ShareLinks` row, on a
+  key derived from the invite key, checked against its row every request.
+
+How the server decides, in `Foxfire.Api/Auth/ReaderAccess.cs`: a read route asks for
+`FoxfirePolicies.Reader` through **`AllowOutsiders(coverage)`**, which a member always passes, an
+outsider passes on an open server, and a share link passes only where the route's `ShareCoverage`
+says it reads that link's account — `Account` (the route's account id), `LeagueGame`/`TftGame` (a
+game it played), `Lookup` (its Riot ID) or `Reference` (seasons). **A new read route picks a
+coverage or leaves it out** — without one it is open on an open server and never to a link — and
+**every write stays `RequireAuthorization()`**. Outsiders' reads are limited per address at
+`RateLimit__ReaderPerMinute`; members are never counted, which is why `UseRateLimiter` runs after
+authentication.
+
+What an outsider is never given, decided in the handlers by there being no user: who claimed an
+account (`RiotAccountResponse.Describe`), a row's YouTube recording or shared replay
+(`Reads/OutsiderView`), and a Riot call (`GetMasteryRequest` serves what is stored). Nothing that
+writes, syncs, downloads, or reaches the hub. The shared screens follow suit through `useViewer`:
+an outsider is offered no Sync, LP, recording or download, and a 401 on a player or game is a
+"members only" page rather than an error. The desktop never reads as an outsider — it always signs
+in — but it can make share links, and offers Share only where `publicAccess` is off, in Copy link's
+place rather than beside it.
+
+A read refused to somebody carrying a link says why, in the 401's body (`ShareRefusalResults`):
+`share_link_expired`, `share_link_withdrawn`, `share_link_invalid`, or `not_shared` for a working
+link asked for something it does not open. Anybody else refused gets the bare 401 they always did.
+The web client takes the first three — at load, or from any read while the profile is open
+(`onOutsiderRefused` on the session) — to `/shared-link`, which says which, rather than to sign-in.
+
+## Games
+
+Foxfire tracks two Riot titles on one Riot ID: League of Legends and Teamfight Tactics. A game is
+a tenant of everything that was League's — matches, ladders, seasons, syncs, recordings — rather
+than a second app, because it is the same player: one account, one profile with a League | TFT
+switch, `/players/{slug}` for League and `/players/{slug}/tft` (and `/tft/rank`) for TFT. Links
+land on League, as they always did.
+
+- **The registry** is `packages/core/src/games`: `GAMES` (each game's queues with their labels and
+  recording folders, its default history filter, its key scope, its post-game retry ladder and how
+  long a recording waits for its match) and `LADDERS` (each ranked ladder's game, queue, URL
+  spelling, scale, whether LP can be typed for it, and how many places its card counts).
+  `QueueType` is `LadderId`. Every list of queues League used to keep for itself is read from here,
+  with League's answers pinned by `registry.test.ts`, so ask the registry rather than listing
+  queues again. The server's copy is `Foxfire.Core/Games.cs` and `RankedQueues.cs`;
+  `fixtures/game-registry.json`, generated from the TypeScript with
+  `npm run generate-game-registry -w @foxfire/core`, holds the two together in `GameRegistryTests`.
+  Change one and you regenerate it and change the other.
+- **TFT's ladders** are Ranked (1100), Double Up (1160) and Hyper Roll (1130). Hyper Roll is
+  *rated*: a colour (`ratedTier`, Gray to Orange) and a rating, no tier, division or LP, and its
+  ladder position is the rating — `ratedLadder.ts` and `RatedTiers.cs`. It has no LP to type, so
+  the LP editor refuses it. Double Up counts the team's place, #1 to #4, worked out from the whole
+  lobby on the way in (`teamPlacements`, `TftPlacements`).
+- **A TFT game is placed at its player's elimination** — `time_eliminated`, `tftGameEndMs`,
+  `TftPlacements.GameEnd` — not the end of its lobby, everywhere a game is placed among rank
+  readings: attribution, the LP editor's "before", co-player ranks. TFT moves LP the moment
+  somebody is knocked out, and the lobby can play on for twenty minutes.
+- **Storage reuses `Matches`.** A TFT game is a row there with `Game = tft`, its boards in
+  `TftParticipants` (`tft_participants` on the desktop), so LP rows, hand-entered readings and
+  recordings reach it by the keys they already have. Every League read starts from
+  `MatchParticipants` by puuid and so cannot see a TFT game; the one that does not —
+  `MatchDetailAsync` — filters on `Game == Lol`.
+- **Per game:** sync state, in-flight runs, cooldown and post-game ladder are per (account, game);
+  seasons are one game's at a time (`?game=` on `/api/seasons`, a League | TFT picker in the
+  editor); a route that was League's before takes an optional `game` and means League without one,
+  so a desktop from before TFT keeps working. TFT's own routes are under
+  `/api/riot-accounts/{id}/tft`. The API stayed version 3: all of it was additive.
+
+A new game is a registry entry and its ladders in both languages, a regenerated fixture, its
+boards' table, its sync, and its pages.
+
+## Riot keys
+
+Riot grants each API key its products, and a key registered for League alone gets a 403 from every
+TFT endpoint — the same status an expired key gets. So TFT is asked through its own key when there
+is one and the main key when there is not, and on the main key a 403 from TFT means "no TFT here"
+(`RiotApiException.NoProductAccess`, the desktop's `RiotApiError.noProductAccess`) and never
+latches the main key's limiter: League keeps syncing. `TftAccess` (server) and `tftAccess.ts`
+(desktop) remember the answer — unknown, granted, denied — and ask a denial again after ten
+minutes; `/health` reports it as `tftAccess`, and the TFT profile says so.
+
+- **Server:** `Riot__Tft__ApiKey` and `Riot__Tft__KeyType` give TFT a key and a limiter of its own
+  (`Sync/TftRiot.cs`); docker-compose and `.env.example` list them.
+- **Desktop:** Settings › Riot API key takes an optional TFT key, kept in the secret store beside
+  the main one, with its own limiter and key type (`riot/client.ts`'s scopes).
+- **Ids follow the key.** Riot encrypts a puuid per key, so with a TFT key the same player is a
+  different id to TFT: `ScopedPuuids` / `account_scoped_puuids` hold it, learnt from the Riot ID on
+  the first TFT sync (`TftIdentity`, `services/tftIdentity.ts`), and an account's TFT boards are
+  filed under it. Adding, replacing or removing the TFT key moves them; League's identity repair
+  after a new main key moves TFT's boards too while the two share it.
+
 ## Lists that grow are paged
 
 A list whose length depends on time or on the size of the community is read a page at a time,
 never whole — the accounts rule above is one case of it. That is the finder (`/api/search`), match
-history (`/api/riot-accounts/{id}/matches`), the members (`/api/admin/users`, searched on the
+history (`/api/riot-accounts/{id}/matches`), TFT's history
+(`/api/riot-accounts/{id}/tft/matches`), the members (`/api/admin/users`, searched on the
 server by `q`), used invites (`/api/admin/invites/used`), the replay library
 (`/api/admin/storage/replays`), the server's recent log lines (`/api/admin/insights/logs`), the
-email log and suppressions (`/api/admin/email/messages`, `/api/admin/email/suppressions`), and on
-the desktop the Captures tabs' recordings and replays.
+email log and suppressions (`/api/admin/email/messages`, `/api/admin/email/suppressions`), the open
+share links (`/api/admin/shares` — any member may share, so they grow with the community even though
+each lapses in a week), and on the desktop the Captures tabs' recordings and replays.
 
 - **The answer** is `{ items, total }` — `Page<T>` in `Foxfire.Api/Common` and in `@foxfire/core`.
   `total` counts the list under the same filters, so a screen says "120 members" rather than "50+"
@@ -127,10 +230,10 @@ Two lists that grow are whole on purpose, and say so where they are read:
 The insights charts (`/api/admin/insights/{section}`) are not lists at all: a window is at most 360
 points whatever it spans, and its tables are capped — the fifty busiest routes, the last ten syncs.
 
-**Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`) grows
-with a player's history and is still read whole, with a query per game for the rank before it. It
-should be paged; what makes that more than a page size is that saving one game's rank can settle
-its neighbours anywhere in the list.
+**Known debt:** the LP editor's list (`/rank/editable`, `ManualRankEditor.EditableAsync`, and
+TFT's `/tft/rank/editable`, `TftEditableAsync`) grows with a player's history and is still read
+whole, with a query per game for the rank before it. It should be paged; what makes that more than
+a page size is that saving one game's rank can settle its neighbours anywhere in the list.
 
 A new list that can grow is paged the same way, and its route goes in
 `WireShapeTests.Every_list_that_grows_answers_with_a_page`. Turning an existing array into a page
@@ -153,7 +256,7 @@ is one more reason for the rules below.
 
 Every request gets one line, and every line written during it carries its trace id, the client, the
 member and their address; the response carries the trace id as `X-Trace-Id`. A sync puts the account
-on its lines with a log scope, and so should any other long piece of background work.
+and the game on its lines with a log scope, and so should any other long piece of background work.
 
 When you add a log line:
 
@@ -203,6 +306,10 @@ maps in `MappingFor` or a line in its `Sample`, then a series in the section han
 never tag by something unbounded like a path or a user id. `Telemetry__Persist=false` is the test
 fixture's: the store's tests drive `TelemetryStore` themselves, with times of their own.
 
+A sync's game is not a dimension of `sync.runs`: stored dimensions are merged by position, and the
+metric kept the shape it had before there were two games. The recent-syncs table says which game
+each run was instead.
+
 One tab is a head admin's rather than every admin's: **Email**, beside the Email page it goes with.
 Its route adds `RequireRole(HeadAdmin)` to the group's, and the screen offers the tab only through
 `useIsHeadAdmin`.
@@ -210,6 +317,27 @@ Its route adds `RequireRole(HeadAdmin)` to the group's, and the screen offers th
 The desktop's **Developer telemetry** is a different thing: this PC's own Riot calls, processes and
 League client, in `telemetry.db`, never sent anywhere. The two share only the chart
 (`TimeSeriesChart` in `@foxfire/ui`).
+
+## Background sync
+
+Off unless an admin turns it on, on Data & storage. On, `Sync/BackgroundSyncs.cs` sweeps every
+tracked account's League and TFT history by itself — every 30 minutes by default, leaving alone any
+synced in the last 15 (`sync.backgroundMinutes`, `sync.backgroundSkipMinutes`; the window is always
+shorter than the interval, or a sweep would skip everybody the last one reached). It exists for the
+accounts nothing else syncs: an owner not running Foxfire arms no post-game ladder, and an
+unclaimed account has nobody to press Sync now.
+
+- **The rules** are `BackgroundSyncRules` in `Foxfire.Core`: when a sweep is due, who is fresh, and
+  the order — stalest first, never-synced (a backfill) last.
+- **A sweep** goes one account at a time, and skips one whose sync is under way or whose post-game
+  ladder is waiting, and TFT while `TftAccess` says the key cannot reach it. Its runs are
+  `SyncTrigger.Background`, which is Riot's backfill queue and `background` in Insights — but
+  `auto` on the wire, because clients know only manual and auto (`SyncProgressEvent.Trigger`).
+- **One process sweeps**, under `SqlAppLock` like the email dispatcher, and the time of the last
+  sweep is the process's own; the skip window is what keeps a restart from asking Riot twice.
+- `Sync__Background=false` stops a process sweeping at all. It is the test fixture's, beside
+  `Telemetry__Persist=false`: one test turning the switch on would set every host sweeping the
+  shared database.
 
 ## Server email
 
@@ -278,14 +406,86 @@ by swapping the version inside that URL, and the version appears in both the tag
   build past the server's allow list would be refused by it, so an update would lock somebody out
   of their own community.
 - **Local-only** — install the newest desktop release, found from `releases/latest` (which answers
-  JSON with the tag on it, and costs none of `api.github.com`'s hourly budget).
+  JSON with the tag on it, and costs none of `api.github.com`'s hourly budget) — unless the
+  install is still signed in to a server. "Use this PC" keeps the sign-in, and every switch between
+  servers passes through local-only, so it is capped at the strictest server it is signed in to, and
+  holds while any of them is unreachable.
 - **Server unreachable** — do nothing. Falling back to the newest release the moment a host's
   machine is down installs the one build that server might refuse when it comes back.
+- **A build already downloaded** is asked about again on every server change, when it finishes
+  downloading, and on every scheduled check, and withdrawn (`autoInstallOnAppQuit` off, which
+  electron-updater reads at quit) once its server would refuse it.
 
 Nothing installs while the app is open except on request: the download is quiet, the offer sits in
 the window and the tray, and it is refused while a game is on or a recording is running. Otherwise
 it installs on the next quit. The Releases page stays the way in for a first install, which is why
 the repository is public.
+
+## How the desktop records
+
+From 0.17.0 there are two recorders, chosen in Settings › Game capture (`capture.driver`): OBS,
+driven over its websocket, and the native recorder, an FFmpeg the app ships and runs itself. A new
+install starts on native; an install that had capture set up before is pinned to OBS on first run
+(`pinCaptureDriver`). Both sit behind `Recorder` in `apps/desktop/src/main/capture/recorder.ts`, and
+`captureService.ts` decides when to record without knowing which one it is driving. The recorder that
+starts a game finishes it, so a switch mid-game applies after it. Everything outside the service reads
+only `CaptureStatus`.
+
+The native recorder is `main/capture/native`:
+
+- **Video is the game's window, not the screen** — FFmpeg's `gfxcapture` (Windows Graphics Capture,
+  FFmpeg 8.1+), matched by the executable and class in `capture/gameWindows.ts`, which OBS's own
+  setup reads too. NVENC takes the GPU frames as they are; every other encoder gets them converted on
+  the CPU, because FFmpeg's D3D11 scaler will not take gfxcapture's textures. NVENC converts with
+  BT.601 into limited range, and the stream is labelled to say so (`setparams`) — FFmpeg would
+  otherwise label it RGB.
+- **Audio is not FFmpeg's**: it cannot capture what Windows plays. A hidden page
+  (`renderer/capture-audio.html`, its own preload and in-memory session) takes loopback audio from a
+  display-media request main answers, mixes in the microphone, and hands main 20 ms chunks that go to
+  FFmpeg over a named pipe (`audioPipe.ts`). stdin is kept for the `q` that stops a recording, and
+  the pipe is closed with it: FFmpeg cannot act on a `q` while a thread of its is waiting on a read.
+  The PC's sound is asked for with echo cancellation, noise suppression and gain control all off,
+  as the mic is: asked for as plain `audio: true`, Chromium processes it like a call — mono, with
+  automatic gain pumping it under a limiter — and recordings sounded blown out.
+- **The audio never shares the capture's filtergraph.** FFmpeg runs a graph as one and asks it for
+  whichever output is furthest behind, which with live audio is the audio — so with both in one
+  `-filter_complex`, capture was asked for a frame only as audio came in: 64 a second from a 144 Hz
+  window, against 134 apart, and a third of a real game's file repeats. The capture is the complex
+  graph alone; the audio is filtered with `-af`.
+- **Every encoder hands frames straight back** (`-delay 0` for NVENC, `-async_depth 1` for AMF and
+  QSV, no B-frames). FFmpeg pauses whichever input runs 100 ms ahead of the slowest stream into the
+  file (`SCHEDULE_TOLERANCE`, compiled in), and an encoder's queue makes the video the slowest. The
+  paused audio is then read in a rush, all stamped with the moment it was read, and `aresample` cuts
+  and pads it to match: NVENC's default queue left a tenth of a second of silence every third of a
+  second. Check the audio for runs of exact zeros after changing an encoder's settings.
+- **The two are lined up on the wall clock** — audio stamped as it is read, video by the capture's
+  own frame times moved onto the wall clock by the smallest gap seen — and the file's zero is the
+  launch. `ffmpegArgs.ts` explains it. Do not drop `-copyts` or the `setpts`: without them FFmpeg
+  starts both streams at zero, and the audio leads by however long window capture took to deliver a
+  frame. And do not stamp video with the wall clock as frames pass: frames held up anywhere
+  downstream arrive in clumps, a clump shares one moment, and the `fps` filter keeps one of each.
+- **Count distinct frames, not frames**, when checking a recording's smoothness: the `fps` filter
+  writes exactly the preset's rate whatever capture delivered, repeating what it must.
+- **Capture runs at the display's rate** (`max_framerate` at least 240) and the `fps` filter takes the
+  preset's rate from it. Windows hands over a captured frame only on a refresh: capped at 60, a 144 Hz
+  monitor gives one every third refresh — 48 fps at best, 25–38 in a real game. Taking 60 from 144 is
+  smooth in count but judders, so the `…Display` presets record at the fastest monitor's own rate
+  (`displayRate.ts`); OBS has no such setting and records them at 60.
+- **Files are fragmented MP4**, named up front (`pending-<ms>.mp4` in the capture folder) and filed
+  like OBS's once FFmpeg exits. `recordingProtocol.ts` serves nothing but MP4 from that folder.
+- **The file ends with the game's window** — gfxcapture logs `Capture item closed`, and the recorder
+  sends the `q` itself — but the recording ends when the service ends it, as an OBS one does: the
+  finished file is held until `end()`. The window goes a few seconds before the client leaves
+  InProgress, and a recording reported finished in between would let the next poll arm the same game
+  again.
+
+**The FFmpeg is pinned**, by URL and SHA-256, in `apps/desktop/scripts/fetch-ffmpeg.mjs` — the LGPL
+win64 build from BtbN, no GPL encoders needed. `npm run fetch-ffmpeg -w @foxfire/desktop` puts it in
+`apps/desktop/resources/ffmpeg/` (gitignored), which a dev build reads and `extraResources` ships;
+`build:win` and the release workflow both run it, and the workflow caches it. BtbN prunes old
+autobuilds, so a pin eventually stops downloading: take the newest dated autobuild's
+`…-win64-lgpl-<ver>.zip` and its digest, and record a game with it before releasing. The fetch refuses
+a binary without `gfxcapture` or the encoders.
 
 ## How recordings reach YouTube
 
@@ -293,8 +493,23 @@ A recording starts as an OBS file on one PC. From 0.14.0 it can go to YouTube, a
 watched by everybody on a server — on the desktop and in the browser. The rule everything follows:
 **a recording is one player's view of one game**. A server keys it on (match, Riot account), never on
 the match alone, so in a game two members recorded each history plays its own and no other history
-offers either. That rule lives in the row query in `MatchReads.MatchListAsync`, which is where to
-look if a recording ever turns up on the wrong history.
+offers either. That rule lives in the row queries in `MatchReads.MatchListAsync` and, for TFT,
+`TftReads.MatchListAsync`, which is where to look if a recording ever turns up on the wrong history.
+
+A TFT recording is the same thing for a TFT game. It has no roster to be bound by, so it is bound by
+the game's id instead: the League client names the game while it is played, and
+`${platform}_${gameId}` is its match id (`findTftMatchForRecording`); one without an id is bound
+only when a single game's span holds it. It keeps no markers, and is titled from a template of its
+own, `{placement} · {queue} · {trait}` to start.
+
+TFT's game is not League's program. It is Riot's own Unreal client,
+`TFT\Binaries\Win64\TFTClient-Win64-Shipping.exe` under its own install, launched by the League
+client — which is still where its lobby, gameflow and ranks are read. It serves no Live Client Data
+API: nothing on port 2999, so no clock, no events and no roster. A TFT recording therefore starts
+`TFT_START_DELAY_MS` after the client says the game is on and stops when the client says it is over
+(`capture/gameClock.ts`). Managed OBS keeps a Game Capture for each game's window in its scene
+(`GAME_SOURCES` in `obs/provision.ts`); only the game being played has a window, so the other draws
+nothing, and a new game is a new entry there or it records black.
 
 **It is switched off at build time, everywhere, by one switch.** `FOXFIRE_FEATURE_YOUTUBE` in the
 environment of a build — `1`, `true`, `yes` or `on` — is what includes it, and the release workflows
@@ -348,6 +563,24 @@ its requests as the Referer. Nothing may be drawn over YouTube's player; the mar
 
 Electron accepts `registerSchemesAsPrivileged` once. Every scheme of ours is in the single call in
 `main/schemes.ts` — registering a new one anywhere else silently unregisters the others.
+
+## Recordings on disk
+
+OBS writes every recording into the capture folder by a name of its own. When it closes the file,
+`capture/fileRecording.ts` moves it to
+`<folder>\<Riot ID>\<LoL | TFT>\<mode>\<YYYY-MM-DD HH-mm-ss>.<ext>` — `Faker-KR1\TFT\Ranked\…`, the
+mode's folder from the registry, the time this PC's own — and the row follows it. The rules are
+`capture/recordingLayout.ts`, pure and tested: names are made safe for Windows (refused and control
+characters replaced, trailing dots and spaces dropped, device names like `CON` suffixed, length
+capped); a recording nobody claimed goes under `Unknown`, a queue the registry does not list under
+`Other`, and a second recording in the same second gets ` (2)`.
+
+Only a file under the capture folder moves, so a folder OBS was pointed at by hand stays where the
+person put it, and nothing recorded before 0.17 is relocated. A move refused because the file is
+still open is tried once more two seconds later; any other failure leaves the file where OBS wrote
+it, which is still a recording that plays. Deleting a recording removes the folders it leaves
+empty, up to but never the capture folder itself. Riot replays are not recordings, and keep a
+folder of their own (`<folder>\Replays` unless somebody chose another).
 
 The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and, optionally,
 `MAIN_VITE_YOUTUBE_CLIENT_SECRET` (repository secrets in the release workflow; `.env.local` for
@@ -496,3 +729,11 @@ Tests go at the seams as plain node-environment vitest — the rules, the search
 event refreshes, what a menu offers on each platform — with no DOM test setup. The screens
 themselves are checked by eye in the fixture harnesses: `npm run dev:web` for the desktop's
 renderer and `npm run dev:mock -w @foxfire/web` for the web client, both switched by `?scenario=`.
+Their TFT is generated from a fixed seed (`packages/screens/src/dev/tftFixtures.ts`), so a
+screenshot today matches one next week; `?scenario=tft-no-access` is TFT as a key without it sees
+it.
+
+The fixtures that hold the two languages to one rule are generated from the TypeScript and checked
+by the server's tests: `npm run generate-trend-corpus -w @foxfire/core` for the rank trend, and
+`npm run generate-game-registry -w @foxfire/core` for the games and ladders. A change to either
+side is a regenerated fixture and the same change on the other.

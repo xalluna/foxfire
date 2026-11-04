@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadBlockedReason, matchContextItems, withoutServerRecording } from './matchMenu'
+import { downloadBlockedReason, lpEditBlockedReason, matchContextItems, withoutServerRecording } from './matchMenu'
 import type { MatchSummary } from '@foxfire/core'
 
 /**
@@ -139,6 +139,18 @@ describe('LP editing and whose account it is', () => {
     expect(labelled(items, 'Edit LP gain')?.disabledReason).toBeUndefined()
   })
 
+  it('offers the edit on TFT Ranked and Double Up, which move LP like League does', () => {
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1100 }, true)).toBeNull()
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1160 }, true)).toBeNull()
+  })
+
+  it('refuses the edit on Hyper Roll, and says it is a rating rather than an unranked game', () => {
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1130 }, true)).toBe(
+      'Hyper Roll has a rating, not LP'
+    )
+    expect(lpEditBlockedReason({ ...RANKED_UNATTRIBUTED, queueId: 1090 }, true)).toBe('Only ranked games move LP')
+  })
+
   it('refuses the edit on somebody else account, and says why', () => {
     const items = matchContextItems(RANKED_UNATTRIBUTED, NOTHING, { isMine: false })
 
@@ -258,6 +270,45 @@ describe('matchContextItems on a platform that cannot do everything', () => {
       'Copy match ID',
       'Open match details'
     ])
+  })
+})
+
+/**
+ * Somebody reading without an account: an open server's visitor, or a share
+ * link's holder. The server refuses them every write and every download, so a
+ * menu offering one would only be a refusal waiting for a click.
+ */
+describe('matchContextItems for somebody who is not signed in', () => {
+  const EVERYTHING = {
+    onCopyId: () => {},
+    onOpenDetails: () => {},
+    onCopyLink: () => {},
+    onEditLp: () => {},
+    onClearLp: () => {},
+    onWatchRecording: () => {},
+    onUploadRecording: () => {},
+    onAttachRecordingLink: () => {},
+    onDetachRecording: () => {},
+    onWatchReplay: () => {},
+    onDownloadReplay: () => {}
+  }
+
+  it('offers looking and copying, and nothing that writes or downloads', () => {
+    const shared = { ...MATCH, sharedReplay: { patch: '15.14', fileBytes: 31_000_000 } }
+
+    expect(
+      matchContextItems(shared, EVERYTHING, { isMine: false, serverMode: true, outsider: true }).map(
+        (item) => item.label
+      )
+    ).toEqual(['Copy link', 'Copy match ID', 'Open match details'])
+  })
+
+  it('offers no way to clear a figure somebody typed, either', () => {
+    const typed = { ...MATCH, hasManualRank: true }
+
+    expect(
+      matchContextItems(typed, EVERYTHING, { isMine: false, outsider: true }).map((item) => item.label)
+    ).not.toContain('Clear LP edit')
   })
 })
 

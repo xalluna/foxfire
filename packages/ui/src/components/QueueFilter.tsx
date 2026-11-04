@@ -1,4 +1,4 @@
-import { QUEUE_FILTER_OPTIONS } from '@foxfire/core'
+import { QUEUE_FILTER_OPTIONS, type QueueFilterOption } from '@foxfire/core'
 
 /**
  * The queue selector shared by match history and champion stats.
@@ -14,11 +14,14 @@ import { QUEUE_FILTER_OPTIONS } from '@foxfire/core'
 export function QueueFilter({
   value,
   onChange,
-  label = 'Queue'
+  label = 'Queue',
+  options = QUEUE_FILTER_OPTIONS
 }: {
   value: number | null
   onChange: (queueId: number | null) => void
   label?: string
+  /** The game's own list; League's unless another is given. */
+  options?: readonly QueueFilterOption[]
 }): JSX.Element {
   return (
     <select
@@ -28,13 +31,13 @@ export function QueueFilter({
       onChange={(e) => onChange(e.target.value === 'all' ? null : Number(e.target.value))}
       // h-8 matches the segmented toggles and buttons it sits beside; without
       // it a <select> sizes to the OS default and breaks the row's alignment.
-      className="h-8 cursor-pointer appearance-none rounded-md border border-hairline bg-surface bg-[length:10px] bg-[right_0.6rem_center] bg-no-repeat pl-3 pr-8 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent focus:text-accent"
+      className="h-8 cursor-pointer appearance-none rounded-md border border-edge bg-surface bg-[length:10px] bg-[right_0.6rem_center] bg-no-repeat pl-3 pr-8 text-sm text-text-dim transition hover:border-accent hover:text-accent focus:text-accent"
       style={{
         backgroundImage:
           "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239DC8FF' stroke-width='1.5'/%3E%3C/svg%3E\")"
       }}
     >
-      {QUEUE_FILTER_OPTIONS.map((option) => (
+      {options.map((option) => (
         <option
           key={option.label}
           value={option.value === null ? 'all' : String(option.value)}

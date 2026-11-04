@@ -67,7 +67,7 @@ export function ForgotPasswordPage(): JSX.Element {
           <p className="rounded-md border border-teal/30 bg-teal/10 px-3 py-2 text-sm leading-relaxed text-teal">
             {sent}
           </p>
-          <p className="text-2xs leading-relaxed text-text-mute">
+          <p className="text-xs leading-relaxed text-text-mute">
             Only one link is out at a time: asking again while it works sends nothing new, so look for the
             first one. Never confirmed your address? Then nothing was sent — ask an administrator instead.
           </p>

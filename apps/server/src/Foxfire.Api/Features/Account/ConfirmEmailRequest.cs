@@ -116,7 +116,9 @@ internal sealed class ConfirmEmailRequestHandler(
             && !await users.IsInRoleAsync(user, FoxfireRoles.HeadAdmin))
         {
             return Response<ConfirmEmailResponse>.Failure(
-                new Error("admin_email_reserved", "That address is reserved for this server's administrator."));
+                new Error("admin_email_reserved",
+                "That address is reserved for this server's administrator. If you run this server, set "
+                + "ADMIN_EMAIL (Admin__Email) to the address this account uses and restart — it becomes head admin then."));
         }
 
         var previous = user.Email;

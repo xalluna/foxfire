@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace Foxfire.Data.Entities;
 
 /// <summary>
-/// Permission for one person to register while public signup is off.
+/// Permission for one person to register, and a record of who it brought in.
+///
+/// Spent whichever way public signup is set: while it is off it is the only way
+/// in, and while it is on it still says who joined through which link.
 ///
 /// This is the half of an invite that remembers. The travelling half is a signed
 /// token naming this row (see Foxfire.Core.InviteToken), and the division of

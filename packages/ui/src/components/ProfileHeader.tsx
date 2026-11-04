@@ -4,6 +4,7 @@ import { profileIconUrl } from '../lib/assets'
 import { Asset } from './Asset'
 import { CopyLinkButton } from './CopyLinkButton'
 import { ProfileMarks, type FavoriteMark, type HomeMark } from './ProfileMarks'
+import { ShareProfileButton } from './ShareLinkDialog'
 import { SyncButton } from './SyncButton'
 import { SyncProgressBar } from './SyncProgressBar'
 
@@ -20,6 +21,8 @@ import { SyncProgressBar } from './SyncProgressBar'
  * "Sync now" is anybody's, not only the owner's: an account an admin tracks
  * has nobody else to refresh it. The server turns away a second sync of the
  * same account inside two minutes, whoever asks, so the button waits them out.
+ * Anybody who is a member, that is — somebody reading without an account is
+ * offered no button at all.
  */
 export function ProfileHeader({
   account,
@@ -28,11 +31,13 @@ export function ProfileHeader({
   cooldownUntil,
   progress,
   onCopyLink,
+  onShare,
   favorite,
   home
 }: {
   account: Account
-  onRefresh: () => void
+  /** Absent for somebody reading without signing in, who cannot sync. */
+  onRefresh?: () => void
   refreshing: boolean
   /** When the server takes a sync of this account again. Null when nothing holds it back. */
   cooldownUntil: string | null
@@ -40,6 +45,8 @@ export function ProfileHeader({
   progress?: SyncProgressEvent
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyLink?: () => Promise<void> | void
+  /** Opens this profile to somebody outside. Absent where there is nobody it could add. */
+  onShare?: () => void
   /** The star. Absent where nobody can be starred. */
   favorite?: FavoriteMark
   /** The house, for opening on this account. */
@@ -77,16 +84,19 @@ export function ProfileHeader({
             ` · ${account.platform.toUpperCase()}`}
         </p>
 
-        <SyncButton
-          onSync={onRefresh}
-          syncing={refreshing}
-          cooldownUntil={cooldownUntil}
-          className="mt-3 w-full justify-center"
-        />
+        {onRefresh && (
+          <SyncButton
+            onSync={onRefresh}
+            syncing={refreshing}
+            cooldownUntil={cooldownUntil}
+            className="mt-3 w-full justify-center"
+          />
+        )}
 
-        {(onCopyLink || favorite || home) && (
+        {(onCopyLink || onShare || favorite || home) && (
           <div className="mt-2 flex w-full justify-center gap-1.5">
             {onCopyLink && <CopyLinkButton onCopy={onCopyLink} className="flex-1 py-1.5" />}
+            {onShare && <ShareProfileButton onShare={onShare} className="flex-1 py-1.5" />}
             <ProfileMarks favorite={favorite} home={home} />
           </div>
         )}

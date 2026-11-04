@@ -11,7 +11,8 @@ import type {
   InsightsSections,
   InsightsWindow,
   ServerLogEntry,
-  ServerLogQuery
+  ServerLogQuery,
+  ShareLink
 } from '@foxfire/core'
 import type {
   AdminReplay,
@@ -30,8 +31,11 @@ import type {
   ArchiveResult,
   AssetManifest,
   BackgroundSettings,
+  DisplaySettings,
+  CaptureMicrophone,
   CaptureSettings,
   CaptureStatus,
+  NativeCaptureCheck,
   ClientArchive,
   EmailChange,
   IdentityReport,
@@ -79,6 +83,7 @@ import type {
   TelemetryState,
   TelemetrySummary
 } from './telemetry'
+import type { GameId, RiotKeyScope } from '@foxfire/core'
 
 export interface ValidateResult {
   ok: boolean
@@ -163,6 +168,10 @@ export interface Api {
     resendEmailConfirmation: () => Promise<AccountEmailResult>
     /** Stops a move to a new address that has not been confirmed. */
     cancelEmailChange: () => Promise<AccountEmailResult>
+    /** Opens a profile to somebody outside, for a week. The same link again within a day. */
+    createShareLink: (accountId: string) => Promise<ShareLink>
+    /** Withdraws a share link: your own, or anybody's for an admin. */
+    revokeShareLink: (id: string) => Promise<AdminActionResult>
     /** Null is local-only mode. Not the same as signing out: the credential stays. */
     setActive: (url: string | null) => Promise<ServerState>
     forget: (url: string) => Promise<ServerState>
@@ -205,6 +214,8 @@ export interface Api {
     sendTestEmail: (to: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
+    /** A page of the share links that still open something, newest first. */
+    shareLinks: (page?: PageOptions) => Promise<Page<ShareLink>>
     /** What the server is holding, for the Data & storage page. */
     storage: () => Promise<ServerStorageUsage>
     /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
@@ -245,8 +256,12 @@ export interface Api {
     get: () => Promise<AppSettingsPublic>
     setApiKey: (key: string) => Promise<ValidateResult>
     clearApiKey: () => Promise<AppSettingsPublic>
-    /** Personal or application, and for the latter the allowance it was granted. */
-    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits) => Promise<AppSettingsPublic>
+    /** Personal or application, and for the latter the allowance it was granted — the main key's, or TFT's own. */
+    setKeyType: (keyType: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope) => Promise<AppSettingsPublic>
+    /** Gives TFT a key of its own, after checking it can reach TFT. */
+    setTftApiKey: (key: string) => Promise<ValidateResult>
+    /** Takes it away; TFT goes back to the main key. */
+    clearTftApiKey: () => Promise<AppSettingsPublic>
     /** Fires when Riot rejects the stored key (personal keys expire every 24h). */
     onKeyInvalid: (cb: () => void) => () => void
   }
@@ -283,6 +298,7 @@ export interface Api {
   }
   champions: FoxfireData['champions']
   seasons: FoxfireData['seasons']
+  tft: FoxfireData['tft']
   mastery: FoxfireData['mastery']
   rank: FoxfireData['rank'] & {
     openEditor: (accountId: string, queueType: QueueType, matchId: string) => Promise<void>
@@ -301,7 +317,16 @@ export interface Api {
     get: () => Promise<BackgroundSettings>
     set: (patch: Partial<BackgroundSettings>) => Promise<BackgroundSettings>
   }
-  /** Recording games as they are played, through a local OBS over its websocket. */
+  /** How large every window is drawn. Ctrl+= / Ctrl+- / Ctrl+0 change it too. */
+  display: {
+    get: () => Promise<DisplaySettings>
+    set: (patch: Partial<DisplaySettings>) => Promise<DisplaySettings>
+    onChanged: (cb: (settings: DisplaySettings) => void) => () => void
+  }
+  /**
+   * Recording games as they are played — through a local OBS over its
+   * websocket, or natively, with the FFmpeg the app ships.
+   */
   capture: {
     getSettings: () => Promise<CaptureSettings>
     set: (patch: Partial<CaptureSettings>) => Promise<CaptureSettings>
@@ -318,10 +343,14 @@ export interface Api {
     /** One frame of the capture source as a data URI, or null when unavailable. */
     preview: () => Promise<string | null>
     reconnect: () => Promise<CaptureStatus>
+    /** Whether the native recorder can record here, and with which encoder. Probed afresh. */
+    nativeCheck: () => Promise<NativeCaptureCheck>
+    /** The microphones the native recorder can mix in, by device id. */
+    listMicrophones: () => Promise<CaptureMicrophone[]>
   }
   recordings: {
-    /** A page of an account's recordings, newest first, bound or not, and how many there are. */
-    list: (accountId: string, page?: PageOptions) => Promise<Page<Recording>>
+    /** A page of an account's recordings, newest first, bound or not, and how many there are — one game's, if asked. */
+    list: (accountId: string, page?: PageOptions, game?: GameId | null) => Promise<Page<Recording>>
     /**
      * Every recording of an account's that can go to YouTube — whole, not a
      * page, because "select all" has to mean all of them and the batch dialog
@@ -343,8 +372,9 @@ export interface Api {
     /** Fires when a recording is added, bound or deleted. */
     onChanged: (cb: () => void) => () => void
     /** Sent by a recording window; the main window focuses and expands that match. */
-    showMatch: (accountId: string, matchId: string) => Promise<void>
-    onShowMatch: (cb: (accountId: string, matchId: string) => void) => () => void
+    /** Opens a game in the main window's history — the TFT history for a TFT game. */
+    showMatch: (accountId: string, matchId: string, game?: GameId) => Promise<void>
+    onShowMatch: (cb: (accountId: string, matchId: string, game?: GameId) => void) => () => void
     /** Removes a recording's row once its file is gone. The YouTube video and the server's copy stay. */
     forget: (recordingId: number) => Promise<void>
     /** Opens a window for one account's recording of a game that this machine has no file of. */

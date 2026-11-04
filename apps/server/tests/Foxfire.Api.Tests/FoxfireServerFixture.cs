@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Foxfire.Api.Services;
 using Foxfire.Core;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.Azurite;
 using Testcontainers.MsSql;
 
@@ -95,11 +97,17 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         // RateLimitTests runs its own host with low ones.
         Environment.SetEnvironmentVariable("RateLimit__AuthPerMinute", "100000");
         Environment.SetEnvironmentVariable("RateLimit__SearchPerMinute", "100000");
+        Environment.SetEnvironmentVariable("RateLimit__ReaderPerMinute", "100000");
 
         // Dozens of hosts share this database, and each would write its own
         // minutes of insights and prune everybody else's. The insights tests
         // drive the store themselves; the last hour is in memory either way.
         Environment.SetEnvironmentVariable("Telemetry__Persist", "false");
+
+        // The same database again: a test that turns background sync on would
+        // set every host sweeping everybody's accounts, through a Riot client
+        // with no real key. BackgroundSyncTests drive the sweep themselves.
+        Environment.SetEnvironmentVariable("Sync__Background", "false");
 
         _factory = new WebApplicationFactory<Program>();
 
@@ -108,7 +116,19 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         // its own message instead of as every test failing at once.
         using var warmup = Client();
         await warmup.GetAsync(new Uri("/version", UriKind.Relative));
+
+        // A new server starts invite-only, and this is one — so what it chose is
+        // kept for the test that says so. Then sign-up is opened, as a host who
+        // wanted it open would: the suite registers members without invites
+        // throughout, and the tests about a closed server close it themselves.
+        using var scope = Services.CreateScope();
+        var settings = scope.ServiceProvider.GetRequiredService<ServerSettingsService>();
+        StartedInviteOnly = await settings.IsPublicSignupChosenAsync() && !await settings.IsPublicSignupEnabledAsync();
+        await settings.SetPublicSignupAsync(true);
     }
+
+    /// <summary>Whether this server, started on an empty database, came up invite-only.</summary>
+    public bool StartedInviteOnly { get; private set; }
 
     public async Task DisposeAsync()
     {
@@ -225,7 +245,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     /// <summary>
     /// A client signed in as a new admin who is not a head admin: registered,
     /// promoted by the configured head admin, then signed in again — the
-    /// promotion ended the session it registered with.
+    /// session it registered with carries a member's roles until it renews.
     /// </summary>
     public async Task<(HttpClient Client, Session Session)> PlainAdminAsync(string name = "Plain")
     {
@@ -293,7 +313,8 @@ public sealed record VersionInfo(
     string RecommendedDesktop,
     bool PublicSignup,
     string ApiBase,
-    string PublicUrl);
+    string PublicUrl,
+    bool PublicAccess = false);
 
 /// <summary>An invite, as an admin sees it.</summary>
 public sealed record InviteInfo(
@@ -312,7 +333,15 @@ public sealed record InviteInfo(
 
 public sealed record InvitePreview(bool Usable, string ServerName, string? Email, string Message);
 
-public sealed record ServerSettings(bool PublicSignup, int BackfillTarget, long ReplayByteCap);
+public sealed record ServerSettings(
+    bool PublicSignup,
+    int BackfillTarget,
+    long ReplayByteCap,
+    bool PublicAccess = false,
+    bool BackgroundSync = false,
+    int BackgroundSyncMinutes = 0,
+    int BackgroundSyncSkipMinutes = 0,
+    bool PublicSignupChosen = false);
 
 /// <summary>
 /// One server for the whole assembly.

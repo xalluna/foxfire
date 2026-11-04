@@ -88,7 +88,9 @@ internal sealed class ChangeEmailRequestHandler(
 
         if (Accounts.IsConfiguredAdmin(email, configured) && !me.IsInRole(FoxfireRoles.HeadAdmin))
         {
-            return new Error("admin_email_reserved", "That address is reserved for this server's administrator.");
+            return new Error("admin_email_reserved",
+                "That address is reserved for this server's administrator. If you run this server, set "
+                + "ADMIN_EMAIL (Admin__Email) to the address this account uses and restart — it becomes head admin then.");
         }
 
         if (outbox.IsEnabled) return await AskToMoveAsync(user, email, cancellationToken);

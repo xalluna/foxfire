@@ -4,7 +4,7 @@
  * The states below are not rare edge cases in this app: a personal Riot key
  * expires every 24 hours, so no-key and key-expired are part of ordinary use
  * and need to be as designed as the happy path. Some are the desktop's alone
- * (no-key, key-expired, not-live, no-obs); the fixture client answers the rest,
+ * (no-key, key-expired, not-live, no-obs, no-ffmpeg); the fixture client answers the rest,
  * and the desktop's mock builds on it for its own.
  */
 export type Scenario =
@@ -17,6 +17,9 @@ export type Scenario =
   | 'sync-error'
   | 'not-live'
   | 'no-obs'
+  // The native recorder in a build whose FFmpeg is missing — a dev checkout
+  // that never fetched it, or an install something deleted it from.
+  | 'no-ffmpeg'
   // Signed in to a Foxfire server; refused by one for being too old; and one
   // whose own Riot key has expired, which is the state a personal key reaches
   // every twenty-four hours and which nobody on this machine can fix.
@@ -26,6 +29,13 @@ export type Scenario =
   // Signed in as an admin who is not the head admin: the Members page with
   // other admins' rows closed to them, and the import card saying why not.
   | 'server-admin'
+  // Signed in as a member who is no admin at all: no admin pages on the
+  // desktop, and "Administrators only" at /admin on the web.
+  | 'server-member'
+  // The owner, signed in to a server set up today: nobody else in it, nothing
+  // claimed, invited or stored, and no mail provider or replay store yet. Day
+  // one, which every admin page has to make sense of.
+  | 'server-fresh'
   // Signed in to a server older than this build, which refuses it — the case
   // where the remedy is the host's, not anybody's download.
   | 'server-behind'
@@ -58,6 +68,22 @@ export type Scenario =
   | 'email-held'
   | 'unverified'
   | 'email-change-pending'
+  // The configured head admin's own Account page, whose address is set in the
+  // server's configuration rather than in the app.
+  | 'admin-email-pinned'
+  // A server from before new ones started invite-only: open by a default nobody
+  // chose, which Members, Invites and the desktop's Server page ask about.
+  | 'signup-unchosen'
+  // A server whose Riot key cannot reach TFT: every TFT page says so, and its
+  // history is whatever was stored before.
+  | 'tft-no-access'
+  // Nobody signed in. An open server, read by anybody with no sync, no LP and
+  // no downloads; a share link, which opens one profile and refuses the rest;
+  // and that link once it has run out. The web harness's alone — the desktop
+  // always signs in.
+  | 'public-signed-out'
+  | 'shared-link'
+  | 'shared-link-ended'
 
 function currentScenario(): Scenario {
   const raw = new URLSearchParams(window.location.search).get('scenario')

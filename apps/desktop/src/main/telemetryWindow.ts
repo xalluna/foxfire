@@ -2,6 +2,7 @@ import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { windowRoutes } from '@shared/windowRoutes'
 import { loadRoute } from './rendererUrl'
+import { attachZoom, currentZoom } from './zoom'
 
 /**
  * The developer telemetry panel, in its own window rather than a tab in the app.
@@ -37,7 +38,8 @@ export function openTelemetryWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      zoomFactor: currentZoom()
     }
   })
 
@@ -50,6 +52,7 @@ export function openTelemetryWindow(): void {
     return { action: 'deny' }
   })
 
+  attachZoom(window)
   loadRoute(window, windowRoutes.telemetry())
 
   telemetryWindow = window

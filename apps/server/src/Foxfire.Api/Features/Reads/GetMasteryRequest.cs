@@ -31,6 +31,11 @@ public sealed record MasteryResponse(
 /// server, for a number that moves by a few hundred points a game. Caching it
 /// and refreshing on request is the whole of the policy — the desktop does the
 /// same, and there the budget was one person's.
+///
+/// Only a member's request ever reaches Riot. An outsider — somebody reading an
+/// open server, or a share link — is served what is stored, and nothing when
+/// nothing is: the key's budget belongs to the community, and a page anybody
+/// can load is not something that may spend it.
 /// </summary>
 public sealed record GetMasteryRequest(Guid RiotAccountId, bool Refresh, int? QueueId)
     : IDomainRequest<MasteryResponse>;
@@ -39,6 +44,7 @@ internal sealed class GetMasteryRequestHandler(
     FoxfireDbContext db,
     MatchReads matches,
     RiotClient riot,
+    IIdentityContext me,
     TimeProvider time)
     : IDomainRequestHandler<GetMasteryRequest, MasteryResponse>
 {
@@ -55,7 +61,7 @@ internal sealed class GetMasteryRequestHandler(
 
         var stored = await StoredAsync(id, cancellationToken);
 
-        if (request.Refresh || stored.Count == 0)
+        if (me.UserId is not null && (request.Refresh || stored.Count == 0))
         {
             try
             {

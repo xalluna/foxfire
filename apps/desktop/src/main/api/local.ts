@@ -1,7 +1,7 @@
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { getDb } from '../db'
-import { getAccountById, getLeagueEntries } from '../db/repositories/accounts.repo'
+import { getAccountById, getLeagueEntries, listAccounts } from '../db/repositories/accounts.repo'
 import { countMatchSummaries, getChampionStats, getMatchDetail, getMatchSummaries } from '../db/repositories/matches.repo'
 import { listSeasons, saveSeasons } from '../db/repositories/seasons.repo'
 import {
@@ -12,13 +12,28 @@ import {
   removeAccount,
   setHome
 } from '../services/accountService'
-import { readSyncState, startSync } from '../services/syncService'
+import { readSyncState, startAllSyncs, startSync } from '../services/syncService'
 import { getMasteryData } from '../services/masteryService'
 import { getRankHistory, getRankPeriods, getRankTrend } from '../services/rankHistoryService'
-import { clearManualRank, getEditableMatches, saveManualRanks } from '../services/manualRankService'
+import {
+  clearManualRank,
+  getEditableMatches,
+  getEditableTftMatches,
+  rebuildAttribution,
+  saveManualRanks
+} from '../services/manualRankService'
+import {
+  countTftMatchSummaries,
+  getTftLobby,
+  getTftMatchSummaries,
+  getTftMatchSummary
+} from '../db/repositories/tftMatches.repo'
+import { accountsByTftPuuid, getTftDashboard } from '../services/tftService'
+import { puuidForGame, tftPuuidOf } from '../services/tftIdentity'
 import {
   clampPage,
   compareSearchResults,
+  laddersOf,
   MATCH_PAGE_LIMIT_DEFAULT,
   pageOf,
   rangeBounds,
@@ -90,17 +105,18 @@ export const localApi: ServerBackedApi = {
     },
     add: async (input) => {
       const account = await addAccount(input)
-      // Not awaited. The backfill is up to 200 matches through a rate limiter
+      // Not awaited. Each backfill is up to 200 games through a rate limiter
       // and takes minutes; the account itself exists now, so the UI navigates
-      // to it and watches sync:progress fill it in.
-      startSync(account.id)
+      // to it and watches sync:progress fill it in — League's and TFT's, each
+      // on its own.
+      startAllSyncs(account.id)
       return wire(account)
     },
     // Nothing to attest to: every account in this file is already yours, so
     // claiming one and tracking one are the same act.
     link: async (input) => {
       const account = await addAccount(input)
-      startSync(account.id)
+      startAllSyncs(account.id)
       return wire(account)
     },
 
@@ -136,11 +152,74 @@ export const localApi: ServerBackedApi = {
   sync: {
     // No cooldown on this PC: its own key, its own budget, and a sync already
     // running for the account is joined rather than repeated.
-    start: async (accountId) => {
-      startSync(rowId(accountId))
+    start: async (accountId, game) => {
+      startSync(rowId(accountId), 'manual', game ?? 'lol')
       return { ok: true, error: null }
     },
-    getState: async (accountId) => readSyncState(rowId(accountId))
+    getState: async (accountId, game) => readSyncState(rowId(accountId), game ?? 'lol')
+  },
+
+  /**
+   * TFT, out of this machine's own database. Every read finds the account's
+   * boards by the id TFT files them under — its own puuid, or a TFT key's —
+   * and LP is written against the account, as League's is.
+   */
+  tft: {
+    dashboard: async (accountId) => {
+      const data = getTftDashboard(rowId(accountId))
+      return data ? { ...data, account: wire(data.account) } : null
+    },
+    matchList: async (accountId, limit, offset, queueId) => {
+      const db = getDb()
+      const id = rowId(accountId)
+      const account = getAccountById(db, id)
+      if (!account) return { items: [], total: 0 }
+
+      const puuid = tftPuuidOf(db, account)
+      const page = clampPage({ limit, offset }, MATCH_PAGE_LIMIT_DEFAULT)
+      return {
+        items: getTftMatchSummaries(db, id, puuid, page.limit, page.offset, queueId),
+        total: countTftMatchSummaries(db, puuid, queueId)
+      }
+    },
+    matchSummary: async (accountId, matchId) => {
+      const db = getDb()
+      const id = rowId(accountId)
+      const account = getAccountById(db, id)
+      return account ? getTftMatchSummary(db, id, tftPuuidOf(db, account), matchId) : null
+    },
+    lobby: async (_accountId, matchId) => getTftLobby(getDb(), matchId, accountsByTftPuuid()),
+    rank: {
+      history: async (accountId, queueType, range) => getRankHistory(rowId(accountId), queueType, range),
+      trend: async (accountId, queueType) => getRankTrend(rowId(accountId), queueType),
+      periods: async (accountId) => getRankPeriods(rowId(accountId), 'tft'),
+      editable: async (accountId, queueType) => {
+        const db = getDb()
+        const id = rowId(accountId)
+        const account = getAccountById(db, id)
+        return account ? getEditableTftMatches(db, id, tftPuuidOf(db, account), queueType) : []
+      },
+      // As League's below: the fresh list back, and the other windows told.
+      saveManual: async (accountId, queueType, edits) => {
+        const db = getDb()
+        const id = rowId(accountId)
+        const account = getAccountById(db, id)
+        if (!account) return []
+        const puuid = tftPuuidOf(db, account)
+        saveManualRanks(db, id, puuid, queueType, edits)
+        broadcast(CH.rank.edited, accountId)
+        return getEditableTftMatches(db, id, puuid, queueType)
+      },
+      clearManual: async (accountId, queueType, matchId) => {
+        const db = getDb()
+        const id = rowId(accountId)
+        const account = getAccountById(db, id)
+        if (!account) return []
+        const puuid = tftPuuidOf(db, account)
+        if (clearManualRank(db, id, puuid, matchId)) broadcast(CH.rank.edited, accountId)
+        return getEditableTftMatches(db, id, puuid, queueType)
+      }
+    }
   },
 
   champions: {
@@ -203,8 +282,21 @@ export const localApi: ServerBackedApi = {
   },
 
   seasons: {
-    list: async () => listSeasons(getDb()),
-    save: async (seasons) => saveSeasons(getDb(), seasons)
+    list: async (game) => listSeasons(getDb(), game ?? 'lol'),
+    // Every LP figure was worked out against the table as it stood, and a
+    // replay only adds — so a boundary corrected late would leave the numbers
+    // on the match rows describing the old one. Each of this PC's accounts is
+    // worked out again, as a server does for its own.
+    save: async (seasons, game) => {
+      const db = getDb()
+      const which = game ?? 'lol'
+      const saved = saveSeasons(db, seasons, which)
+      for (const account of listAccounts(db)) {
+        const puuid = puuidForGame(db, account, which)
+        for (const ladder of laddersOf(which)) rebuildAttribution(db, account.id, puuid, ladder)
+      }
+      return saved
+    }
   },
 
   /**

@@ -89,9 +89,29 @@ describe('capture state machine', () => {
       type: 'beginRecording',
       accountId: '1',
       queueId: 420,
+      game: 'lol',
+      gameId: null,
       gameTime: 42.5,
       at: T0 + 120_000
     })
+  })
+
+  it('carries a TFT game and its id through to the recording', () => {
+    const config = { ...CONFIG, queues: [...CONFIG.queues, 1100] }
+    const armed = reduce(INITIAL_STATE, { type: 'gameStarted', accountId: '1', queueId: 1100, game: 'tft', gameId: 5_312, at: T0 }, config).state
+
+    expect(armed).toMatchObject({ phase: 'armed', game: 'tft', gameId: 5_312 })
+    expect(reduce(armed, ready, config).effect).toMatchObject({ type: 'beginRecording', game: 'tft', gameId: 5_312 })
+  })
+
+  it('leaves TFT alone until one of its queues is ticked, whatever "other queues" says', () => {
+    const config = { ...CONFIG, otherQueues: true }
+    const tft = { type: 'gameStarted' as const, accountId: '1', queueId: 1100, game: 'tft' as const, gameId: 1, at: T0 }
+    const event = { ...tft, queueId: 6_000 }
+
+    expect(reduce(INITIAL_STATE, tft, config).state.phase).toBe('idle')
+    // An event queue nobody listed is TFT's, not League's catch-all.
+    expect(reduce(INITIAL_STATE, event, config).state.phase).toBe('idle')
   })
 
   it('stays armed until OBS confirms, so a failed start is not mistaken for a recording', () => {

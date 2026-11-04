@@ -170,6 +170,21 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: npm ci
 
+      # The FFmpeg the native recorder runs, which the installer carries beside
+      # the app. build:win fetches it too; fetching it here first is what lets
+      # the download be cached, so a pinned build that BtbN has since pruned
+      # still builds for as long as the cache holds it. The key is the script
+      # because that is where the pin lives. The fetch verifies the checksum
+      # and that the binary can capture a window, cached or not.
+      - name: Restore FFmpeg
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/resources/ffmpeg
+          key: ffmpeg-${{ hashFiles('apps/desktop/scripts/fetch-ffmpeg.mjs') }}
+
+      - name: Fetch FFmpeg
+        run: npm run fetch-ffmpeg
+
       # `--publish never` is not decoration. electron-builder will publish to
       # GitHub on its own initiative when it sees a CI build on a tag and a
       # token in the environment, which would leave two things racing to attach
@@ -237,6 +252,12 @@ jobs:
             exit 1
           fi
           echo "INSTALLER_SIZE=$size" >> "$GITHUB_ENV"
+          # An install without it would record nothing natively and say so only
+          # in Settings, which is a worse way to find out than here.
+          if [ ! -f release/win-unpacked/resources/ffmpeg/ffmpeg.exe ]; then
+            echo "::error::The build carries no resources/ffmpeg/ffmpeg.exe - the native recorder needs it"
+            exit 1
+          fi
 
       # latest.yml is what every installed copy reads to decide whether to
       # update and what to fetch, which makes its contents a contract rather

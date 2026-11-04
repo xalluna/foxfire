@@ -169,7 +169,7 @@ export function Table<T>({
     <section>
       <div className="mb-2">
         <h2 className="font-display text-base text-text-dim">{title}</h2>
-        {description && <p className="mt-1 text-2xs leading-relaxed text-text-mute">{description}</p>}
+        {description && <p className="mt-1 text-xs leading-relaxed text-text-mute">{description}</p>}
       </div>
       <div className="overflow-x-auto rounded-lg border border-hairline bg-surface">
         {rows.length === 0 ? (

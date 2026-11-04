@@ -168,7 +168,7 @@ function TrackedAccountsCard({
           </button>
         </form>
 
-        {error !== null && <p className="mt-2 text-2xs text-red">{error}</p>}
+        {error !== null && <p className="mt-2 text-xs text-red">{error}</p>}
         {added !== null && (
           <p className="mt-2 text-2xs text-text-mute">
             Now tracking <span className="text-text">{added}</span>. Its history is being fetched.

@@ -70,6 +70,14 @@ export function createServerData(
       getState: api.sync.getState
     },
 
+    tft: {
+      dashboard: api.tft.dashboard,
+      matchList: api.tft.matches,
+      matchSummary: api.tft.matchSummary,
+      lobby: api.tft.lobby,
+      rank: api.tft.rank
+    },
+
     champions: { stats: api.champions.stats },
 
     mastery: { get: api.mastery.get },

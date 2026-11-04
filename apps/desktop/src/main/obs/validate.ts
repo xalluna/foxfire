@@ -153,7 +153,7 @@ export function describeObsProblem(problem: ObsProblem): string {
     case 'recordFormat':
       return `OBS is recording as ${problem.found}. Set Settings → Output → Recording Format to MP4 — this app cannot play MKV.`
     case 'sceneNotChosen':
-      return 'Pick the scene that captures League.'
+      return 'Pick the scene that captures your games.'
     case 'sceneMissing':
       return `The scene "${problem.scene}" no longer exists in OBS.`
     case 'noCaptureSource':

@@ -1,19 +1,34 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { format } from 'date-fns'
-import type { QueueType, RankHistory, RankRange, Season } from '@foxfire/core'
-import { parseSeasonRange, rankNetChange, rankRangeCloses, seasonRange } from '@foxfire/core'
+import type { QueueType, RankHistory, RankRange, RankSnapshot, Season } from '@foxfire/core'
+import {
+  LADDERS,
+  laddersOf,
+  milestoneTimeline,
+  parseSeasonRange,
+  rankNetChange,
+  rankRangeCloses,
+  seasonRange
+} from '@foxfire/core'
 import { EmptyState } from '../components/EmptyState'
+import { MilestoneTimeline } from '../components/MilestoneTimeline'
 import { RankChart } from '../components/RankChart'
 import { Segmented } from '../components/Segmented'
 import { Skeleton } from '../components/Skeleton'
 import * as Icon from '../components/icons'
-import { queueLabel, tierColor, tierCrest, tierLabel } from '../lib/rank'
+import { queueLabel, ratedTierLabel, tierLabel } from '../lib/rank'
 
-const QUEUES: Array<[QueueType, string]> = [
-  ['RANKED_SOLO_5x5', 'Solo/Duo'],
-  ['RANKED_FLEX_SR', 'Flex']
-]
+/** League's two ladders, which is what the page offers unless it is handed a game's own. */
+const LEAGUE_LADDERS: Array<[QueueType, string]> = laddersOf('lol').map((ladder) => [
+  ladder,
+  LADDERS[ladder].shortLabel
+])
+
+/** Where a reading stands, as the header says it: a rank and LP, or a colour and a rating. */
+function standing(reading: RankSnapshot, rated: boolean): string {
+  if (rated) return `${ratedTierLabel(reading.ratedTier)} · ${(reading.ratedRating ?? 0).toLocaleString()} rating`
+  return `${tierLabel(reading.tier, reading.rank)} · ${reading.leaguePoints ?? 0} LP`
+}
 
 /**
  * The two relative windows, which exist whether or not anything was recorded.
@@ -33,6 +48,7 @@ const RELATIVE_RANGES: Array<[RankRange, string]> = [
  * empty state says so plainly rather than implying data is still loading.
  */
 export function RankPage({
+  ladders = LEAGUE_LADDERS,
   queueType,
   onQueueTypeChange: setQueueType,
   range,
@@ -45,6 +61,8 @@ export function RankPage({
   headerExtra,
   back
 }: {
+  /** The ladders to pick between, as the picker labels them — one game's. League's by default. */
+  ladders?: Array<[QueueType, string]>
   queueType: QueueType
   onQueueTypeChange: (queueType: QueueType) => void
   range: RankRange
@@ -66,6 +84,10 @@ export function RankPage({
   /** Above the heading: the way back to the profile this page hangs off. */
   back?: ReactNode
 }): JSX.Element {
+  // Hyper Roll climbs a rating rather than divisions: the same page, read in
+  // its own unit and coloured by its own tiers.
+  const rated = LADDERS[queueType].scale === 'rated'
+  const unit = rated ? 'rating' : 'LP'
 
   const ranges: Array<[RankRange, string]> = [
     ...RELATIVE_RANGES,
@@ -81,8 +103,11 @@ export function RankPage({
   const pastSeason = selected !== null && (periods ?? [])[0]?.id !== selected.id
 
   const snapshots = data?.snapshots ?? []
-  const milestones = data?.milestones ?? []
   const latest = snapshots[snapshots.length - 1]
+
+  // The milestones with the back-and-forth folded, and peaks and returns kept
+  // out of the folds — measured on this ladder, against this game's resets.
+  const timeline = data ? milestoneTimeline(data, queueType, seasons ?? []) : []
 
   // Counted from the reading before the period, so "30 days" includes the
   // month's first game and says what the profile's card says. Only meaningful
@@ -109,7 +134,7 @@ export function RankPage({
               ? // "Currently" would be a lie on a year the player has since been
                 // reset out of — that reading is where they finished, not where
                 // they stand.
-                `${pastSeason ? 'Finished' : 'Currently'} ${tierLabel(latest.tier, latest.rank)} · ${latest.leaguePoints ?? 0} LP`
+                `${pastSeason ? 'Finished' : 'Currently'} ${standing(latest, rated)}`
               : 'No rank recorded yet.'}
           </p>
           {headerExtra}
@@ -117,7 +142,7 @@ export function RankPage({
 
         {/* Wraps because the range picker grows by one button every January. */}
         <div className="flex flex-wrap items-center justify-end gap-2 max-md:justify-start">
-          <Segmented options={QUEUES} value={queueType} onChange={setQueueType} />
+          <Segmented options={ladders} value={queueType} onChange={setQueueType} />
           <Segmented options={ranges} value={range} onChange={setRange} />
         </div>
       </div>
@@ -161,11 +186,11 @@ export function RankPage({
                   )}
                 >
                   {netLp > 0 ? '+' : ''}
-                  {netLp} LP over this period
+                  {netLp} {unit} over this period
                 </p>
               )}
             </div>
-            <RankChart closes={closes} />
+            <RankChart closes={closes} rated={rated} />
           </section>
 
           <section className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
@@ -173,41 +198,14 @@ export function RankPage({
               Milestones
             </p>
 
-            {milestones.length === 0 ? (
+            {timeline.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-text-mute">
                 No tier or division changes in this period.
               </p>
             ) : (
-              <ul className="divide-y divide-hairline/60">
-                {milestones.map((m) => {
-                  const crest = tierCrest(m.tier)
-                  const promoted = m.movement === 'promotion'
-                  return (
-                    <li
-                      key={`${m.capturedAt}-${m.tier}-${m.rank}`}
-                      className="flex items-center gap-3 px-4 py-2.5"
-                    >
-                      {crest ? (
-                        <img
-                          src={crest}
-                          alt=""
-                          className={clsx('h-7 w-7 object-contain', !promoted && 'opacity-50')}
-                        />
-                      ) : (
-                        <div className="h-7 w-7" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm" style={{ color: tierColor(m.tier) }}>
-                          {promoted ? 'Promoted to' : 'Demoted to'} {tierLabel(m.tier, m.rank)}
-                        </p>
-                      </div>
-                      <p className="text-2xs tabular-nums text-text-mute">
-                        {format(m.capturedAt, 'MMM d, HH:mm')}
-                      </p>
-                    </li>
-                  )
-                })}
-              </ul>
+              // Keyed by ladder and range: a fold left open belongs to the
+              // milestones it was opened on.
+              <MilestoneTimeline key={`${queueType}-${range}`} entries={timeline} rated={rated} />
             )}
           </section>
         </>

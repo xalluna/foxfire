@@ -45,13 +45,33 @@ const live = vi.hoisted(() => ({
   events: [] as Array<{ EventName: string }>,
   startObsCalls: 0,
   startRecordCalls: 0,
+  /** OBS's managed setup: entered, and put back. */
+  enterManagedCalls: 0,
+  leaveManagedCalls: 0,
+  /** Scoreboard reads, each one a request to the server when connected to one. */
+  boardReads: 0,
   createdRecordings: 0,
+  /** What each createRecording was asked to write, for the native start's figures. */
+  created: [] as Array<Record<string, unknown>>,
   finished: [] as Array<{ recordingId: number; path: string }>,
   deleted: [] as number[],
   /** Every capture status pushed at the renderer. */
   broadcasts: [] as unknown[],
   /** And at the taskbar badge, which broadcastStatus drives from the same call. */
   iconStatuses: [] as unknown[]
+}))
+
+const native = vi.hoisted(() => ({
+  connection: { state: 'ready' } as { state: string; message?: string },
+  connectionListeners: [] as Array<() => void>,
+  signalListeners: [] as Array<(signal: unknown) => void>,
+  boots: 0,
+  shutdowns: 0,
+  prepared: [] as unknown[],
+  begun: [] as unknown[],
+  ended: 0,
+  releases: 0,
+  path: null as string | null
 }))
 
 vi.mock('../telemetry/logger', () => ({
@@ -93,8 +113,9 @@ vi.mock('../api/accountContext', () => ({
 }))
 
 vi.mock('../db/repositories/recordings.repo', () => ({
-  createRecording: () => {
+  createRecording: (_db: unknown, input: Record<string, unknown>) => {
     live.createdRecordings += 1
+    live.created.push(input)
     return RECORDING_ID
   },
   deleteRecording: (_db: unknown, recordingId: number) => {
@@ -117,6 +138,7 @@ vi.mock('../obs/client', () => ({
   getObsConnectionState: () => live.connection,
   getObsLastError: () => null,
   isObsConnected: () => live.connection === 'connected',
+  stopObsClient: () => {},
   onObsConnectionChange: (cb: ConnectionListener) => {
     live.connectionListeners.push(cb)
     return () => {}
@@ -131,8 +153,14 @@ vi.mock('../obs/client', () => ({
 }))
 
 vi.mock('../obs/provision', () => ({
-  enterManagedMode: () => Promise.resolve(true),
-  leaveManagedMode: () => Promise.resolve(),
+  enterManagedMode: () => {
+    live.enterManagedCalls += 1
+    return Promise.resolve(true)
+  },
+  leaveManagedMode: () => {
+    live.leaveManagedCalls += 1
+    return Promise.resolve()
+  },
   startRecording: () => {
     live.startRecordCalls += 1
     return Promise.resolve()
@@ -141,10 +169,52 @@ vi.mock('../obs/provision', () => ({
 }))
 
 vi.mock('../obs/config', () => ({ setCurrentScene: () => Promise.resolve() }))
-vi.mock('../obs/launch', () => ({ launchObs: () => Promise.resolve() }))
+vi.mock('../obs/launch', () => ({ launchObs: () => Promise.resolve(), quitLaunchedObs: () => {} }))
+
+// The native recorder as the service sees it: something to ask, and something
+// that answers with signals. Its supervision of FFmpeg is nativeRecorder.test.ts's.
+vi.mock('./native/nativeRecorder', () => ({
+  nativeRecorder: {
+    driver: 'native',
+    boot: () => {
+      native.boots += 1
+    },
+    shutdown: () => {
+      native.shutdowns += 1
+      return Promise.resolve()
+    },
+    connection: () => native.connection,
+    onConnectionChange: (cb: () => void) => {
+      native.connectionListeners.push(cb)
+    },
+    onSignal: (cb: (signal: unknown) => void) => {
+      native.signalListeners.push(cb)
+    },
+    prepare: (target: unknown) => {
+      native.prepared.push(target)
+      return Promise.resolve()
+    },
+    begin: (target: unknown) => {
+      native.begun.push(target)
+      return Promise.resolve()
+    },
+    end: () => {
+      native.ended += 1
+      return Promise.resolve(native.path)
+    },
+    release: () => {
+      native.releases += 1
+      return Promise.resolve()
+    },
+    outputPath: () => native.path
+  }
+}))
 
 vi.mock('../services/liveClientService', () => ({
-  getScoreboard: () => Promise.resolve(live.board)
+  getScoreboard: () => {
+    live.boardReads += 1
+    return Promise.resolve(live.board)
+  }
 }))
 
 vi.mock('../liveClient/client', () => ({
@@ -230,6 +300,20 @@ beforeEach(() => {
   live.startObsCalls = 0
   live.startRecordCalls = 0
   live.createdRecordings = 0
+  live.created = []
+  live.enterManagedCalls = 0
+  live.leaveManagedCalls = 0
+  live.boardReads = 0
+  native.prepared = []
+  native.releases = 0
+  native.connection = { state: 'ready' }
+  native.connectionListeners = []
+  native.signalListeners = []
+  native.boots = 0
+  native.shutdowns = 0
+  native.begun = []
+  native.ended = 0
+  native.path = null
   live.finished = []
   live.deleted = []
   live.broadcasts = []
@@ -359,5 +443,230 @@ describe('capture service wiring', () => {
     // file OBS never finished writing.
     expect(live.deleted).toEqual([RECORDING_ID])
     expect(live.finished).toEqual([])
+  })
+})
+
+describe('the first seconds of a game', () => {
+  async function capturing(): Promise<CaptureService> {
+    const capture = await load()
+    capture.initCapture()
+    live.settings.enabled = true
+    live.connection = 'connected'
+    capture.refreshCapture()
+    return capture
+  }
+
+  it('sets OBS up while the game loads, so its capture has hooked the game before play', async () => {
+    const capture = await capturing()
+    // The loading screen: the game has not said it started.
+    live.events = []
+
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await flush()
+    expect(live.enterManagedCalls).toBe(1)
+    expect(live.startRecordCalls).toBe(0)
+
+    live.events = [{ EventName: 'GameStart' }]
+    await vi.advanceTimersByTimeAsync(250)
+    await flush()
+
+    // Recording, with nothing left to set up at the moment play began.
+    expect(live.startRecordCalls).toBe(1)
+    expect(live.enterManagedCalls).toBe(1)
+  })
+
+  it('starts within a quarter second of the game saying it has', async () => {
+    const capture = await capturing()
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+
+    await vi.advanceTimersByTimeAsync(250)
+    await flush()
+
+    expect(live.startRecordCalls).toBe(1)
+  })
+
+  it('reads the scoreboard at the ordinary pace while looking for the start four times as often', async () => {
+    const capture = await capturing()
+    live.events = []
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+
+    // Two seconds of loading screen: eight looks at the event feed.
+    for (let i = 0; i < 8; i += 1) {
+      await vi.advanceTimersByTimeAsync(250)
+      await flush()
+    }
+
+    expect(live.boardReads).toBe(1)
+  })
+
+  it("puts the user's own OBS setup back when the game never starts", async () => {
+    const capture = await capturing()
+    live.events = []
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await flush()
+    expect(live.enterManagedCalls).toBe(1)
+
+    // Dodged in loading, or the game crashed before play.
+    capture.onGamePhase(ACCOUNT, QUEUE, false)
+    await flush()
+
+    expect(live.leaveManagedCalls).toBe(1)
+    expect(live.startRecordCalls).toBe(0)
+  })
+})
+
+describe('capture service with the native recorder', () => {
+  const PATH = 'C:\\Videos\\Foxfire\\pending-1.mp4'
+
+  function fireNative(signal: unknown): void {
+    for (const listener of native.signalListeners) listener(signal)
+  }
+
+  async function switchedOnNative(): Promise<CaptureService> {
+    const capture = await load()
+    capture.initCapture()
+    live.settings.enabled = true
+    live.settings.driver = 'native'
+    capture.refreshCapture()
+    return capture
+  }
+
+  it('boots the native recorder, and lets OBS go, when native is chosen', async () => {
+    await switchedOnNative()
+
+    expect(native.boots).toBe(1)
+    expect(live.startObsCalls).toBe(0)
+  })
+
+  it('reports why the native recorder cannot record', async () => {
+    native.connection = { state: 'unavailable', message: 'No video encoder worked on this PC.' }
+    const capture = await switchedOnNative()
+
+    expect(capture.getCaptureStatus()).toEqual({
+      state: 'error',
+      message: 'No video encoder worked on this PC.'
+    })
+  })
+
+  it('records a game from start to filed, at the path the recorder chose', async () => {
+    const capture = await switchedOnNative()
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    await flush()
+
+    expect(native.begun).toEqual([
+      expect.objectContaining({ game: 'lol', folder, quality: 'balanced', audio: 'game' })
+    ])
+    expect(live.startRecordCalls).toBe(0)
+
+    // FFmpeg's file began three seconds before its first frame was counted, and
+    // the game clock read now is wound back to the file's start.
+    native.path = PATH
+    vi.setSystemTime(T0 + POLL_MS + 3_000)
+    fireNative({ kind: 'started', at: T0 + POLL_MS })
+    await flush()
+
+    expect(live.created).toEqual([
+      expect.objectContaining({ filePath: PATH, startedAt: T0 + POLL_MS, gameTimeOffset: 9 })
+    ])
+    expect(capture.getCaptureStatus()).toMatchObject({ state: 'recording', recordingId: RECORDING_ID })
+
+    capture.onGamePhase(ACCOUNT, QUEUE, false)
+    await flush()
+    expect(native.ended).toBe(1)
+
+    fireNative({ kind: 'finished', path: PATH })
+    await flush()
+
+    expect(live.finished).toEqual([{ recordingId: RECORDING_ID, path: PATH }])
+    expect(capture.getCaptureStatus()).toEqual({ state: 'idle' })
+  })
+
+  it('opens the audio while the game loads, and lets it go if the game never starts', async () => {
+    const capture = await switchedOnNative()
+    live.events = []
+
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await flush()
+    expect(native.prepared).toEqual([expect.objectContaining({ game: 'lol', folder, audio: 'game' })])
+
+    capture.onGamePhase(ACCOUNT, QUEUE, false)
+    await flush()
+    expect(native.releases).toBe(1)
+    expect(native.begun).toEqual([])
+  })
+
+  it('drops the row when the recording fails with nothing playable', async () => {
+    const capture = await switchedOnNative()
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    await flush()
+    native.path = PATH
+    fireNative({ kind: 'started', at: Date.now() })
+    await flush()
+
+    fireNative({ kind: 'failed', reason: 'FFmpeg stopped without a playable recording.' })
+    await flush()
+
+    expect(live.deleted).toEqual([RECORDING_ID])
+    expect(live.finished).toEqual([])
+    expect(capture.getCaptureStatus()).toEqual({ state: 'idle' })
+  })
+
+  it('ignores OBS stopping while the native recorder has the game', async () => {
+    const capture = await switchedOnNative()
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    await flush()
+    fireNative({ kind: 'started', at: Date.now() })
+    await flush()
+
+    // An OBS the user runs for themselves finishing a recording of its own.
+    fireRecordState('OBS_WEBSOCKET_OUTPUT_STOPPED', 'C:\\Videos\\theirs.mp4')
+    await flush()
+
+    expect(live.finished).toEqual([])
+    expect(capture.getCaptureStatus()).toMatchObject({ state: 'recording' })
+  })
+
+  it('finishes a game with the recorder that started it after a switch mid-game', async () => {
+    const capture = await switchedOnNative()
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    await flush()
+    native.path = PATH
+    fireNative({ kind: 'started', at: Date.now() })
+    await flush()
+
+    // Switched to OBS in settings while the game is still on.
+    live.settings.driver = 'obs'
+    capture.refreshCapture()
+    expect(native.shutdowns).toBe(0)
+
+    capture.onGamePhase(ACCOUNT, QUEUE, false)
+    await flush()
+    expect(native.ended).toBe(1)
+    fireNative({ kind: 'finished', path: PATH })
+    await flush()
+
+    expect(live.finished).toEqual([{ recordingId: RECORDING_ID, path: PATH }])
+    // And with the game filed, the switch takes effect.
+    expect(native.shutdowns).toBe(1)
+  })
+
+  it('writes a native recording down at its path when the app quits mid-game', async () => {
+    const capture = await switchedOnNative()
+    capture.onGamePhase(ACCOUNT, QUEUE, true)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+    await flush()
+    native.path = PATH
+    fireNative({ kind: 'started', at: Date.now() })
+    await flush()
+
+    capture.shutdownCapture()
+    service = null
+
+    expect(live.finished).toEqual([{ recordingId: RECORDING_ID, path: PATH }])
+    expect(native.shutdowns).toBe(1)
   })
 })

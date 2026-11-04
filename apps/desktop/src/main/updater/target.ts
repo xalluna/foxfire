@@ -35,14 +35,27 @@ export type UpdateDecision =
  * one build that server might refuse when it comes back, and it would do it
  * precisely when nobody could be told why.
  *
- * Local-only has no such authority, so it takes the newest there is.
+ * Local-only answers to the servers this install is still signed in to
+ * (`signedIn`): "Use this PC" keeps the credential so coming back needs no
+ * password, and every way from one server to another passes through here. A
+ * build newer than one of them accepts would be refused there on the way back,
+ * so local-only is capped by the lowest of them, and held while any of them
+ * cannot be reached. Only an install signed in to no server at all takes the
+ * newest there is.
  */
 export function resolveTarget(options: {
   current: string
   server: ActiveServer | null
   newest: string | null
+  /** In local-only mode, each server this install is still signed in to, as it answered. */
+  signedIn?: ActiveServer[]
 }): UpdateDecision {
   const { current, server, newest } = options
+
+  if (server === null && options.signedIn?.length) {
+    const strictest = strictestOf(options.signedIn)
+    return strictest === null ? { kind: 'unknown' } : resolveTarget({ current, server: strictest, newest })
+  }
 
   if (server !== null) {
     if (!server.reachable) return { kind: 'unknown' }
@@ -63,6 +76,46 @@ export function resolveTarget(options: {
 
   if (newest === null) return { kind: 'unknown' }
   return isNewer(current, newest) ? { kind: 'install', version: newest } : { kind: 'current' }
+}
+
+/**
+ * Whether a build already downloaded may still be installed.
+ *
+ * electron-updater installs what it has downloaded on the next quit, whatever
+ * this module decided since — so a download that finished for one server has to
+ * be asked about again whenever the answer could have changed: a switch of
+ * server, the download finishing after one, and every scheduled check. The
+ * authority is the same as for choosing a build: the active server, or locally
+ * the strictest server this install is still signed in to. Withdrawn when that
+ * authority accepts something older, or cannot be asked — the reason an
+ * unreachable server holds rather than falls back.
+ */
+export function pendingVerdict(options: {
+  pending: string
+  server: ActiveServer | null
+  signedIn?: ActiveServer[]
+}): 'keep' | 'withdraw' {
+  const { pending, server } = options
+
+  const authority = server ?? (options.signedIn?.length ? strictestOf(options.signedIn) : undefined)
+
+  // Local-only and signed in nowhere: the newest release is anybody's to run.
+  if (authority === undefined) return 'keep'
+  if (authority === null || !authority.reachable) return 'withdraw'
+  return isNewer(authority.recommended, pending) ? 'withdraw' : 'keep'
+}
+
+/**
+ * The server accepting the oldest build, or null when any of them could not be
+ * asked — one that cannot answer might accept less than all the rest.
+ */
+function strictestOf(servers: ActiveServer[]): (ActiveServer & { reachable: true }) | null {
+  let strictest: (ActiveServer & { reachable: true }) | null = null
+  for (const server of servers) {
+    if (!server.reachable) return null
+    if (strictest === null || isNewer(server.recommended, strictest.recommended)) strictest = server
+  }
+  return strictest
 }
 
 /**

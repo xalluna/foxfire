@@ -23,6 +23,9 @@ const ACCOUNT = 1
  * Season 2026 as migration 008 seeds it, then a preseason that carries rank
  * forward and a 2027 season that resets. The middle row is the one that proves
  * the guard keys on the reset and not on the boundary.
+ *
+ * The two after it are 8 and 9 because migration 016 seeds TFT's six sets as
+ * 2 to 7, and a season's id is the database's whatever game it is.
  */
 const SEASONS: Season[] = [
   {
@@ -33,14 +36,14 @@ const SEASONS: Season[] = [
     resetsRank: true
   },
   {
-    id: 2,
+    id: 8,
     label: 'Preseason 2027',
     startsAt: new Date(2026, 11, 22).getTime(),
     isPreseason: true,
     resetsRank: false
   },
   {
-    id: 3,
+    id: 9,
     label: 'Season 2027',
     startsAt: new Date(2027, 0, 8).getTime(),
     isPreseason: false,
@@ -500,8 +503,10 @@ describe('replayAttribution', () => {
 
 describe('upgrading to games placed by their end (migration 015)', () => {
   it('drops a figure the old rule proved and the new one cannot', () => {
+    // Every migration but 015, which is the upgrade under test. The ones after
+    // it are the schema today's code reads, and have nothing to do with it.
     const db = new DatabaseSync(':memory:')
-    for (const name of migrationNames().filter((n) => n < '015')) db.exec(migrationSql(name))
+    for (const name of migrationNames().filter((n) => !n.startsWith('015'))) db.exec(migrationSql(name))
     db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run(
       ME,
       'Faker',

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import type { AdminActionResult } from '@foxfire/core'
-import { MembersPage } from '@foxfire/ui'
+import { MembersPage, SignupChoiceNotice } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useConnection, useIsHeadAdmin } from '../client/useConnection'
 import { useDebounced } from '../hooks/useDebounced'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems, pageTotal } from '../queries/paging'
+import { useSignupChoice } from '../queries/signupChoice'
 
 /** Members per page. */
 const PAGE_SIZE = 50
@@ -23,6 +24,7 @@ export function MembersScreen(): JSX.Element {
   const queryClient = useQueryClient()
   const connection = useConnection()
   const isHeadAdmin = useIsHeadAdmin()
+  const signup = useSignupChoice()
 
   const [query, setQuery] = useState('')
   const asked = useDebounced(query.trim())
@@ -58,6 +60,7 @@ export function MembersScreen(): JSX.Element {
 
   return (
     <MembersPage
+      notice={signup.unchosen ? <SignupChoiceNotice onChoose={signup.choose} /> : undefined}
       users={pageItems(users.data, (user) => user.id)}
       total={pageTotal(users.data)}
       usersLoading={users.isPending}

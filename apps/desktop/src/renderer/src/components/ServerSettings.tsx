@@ -12,10 +12,15 @@ import {
   ghostButtonClass,
   inputClass,
   primaryButtonClass,
+  SignupChoiceNotice,
   Icon
 } from '@foxfire/ui'
+import { useSignupChoice } from '@foxfire/screens'
 import { MINIMUM_PASSWORD, passwordProblem } from '@foxfire/core/server'
 import { absoluteUrl, paths } from '@foxfire/core/routes'
+
+/** How to stand a server up: the settings file, every one of them explained in place. */
+const SERVER_SETUP_URL = 'https://github.com/xalluna/foxfire/blob/main/apps/server/docker/.env.example'
 
 /** Which half of the connect form is showing. */
 type Mode = 'login' | 'register'
@@ -61,6 +66,9 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const session = state.session!
   const active = state.servers.find((s) => s.url === state.activeUrl)
+  // Where Settings opens while connected, so the one place an owner is sure to
+  // see it before any admin page.
+  const signup = useSignupChoice(session.isAdmin)
 
   return (
     <SettingsPage
@@ -91,6 +99,8 @@ function ConnectedPage({ state }: { state: ServerState }): JSX.Element {
           </StatusRow>
         </SettingsCard>
       )}
+
+      {session.isAdmin && signup.unchosen && <SignupChoiceNotice onChoose={signup.choose} />}
 
       <SettingsCard title="Signed in">
         <SettingsRow
@@ -298,6 +308,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                 if (e.key === 'Enter' && url.trim()) void check()
               }}
               placeholder="foxfire.example.com"
+              aria-label="Server address"
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"
@@ -374,13 +385,14 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                 value={invite}
                 onChange={(e) => void checkInvite(e.target.value)}
                 placeholder="Paste your invite"
+                aria-label="Invite code"
                 spellCheck={false}
                 className={clsx(inputClass, 'w-full')}
               />
               {invitePreview !== null && (
                 <p
                   className={clsx(
-                    'mt-2 text-2xs leading-relaxed',
+                    'mt-2 text-xs leading-relaxed',
                     invitePreview.usable ? 'text-teal' : 'text-red'
                   )}
                 >
@@ -399,6 +411,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Faker"
+                aria-label="Username"
                 className={clsx(inputClass, 'w-full')}
               />
             </SettingsBlock>
@@ -410,6 +423,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              aria-label="Email"
               spellCheck={false}
               autoCapitalize="off"
               className={clsx(inputClass, 'w-full')}
@@ -424,6 +438,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
           >
             <input
               type="password"
+              aria-label="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => {
@@ -440,6 +455,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
             >
               <input
                 type="password"
+                aria-label="Confirm password"
                 value={confirmation}
                 onChange={(e) => setConfirmation(e.target.value)}
                 onKeyDown={(e) => {
@@ -457,7 +473,7 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                   the whole errand happens there. Without mail there is nowhere
                   to send a link except through its admin. */}
               {probe?.email && probe.publicUrl ? (
-                <p className="text-2xs leading-relaxed text-text-mute">
+                <p className="text-xs leading-relaxed text-text-mute">
                   <a
                     href={absoluteUrl(probe.publicUrl, paths.forgotPassword())}
                     target="_blank"
@@ -469,11 +485,17 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
                   It opens in your browser, and the link to set a new one is emailed to you.
                 </p>
               ) : (
-                <p className="text-2xs leading-relaxed text-text-mute">
+                <p className="text-xs leading-relaxed text-text-mute">
                   Forgotten your password? Ask whoever runs this server for a reset link, and open it
                   in a browser.
                 </p>
               )}
+              {/* For the one person there is nobody to ask. */}
+              <p className="mt-1 text-xs leading-relaxed text-text-mute">
+                Run this server yourself? If you&apos;re still signed in anywhere, Members › your own
+                row makes you a reset link. If not, ADMIN_EMAIL in the server&apos;s .env says how to
+                get back in.
+              </p>
             </SettingsBlock>
           )}
 
@@ -500,8 +522,12 @@ function ConnectPage({ state }: { state: ServerState }): JSX.Element {
       <SettingsCard title="Running your own">
         <SettingsRow
           label="Foxfire Server"
-          description="Docker Compose, a Riot API key and about ten minutes. There is no central Foxfire service — every community runs their own."
-          control={<span className="text-2xs text-text-mute">See apps/server in the repo</span>}
+          description="Docker Compose, a Riot API key and about ten minutes. There is no central Foxfire service — every community runs their own. Make your own account with the address you put in ADMIN_EMAIL: that account runs the server."
+          control={
+            <a href={SERVER_SETUP_URL} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+              Setting one up
+            </a>
+          }
         />
       </SettingsCard>
     </SettingsPage>

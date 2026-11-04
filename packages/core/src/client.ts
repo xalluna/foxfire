@@ -45,9 +45,15 @@ import type {
   ServerLogEntry,
   ServerLogQuery,
   ServerStorageUsage,
+  ShareLink,
   SyncProgressEvent,
-  SyncState
+  SyncState,
+  TftDashboard,
+  TftEditableMatch,
+  TftLobby,
+  TftMatchSummary
 } from './types'
+import type { GameId } from './games/registry'
 
 /**
  * Everything a screen reads and writes about League data, whoever answers.
@@ -125,8 +131,9 @@ export interface FoxfireData {
      * throw, because the person pressing the button wants to know how long to
      * wait. How it goes is the progress events, not this.
      */
-    start: (accountId: string) => Promise<AdminActionResult>
-    getState: (accountId: string) => Promise<SyncState | null>
+    start: (accountId: string, game?: GameId) => Promise<AdminActionResult>
+    /** League's history unless a game is named; each game syncs on its own. */
+    getState: (accountId: string, game?: GameId) => Promise<SyncState | null>
   }
   champions: {
     stats: (accountId: string, queueId: number | null, range: RankRange) => Promise<ChampionStats[]>
@@ -179,8 +186,26 @@ export interface FoxfireData {
    * calendar is not a stand-in for one. Saving replaces the whole list.
    */
   seasons: {
-    list: () => Promise<Season[]>
-    save: (seasons: SeasonInput[]) => Promise<Season[]>
+    /** One game's seasons, League's unless another is named. Each game keeps its own calendar. */
+    list: (game?: GameId) => Promise<Season[]>
+    save: (seasons: SeasonInput[], game?: GameId) => Promise<Season[]>
+  }
+  /**
+   * One account's TFT. Its own namespace rather than a game parameter on
+   * League's, because almost nothing about a TFT row is League's shape; rank is
+   * the same machinery read on TFT's ladders, so it reads the same way.
+   */
+  tft: {
+    dashboard: (accountId: string) => Promise<TftDashboard | null>
+    matchList: (
+      accountId: string,
+      limit: number,
+      offset: number,
+      queueId: number | null
+    ) => Promise<Page<TftMatchSummary>>
+    matchSummary: (accountId: string, matchId: string) => Promise<TftMatchSummary | null>
+    lobby: (accountId: string, matchId: string) => Promise<TftLobby | null>
+    rank: TftRank
   }
   search: {
     /**
@@ -230,6 +255,19 @@ export interface FoxfireData {
 }
 
 /** Stops listening. Every subscription below hands one back. */
+/** TFT's rank, read and typed as League's is, on TFT's ladders. */
+export interface TftRank {
+  history: (accountId: string, queueType: QueueType, range: RankRange) => Promise<RankHistory>
+  trend: (accountId: string, queueType: QueueType) => Promise<RankTrend>
+  periods: (accountId: string) => Promise<Season[]>
+  editable: (accountId: string, queueType: QueueType) => Promise<TftEditableMatch[]>
+  saveManual: (accountId: string, queueType: QueueType, edits: ManualRankEdit[]) => Promise<TftEditableMatch[]>
+  clearManual: (accountId: string, queueType: QueueType, matchId: string) => Promise<TftEditableMatch[]>
+}
+
+/** The rank reads both games answer alike, which is what the Rank screen draws from. */
+export type RankReader = Pick<FoxfireData['rank'], 'history' | 'trend' | 'periods'>
+
 export type Unsubscribe = () => void
 
 /**
@@ -259,6 +297,14 @@ export interface ConnectionState {
    * buttons that act against another admin.
    */
   session: { username: string; email: string; isAdmin: boolean; isHeadAdmin: boolean } | null
+  /**
+   * Whether the server can be read without signing in.
+   *
+   * What decides whether "Copy link" already reaches anybody, or whether a
+   * profile has to be shared to reach somebody outside. False in local-only
+   * mode and from a server too old to say.
+   */
+  publicAccess: boolean
   /** The server's own Riot key has been refused — the host's to fix, not the reader's. */
   riotKeyRejected: boolean
   /** Set when the server refused this client outright, with the version it wants. */
@@ -297,6 +343,18 @@ export interface FoxfireClient extends FoxfireData {
     cancelEmailChange: () => Promise<AccountEmailResult>
   }
   /**
+   * Opening one profile to somebody who is not a member.
+   *
+   * Any member may share any profile. Sharing the same one again within a day
+   * hands back the link made then. Only offered on a server, signed in, and
+   * where the server is not already open to everybody — see ConnectionState.
+   */
+  shares: {
+    create: (accountId: string) => Promise<ShareLink>
+    /** Withdraws a link: its creator's, or anybody's for an admin. */
+    revoke: (id: string) => Promise<AdminActionResult>
+  }
+  /**
    * Administering a server. Only offered to somebody the connection says is an
    * admin, and only ever authoritative because the server checks the role
    * itself on every request. Reads throw; writes answer with a result, because
@@ -329,6 +387,8 @@ export interface FoxfireClient extends FoxfireData {
     emailInvite: (id: string) => Promise<AdminActionResult>
     getSettings: () => Promise<ServerAdminSettings>
     setSettings: (patch: Partial<ServerAdminSettings>) => Promise<ServerAdminSettings>
+    /** A page of the share links that still open something, newest first. */
+    shareLinks: (page?: PageOptions) => Promise<Page<ShareLink>>
     storage: () => Promise<ServerStorageUsage>
     /** A page of the shared replays, biggest first, so space can be reclaimed where it actually is. */
     storedReplays: (page?: PageOptions) => Promise<Page<AdminReplay>>

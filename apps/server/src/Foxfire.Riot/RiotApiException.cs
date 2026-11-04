@@ -54,12 +54,14 @@ public sealed class RiotApiException : Exception
         string message,
         int status,
         TimeSpan? retryAfter = null,
-        bool staleIdentity = false)
+        bool staleIdentity = false,
+        bool noProductAccess = false)
         : base(message)
     {
         Status = status;
         RetryAfter = retryAfter;
         StaleIdentity = staleIdentity;
+        NoProductAccess = noProductAccess;
     }
 
     /// <summary>The HTTP status. 0 when the request never got an answer at all.</summary>
@@ -79,8 +81,20 @@ public sealed class RiotApiException : Exception
     /// </summary>
     public bool StaleIdentity { get; }
 
+    /// <summary>
+    /// A 403 from a TFT endpoint, on a key that is fine for League.
+    ///
+    /// Riot ties a registered key to a product, so a key registered for League
+    /// alone is refused by every TFT endpoint with the same 403 an expired key
+    /// gets. Read as a rejection, it would latch the shared queue and stop
+    /// League syncing too, for a server that was never meant to have TFT on that
+    /// key. Only ever set on a TFT call made with the main key; a TFT key of its
+    /// own that answers 403 is rejected like any other.
+    /// </summary>
+    public bool NoProductAccess { get; }
+
     /// <summary>The key is expired, revoked, or was never valid.</summary>
-    public bool IsKeyRejection => Status is 401 or 403;
+    public bool IsKeyRejection => Status == 401 || (Status == 403 && !NoProductAccess);
 }
 
 /// <summary>

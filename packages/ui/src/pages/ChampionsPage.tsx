@@ -78,25 +78,32 @@ function SortHeader({
   dir: SortDir
   onClick: () => void
 }): JSX.Element {
+  // The sort is the header's to announce rather than the button's: a screen
+  // reader reads aria-sort off a column header, and only there.
   return (
-    <button
-      onClick={onClick}
+    <div
+      role="columnheader"
       aria-sort={active ? (dir === 'desc' ? 'descending' : 'ascending') : 'none'}
-      className={clsx(
-        'flex items-center justify-end gap-1 transition hover:text-text-dim',
-        width,
-        active && 'text-accent'
-      )}
+      className={width}
     >
-      {label}
-      {active && (
-        <Icon.ChevronDown
-          width={10}
-          height={10}
-          className={clsx('transition-transform', dir === 'asc' && 'rotate-180')}
-        />
-      )}
-    </button>
+      <button
+        type="button"
+        onClick={onClick}
+        className={clsx(
+          'flex w-full items-center justify-end gap-1 transition hover:text-text-dim',
+          active && 'text-accent'
+        )}
+      >
+        {label}
+        {active && (
+          <Icon.ChevronDown
+            width={10}
+            height={10}
+            className={clsx('transition-transform', dir === 'asc' && 'rotate-180')}
+          />
+        )}
+      </button>
+    </div>
   )
 }
 
@@ -116,11 +123,11 @@ function Stat({
   tone?: string
 }): JSX.Element {
   return (
-    <div className={clsx(width, 'text-right')}>
+    <div role="cell" className={clsx(width, 'text-right')}>
       <p className={clsx('text-sm tabular-nums', thin ? 'text-text-mute' : (tone ?? 'text-text'))}>
         {primary}
       </p>
-      <p className={clsx('text-2xs tabular-nums', thin ? 'text-text-mute/70' : 'text-text-mute')}>
+      <p className="text-2xs tabular-nums text-text-mute">
         {secondary}
       </p>
     </div>
@@ -175,7 +182,6 @@ function ChampionsBody({
   // actually play and how they perform.
   const [sort, setSort] = useState<SortKey>('games')
   const [dir, setDir] = useState<SortDir>('desc')
-  const selectedSeason = seasonLabel === null ? null : { label: seasonLabel }
 
   // A new column sorts descending first — "best on this stat" is the question
   // being asked nine times in ten. Re-clicking the active one flips it.
@@ -226,21 +232,12 @@ function ChampionsBody({
     })
     .slice(0, 50)
 
-  const totalGames = data.reduce((n, w) => n + w.games, 0)
   const queueName = queueFilterLabel(queueId)
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 max-md:p-2">
       <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-start">
-        <div>
-          <h1 className="font-display text-xl text-text">Champions</h1>
-          <p className="mt-0.5 text-sm text-text-mute">
-            From your {totalGames} synced {queueId === null ? '' : `${queueName} `}
-            {totalGames === 1 ? 'game' : 'games'}
-            {selectedSeason === null ? ' across all time' : ` in ${selectedSeason.label}`}.
-            Remakes excluded.
-          </p>
-        </div>
+        <h1 className="font-display text-xl text-text">Champions</h1>
         {/* Wraps because the period picker grows by one button every January. */}
         <div className="flex flex-wrap items-center justify-end gap-2 max-md:justify-start">
           <Segmented options={rangeOptions} value={range} onChange={setPicked} />
@@ -248,15 +245,22 @@ function ChampionsBody({
         </div>
       </div>
 
-      {/* On a phone the table keeps its columns and scrolls sideways on its own. */}
-      <div className="overflow-hidden rounded-lg border border-hairline bg-surface/40 max-md:overflow-x-auto">
+      {/* On a phone the table keeps its columns and scrolls sideways on its own.
+          A table to a screen reader too, which is what lets it read the sort
+          off the column headers. */}
+      <div
+        role="table"
+        aria-label="Champions"
+        className="overflow-hidden rounded-lg border border-hairline bg-surface/40 max-md:overflow-x-auto"
+      >
         <div
+          role="row"
           className={clsx(
             'grid gap-4 border-b border-hairline px-4 py-2 text-2xs font-medium uppercase tracking-widest text-text-mute max-md:min-w-[640px]',
             GRID
           )}
         >
-          <span>Champion</span>
+          <span role="columnheader">Champion</span>
           {COLUMNS.map((col) => (
             <SortHeader
               key={col.key}
@@ -271,22 +275,27 @@ function ChampionsBody({
 
         {/* Rendered inside the card rather than replacing the page, so the queue
             filter stays reachable — otherwise picking an empty queue would trap
-            you on a screen with no way back. */}
+            you on a screen with no way back. The table's one row, the way a
+            table says it has nothing. */}
         {rows.length === 0 && (
-          <EmptyState
-            icon={<Icon.Trophy />}
-            title={queueId === null ? 'No champions yet' : `No ${queueName} games found`}
-            description={
-              selectedSeason !== null
-                ? 'Nothing stored for this season. Pick another, or sync more of your match history.'
-                : queueId === null
-                  ? 'Sync your match history to see which champions you play and how they do.'
-                  : 'Try a different queue, or sync more of your match history.'
-            }
-          />
+          <div role="row">
+            <div role="cell">
+              <EmptyState
+                icon={<Icon.Trophy />}
+                title={queueId === null ? 'No champions yet' : `No ${queueName} games found`}
+                description={
+                  seasonLabel !== null
+                    ? 'Nothing stored for this season. Pick another, or sync more of your match history.'
+                    : queueId === null
+                      ? 'Sync your match history to see which champions you play and how they do.'
+                      : 'Try a different queue, or sync more of your match history.'
+                }
+              />
+            </div>
+          </div>
         )}
 
-        <ul className="divide-y divide-hairline/60 max-md:min-w-[640px]">
+        <ul role="rowgroup" className="divide-y divide-hairline/60 max-md:min-w-[640px]">
           {rows.map((row) => {
             const { games, wins } = row
             const wr = wins / games
@@ -302,12 +311,13 @@ function ChampionsBody({
             return (
               <li
                 key={row.championId}
+                role="row"
                 className={clsx(
                   'grid items-center gap-4 px-4 py-2 transition hover:bg-surface',
                   GRID
                 )}
               >
-                <div className="flex min-w-0 items-center gap-2.5">
+                <div role="cell" className="flex min-w-0 items-center gap-2.5">
                   <Asset
                     src={championIconUrl(assets, row.championId)}
                     className="h-9 w-9"
@@ -323,7 +333,7 @@ function ChampionsBody({
                     size. Only the percentage recedes, because a teal 100% off
                     one game is the loudest thing on the row and the least
                     earned. */}
-                <div className="w-32">
+                <div role="cell" className="w-32">
                   <p className="text-right text-sm tabular-nums text-text-dim">{games}</p>
                   <Bar fraction={wr} tone="winrate" className="mt-1" />
                   <div className="mt-0.5 flex items-baseline justify-between text-2xs tabular-nums">

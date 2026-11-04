@@ -1,6 +1,6 @@
 import type { AssetManifest } from '@foxfire/core'
 import { TRINKET_SLOT, itemSlots } from '../lib/items'
-import { itemIconUrl } from '../lib/assets'
+import { itemIconUrl, itemName } from '../lib/assets'
 import { Asset } from './Asset'
 
 /**
@@ -15,6 +15,10 @@ import { Asset } from './Asset'
  * detail panel draw the same eight squares, differing only in how big they are.
  * The size arrives as a literal utility class rather than a number, because
  * Tailwind only emits the classes it can see in the source.
+ *
+ * Each item is named, on hover and to a screen reader; an empty slot is not,
+ * so a half-built inventory reads as the items in it rather than as a list of
+ * blanks.
  */
 export function ItemStrip({
   m,
@@ -30,14 +34,19 @@ export function ItemStrip({
 }): JSX.Element {
   return (
     <div className="flex gap-[3px]">
-      {itemSlots(items, roleBound).map((itemId, i) => (
-        <Asset
-          key={i}
-          src={itemIconUrl(m, itemId)}
-          className={size}
-          rounded={i >= TRINKET_SLOT ? 'rounded-full' : 'rounded'}
-        />
-      ))}
+      {itemSlots(items, roleBound).map((itemId, i) => {
+        const name = itemId ? itemName(m, itemId) : undefined
+        return (
+          <Asset
+            key={i}
+            src={itemIconUrl(m, itemId)}
+            alt={name}
+            title={name}
+            className={size}
+            rounded={i >= TRINKET_SLOT ? 'rounded-full' : 'rounded'}
+          />
+        )
+      })}
     </div>
   )
 }

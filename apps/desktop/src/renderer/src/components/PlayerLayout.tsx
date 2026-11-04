@@ -1,11 +1,19 @@
 import { useEffect, type ReactNode } from 'react'
-import { useMyAccounts, type PlayerLayoutProps } from '@foxfire/screens'
+import { useRouterState } from '@tanstack/react-router'
+import { GameSwitch, useMyAccounts, type PlayerLayoutProps } from '@foxfire/screens'
 import { useLastPlayer } from '../store/lastPlayer'
 import { AccountSwitcher } from './AccountSwitcher'
 
-/** The scrolling content area every main-window page draws into. */
+/**
+ * The scrolling content area every main-window page draws into.
+ *
+ * Positioned so it is the containing block of everything absolute inside it —
+ * screen-reader text above all. A scroller that is not positioned clips none of
+ * that: it is placed against the page, the page grows past the window, and the
+ * window gets a second scrollbar beside this one.
+ */
 export function Main({ children }: { children: ReactNode }): JSX.Element {
-  return <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+  return <main className="relative min-w-0 flex-1 overflow-y-auto">{children}</main>
 }
 
 /**
@@ -18,6 +26,7 @@ export function Main({ children }: { children: ReactNode }): JSX.Element {
  */
 export function PlayerLayout({ account, children }: PlayerLayoutProps): JSX.Element {
   const remember = useLastPlayer((s) => s.remember)
+  const onCaptures = useRouterState({ select: (s) => /\/captures\/?$/.test(s.location.pathname) })
   const accounts = useMyAccounts()
 
   useEffect(() => {
@@ -27,7 +36,18 @@ export function PlayerLayout({ account, children }: PlayerLayoutProps): JSX.Elem
   return (
     <>
       <AccountSwitcher accounts={accounts.data ?? []} activeAccountId={account?.id ?? null} />
-      <Main>{children}</Main>
+      <Main>
+        {/* Which of the player's games this is. The desktop has no tabs — its
+            other pages open from the cards that summarise them — so the switch
+            is the one thing above the page. Not on Captures, which is this
+            PC's recordings of both games and has a filter of its own. */}
+        {account && !onCaptures && (
+          <div className="flex justify-end px-4 pt-3">
+            <GameSwitch account={account} />
+          </div>
+        )}
+        {children}
+      </Main>
     </>
   )
 }

@@ -114,7 +114,7 @@ export function ReplaysTab({ account }: { account: Account }): JSX.Element {
             type="button"
             disabled={rescan.isPending}
             onClick={() => rescan.mutate()}
-            className="rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent disabled:opacity-50"
+            className="rounded-md border border-edge px-3 py-1.5 text-sm text-text-dim transition hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {rescan.isPending ? 'Checking…' : 'Check for new replays'}
           </button>
@@ -142,7 +142,7 @@ export function ReplaysTab({ account }: { account: Account }): JSX.Element {
               Replays are past the {Math.round(usage.data.softCapBytes / GB)} GB you asked to be
               warned at.
             </p>
-            <p className="mt-1 text-2xs leading-relaxed text-text-dim">
+            <p className="mt-1 text-xs leading-relaxed text-text-dim">
               Nothing has been deleted — this is a reminder, not a limit. Raise the number in
               Settings, or clear out the games you are done with.
             </p>
@@ -151,7 +151,7 @@ export function ReplaysTab({ account }: { account: Account }): JSX.Element {
       )}
 
       {usage.data && usage.data.unplayableCount > 0 && (
-        <p className="mt-4 rounded-md border border-hairline bg-surface/40 px-4 py-2.5 text-2xs leading-relaxed text-text-mute">
+        <p className="mt-4 rounded-md border border-hairline bg-surface/40 px-4 py-2.5 text-xs leading-relaxed text-text-mute">
           {usage.data.unplayableCount === 1
             ? '1 replay needs'
             : `${usage.data.unplayableCount} replays need`}{' '}
@@ -227,7 +227,7 @@ function AddReplayButton({ onPick }: { onPick: (path: string) => void }): JSX.El
       <button
         type="button"
         onClick={() => input.current?.click()}
-        className="rounded-md border border-hairline px-3 py-1.5 text-sm text-text-dim transition hover:border-accent-dim hover:text-accent"
+        className="rounded-md border border-edge px-3 py-1.5 text-sm text-text-dim transition hover:border-accent hover:text-accent"
       >
         Add replay…
       </button>
@@ -339,7 +339,7 @@ function ReplayRow({ replay, onDelete }: { replay: Replay; onDelete: () => void 
       {/* Stated on the row rather than hidden behind the disabled button, so
           "why can I watch that one and not this one" has an answer in view. */}
       {(replay.blockedReason !== null || error !== null) && (
-        <p className="w-full text-2xs leading-relaxed text-amber">
+        <p className="w-full text-xs leading-relaxed text-amber">
           {error ?? replay.blockedReason}
         </p>
       )}
@@ -368,7 +368,7 @@ function IconButton({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        'flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-text-mute transition disabled:opacity-40',
+        'flex h-7 w-7 items-center justify-center rounded-md border border-edge text-text-mute transition disabled:opacity-40',
         danger ? 'hover:border-red/40 hover:text-red' : 'hover:border-accent-dim hover:text-accent'
       )}
     >

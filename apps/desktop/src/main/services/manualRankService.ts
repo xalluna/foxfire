@@ -9,8 +9,10 @@ import {
   insertManualSnapshot,
   type SnapshotInput
 } from '../db/repositories/rankHistory.repo'
+import { getEditableTftRows } from '../db/repositories/tftMatches.repo'
 import { replayAttribution } from './rankAttribution'
-import { ALL_TIERS, APEX_TIERS, DIVISIONS, gameEndMs, queueIdForQueueType } from '@foxfire/core'
+import { ALL_TIERS, APEX_TIERS, DIVISIONS, LADDERS, gameEndMs, queueIdForQueueType, tftGameEndMs } from '@foxfire/core'
+import type { TftEditableMatch } from '@foxfire/core'
 import type { EditableMatch, ManualRank, ManualRankEdit, QueueType } from '@shared/types'
 
 /**
@@ -112,7 +114,7 @@ export function rebuildAttribution(
   queueType: QueueType
 ): void {
   deleteMatchRankForQueue(db, accountId, queueType)
-  replayAttribution(db, accountId, puuid, null)
+  replayAttribution(db, accountId, puuid, null, LADDERS[queueType].game)
 }
 
 /**
@@ -130,7 +132,38 @@ export function getEditableMatches(
   queueType: QueueType
 ): EditableMatch[] {
   const matches = getEditableRankedMatches(db, accountId, puuid, queueIdForQueueType(queueType))
+  return withReadings(db, accountId, queueType, matches, (m) => gameEndMs(m.gameCreation, m.gameDuration))
+}
 
+/**
+ * The same for one of TFT's ladders, filed under the account's TFT id: each
+ * game with its place, placed at the player's elimination rather than the
+ * lobby's end, which is when TFT moved their LP.
+ */
+export function getEditableTftMatches(
+  db: DatabaseSync,
+  accountId: number,
+  tftPuuid: string,
+  queueType: QueueType
+): TftEditableMatch[] {
+  const rows = getEditableTftRows(db, accountId, tftPuuid, queueIdForQueueType(queueType))
+  return withReadings(db, accountId, queueType, rows, (r) =>
+    tftGameEndMs(r.gameCreation, r.timeEliminated, r.gameDuration)
+  ).map(({ timeEliminated: _eliminated, ...match }) => match)
+}
+
+/**
+ * Each game with what the editor shows beside it: the entry already typed for
+ * it, and the reading its entry will be measured from. `endOf` is where the
+ * game sits among readings, which is each game's own rule.
+ */
+function withReadings<T extends { matchId: string; gameCreation: number }>(
+  db: DatabaseSync,
+  accountId: number,
+  queueType: QueueType,
+  matches: T[],
+  endOf: (match: T) => number
+): Array<T & Pick<EditableMatch, 'before' | 'beforeAt' | 'beforeUsable' | 'manual'>> {
   const entries = getManualSnapshots(db, accountId, queueType)
 
   return matches.map((match) => {
@@ -144,12 +177,7 @@ export function getEditableMatches(
     // before the game ended. One taken while it was being played is the rank it
     // started from, and counting from anything earlier would show a figure the
     // match row never does.
-    const previous = getSnapshotBefore(
-      db,
-      accountId,
-      queueType,
-      gameEndMs(match.gameCreation, match.gameDuration)
-    )
+    const previous = getSnapshotBefore(db, accountId, queueType, endOf(match))
 
     return {
       ...match,
@@ -177,6 +205,36 @@ export function getEditableMatches(
  * on its own. Replaying once at the end rather than per row means the list the
  * user gets back already reflects that.
  */
+/**
+ * The games an entry may be typed for on one ladder, by id, with where each
+ * begins and where its entry is stored: the end of a League game, or a TFT
+ * player's elimination.
+ */
+function editableGames(
+  db: DatabaseSync,
+  accountId: number,
+  puuid: string,
+  queueType: QueueType
+): Map<string, { gameCreation: number; endMs: number }> {
+  const queueId = queueIdForQueueType(queueType)
+
+  if (LADDERS[queueType].game === 'tft') {
+    return new Map(
+      getEditableTftRows(db, accountId, puuid, queueId).map((r) => [
+        r.matchId,
+        { gameCreation: r.gameCreation, endMs: tftGameEndMs(r.gameCreation, r.timeEliminated, r.gameDuration) }
+      ])
+    )
+  }
+
+  return new Map(
+    getEditableRankedMatches(db, accountId, puuid, queueId).map((m) => [
+      m.matchId,
+      { gameCreation: m.gameCreation, endMs: manualSnapshotTime(m.gameCreation, m.gameDuration) }
+    ])
+  )
+}
+
 export function saveManualRanks(
   db: DatabaseSync,
   accountId: number,
@@ -184,12 +242,9 @@ export function saveManualRanks(
   queueType: QueueType,
   edits: ManualRankEdit[]
 ): void {
-  const matches = new Map(
-    getEditableRankedMatches(db, accountId, puuid, queueIdForQueueType(queueType)).map((m) => [
-      m.matchId,
-      m
-    ])
-  )
+  if (!LADDERS[queueType].lpEditable) throw new Error('Hyper Roll has a rating, not LP')
+
+  const matches = editableGames(db, accountId, puuid, queueType)
 
   for (const edit of edits) {
     if (!matches.has(edit.matchId)) {
@@ -219,13 +274,7 @@ export function saveManualRanks(
         )
       }
 
-      insertManualSnapshot(
-        db,
-        accountId,
-        edit.matchId,
-        toSnapshotInput(queueType, edit.after),
-        manualSnapshotTime(match.gameCreation, match.gameDuration)
-      )
+      insertManualSnapshot(db, accountId, edit.matchId, toSnapshotInput(queueType, edit.after), match.endMs)
     }
 
     rebuildAttribution(db, accountId, puuid, queueType)

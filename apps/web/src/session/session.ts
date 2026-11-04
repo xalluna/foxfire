@@ -8,6 +8,7 @@ import type {
 } from '@foxfire/core'
 import { WEB_API_VERSION, createServerSession, type ServerSession } from '@foxfire/core/server'
 import { refreshLock } from './locks'
+import { refusalFrom, rememberShare, type ShareGrant, type ShareRefusal } from './share'
 
 /** What the web client says it is on every request: `web`, built against this API version. */
 export const WEB_IDENTITY = { kind: 'web', apiVersion: WEB_API_VERSION } as const
@@ -19,10 +20,31 @@ interface AuthState {
   ready: boolean
   /** The server no longer serves the API this page was built against. */
   upgradeRequired: boolean
+  /** Whether the server can be read without signing in, as its handshake said when the page loaded. */
+  publicAccess: boolean
+  /** The profile a share link opened in this tab, while it lasts. */
+  share: ShareGrant | null
+  /** Why the share link this tab was opened with opens nothing any more. */
+  shareRefused: ShareRefusal | null
 }
 
 /** Who is signed in, as every part of the page reads it. */
-export const useAuth = create<AuthState>(() => ({ user: null, ready: false, upgradeRequired: false }))
+export const useAuth = create<AuthState>(() => ({
+  user: null,
+  ready: false,
+  upgradeRequired: false,
+  publicAccess: false,
+  share: null,
+  shareRefused: null
+}))
+
+/**
+ * Whether this page may show anything but the sign-in pages: somebody is
+ * signed in, the server is open, or a share link opened a profile.
+ */
+export function canBrowse(state: AuthState = useAuth.getState()): boolean {
+  return state.user !== null || state.publicAccess || state.share !== null
+}
 
 type SessionMessage = 'signed-in' | 'signed-out'
 
@@ -56,7 +78,23 @@ export const session: ServerSession = createServerSession({
   deviceLabel: describeBrowser(),
   onUserRefreshed: (user) => useAuth.setState({ user }),
   onSignedOut: () => useAuth.setState({ user: null }),
-  onUpgradeRequired: () => useAuth.setState({ upgradeRequired: true })
+  onUpgradeRequired: () => useAuth.setState({ upgradeRequired: true }),
+
+  // Nobody signed in still reads, on an open server or with a share link —
+  // with no token to renew, and nothing to sign out of when refused.
+  outsider: () => {
+    const { publicAccess, share } = useAuth.getState()
+    return publicAccess || share ? { shareToken: share?.token ?? null } : null
+  },
+
+  // The link ran out, or was withdrawn, while the page was open. The shell
+  // takes this to the page that says so.
+  onOutsiderRefused: (error) => {
+    const ended = refusalFrom(error.code, error.message)
+    if (!ended || !useAuth.getState().share) return
+    rememberShare(null)
+    useAuth.setState({ share: null, shareRefused: ended })
+  }
 })
 
 /**

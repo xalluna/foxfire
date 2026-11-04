@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { RecordingEvent } from '../types'
 import {
   buildRecordingDescription,
+  buildTftRecordingDescription,
+  DEFAULT_TFT_TITLE_TEMPLATE,
   DEFAULT_TITLE_TEMPLATE,
   DESCRIPTION_FOOTER,
   DESCRIPTION_MAX_BYTES,
@@ -9,9 +11,12 @@ import {
   formatTimestamp,
   queueLabel,
   renderRecordingTitle,
+  renderTftRecordingTitle,
   TITLE_MAX_CHARS,
+  UNMATCHED_TFT_TITLE_TEMPLATE,
   UNMATCHED_TITLE_TEMPLATE,
-  type RecordingTitleFacts
+  type RecordingTitleFacts,
+  type TftRecordingTitleFacts
 } from './templates'
 
 const AHRI: RecordingTitleFacts = {
@@ -118,5 +123,40 @@ describe('buildRecordingDescription', () => {
     const text = buildRecordingDescription(events)
     expect(descriptionBytes(text)).toBeLessThanOrEqual(DESCRIPTION_MAX_BYTES)
     expect(text.endsWith(DESCRIPTION_FOOTER)).toBe(true)
+  })
+})
+
+describe('TFT titles', () => {
+  const FIRST: TftRecordingTitleFacts = {
+    queueId: 1100,
+    placement: 1,
+    teamPlacement: null,
+    trait: 'Flora Fatalis',
+    playedAt: new Date(2026, 9, 23, 21, 15).getTime()
+  }
+
+  it('reads place, queue and trait by default', () => {
+    expect(renderTftRecordingTitle(DEFAULT_TFT_TITLE_TEMPLATE, FIRST)).toBe('1st · Ranked TFT · Flora Fatalis')
+  })
+
+  it("names the team's place in Double Up", () => {
+    expect(
+      renderTftRecordingTitle(DEFAULT_TFT_TITLE_TEMPLATE, { ...FIRST, queueId: 1160, placement: 3, teamPlacement: 2 })
+    ).toBe('2nd · Double Up · Flora Fatalis')
+  })
+
+  it('drops what an unmatched recording cannot say', () => {
+    const unmatched = { ...FIRST, placement: null, trait: null }
+    expect(renderTftRecordingTitle(DEFAULT_TFT_TITLE_TEMPLATE, unmatched)).toBe('Ranked TFT')
+    expect(renderTftRecordingTitle(UNMATCHED_TFT_TITLE_TEMPLATE, unmatched)).toBe('Ranked TFT · 23 Oct 2026')
+    expect(renderTftRecordingTitle('{trait}', unmatched)).toBe('Teamfight Tactics recording')
+  })
+
+  it('names an event queue by its mode rather than not at all', () => {
+    expect(queueLabel(6000, 'TFT')).toBe('Teamfight Tactics')
+  })
+
+  it('writes the credit alone as a description', () => {
+    expect(buildTftRecordingDescription()).toBe(DESCRIPTION_FOOTER)
   })
 })

@@ -2,7 +2,7 @@ import type React from 'react'
 import clsx from 'clsx'
 import type { MatchSummary } from '@foxfire/core'
 import { useAssetManifest } from '../context/assetManifest'
-import { championIconUrl, championName, runeIconUrl, spellIconUrl } from '../lib/assets'
+import { championIconUrl, championName, runeIconUrl, runeName, spellIconUrl, spellName } from '../lib/assets'
 import { positionIcon, positionLabel } from '../lib/positions'
 import { queueName } from '../lib/queues'
 import { runeIds } from '../lib/runes'
@@ -75,7 +75,8 @@ export function MatchListRow({
       onContextMenu={onContextMenu}
       aria-expanded={expandable ? expanded : undefined}
       className={clsx(
-        'flex h-[72px] w-full items-center gap-2.5 border-l-[3px] pl-2.5 pr-3 text-left transition',
+        // The list clips to its card's corners, so the focus ring goes inside.
+        'flex h-[72px] w-full items-center gap-2 border-l-[3px] pl-2.5 pr-3 text-left transition focus-visible:outline-offset-[-2px]',
         expandable && 'cursor-pointer',
         match.isRemake
           ? 'border-l-hairline bg-surface/40 hover:bg-surface'
@@ -108,12 +109,14 @@ export function MatchListRow({
         <div className="relative">
           <Asset
             src={assets ? championIconUrl(assets, match.championId) : null}
+            // Named here as well as beside it: on a phone the name beside it goes.
+            alt={name}
             className="h-11 w-11"
             rounded="rounded-full"
             title={name}
           />
           {match.champLevel !== null && (
-            <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-canvas px-1 text-[9px] font-medium tabular-nums text-text-dim ring-1 ring-hairline">
+            <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-canvas px-1 text-2xs font-medium leading-none tabular-nums text-text-dim ring-1 ring-hairline">
               {match.champLevel}
             </span>
           )}
@@ -122,10 +125,12 @@ export function MatchListRow({
         <div className="flex flex-col gap-[3px] max-sm:hidden">
           <Asset
             src={assets && match.summoner1Id !== null ? spellIconUrl(assets, match.summoner1Id) : null}
+            alt={assets && match.summoner1Id !== null ? spellName(assets, match.summoner1Id) : undefined}
             className="h-[19px] w-[19px]"
           />
           <Asset
             src={assets && match.summoner2Id !== null ? spellIconUrl(assets, match.summoner2Id) : null}
+            alt={assets && match.summoner2Id !== null ? spellName(assets, match.summoner2Id) : undefined}
             className="h-[19px] w-[19px]"
           />
         </div>
@@ -133,11 +138,13 @@ export function MatchListRow({
         <div className="flex flex-col gap-[3px] max-sm:hidden">
           <Asset
             src={assets && keystone !== null ? runeIconUrl(assets, keystone) : null}
+            alt={assets && keystone !== null ? runeName(assets, keystone) : undefined}
             className="h-[19px] w-[19px] bg-canvas"
             rounded="rounded-full"
           />
           <Asset
             src={assets && secondary !== null ? runeIconUrl(assets, secondary) : null}
+            alt={assets && secondary !== null ? runeName(assets, secondary) : undefined}
             className="h-[19px] w-[19px]"
             rounded="rounded-full"
           />
@@ -183,7 +190,7 @@ export function MatchListRow({
           {compactNumber(match.damageDealtToChampions)} dmg
         </p>
         <Bar fraction={share ?? 0} className="mt-1" />
-        <p className="mt-0.5 text-[9px] tabular-nums text-text-mute">
+        <p className="mt-0.5 text-2xs tabular-nums text-text-mute">
           {formatPercent(share)} of team
         </p>
       </div>
@@ -199,7 +206,7 @@ export function MatchListRow({
           />
         )}
         {multiKill && (
-          <span className="rounded-full border border-accent-dim bg-accent/10 px-1.5 text-[9px] font-medium uppercase tracking-wide text-accent">
+          <span className="rounded-full border border-accent-dim bg-accent/10 px-1.5 text-2xs font-medium uppercase tracking-wide text-accent">
             {multiKill}
           </span>
         )}
@@ -219,31 +226,37 @@ export function MatchListRow({
         and no need to: the marker's job is "there is something to watch here",
         and the menu is where the two are told apart.
       */}
-      <span className="ml-2 w-3.5 shrink-0" title={watchableTitle(match)}>
-        {(holdsLocally(match) || match.recording || match.sharedReplay) && (
-          <Icon.Film
-            width={14}
-            height={14}
-            // Dimmer only for a replay that is on the server rather than on
-            // this disk. A recording on YouTube plays straight from the menu,
-            // which is as close as a file here is, so it gets the full mark.
-            className={
-              holdsLocally(match) || match.recording ? 'text-accent/60' : 'text-text-mute/50'
-            }
-          />
-        )}
-      </span>
-
-      {expandable ? (
-        <Icon.ChevronDown
-          className={clsx(
-            'ml-1 shrink-0 text-text-mute transition-transform',
-            expanded && 'rotate-180'
+      {/*
+        The marker and the chevron as one cluster, a step closer together than
+        the columns are. Every column above is a fixed width, and with the rail
+        beside it at 1280px the list is 836px: as two more columns they pushed
+        the chevron 12px past the card's edge, where the card clipped it. The
+        columns closed up from 10px to 8px for the same reason.
+      */}
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="w-3.5" title={watchableTitle(match)}>
+          {(holdsLocally(match) || match.recording || match.sharedReplay) && (
+            <Icon.Film
+              width={14}
+              height={14}
+              // Dimmer only for a replay that is on the server rather than on
+              // this disk. A recording on YouTube plays straight from the menu,
+              // which is as close as a file here is, so it gets the full mark.
+              className={
+                holdsLocally(match) || match.recording ? 'text-accent/60' : 'text-text-mute'
+              }
+            />
           )}
-        />
-      ) : (
-        <span className="ml-1 w-4 shrink-0" />
-      )}
+        </span>
+
+        {expandable ? (
+          <Icon.ChevronDown
+            className={clsx('text-text-mute transition-transform', expanded && 'rotate-180')}
+          />
+        ) : (
+          <span className="w-4" />
+        )}
+      </div>
     </button>
   )
 }

@@ -70,6 +70,12 @@ public static class ImportEndpoints
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ImportMatchesRequest(matches), cancellationToken));
 
+        group.MapPost("/tft-matches", (
+                [FromBody] IReadOnlyList<ImportMatch> matches,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            sender.SendAsync(new ImportTftMatchesRequest(matches), cancellationToken));
+
         group.MapPost("/rank-readings", (
                 [FromBody] IReadOnlyList<ImportRankReading> readings,
                 ISender sender,
@@ -82,7 +88,7 @@ public static class ImportEndpoints
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ImportSeasonsRequest(seasons), cancellationToken));
 
-        group.MapPost("/finish", (ISender sender, CancellationToken cancellationToken) =>
-            sender.SendAsync(new FinishImportRequest(), cancellationToken));
+        group.MapPost("/finish", (int? offset, int? limit, ISender sender, CancellationToken cancellationToken) =>
+            sender.SendAsync(new FinishImportRequest(offset, limit), cancellationToken));
     }
 }

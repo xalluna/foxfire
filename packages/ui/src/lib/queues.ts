@@ -1,4 +1,6 @@
-/** Only the queues worth naming; anything else falls back to the raw game mode. */
+import { queueDefinition } from '@foxfire/core'
+
+/** Only the queues worth naming; anything else falls back to the registry's name, then the raw game mode. */
 const QUEUE_NAMES: Record<number, string> = {
   400: 'Normal Draft',
   420: 'Ranked Solo',
@@ -11,5 +13,5 @@ const QUEUE_NAMES: Record<number, string> = {
 }
 
 export function queueName(queueId: number | null, gameMode: string | null): string {
-  return QUEUE_NAMES[queueId ?? -1] ?? gameMode ?? 'Game'
+  return QUEUE_NAMES[queueId ?? -1] ?? queueDefinition(queueId)?.label ?? gameMode ?? 'Game'
 }

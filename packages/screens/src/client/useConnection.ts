@@ -44,3 +44,24 @@ export function useIsServerAdmin(): boolean {
 export function useIsHeadAdmin(): boolean {
   return useConnection()?.session?.isHeadAdmin ?? false
 }
+
+/**
+ * Who is reading, as far as what a screen offers goes.
+ *
+ * An outsider is somebody on a server with nobody signed in: a visitor to an
+ * open server, or whoever was handed a share link. The server only answers
+ * them reads, so a screen offers them nothing that writes — no sync, no LP, no
+ * share — rather than buttons that end in a refusal. Never true on the
+ * desktop, which only ever reads a server signed in.
+ *
+ * `viaLink` is an outsider on a server that is not open, who can only be here
+ * on a share link, and so can read one profile and nothing around it — not the
+ * finder, not their own accounts, not anybody else's.
+ */
+export function useViewer(): { outsider: boolean; publicAccess: boolean; viaLink: boolean } {
+  const connection = useConnection()
+  const outsider = connection?.mode === 'server' && connection.session === null
+  const publicAccess = connection?.publicAccess ?? false
+
+  return { outsider, publicAccess, viaLink: outsider && !publicAccess }
+}

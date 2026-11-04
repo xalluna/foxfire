@@ -15,7 +15,8 @@ public sealed record SyncRunRecord(
     int Stored,
     int Failed,
     string Outcome,
-    string? Error);
+    string? Error,
+    string Game = "lol");
 
 /// <summary>
 /// The last few syncs this process ran, for the insights page.

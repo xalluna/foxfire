@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { listSeasons, saveSeasons } from './seasons.repo'
-import { applyAllMigrations } from '../testMigrations'
+import { applyAllMigrations, migrationNames, migrationSql } from '../testMigrations'
 
 // See matches.repo.test.ts: Vite strips the `node:` prefix during transform and
 // then cannot resolve the bare `sqlite` specifier.
@@ -97,5 +97,75 @@ describe('seasons', () => {
     ).toThrow()
 
     expect(listSeasons(db)).toEqual(before)
+  })
+})
+
+describe('seasons per game', () => {
+  let db: DatabaseSyncType
+
+  beforeEach(() => {
+    db = new DatabaseSync(':memory:')
+    applyAllMigrations(db)
+  })
+
+  it('ships TFT’s sets from Set 13, apart from League’s seasons', () => {
+    expect(listSeasons(db, 'tft').map((s) => s.label)).toEqual([
+      'Set 13',
+      'Set 14',
+      'Set 15',
+      'Set 16',
+      'Set 17',
+      'Set 18'
+    ])
+    expect(listSeasons(db).map((s) => s.label)).toEqual(['Season 2026'])
+  })
+
+  it('saves one game’s list without touching the other’s', () => {
+    const sets = listSeasons(db, 'tft')
+    saveSeasons(db, [{ label: 'Season 2027', startsAt: JAN_2027, isPreseason: false, resetsRank: true }])
+
+    expect(listSeasons(db, 'tft')).toEqual(sets)
+    expect(listSeasons(db).map((s) => s.label)).toEqual(['Season 2027'])
+  })
+
+  it('lets a League season and a TFT set open at the same instant', () => {
+    const [set13] = listSeasons(db, 'tft')
+    const saved = saveSeasons(db, [
+      { label: 'Season 2025', startsAt: set13.startsAt, isPreseason: false, resetsRank: true }
+    ])
+    expect(saved[0]).toMatchObject({ startsAt: set13.startsAt, game: 'lol' })
+  })
+
+  it('will not update the other game’s season through an id from its list', () => {
+    const [set13] = listSeasons(db, 'tft')
+    saveSeasons(db, [{ ...set13, label: 'Hijacked' }])
+
+    expect(listSeasons(db, 'tft')[0].label).toBe('Set 13')
+  })
+})
+
+describe('migration 016 on an existing install', () => {
+  it('keeps every League season’s id, and carries sync state into League’s row', () => {
+    // A 0.16 database with a season of its own and an account that had synced.
+    const old = new DatabaseSync(':memory:')
+    for (const name of migrationNames().filter((n) => n < '016')) old.exec(migrationSql(name))
+    old.prepare('INSERT INTO seasons (id, label, starts_at) VALUES (?, ?, ?)').run(41, 'Season 2027', JAN_2027)
+    old.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run('p', 'Faker', 'NA1')
+    old.prepare('INSERT INTO sync_state (account_id, most_recent_match_id, backfill_complete) VALUES (1, ?, 1)').run(
+      'NA1_9'
+    )
+
+    old.exec(migrationSql('016_tft.sql'))
+
+    expect(listSeasons(old).map((s) => [s.id, s.label])).toEqual([
+      [1, 'Season 2026'],
+      [41, 'Season 2027']
+    ])
+    // New rows carry on past the highest id kept, so nothing reuses one.
+    expect(Math.min(...listSeasons(old, 'tft').map((s) => s.id))).toBeGreaterThan(41)
+
+    expect(old.prepare('SELECT game, most_recent_match_id, backfill_complete FROM sync_state').all()).toEqual([
+      { game: 'lol', most_recent_match_id: 'NA1_9', backfill_complete: 1 }
+    ])
   })
 })

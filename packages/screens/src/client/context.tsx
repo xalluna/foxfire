@@ -3,6 +3,7 @@ import type {
   Account,
   AttachRecordingOutcome,
   FoxfireClient,
+  GameId,
   ImportProgress,
   ImportResult,
   MatchSummary,
@@ -10,10 +11,16 @@ import type {
 } from '@foxfire/core'
 import type { YouTubeMount } from '@foxfire/ui'
 
-/** One player's view of one game — which is what a recording is of. */
+/**
+ * One player's view of one game — which is what a recording is of — in either
+ * game. What a platform reads of the row is the same for League's and TFT's:
+ * its id, and the footage this machine or a server holds.
+ */
 export interface RecordingTarget {
   account: Account
-  match: MatchSummary
+  match: Pick<MatchSummary, 'matchId' | 'local' | 'recording'>
+  /** Which game the row is: a TFT recording's page asks for a TFT row. League when absent. */
+  game?: GameId
 }
 
 /** How an action a platform carried out went, when it can fail for a reason worth saying. */

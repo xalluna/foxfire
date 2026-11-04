@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Foxfire.Riot;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Foxfire.Api.Tests;
@@ -29,6 +30,11 @@ public sealed class FakeRiot
     private readonly Dictionary<string, string> _leagueEntries = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _accounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _undecryptable = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> _tftMatchIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _tftMatches = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _tftLeagueEntries = new(StringComparer.Ordinal);
+    private readonly List<(string Path, string? Token)> _tokens = [];
+    private bool _tftDenied;
 
     /// <summary>Every path asked for, in order, including the query string.</summary>
     public IReadOnlyList<string> Requests
@@ -68,6 +74,44 @@ public sealed class FakeRiot
         return this;
     }
 
+    public FakeRiot WithTftMatchIds(string puuid, params string[] matchIds)
+    {
+        lock (_gate) _tftMatchIds[puuid] = [.. matchIds];
+        return this;
+    }
+
+    public FakeRiot WithTftMatch(string matchId, string rawJson)
+    {
+        lock (_gate) _tftMatches[matchId] = rawJson;
+        return this;
+    }
+
+    public FakeRiot WithTftLeagueEntries(string puuid, string json)
+    {
+        lock (_gate) _tftLeagueEntries[puuid] = json;
+        return this;
+    }
+
+    /// <summary>
+    /// Every TFT endpoint answers 403 — what a key registered for League alone
+    /// gets, and also what an expired one gets, which is the ambiguity the
+    /// server has to live with.
+    /// </summary>
+    public FakeRiot DenyTft()
+    {
+        lock (_gate) _tftDenied = true;
+        return this;
+    }
+
+    /// <summary>The key each request to a path starting with this was made with.</summary>
+    public IReadOnlyList<string?> TokensFor(string pathPrefix)
+    {
+        lock (_gate)
+        {
+            return [.. _tokens.Where(t => t.Path.StartsWith(pathPrefix, StringComparison.Ordinal)).Select(t => t.Token)];
+        }
+    }
+
     /// <summary>
     /// A puuid Riot will no longer decrypt — what every stored puuid looks like
     /// after the server's API key is replaced.
@@ -83,7 +127,22 @@ public sealed class FakeRiot
         var uri = request.RequestUri!;
         var path = uri.PathAndQuery;
 
-        lock (_gate) _requests.Add(path);
+        lock (_gate)
+        {
+            _requests.Add(path);
+            _tokens.Add((path, request.Headers.TryGetValues("X-Riot-Token", out var keys) ? keys.FirstOrDefault() : null));
+        }
+
+        if (path.StartsWith("/tft/", StringComparison.Ordinal))
+        {
+            lock (_gate)
+            {
+                if (_tftDenied)
+                {
+                    return Json(HttpStatusCode.Forbidden, """{"status":{"message":"Forbidden","status_code":403}}""");
+                }
+            }
+        }
 
         // Checked before anything else, because this is how Riot behaves: the
         // puuid is undecryptable whatever you were trying to do with it.
@@ -179,6 +238,44 @@ public sealed class FakeRiot
             return Json(HttpStatusCode.OK, "[]");
         }
 
+        if (path.StartsWith("/tft/status/v1", StringComparison.Ordinal))
+        {
+            return Json(HttpStatusCode.OK, """{"id":"NA1","name":"North America"}""");
+        }
+
+        if (path.StartsWith("/tft/match/v1/matches/by-puuid/", StringComparison.Ordinal))
+        {
+            var puuid = Uri.UnescapeDataString(
+                path["/tft/match/v1/matches/by-puuid/".Length..path.IndexOf("/ids", StringComparison.Ordinal)]);
+
+            var start = QueryValue(uri.Query, "start", 0);
+            var count = QueryValue(uri.Query, "count", 20);
+
+            lock (_gate)
+            {
+                var ids = _tftMatchIds.TryGetValue(puuid, out var all) ? all : [];
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(ids.Skip(start).Take(count)));
+            }
+        }
+
+        if (path.StartsWith("/tft/match/v1/matches/", StringComparison.Ordinal))
+        {
+            var matchId = Uri.UnescapeDataString(path["/tft/match/v1/matches/".Length..]);
+            lock (_gate)
+            {
+                return _tftMatches.TryGetValue(matchId, out var raw) ? Json(HttpStatusCode.OK, raw) : NotFound();
+            }
+        }
+
+        if (path.StartsWith("/tft/league/v1/by-puuid/", StringComparison.Ordinal))
+        {
+            var puuid = Uri.UnescapeDataString(path["/tft/league/v1/by-puuid/".Length..]);
+            lock (_gate)
+            {
+                return Json(HttpStatusCode.OK, _tftLeagueEntries.TryGetValue(puuid, out var entries) ? entries : "[]");
+            }
+        }
+
         return NotFound();
     }
 
@@ -211,12 +308,24 @@ public sealed class FakeRiot
     /// rate limiter and a fresh set of singletons. It shares the database, which
     /// is the point — the schema and its migrations are the real ones.
     /// </summary>
-    public WebApplicationFactory<Program> Host(WebApplicationFactory<Program> parent) =>
+    /// <param name="tftKey">
+    /// A TFT key of its own, as <c>Riot__Tft__ApiKey</c> would give it. Without
+    /// one, TFT is called with the main key, as on most servers.
+    /// </param>
+    public WebApplicationFactory<Program> Host(WebApplicationFactory<Program> parent, string? tftKey = null) =>
         parent.WithWebHostBuilder(builder =>
+        {
+            if (tftKey is not null)
+            {
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                    new Dictionary<string, string?> { ["Riot:Tft:ApiKey"] = tftKey }));
+            }
+
             builder.ConfigureServices(services =>
                 services
                     .AddHttpClient(RiotClient.HttpClientName)
-                    .ConfigurePrimaryHttpMessageHandler(() => new StubHandler(this))));
+                    .ConfigurePrimaryHttpMessageHandler(() => new StubHandler(this)));
+        });
 
     private sealed class StubHandler(FakeRiot riot) : HttpMessageHandler
     {
@@ -225,6 +334,94 @@ public sealed class FakeRiot
             CancellationToken cancellationToken) =>
             Task.FromResult(riot.Respond(request));
     }
+}
+
+/// <summary>TFT payloads, shaped the way tft-match-v1 and tft-league-v1 shape them.</summary>
+public static class TftPayloads
+{
+    /// <summary>
+    /// An eight-player lobby, <paramref name="puuids"/> placed first to last
+    /// and strangers after them. In Double Up (1160) the lobby is four teams of
+    /// two, partnered in placement order.
+    /// </summary>
+    /// <param name="eliminatedAt">
+    /// Seconds into the game each placement was knocked out, last place first.
+    /// The winner's is the game's length.
+    /// </param>
+    public static string Lobby(
+        string matchId,
+        long gameCreation,
+        int queueId,
+        IReadOnlyList<string> puuids,
+        double gameLength = 2216.4,
+        int setNumber = 18)
+    {
+        var roster = Enumerable.Range(0, 8)
+            .Select(i => i < puuids.Count ? puuids[i] : $"stranger-{matchId}-{i}")
+            .ToList();
+
+        var participants = roster.Select((puuid, i) => new
+        {
+            puuid,
+            riotIdGameName = $"Tactician{i}",
+            riotIdTagline = "NA1",
+            placement = i + 1,
+            level = 9 - (i / 2),
+            last_round = 36 - (i * 2),
+            // Last place goes first; the winner lasts the whole game.
+            time_eliminated = i == 0 ? gameLength : gameLength - (i * 150.25),
+            players_eliminated = Math.Max(0, 3 - i),
+            total_damage_to_players = 140 - (i * 15),
+            gold_left = i,
+            win = i < 4,
+            partner_group_id = queueId == 1160 ? (int?)((i / 2) + 1) : null,
+            traits = new object[]
+            {
+                new { name = "TFT18_FloraFatalis", num_units = 4, style = 3, tier_current = 2, tier_total = 3 },
+                new { name = "TFT18_Executioner", num_units = 2, style = 1, tier_current = 1, tier_total = 3 },
+                new { name = "TFT18_Blackthorn", num_units = 1, style = 0, tier_current = 0, tier_total = 2 }
+            },
+            units = new object[]
+            {
+                new { character_id = "TFT18_Jinx", tier = 2, rarity = 4, itemNames = new[] { "TFT_Item_InfinityEdge" } },
+                new { character_id = "TFT18_Poppy", tier = 3, rarity = 0, itemNames = Array.Empty<string>() }
+            },
+            augments = new[] { "TFT18_Augment_Pandora" }
+        }).ToList();
+
+        return JsonSerializer.Serialize(new
+        {
+            metadata = new { data_version = "6", match_id = matchId, participants = roster },
+            info = new
+            {
+                gameCreation,
+                gameId = long.Parse(matchId[(matchId.IndexOf('_', StringComparison.Ordinal) + 1)..], System.Globalization.CultureInfo.InvariantCulture),
+                game_datetime = gameCreation + (long)(gameLength * 1000),
+                game_length = gameLength,
+                game_version = "Version 18.5",
+                mapId = 22,
+                queueId,
+                queue_id = queueId,
+                tft_game_type = queueId == 1160 ? "pairs" : "standard",
+                tft_set_core_name = $"TFTSet{setNumber}",
+                tft_set_number = setNumber,
+                participants
+            }
+        });
+    }
+
+    /// <summary>A tft-league-v1 answer: Ranked on a divisioned ladder, Hyper Roll rated.</summary>
+    public static string Entries(
+        string? tier = "PLATINUM",
+        string? division = "III",
+        int leaguePoints = 88,
+        string? ratedTier = null,
+        int? ratedRating = null) =>
+        JsonSerializer.Serialize(new object?[]
+        {
+            tier is null ? null : new { queueType = "RANKED_TFT", tier, rank = division, leaguePoints, wins = 27, losses = 122 },
+            ratedTier is null ? null : new { queueType = "RANKED_TFT_TURBO", ratedTier, ratedRating, wins = 5, losses = 20 }
+        }.Where(e => e is not null));
 }
 
 /// <summary>Match payloads shaped the way match-v5 shapes them.</summary>

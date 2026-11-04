@@ -14,7 +14,18 @@ namespace Foxfire.Core;
 /// a boundary at all: rank carries into a preseason, and Riot has reset mid-year
 /// without one.
 /// </param>
-public sealed record Season(int Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
+/// <param name="Game">
+/// Whose calendar it is. TFT's sets reset on their own dates, so each game
+/// keeps its own list, and every function below is handed one game's list —
+/// League's annual reset says nothing about a TFT set.
+/// </param>
+public sealed record Season(
+    int Id,
+    string Label,
+    long StartsAt,
+    bool IsPreseason,
+    bool ResetsRank,
+    Game Game = Game.Lol);
 
 /// <summary>
 /// Arithmetic over the season list. Ported from packages/core/src/rules/seasons.ts.
@@ -162,5 +173,26 @@ public static class RankedSeasons
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// When the ladder last reset at or before a moment, or null when no recorded
+    /// boundary has.
+    ///
+    /// A reading taken at the reset's own instant is the first of the new ladder,
+    /// as <see cref="ResetsBetween"/> reads it, so "since the last reset" is
+    /// <c>&gt;=</c> this. Only a boundary that reset counts: rank carries through a
+    /// preseason, and so does whatever somebody reached before it.
+    /// </summary>
+    public static long? LastResetAt(IReadOnlyList<Season> seasons, long ms)
+    {
+        ArgumentNullException.ThrowIfNull(seasons);
+
+        for (var i = seasons.Count - 1; i >= 0; i--)
+        {
+            if (seasons[i].ResetsRank && seasons[i].StartsAt <= ms) return seasons[i].StartsAt;
+        }
+
+        return null;
     }
 }

@@ -1,11 +1,16 @@
 import { getDb } from '../db'
-import { getAccountByRiotId } from '../db/repositories/accounts.repo'
+import { getAccountById, getAccountByRiotId } from '../db/repositories/accounts.repo'
 import { recordRankSnapshot } from '../services/rankHistoryService'
-import { refreshRank } from '../services/accountService'
+import { refreshRank, refreshTftRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
 import { authedRequest, isServerMode } from '../services/serverService'
-import { startSync } from '../services/syncService'
-import type { Account, QueueType } from '@shared/types'
+import { startAllSyncs } from '../services/syncService'
+import { resolveTftPuuid } from '../services/tftIdentity'
+import { LADDERS, type GameId } from '@foxfire/core'
+import type { LcuRankReading } from '../lcu/rankedStats'
+import type { Account } from '@shared/types'
+
+export type { LcuRankReading } from '../lcu/rankedStats'
 
 /**
  * What the League client watcher does with what it sees, wherever the data lives.
@@ -44,26 +49,17 @@ export interface LcuReporting {
    */
   recordRank(accountId: string, reading: LcuRankReading, force: boolean): Promise<boolean>
 
-  /** A game just finished. Whatever fetches it should start looking. */
-  gameEnded(accountId: string): Promise<void>
+  /** A game just finished — League's unless it says. Whatever fetches it should start looking. */
+  gameEnded(accountId: string, game?: GameId): Promise<void>
 
   /**
-   * Refreshes the account's current standing after a reading moved.
+   * Refreshes the account's current standing in one game after a reading of
+   * it moved.
    *
    * Best-effort and never awaited for its result: the reading is already
    * recorded, and this only brings the profile card into line with it.
    */
-  refreshStanding(accountId: string): Promise<void>
-}
-
-/** A reading as the League client reports it. */
-export interface LcuRankReading {
-  queueType: QueueType
-  tier: string | null
-  rank: string | null
-  leaguePoints: number | null
-  wins: number | null
-  losses: number | null
+  refreshStanding(accountId: string, game?: GameId): Promise<void>
 }
 
 const localReporting: LcuReporting = {
@@ -75,12 +71,19 @@ const localReporting: LcuReporting = {
   recordRank: async (accountId, reading, force) =>
     recordRankSnapshot(Number(accountId), reading, 'lcu', Date.now(), force),
 
-  gameEnded: async (accountId) => {
-    schedulePostGameSync(Number(accountId))
+  gameEnded: async (accountId, game = 'lol') => {
+    schedulePostGameSync(Number(accountId), game)
   },
 
-  refreshStanding: async (accountId) => {
-    await refreshRank(Number(accountId))
+  refreshStanding: async (accountId, game = 'lol') => {
+    if (game === 'lol') {
+      await refreshRank(Number(accountId))
+      return
+    }
+
+    const db = getDb()
+    const account = getAccountById(db, Number(accountId))
+    if (account) await refreshTftRank(account.id, await resolveTftPuuid(db, account))
   }
 }
 
@@ -118,20 +121,25 @@ const serverReporting: LcuReporting = {
         leaguePoints: reading.leaguePoints,
         wins: reading.wins,
         losses: reading.losses,
-        force
+        force,
+        // TFT's say so, and Hyper Roll's carry its colour and rating; League's
+        // reading goes as it always did, which a server from before TFT reads.
+        ...(LADDERS[reading.queueType].game === 'tft'
+          ? { game: 'tft', ratedTier: reading.ratedTier ?? null, ratedRating: reading.ratedRating ?? null }
+          : {})
       }
     })
 
     return written?.recorded ?? true
   },
 
-  gameEnded: async (accountId) => {
+  gameEnded: async (accountId, game = 'lol') => {
     // The retry ladder belongs to the server: it has to keep running after this
     // laptop closes, and two people who were in the same game must not both
-    // walk it.
+    // walk it. A game named nothing is League's to a server, as it always was.
     await authedRequest<void>('/sync/game-ended', {
       method: 'POST',
-      body: { riotAccountId: accountId }
+      body: game === 'lol' ? { riotAccountId: accountId } : { riotAccountId: accountId, game }
     })
   },
 
@@ -152,13 +160,21 @@ export function lcuReporting(): LcuReporting {
  * Starts a sync for an account, wherever the syncing happens.
  *
  * Used by the launch sweep, which runs before anything has reported anything
- * and simply wants each account brought up to date.
+ * and simply wants each account brought up to date — in both games.
  */
 export async function startSyncFor(accountId: string): Promise<void> {
   if (isServerMode()) {
-    await authedRequest<void>(`/sync/${accountId}`, { method: 'POST' })
+    // Each game asked on its own. One after the other, League's refused —
+    // synced under two minutes ago, which a restart after a game often is —
+    // meant TFT's was never asked for at all.
+    const asked = await Promise.allSettled([
+      authedRequest<void>(`/sync/${accountId}`, { method: 'POST' }),
+      authedRequest<void>(`/sync/${accountId}?game=tft`, { method: 'POST' })
+    ])
+    const refused = asked.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (refused) throw refused.reason
     return
   }
 
-  startSync(Number(accountId), 'auto')
+  startAllSyncs(Number(accountId), 'auto')
 }

@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { loadRoute } from './rendererUrl'
+import { attachZoom, currentZoom, titleBarHeight } from './zoom'
 import { closeTelemetryWindow } from './telemetryWindow'
 import { closeLpEditorWindow } from './lpEditorWindow'
 import { closeRecordingWindows } from './recordingWindow'
@@ -53,13 +54,15 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     titleBarOverlay: {
       color: '#010A13',
       symbolColor: '#9DC8FF',
-      height: 40
+      // The strip's 40px at the size the window is drawn; see zoom.ts.
+      height: titleBarHeight()
     },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      zoomFactor: currentZoom()
     }
   })
 
@@ -85,6 +88,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     return { action: 'deny' }
   })
 
+  attachZoom(window, { titleBar: true })
   loadRoute(window, '/')
 
   mainWindow = window

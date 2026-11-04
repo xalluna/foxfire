@@ -30,7 +30,7 @@ export function SettingsCard({
         <div className="mb-2">
           {title !== undefined && <h2 className="font-display text-base text-text-dim">{title}</h2>}
           {description !== undefined && (
-            <p className="mt-1 text-2xs leading-relaxed text-text-mute">{description}</p>
+            <p className="mt-1 text-xs leading-relaxed text-text-mute">{description}</p>
           )}
         </div>
       )}

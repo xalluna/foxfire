@@ -34,11 +34,14 @@ export interface DashboardPageProps {
   /** The latest sync event for this account, if one is running or has just failed. */
   syncProgress?: SyncProgressEvent
   syncing: boolean
-  onSync: () => void
+  /** Absent for somebody reading without signing in, who cannot sync. */
+  onSync?: () => void
   /** When the server takes a sync of this account again. Null when nothing holds it back. */
   syncCooldownUntil: string | null
   /** Copies a link to this profile. Absent where there is no web client to link into. */
   onCopyProfileLink?: () => Promise<void> | void
+  /** Opens this profile to somebody outside. Absent where there is nobody it could add. */
+  onShareProfile?: () => void
   /** The star on the profile. Absent where nobody can be starred. */
   favorite?: FavoriteMark
   /** The house on the profile: whether this is the account that opens first, and making it so. */
@@ -101,6 +104,7 @@ export function DashboardPage({
   onSync,
   syncCooldownUntil,
   onCopyProfileLink,
+  onShareProfile,
   favorite,
   home,
   soloTrend,
@@ -164,6 +168,7 @@ export function DashboardPage({
           cooldownUntil={syncCooldownUntil}
           progress={syncProgress}
           onCopyLink={onCopyProfileLink}
+          onShare={onShareProfile}
           favorite={favorite}
           home={home}
         />
@@ -187,6 +192,7 @@ export function DashboardPage({
             cooldownUntil={syncCooldownUntil}
             progress={syncProgress}
             onCopyLink={onCopyProfileLink}
+            onShare={onShareProfile}
             favorite={favorite}
             home={home}
           />
@@ -234,9 +240,8 @@ export function DashboardPage({
                     : 'Pull your match history from Riot to see it here.'
               }
               action={
-                !syncing && (
-                  <SyncButton onSync={onSync} syncing={false} cooldownUntil={syncCooldownUntil} />
-                )
+                !syncing &&
+                onSync && <SyncButton onSync={onSync} syncing={false} cooldownUntil={syncCooldownUntil} />
               }
             />
           )}
@@ -261,7 +266,7 @@ export function DashboardPage({
 
       {notice !== null && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber/30 bg-surface px-4 py-3 shadow-flyout">
-          <p className="max-w-md text-2xs leading-relaxed text-amber">{notice}</p>
+          <p className="max-w-md text-xs leading-relaxed text-amber">{notice}</p>
           <button
             type="button"
             onClick={onDismissNotice}

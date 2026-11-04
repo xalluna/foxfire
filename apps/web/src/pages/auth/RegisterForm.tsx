@@ -63,7 +63,7 @@ export function RegisterForm({
           onChange={(e) => setUsername(e.target.value)}
           className={`${inputClass} w-full`}
         />
-        <span className="block text-2xs text-text-mute">What everybody here sees beside your games.</span>
+        <span className="block text-xs text-text-mute">What everybody here sees beside your games.</span>
       </label>
 
       <label className="block space-y-1">
@@ -80,7 +80,7 @@ export function RegisterForm({
             className={`${inputClass} w-full`}
           />
         )}
-        <span className="block text-2xs text-text-mute">What you sign in with.</span>
+        <span className="block text-xs text-text-mute">What you sign in with.</span>
       </label>
 
       <label className="block space-y-1">
@@ -93,7 +93,7 @@ export function RegisterForm({
           onChange={(e) => setPassword(e.target.value)}
           className={`${inputClass} w-full`}
         />
-        <span className="block text-2xs text-text-mute">At least {MINIMUM_PASSWORD} characters.</span>
+        <span className="block text-xs text-text-mute">At least {MINIMUM_PASSWORD} characters.</span>
       </label>
 
       <label className="block space-y-1">
@@ -106,7 +106,7 @@ export function RegisterForm({
           onChange={(e) => setConfirmation(e.target.value)}
           className={`${inputClass} w-full`}
         />
-        <span className="block text-2xs text-text-mute">
+        <span className="block text-xs text-text-mute">
           Typed twice because a password nobody can read is a password nobody can check.
         </span>
       </label>

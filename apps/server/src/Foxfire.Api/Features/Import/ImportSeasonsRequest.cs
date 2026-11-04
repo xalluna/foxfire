@@ -1,4 +1,5 @@
 using Foxfire.Api.Common;
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +7,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Foxfire.Api.Features.Import;
 
 /// <summary>One season boundary out of the source file.</summary>
-public sealed record ImportSeason(string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
+/// <param name="Game">
+/// Whose season it was. Absent from a stats.db or a desktop from before TFT,
+/// whose seasons are League's.
+/// </param>
+public sealed record ImportSeason(string Label, long StartsAt, bool IsPreseason, bool ResetsRank, string? Game = null);
 
 /// <summary>
 /// Merges the source's season boundaries into this server's.
@@ -33,21 +38,31 @@ internal sealed class ImportSeasonsRequestHandler(FoxfireDbContext db)
         // ever, and the whole point is that they arrive together.
         if (request.Seasons is not { Count: > 0 }) return new ImportBatchResult(0, 0, 0);
 
-        var existing = await db.Seasons.Select(s => s.StartsAt).ToListAsync(cancellationToken);
-        var known = existing.ToHashSet();
+        // Matched within a game: League's season and a TFT set can open on
+        // the same day and are not the same boundary. A season that names no
+        // game is League's, which is all a stats.db from before TFT holds; one
+        // naming a game this server does not know is skipped rather than
+        // filed as League's.
+        var existing = await db.Seasons
+            .Select(s => new { s.Game, s.StartsAt })
+            .ToListAsync(cancellationToken);
+        var known = existing.Select(s => (s.Game, s.StartsAt)).ToHashSet();
 
         var accepted = 0;
 
         foreach (var incoming in request.Seasons)
         {
-            if (!known.Add(incoming.StartsAt)) continue;
+            if (!GameParam.IsValid(incoming.Game)) continue;
+            var game = GameParam.Parse(incoming.Game);
+            if (!known.Add((game, incoming.StartsAt))) continue;
 
             db.Seasons.Add(new RankedSeason
             {
                 Label = incoming.Label,
                 StartsAt = incoming.StartsAt,
                 IsPreseason = incoming.IsPreseason,
-                ResetsRank = incoming.ResetsRank
+                ResetsRank = incoming.ResetsRank,
+                Game = game
             });
 
             accepted++;

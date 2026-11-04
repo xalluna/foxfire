@@ -128,6 +128,8 @@ function droppedReason(reason: string | null): string {
       return 'Not emailed — the link expired while it waited'
     case 'revoked':
       return 'Not emailed — withdrawn'
+    case 'member':
+      return 'Not emailed — that address joined another way'
     case 'suppressed':
     case 'provider_suppressed':
       return 'Not emailed — mail to that address bounced before'

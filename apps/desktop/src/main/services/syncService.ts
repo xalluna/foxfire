@@ -22,7 +22,9 @@ import { ATTRIBUTION_REPLAY_WINDOW_MS, replayAttribution } from './rankAttributi
 import { resolveReplayOwners } from './replayService'
 import { bindPendingRecordings } from './recordingService'
 import { afterIdentityRepair, selectNewMatchIds } from './syncPlanning'
+import { emitTftSyncError, runTftSync } from './tftSync'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
+import type { GameId } from '@foxfire/core'
 import type { SyncProgressEvent, SyncState, SyncTrigger } from '@shared/types'
 
 const log = createLogger('sync')
@@ -36,8 +38,13 @@ const log = createLogger('sync')
  * got no progress events and no completion, so the renderer never invalidated
  * and the Sync now button read as dead. It also gives the post-game retry loop
  * an honest answer when it races the user pressing the button.
+ *
+ * Per account and per game: League's backfill and TFT's are separate runs, and
+ * one in progress says nothing about whether the other is.
  */
-const inFlight = new Map<number, Promise<SyncResult>>()
+const inFlight = new Map<string, Promise<SyncResult>>()
+
+const runKey = (accountId: number, game: GameId): string => `${accountId}:${game}`
 
 export interface SyncResult {
   /** Matches newly written to SQLite by this run. */
@@ -127,8 +134,8 @@ function resolveFinishedReplays(): void {
   }
 }
 
-export function isSyncing(accountId: number): boolean {
-  return inFlight.has(accountId)
+export function isSyncing(accountId: number, game: GameId = 'lol'): boolean {
+  return inFlight.has(runKey(accountId, game))
 }
 
 /**
@@ -273,21 +280,36 @@ async function runGuarded(accountId: number, trigger: SyncTrigger): Promise<Sync
   }
 }
 
-export function syncAccount(accountId: number, trigger: SyncTrigger = 'manual'): Promise<SyncResult> {
+/** TFT's run, with the error event League's gets from runGuarded. */
+async function runTftGuarded(accountId: number, trigger: SyncTrigger): Promise<SyncResult> {
+  try {
+    return await runTftSync(accountId, trigger)
+  } catch (err) {
+    emitTftSyncError(accountId, err, trigger)
+    throw err
+  }
+}
+
+export function syncAccount(
+  accountId: number,
+  trigger: SyncTrigger = 'manual',
+  game: GameId = 'lol'
+): Promise<SyncResult> {
   // Join a run already under way rather than dropping this call. The joiner
   // gets that run's result, which is the honest answer to "did anything land" —
   // the matches it stored are stored either way.
-  const running = inFlight.get(accountId)
+  const key = runKey(accountId, game)
+  const running = inFlight.get(key)
   if (running) return running
 
-  const run = runGuarded(accountId, trigger)
-  inFlight.set(accountId, run)
+  const run = game === 'tft' ? runTftGuarded(accountId, trigger) : runGuarded(accountId, trigger)
+  inFlight.set(key, run)
 
   // Registered after the set, so the entry can never be cleared before it was
   // added. The swallowed rejection is only to keep this bookkeeping chain from
   // surfacing as an unhandled rejection — `run` itself still rejects for the
   // caller.
-  void run.catch(() => {}).then(() => inFlight.delete(accountId))
+  void run.catch(() => {}).then(() => inFlight.delete(key))
 
   return run
 }
@@ -365,12 +387,18 @@ async function runSync(accountId: number, trigger: SyncTrigger): Promise<SyncRes
 }
 
 /** Fire-and-forget entry point for IPC — the renderer tracks progress via events. */
-export function startSync(accountId: number, trigger: SyncTrigger = 'manual'): void {
-  void syncAccount(accountId, trigger).catch((err) => {
-    log.error('Sync failed', err, { accountId, trigger })
+export function startSync(accountId: number, trigger: SyncTrigger = 'manual', game: GameId = 'lol'): void {
+  void syncAccount(accountId, trigger, game).catch((err) => {
+    log.error('Sync failed', err, { accountId, trigger, game })
   })
 }
 
-export function readSyncState(accountId: number): SyncState | null {
-  return getSyncState(getDb(), accountId)
+/** Both games' syncs, for an account just added or found at launch. */
+export function startAllSyncs(accountId: number, trigger: SyncTrigger = 'manual'): void {
+  startSync(accountId, trigger, 'lol')
+  startSync(accountId, trigger, 'tft')
+}
+
+export function readSyncState(accountId: number, game: GameId = 'lol'): SyncState | null {
+  return getSyncState(getDb(), accountId, game)
 }

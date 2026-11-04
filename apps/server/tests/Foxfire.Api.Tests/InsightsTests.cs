@@ -137,7 +137,10 @@ public sealed class InsightsTests(FoxfireServerFixture server)
         Assert.DoesNotContain(requests.Routes, r => r.Route.Contains("hub", StringComparison.Ordinal));
         Assert.DoesNotContain(requests.Routes, r => r.Route.Contains("insights", StringComparison.Ordinal));
         Assert.True(requests.Total >= 3);
-        Assert.Contains(requests.ByStatus, s => s.Key == "2xx" && s.Values[^1] >= 3);
+        // Summed over the window rather than read off its last ten seconds: the
+        // three requests can land either side of a bucket's edge, and a new one
+        // can open before the read, which left the last bucket short of three.
+        Assert.Contains(requests.ByStatus, s => s.Key == "2xx" && s.Values.Sum(v => v ?? 0) >= 3);
     }
 
     [Fact]
@@ -196,6 +199,52 @@ public sealed class InsightsTests(FoxfireServerFixture server)
         Assert.Contains(calls.Endpoints, e => e.Endpoint == "/lol/match/v5/matches/{matchId}");
         Assert.Contains(calls.Priorities, p => p.Priority == "backfill" && p.Requests >= 1);
         Assert.Equal(3, calls.Now.Depths.Count);
+    }
+
+    /// <summary>
+    /// What the timed sweep costs is the first thing a host turning it on will
+    /// want to see, so its runs are counted as its own rather than folded into
+    /// the automatic ones — though the clients are told they are automatic.
+    /// </summary>
+    [Fact]
+    public async Task A_background_sync_is_counted_as_its_own()
+    {
+        var puuid = $"puuid-{Guid.NewGuid():N}";
+        var riot = new FakeRiot().WithMatchIds(puuid);
+
+        await using var host = riot.Host(server.Factory);
+
+        Guid accountId;
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            var account = new RiotAccount
+            {
+                Id = Guid.CreateVersion7(now),
+                Puuid = puuid,
+                GameName = $"Insight{Guid.NewGuid().ToString("N")[..8]}",
+                TagLine = "NA1",
+                Platform = "na1",
+                RegionalRoute = "americas",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            db.RiotAccounts.Add(account);
+            await db.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        await host.Services.GetRequiredService<SyncService>().SyncAsync(accountId, SyncTrigger.Background);
+
+        using var admin = await AdminOnAsync(host);
+
+        var sync = (await admin.GetFromJsonAsync<InsightsSyncResponse>(Route("/api/admin/insights/sync?window=15m")))!;
+
+        var run = Assert.Single(sync.Recent, r => r.AccountId == accountId);
+        Assert.Equal("background", run.Trigger);
+        Assert.True(sync.Totals.Background >= 1);
     }
 
     [Fact]

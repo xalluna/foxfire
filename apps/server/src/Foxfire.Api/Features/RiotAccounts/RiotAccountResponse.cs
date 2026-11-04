@@ -50,10 +50,19 @@ public sealed record RiotAccountResponse(
     /// Shared with the dashboard rather than described twice: both answer the
     /// same question about the same row, and two copies would eventually
     /// disagree about what IsMine means.
+    ///
+    /// Nobody asking means an outsider — a visitor to an open server, or a share
+    /// link's holder — and an outsider is shown the Riot account but not which
+    /// member claimed it, or when: who is on this server is the members' to know.
     /// </summary>
     public static RiotAccountResponse Describe(RiotAccount account, Guid? me)
     {
         ArgumentNullException.ThrowIfNull(account);
+
+        if (me is null)
+        {
+            return Describe(account, Guid.Empty) with { OwnerId = null, OwnerUsername = null, LinkedAt = null };
+        }
 
         return new RiotAccountResponse(
             account.Id,
