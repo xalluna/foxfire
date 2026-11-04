@@ -68,7 +68,9 @@ export function TftMatchListRow({
         <LpChip rank={match.rank} unit={rated ? 'rating' : 'LP'} />
       </div>
 
-      <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
+      {/* Positioned, so the units it cuts off take their screen-reader names
+          with them rather than widening the page. */}
+      <div className="relative min-w-0 flex-1 space-y-1.5 overflow-hidden">
         <TraitStrip traits={match.traits} limit={7} />
         <div className="max-sm:hidden">
           <UnitStrip units={match.units} />

@@ -77,8 +77,9 @@ export function MatchPage({
           <section className="overflow-hidden rounded-lg border border-hairline bg-surface/40">
             {/* The scoreboard keeps its columns on a phone and scrolls sideways
                 on its own, rather than squeezing ten lines of numbers into a
-                width they cannot be read at. */}
-            <div className="max-md:overflow-x-auto">
+                width they cannot be read at. Positioned, so its screen-reader
+                text scrolls with it rather than widening the page. */}
+            <div className="relative max-md:overflow-x-auto">
               <div className="max-md:min-w-[720px]">
                 <MatchDetailTable detail={detail} loading={detailLoading} trackedPuuid={trackedPuuid} />
               </div>
