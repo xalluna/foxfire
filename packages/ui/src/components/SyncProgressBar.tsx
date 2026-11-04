@@ -26,8 +26,6 @@ export function SyncProgressBar({
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
   const label = progress.phase === 'backfill' ? 'Backfilling history' : 'Syncing new matches'
-  // Riot's 100-req/2min ceiling works out to roughly 1.2s per match detail.
-  const minutesLeft = Math.max(1, Math.round(((progress.total - progress.current) * 1.2) / 60))
 
   return (
     <div className="mt-3 rounded-md border border-hairline bg-canvas px-2.5 py-2">
@@ -38,12 +36,6 @@ export function SyncProgressBar({
         </span>
       </div>
       <Bar fraction={pct / 100} tone="accent-solid" className="mt-1.5" />
-      {progress.phase === 'backfill' && progress.total > 25 && (
-        <p className="mt-1.5 text-xs leading-snug text-text-mute">
-          About {minutesLeft} min left at the personal-key rate limit. You can keep using the app
-          while it runs.
-        </p>
-      )}
     </div>
   )
 }

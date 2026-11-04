@@ -114,6 +114,9 @@ record your games by itself, with no OBS to install.
 - **The Champions page drops its subtitle.** The line under the heading that counted your synced
   games and noted that remakes are left out is gone; the season and queue pickers beside it already
   say what the table covers.
+- **The backfill bar drops its footnote.** The line under "Backfilling history" that guessed the
+  minutes left "at the personal-key rate limit" is gone. That limit is the server's to know about,
+  and the bar's count already says how far it has got.
 - **Easier to read.** Secondary text — captions, timestamps, column headers, the description under
   every setting — is a lighter grey that holds up against every panel, where before it was barely
   there, and every colour text is written in now meets the WCAG AA contrast guideline. Text is a

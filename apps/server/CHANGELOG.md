@@ -87,6 +87,10 @@ version 3 still, and a desktop from before TFT is served as it always was.
   the heading that counted your synced games and noted that remakes are left
   out is gone; the season and queue pickers beside it already say what the
   table covers.
+- **The backfill bar drops its footnote** in the web client. The line under
+  "Backfilling history" that guessed the minutes left "at the personal-key
+  rate limit" is gone: that limit is the server's to know about, and the bar's
+  count already says how far it has got.
 - **Easier to read** in the web client. Secondary text — captions,
   timestamps, column headers, form hints — is a lighter grey that holds up
   against every panel, and every colour text is written in now meets the WCAG
