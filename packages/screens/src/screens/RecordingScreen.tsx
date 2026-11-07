@@ -13,6 +13,7 @@ import {
   recordingActionClass
 } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useOffersGame } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
 import { headerFactsFor, isTftRow, tftHeaderFactsFor } from '../match/recordingFacts'
 import { queryKeys } from '../queries/keys'
@@ -75,14 +76,21 @@ export function RecordingScreen({
           enabled: enabled && readLeague !== undefined
         }
 
-  const named = useQuery(rowQuery(game, true))
-  const other = useQuery(rowQuery(game === 'tft' ? 'lol' : 'tft', named.data === null))
+  // TFT's history only where TFT is on offer: a server whose host has not
+  // turned it on has no TFT rows, and League's is then the only one to ask.
+  const tftOffered = useOffersGame('tft')
+  const offered = (which: GameId): boolean => which === 'lol' || tftOffered === true
+  const asked: GameId = tftOffered === false ? 'lol' : game
+  const otherGame: GameId = asked === 'tft' ? 'lol' : 'tft'
+
+  const named = useQuery(rowQuery(asked, offered(asked)))
+  const other = useQuery(rowQuery(otherGame, offered(otherGame) && named.data === null))
   const row = named.data ?? other.data ?? null
 
   const durationSeconds = recording.data?.durationSeconds ?? null
   const facts =
     row && isTftRow(row) ? tftHeaderFactsFor(row, durationSeconds) : headerFactsFor(row, durationSeconds)
-  const rowGame: GameId = row && isTftRow(row) ? 'tft' : game
+  const rowGame: GameId = row && isTftRow(row) ? 'tft' : asked
 
   const body = ((): JSX.Element => {
     if (!readRecording) {

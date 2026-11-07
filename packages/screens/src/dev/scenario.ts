@@ -77,6 +77,9 @@ export type Scenario =
   // A server whose Riot key cannot reach TFT: every TFT page says so, and its
   // history is whatever was stored before.
   | 'tft-no-access'
+  // A server whose host has not turned TFT on: no League | TFT switch, no TFT
+  // pages, League's seasons alone, and no TFT backfill target.
+  | 'tft-off'
   // Nobody signed in. An open server, read by anybody with no sync, no LP and
   // no downloads; a share link, which opens one profile and refuses the rest;
   // and that link once it has run out. The web harness's alone — the desktop

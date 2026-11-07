@@ -11,8 +11,8 @@ changes you would never notice while using the app.
 
 Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
 and the LP each game moved, and recordings of it — tracked the way League always has been, on a
-server or on its own. Every new recording is filed by player, game and mode — and Foxfire can now
-record your games by itself, with no OBS to install.
+server whose host has turned TFT on or on its own. Every new recording is filed by player, game and
+mode — and Foxfire can now record your games by itself, with no OBS to install.
 
 ### Added
 
@@ -34,6 +34,11 @@ record your games by itself, with no OBS to install.
   half, laid out as a bar for each place you finished. Double Up counts your team's place, #1 to #4,
   because that is what moved your LP. Ranked has a 30-day graph. Above the history, your last 20
   games: top-4 rate, firsts, average place, the run of finishes and the traits you played most.
+- **TFT where your server offers it.** On a server, TFT is there only when its host has turned it
+  on — it needs a Riot key registered for TFT, which a personal key usually is not. On a server
+  without it, Foxfire is the League app it was: no League | TFT switch, no TFT pages or seasons,
+  and nothing about your TFT games is sent to it. Local-only, TFT is offered as before, and your
+  own key decides whether it can be synced.
 - **TFT match history.** Each game shows your place, its queue, the stage you reached, your traits
   and your board — every unit with its stars and items — and the LP it moved. Open one to see all
   eight boards in that lobby, with anybody Foxfire tracks a link to their own TFT profile. The
@@ -215,6 +220,11 @@ record your games by itself, with no OBS to install.
   of queues League used to keep for itself is now read from it, with League's answers pinned by a
   test so the move changed nothing. The server keeps its own copy, and `fixtures/game-registry.json`
   holds the two together.
+- Which games a server offers comes from its `/version` (`games`), kept with the server this desktop
+  remembers and refreshed whenever the push channel connects, so a host turning TFT on or off is
+  heard after their restart. A screen reads it as the connection's `games`; in server mode the main
+  process asks a server for no TFT sync, game end, rank reading or binding candidates it does not
+  offer.
 - A ladder that is not Solo/Duo no longer reads as Flex wherever it becomes a queue id or a label,
   which every ladder did while League's two were the only ones.
 - The client contract every screen reads through has a `tft` namespace — the TFT profile, a paged

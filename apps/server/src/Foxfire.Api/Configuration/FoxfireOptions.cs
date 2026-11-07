@@ -363,6 +363,24 @@ public sealed class SyncOptions
 }
 
 /// <summary>
+/// Whether this server offers TFT, read from <c>Tft__Enabled</c> when it starts.
+/// See <see cref="Common.ServerGames"/> for what it switches.
+/// </summary>
+public sealed class TftOptions
+{
+    public const string Section = "Tft";
+
+    /// <summary>
+    /// Off unless the host turns it on. TFT needs a Riot key registered for it,
+    /// and a personal key is registered for one product, so a server that has
+    /// only League's has no TFT to offer. Off, the server asks Riot nothing
+    /// about TFT, and no client connected to it offers TFT. Turning it on
+    /// needs no migration: the tables are there either way.
+    /// </summary>
+    public bool Enabled { get; set; }
+}
+
+/// <summary>
 /// Checks the whole configuration at once, before anything starts.
 ///
 /// All of it, in one message, rather than failing on the first missing value and

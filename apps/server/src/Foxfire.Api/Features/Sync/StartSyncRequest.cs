@@ -24,14 +24,14 @@ namespace Foxfire.Api.Features.Sync;
 /// </summary>
 public sealed record StartSyncRequest(Guid RiotAccountId, string? Game = null) : IEmptyDomainRequest;
 
-internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService sync, TimeProvider time)
+internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService sync, ServerGames games, TimeProvider time)
     : IDomainRequestHandler<StartSyncRequest>
 {
     public async Task<Response> Handle(StartSyncRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!GameParam.IsValid(request.Game))
+        if (!games.Offers(request.Game))
         {
             return Response.Failure(
                 new Error("unknown_game", "That is not a game this server tracks."), HttpStatusCode.BadRequest);
@@ -101,7 +101,10 @@ internal sealed class StartSyncRequestHandler(FoxfireDbContext db, SyncService s
 /// </param>
 public sealed record GameEndedRequest(Guid RiotAccountId, string? Game = null) : IEmptyDomainRequest;
 
-internal sealed class GameEndedRequestHandler(AccountOwnership ownership, PostGameSyncScheduler scheduler)
+internal sealed class GameEndedRequestHandler(
+    AccountOwnership ownership,
+    PostGameSyncScheduler scheduler,
+    ServerGames games)
     : IDomainRequestHandler<GameEndedRequest>
 {
     public async Task<Response> Handle(GameEndedRequest request, CancellationToken cancellationToken)
@@ -111,7 +114,7 @@ internal sealed class GameEndedRequestHandler(AccountOwnership ownership, PostGa
         var account = await ownership.MineAsync(request.RiotAccountId, cancellationToken);
         if (account is null) return Response.Failure(AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
 
-        if (!GameParam.IsValid(request.Game))
+        if (!games.Offers(request.Game))
         {
             return Response.Failure(
                 new Error("unknown_game", "That is not a game this server tracks."), HttpStatusCode.BadRequest);

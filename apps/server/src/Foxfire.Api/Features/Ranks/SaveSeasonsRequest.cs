@@ -32,11 +32,11 @@ public sealed record SaveSeasonsRequest(IReadOnlyList<SeasonRequest> Seasons, st
 
 internal sealed class SaveSeasonsRequestValidator : AbstractValidator<SaveSeasonsRequest>
 {
-    public SaveSeasonsRequestValidator()
+    public SaveSeasonsRequestValidator(ServerGames games)
     {
         ClassLevelCascadeMode = CascadeMode.Stop;
 
-        RuleFor(x => x.Game).MustNameAGame();
+        RuleFor(x => x.Game).MustNameAGame(games);
 
         RuleFor(x => x.Seasons)
             .Must(seasons => seasons is { Count: > 0 })

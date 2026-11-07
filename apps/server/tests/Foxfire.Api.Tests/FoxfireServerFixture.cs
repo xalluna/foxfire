@@ -109,6 +109,10 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         // with no real key. BackgroundSyncTests drive the sweep themselves.
         Environment.SetEnvironmentVariable("Sync__Background", "false");
 
+        // TFT is off unless a host turns it on, and most of the suite is about
+        // what it does when on. TftOffTests runs a host with it off.
+        Environment.SetEnvironmentVariable("Tft__Enabled", "true");
+
         _factory = new WebApplicationFactory<Program>();
 
         // Force the host to build now rather than on first request, so a

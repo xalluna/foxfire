@@ -4,7 +4,7 @@ import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
-import { authedRequest, getServerState, isServerMode } from './serverService'
+import { authedRequest, getServerState, isServerMode, offersGame } from './serverService'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import {
   bindRecording,
@@ -266,6 +266,10 @@ async function serverTftCandidates(
   since: number,
   until: number
 ): Promise<Omit<TftMatchCandidate, 'taken'>[]> {
+  // A server whose host has not turned TFT on has no TFT games to bind to, so
+  // the recording stays this PC's own.
+  if (!offersGame('tft')) return []
+
   try {
     const rows = await authedRequest<
       Array<{ matchId: string; gameCreation: number; gameDuration: number; timeEliminated: number | null }>

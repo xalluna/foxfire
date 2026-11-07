@@ -1,5 +1,5 @@
 import { createServerData, type ServerMatchSummary } from '@foxfire/core/server'
-import { getServerState, serverApi } from '../services/serverService'
+import { getServerState, offersGame, serverApi } from '../services/serverService'
 import { getDb } from '../db'
 import { getSetting, setSetting } from '../db/repositories/appSettings.repo'
 import { getRecordingArtefactsForMatches } from '../db/repositories/recordings.repo'
@@ -76,9 +76,10 @@ export const httpApi: ServerBackedApi = {
       // picks it up.
       void serverApi().sync.start(account.id)
 
-      // And TFT's: the same Riot ID has a second history there, and a
-      // League-only player's costs the server one empty id list.
-      void serverApi().sync.start(account.id, 'tft')
+      // And TFT's, where the server offers it: the same Riot ID has a second
+      // history there, and a League-only player's costs the server one empty
+      // id list.
+      if (offersGame('tft')) void serverApi().sync.start(account.id, 'tft')
 
       return account
     }

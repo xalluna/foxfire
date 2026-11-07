@@ -23,6 +23,18 @@ export type GameId = 'lol' | 'tft'
 export const GAME_IDS: readonly GameId[] = ['lol', 'tft']
 
 /**
+ * The games a server offers, from the slugs its handshake lists.
+ *
+ * League always and first, then the others in the registry's order, and only
+ * ones this build knows. A server with TFT off lists League alone — TFT is a
+ * host's switch (`Tft__Enabled`), off until they turn it on — and one from
+ * before TFT lists nothing, which means League alone too.
+ */
+export function offeredGames(slugs: readonly string[] | null | undefined): GameId[] {
+  return GAME_IDS.filter((id) => id === 'lol' || (slugs ?? []).includes(id))
+}
+
+/**
  * Which Riot key a game's API is called with.
  *
  * Riot ties a registered key to a product, and encrypts a PUUID per key. League

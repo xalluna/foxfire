@@ -70,11 +70,17 @@ public static class ImportEndpoints
                 CancellationToken cancellationToken) =>
             sender.SendAsync(new ImportMatchesRequest(matches), cancellationToken));
 
-        group.MapPost("/tft-matches", (
-                [FromBody] IReadOnlyList<ImportMatch> matches,
-                ISender sender,
-                CancellationToken cancellationToken) =>
-            sender.SendAsync(new ImportTftMatchesRequest(matches), cancellationToken));
+        // Only on a server that offers TFT, like every route that is only
+        // TFT's. Without it the importer leaves a file's TFT games behind, and
+        // importing the same file again once TFT is on brings them across.
+        if (app.ServiceProvider.GetRequiredService<ServerGames>().Tft)
+        {
+            group.MapPost("/tft-matches", (
+                    [FromBody] IReadOnlyList<ImportMatch> matches,
+                    ISender sender,
+                    CancellationToken cancellationToken) =>
+                sender.SendAsync(new ImportTftMatchesRequest(matches), cancellationToken));
+        }
 
         group.MapPost("/rank-readings", (
                 [FromBody] IReadOnlyList<ImportRankReading> readings,

@@ -12,6 +12,7 @@ import type { Account, RiotIdInput } from '@foxfire/core'
 import { isPlayer, parsePlayerSlug, playerSlug } from '@foxfire/core/routes'
 import { EmptyState, Icon, type MatchFocus } from '@foxfire/ui'
 import { PlayerBackLink } from './PlayerBackLink'
+import { useOffersGame } from '../client/useConnection'
 import { useAccount, useAccountByRiotId } from '../queries/accounts'
 import { isRefused } from '../queries/queryClient'
 import { ChampionsScreen } from '../screens/ChampionsScreen'
@@ -165,7 +166,7 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   const tft = createRoute({
     getParentRoute: () => player,
     path: 'tft',
-    component: Outlet
+    component: TftBoundary
   })
 
   const tftProfile = createRoute({
@@ -317,6 +318,24 @@ function DashboardRoute(): JSX.Element {
       focus={focus}
     />
   )
+}
+
+/**
+ * TFT's pages, where TFT is on offer.
+ *
+ * A server whose host has not turned TFT on has none to show, so a link to a
+ * player's TFT — one shared from a server that had it, or kept from before it
+ * was turned off — opens the same player's League profile instead of pages
+ * that cannot load. Nothing is drawn until the connection says which.
+ */
+function TftBoundary(): JSX.Element | null {
+  const account = usePlayer()
+  const tft = useOffersGame('tft')
+
+  if (tft === undefined) return null
+  if (!tft) return <Navigate to={'/players/$slug' as never} params={{ slug: playerSlug(account) } as never} replace />
+
+  return <Outlet />
 }
 
 function TftProfileRoute(): JSX.Element {
