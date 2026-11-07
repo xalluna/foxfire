@@ -51,7 +51,7 @@ public sealed record SyncStateResponse(
 /// </summary>
 public sealed record GetSyncStateRequest(Guid RiotAccountId, string? Game = null) : IDomainRequest<SyncStateResponse>;
 
-internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncService sync)
+internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncService sync, ServerGames games)
     : IDomainRequestHandler<GetSyncStateRequest, SyncStateResponse>
 {
     public async Task<Response<SyncStateResponse>> Handle(
@@ -61,7 +61,7 @@ internal sealed class GetSyncStateRequestHandler(FoxfireDbContext db, SyncServic
         ArgumentNullException.ThrowIfNull(request);
 
         var id = request.RiotAccountId;
-        if (!GameParam.IsValid(request.Game)) return Response<SyncStateResponse>.NotFound();
+        if (!games.Offers(request.Game)) return Response<SyncStateResponse>.NotFound();
         var game = GameParam.Parse(request.Game);
 
         var state = await db.SyncStates

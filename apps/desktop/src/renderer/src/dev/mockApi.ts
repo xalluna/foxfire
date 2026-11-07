@@ -202,6 +202,9 @@ const SIGNED_IN_AS =
       ? { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false }
       : { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
 
+/** What the mock server offers: League alone under ?scenario=tft-off, whose host has not turned TFT on. */
+const MOCK_GAMES: GameId[] = scenario === 'tft-off' ? ['lol'] : ['lol', 'tft']
+
 let serverState: ServerState =
   scenario === 'server-connected' ||
   scenario === 'server-fresh' ||
@@ -214,7 +217,8 @@ let serverState: ServerState =
   scenario === 'unverified' ||
   scenario === 'email-change-pending' ||
   scenario === 'admin-email-pinned' ||
-  scenario === 'signup-unchosen'
+  scenario === 'signup-unchosen' ||
+  scenario === 'tft-off'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
@@ -230,6 +234,7 @@ let serverState: ServerState =
         upgradeRequired: null,
         serverOutdated: false,
         publicAccess: false,
+        games: MOCK_GAMES,
         riotKeyRejected: scenario === 'server-degraded'
       }
     : scenario === 'server-outdated' || scenario === 'server-behind'
@@ -253,10 +258,11 @@ let serverState: ServerState =
           upgradeRequired: scenario === 'server-outdated' ? '0.14.0' : null,
           serverOutdated: scenario === 'server-behind',
           publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }
       : { activeUrl: null, servers: [], session: null, publicUrl: null, upgradeRequired: null,
-        serverOutdated: false, publicAccess: false, riotKeyRejected: false }
+        serverOutdated: false, publicAccess: false, games: MOCK_GAMES, riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
@@ -404,6 +410,7 @@ export const mockApi: Api = {
               publicUrl: null,
               email: null,
               publicAccess: null,
+              games: null,
               compatibility: 'unknown'
             }
           : {
@@ -421,6 +428,7 @@ export const mockApi: Api = {
               email: !url.includes('no-mail'),
               // "open" is a server anybody can read without signing in.
               publicAccess: url.includes('open'),
+              games: MOCK_GAMES,
               // "too-old" is this build behind the server; "old-server" is the
               // server behind this build.
               compatibility: url.includes('too-old')
@@ -473,6 +481,7 @@ export const mockApi: Api = {
             upgradeRequired: null,
             serverOutdated: false,
             publicAccess: false,
+            games: MOCK_GAMES,
             riotKeyRejected: false
           })
         },
@@ -505,6 +514,7 @@ export const mockApi: Api = {
                 upgradeRequired: null,
                 serverOutdated: false,
                 publicAccess: false,
+                games: MOCK_GAMES,
                 riotKeyRejected: false
               })
             },
@@ -522,6 +532,7 @@ export const mockApi: Api = {
           upgradeRequired: null,
           serverOutdated: false,
           publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }),
         300,
@@ -586,6 +597,7 @@ export const mockApi: Api = {
           upgradeRequired: null,
           serverOutdated: false,
           publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }),
         200,
@@ -602,6 +614,7 @@ export const mockApi: Api = {
           upgradeRequired: null,
           serverOutdated: false,
           publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }),
         200,

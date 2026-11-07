@@ -679,8 +679,18 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
 
       matches: (rows: ImportMatchRow[]) => importBatch('/admin/import/matches', rows),
 
-      /** TFT's payloads, on a server from 0.6. */
-      tftMatches: (rows: ImportMatchRow[]) => importBatch('/admin/import/tft-matches', rows),
+      /**
+       * TFT's payloads, on a server from 0.6. Null from one with TFT off, whose
+       * route is not there — an answer, as for `unstoredMatches`, not a failure.
+       */
+      tftMatches: async (rows: ImportMatchRow[]): Promise<ImportBatchOutcome | null> => {
+        try {
+          return await importBatch('/admin/import/tft-matches', rows)
+        } catch (err) {
+          if (err instanceof ServerError && err.status === 404) return null
+          throw err
+        }
+      },
 
       rankReadings: (rows: ImportReadingRow[]) => importBatch('/admin/import/rank-readings', rows),
 

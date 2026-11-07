@@ -49,6 +49,7 @@ services:
       RateLimit__ReaderPerMinute: "${RATE_LIMIT_READER_PER_MINUTE:-120}"
       Riot__ApiKey: "${RIOT_API_KEY}"
       Riot__KeyType: "${RIOT_KEY_TYPE:-personal}"
+      Tft__Enabled: "${TFT_ENABLED:-false}"
       Riot__Tft__ApiKey: "${RIOT_TFT_API_KEY:-}"
       Riot__Tft__KeyType: "${RIOT_TFT_KEY_TYPE:-personal}"
       Auth__JwtSigningKey: "${JWT_SIGNING_KEY}"

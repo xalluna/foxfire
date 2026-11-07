@@ -88,8 +88,10 @@ describe('createServerClient', () => {
       publicUrl: 'https://fox.example',
       serverName: 'The Fox Den',
       session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
-      // A server too old to say whether it is open is not.
+      // A server too old to say whether it is open is not, and one too old to
+      // list its games offers League alone.
       publicAccess: false,
+      games: ['lol'],
       riotKeyRejected: false,
       upgradeRequired: null
     })

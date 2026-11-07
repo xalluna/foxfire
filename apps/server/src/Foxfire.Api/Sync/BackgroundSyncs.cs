@@ -56,6 +56,7 @@ public sealed class BackgroundSyncs(
     IServiceScopeFactory scopes,
     SyncService sync,
     PostGameSyncScheduler ladders,
+    ServerGames games,
     TftAccess tftAccess,
     RiotRateLimiter limiter,
     TimeProvider time,
@@ -239,8 +240,8 @@ public sealed class BackgroundSyncs(
     }
 
     /// <summary>
-    /// Every account's history of every game that has not been synced inside
-    /// the skip window, in the order a sweep works through them — see
+    /// Every account's history of every game this server offers that has not
+    /// been synced inside the skip window, in the order a sweep works through them — see
     /// <see cref="BackgroundSyncRules.Order"/>. One that has never been synced
     /// at all is here too, last.
     /// </summary>
@@ -269,7 +270,7 @@ public sealed class BackgroundSyncs(
 
         return BackgroundSyncRules.Order(
             from id in accounts
-            from game in Games.All
+            from game in games.All
             let last = lastSynced.GetValueOrDefault((id, game))
             where !BackgroundSyncRules.IsFresh(last, now, skip)
             select new BackgroundSyncCandidate(id, game, last));

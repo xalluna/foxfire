@@ -40,6 +40,7 @@ import type {
   TftLadder
 } from '@foxfire/core'
 import {
+  GAME_IDS,
   compareSearchResults,
   ladderMovementFor,
   lastResetAt,
@@ -278,6 +279,8 @@ function runFakeSync(accountId: string, game: GameId = 'lol'): void {
  * server whose own Riot key has expired; and a server that has been upgraded
  * past this client.
  */
+const games: GameId[] = scenario === 'tft-off' ? ['lol'] : [...GAME_IDS]
+
 const connection: ConnectionState =
   scenario === 'server-connected' ||
   scenario === 'server-fresh' ||
@@ -288,13 +291,15 @@ const connection: ConnectionState =
   scenario === 'unverified' ||
   scenario === 'email-change-pending' ||
   scenario === 'admin-email-pinned' ||
-  scenario === 'signup-unchosen'
+  scenario === 'signup-unchosen' ||
+  scenario === 'tft-off'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
         serverName: 'The Fox Den',
         session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
         publicAccess: false,
+        games,
         riotKeyRejected: scenario === 'server-degraded',
         upgradeRequired: null
       }
@@ -308,6 +313,7 @@ const connection: ConnectionState =
               ? { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
               : { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false },
           publicAccess: false,
+          games,
           riotKeyRejected: false,
           upgradeRequired: null
         }
@@ -318,6 +324,7 @@ const connection: ConnectionState =
             serverName: 'The Fox Den',
             session: { username: 'Faker', email: 'faker@example.com', isAdmin: false, isHeadAdmin: false },
             publicAccess: false,
+            games,
             riotKeyRejected: false,
             upgradeRequired: '0.14.0'
           }
@@ -329,6 +336,7 @@ const connection: ConnectionState =
               serverName: 'The Fox Den',
               session: null,
               publicAccess: scenario === 'public-signed-out',
+              games,
               riotKeyRejected: false,
               upgradeRequired: null
             }
@@ -338,6 +346,7 @@ const connection: ConnectionState =
               serverName: null,
               session: null,
               publicAccess: false,
+              games,
               riotKeyRejected: false,
               upgradeRequired: null
             }

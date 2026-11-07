@@ -730,6 +730,16 @@ function ResultRows({ result }: { result: ImportResult }): JSX.Element {
         </StatusRow>
       )}
 
+      {(result.tftLeftBehind ?? 0) > 0 && (
+        // Not a failure: the host chose a server without TFT. Importing the
+        // same file again once it is on sends these and nothing else.
+        <StatusRow tone="mute">
+          {count(result.tftLeftBehind ?? 0, 'TFT game', 'TFT games')} stayed in the file, because TFT is off on
+          this server. Import the file again once it is on to bring {result.tftLeftBehind === 1 ? 'it' : 'them'}{' '}
+          across.
+        </StatusRow>
+      )}
+
       {result.readingsUnplaced > 0 && (
         <StatusRow tone="warn">
           {count(result.readingsUnplaced, 'rank reading', 'rank readings')} left out: the account{' '}

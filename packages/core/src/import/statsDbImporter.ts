@@ -73,8 +73,12 @@ export interface ImportTarget {
    */
   unstoredMatches(matchIds: string[]): Promise<string[] | null>
   matches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome>
-  /** TFT's payloads, which the server files apart from League's. */
-  tftMatches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome>
+  /**
+   * TFT's payloads, which the server files apart from League's. Null from a
+   * server with TFT off, which takes none: the rest of the file's TFT games
+   * are left behind rather than sent to be refused.
+   */
+  tftMatches(rows: ImportMatchRow[]): Promise<ImportBatchOutcome | null>
   rankReadings(rows: ImportReadingRow[]): Promise<ImportBatchOutcome>
   /**
    * Works the LP out, a page of accounts at a time. A server older than the
@@ -270,13 +274,20 @@ async function run(
   const unstored = new Set(await unstoredIds([...leagueIds, ...tftIds], target, report))
   result.alreadyThere.matches = leagueIds.length + tftIds.length - unstored.size
 
-  const total = unstored.size
+  // A server with TFT off takes none of TFT's games, and an empty batch asks
+  // it so before any payload goes up. They stay in the file, counted, and an
+  // import of the same file once TFT is on sends them and nothing else.
+  const tftUnstored = tftIds.filter((id) => unstored.has(id))
+  const tftTaken = tftUnstored.length === 0 || (await target.tftMatches([])) !== null
+  let tftLeftBehind = tftTaken ? 0 : tftUnstored.length
+
+  const total = unstored.size - tftLeftBehind
   report({ phase: 'matches', current: 0, total })
 
   let sent = 0
   for (const [ids, send] of [
     [leagueIds, (rows: ImportMatchRow[]) => target.matches(rows)],
-    [tftIds, (rows: ImportMatchRow[]) => target.tftMatches(rows)]
+    [tftTaken ? tftIds : [], (rows: ImportMatchRow[]) => target.tftMatches(rows)]
   ] as const) {
     for (const page of pages(ids.filter((id) => unstored.has(id)))) {
       const rows = await db.all<{ match_id: string; raw_json: string }>(
@@ -287,11 +298,18 @@ async function run(
       )
 
       const batch = await send(rows.map((row) => ({ matchId: row.match_id, rawJson: row.raw_json })))
+      sent += page.length
+
+      // TFT turned off while this ran.
+      if (batch === null) {
+        tftLeftBehind += page.length
+        report({ phase: 'matches', current: sent, total })
+        continue
+      }
 
       result.matches += batch.accepted
       result.alreadyThere.matches += batch.skipped
       result.matchesFailed += batch.failed
-      sent += page.length
 
       report({ phase: 'matches', current: sent, total })
     }
@@ -391,6 +409,7 @@ async function run(
     readings: result.readings,
     alreadyThere: result.alreadyThere,
     matchesFailed: result.matchesFailed,
+    tftLeftBehind,
     readingsUnplaced: result.readingsUnplaced,
     healed: result.healed,
     attributed,
@@ -402,7 +421,8 @@ async function run(
     ok: true,
     message: null,
     attributed,
-    lpUnfinished
+    lpUnfinished,
+    tftLeftBehind
   }
 }
 

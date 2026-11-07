@@ -312,13 +312,23 @@ public sealed class FakeRiot
     /// A TFT key of its own, as <c>Riot__Tft__ApiKey</c> would give it. Without
     /// one, TFT is called with the main key, as on most servers.
     /// </param>
-    public WebApplicationFactory<Program> Host(WebApplicationFactory<Program> parent, string? tftKey = null) =>
+    /// <param name="tftEnabled">
+    /// Whether the server offers TFT, as <c>Tft__Enabled</c> says. On, as the
+    /// fixture turns it on for the whole suite; off is the default a host gets.
+    /// </param>
+    public WebApplicationFactory<Program> Host(
+        WebApplicationFactory<Program> parent,
+        string? tftKey = null,
+        bool tftEnabled = true) =>
         parent.WithWebHostBuilder(builder =>
         {
-            if (tftKey is not null)
+            var settings = new Dictionary<string, string?>();
+            if (tftKey is not null) settings["Riot:Tft:ApiKey"] = tftKey;
+            if (!tftEnabled) settings["Tft:Enabled"] = "false";
+
+            if (settings.Count > 0)
             {
-                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
-                    new Dictionary<string, string?> { ["Riot:Tft:ApiKey"] = tftKey }));
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(settings));
             }
 
             builder.ConfigureServices(services =>

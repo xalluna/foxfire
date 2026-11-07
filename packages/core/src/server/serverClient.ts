@@ -1,4 +1,5 @@
 import type { ConnectionState, FoxfireClient, Unsubscribe } from '../client'
+import { offeredGames } from '../games/registry'
 import type { AssetManifest, SyncProgressEvent, VersionInfo } from '../types'
 import { silentLogger, type Logger } from '../log'
 import { createServerApi, type ServerApi } from './api'
@@ -90,6 +91,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
           }
         : null,
       publicAccess: version?.publicAccess ?? false,
+      games: offeredGames(version?.games),
       riotKeyRejected,
       upgradeRequired: upgradeRequired ? 'reload' : null
     }

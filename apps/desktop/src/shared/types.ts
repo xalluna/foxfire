@@ -691,6 +691,11 @@ export interface ServerState {
    */
   publicAccess: boolean
   /**
+   * The games the active server offers, League first — League alone unless its
+   * host turned TFT on. Every game when no server is active.
+   */
+  games: GameId[]
+  /**
    * Set when the active server refused this build outright, and holds the
    * version to install. Everything server-backed is unavailable until then, so
    * this is the one thing the UI has to say.

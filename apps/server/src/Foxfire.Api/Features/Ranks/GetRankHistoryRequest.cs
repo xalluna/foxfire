@@ -104,9 +104,9 @@ public sealed record ListSeasonsRequest(string? Game = null) : IValidatedRequest
 
 internal sealed class ListSeasonsRequestValidator : AbstractValidator<ListSeasonsRequest>
 {
-    public ListSeasonsRequestValidator()
+    public ListSeasonsRequestValidator(ServerGames games)
     {
-        RuleFor(x => x.Game).MustNameAGame();
+        RuleFor(x => x.Game).MustNameAGame(games);
     }
 }
 

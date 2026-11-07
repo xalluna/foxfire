@@ -5,6 +5,7 @@
  * these: the desktop from its main process, the web client from the browser.
  */
 
+import type { GameId } from '../games/registry'
 import type { PageOptions } from './domain'
 
 /**
@@ -46,6 +47,12 @@ export interface ServerProbe {
    */
   publicAccess: boolean | null
   /**
+   * The games the server offers, League first — League alone from a server
+   * with TFT off and from one older than TFT. Null when it could not be
+   * reached.
+   */
+  games: GameId[] | null
+  /**
    * How this build stands against that server's stated range. Advisory only:
    * the server's allow list is a set rather than a range, so a version between
    * the minimum and the newest can still be absent from it. This decides what
@@ -83,6 +90,11 @@ export interface VersionInfo {
    * older than the switch, which means no.
    */
   publicAccess?: boolean
+  /**
+   * The games the server offers, by slug. Absent from a server older than
+   * TFT, which means League alone. Read it through `offeredGames`.
+   */
+  games?: string[]
 }
 
 /** Who you are on a server, as the server says it. */
@@ -197,6 +209,11 @@ export interface ImportResult {
   alreadyThere: { matches: number; readings: number; seasons: number }
   /** Games whose payload the server could not read. */
   matchesFailed: number
+  /**
+   * TFT games in the file that were not sent, because the server has TFT off.
+   * Importing the same file again once it is on sends them and nothing else.
+   */
+  tftLeftBehind?: number
   /** Readings for an account that never resolved, or a queue the server does not track. */
   readingsUnplaced: number
   /**

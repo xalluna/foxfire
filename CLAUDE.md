@@ -125,6 +125,18 @@ than a second app, because it is the same player: one account, one profile with 
 switch, `/players/{slug}` for League and `/players/{slug}/tft` (and `/tft/rank`) for TFT. Links
 land on League, as they always did.
 
+**TFT on a server is the host's to turn on, at startup.** `Tft__Enabled` (`TFT_ENABLED` in
+docker-compose) is off by default, because TFT needs a Riot key registered for it and a personal
+key is registered for one product. Unlike YouTube's switch it is runtime, not build-time: one image
+serves both. `ServerGames` (`Common/GameParam.cs`) is the server's answer — `/version` lists its
+`games`, the `/tft` routes and the TFT import are mapped only when it is on, `MustNameAGame(games)`
+and `games.Offers(...)` refuse a request naming TFT, and `SyncService.SyncAsync` asks Riot nothing
+for a game the server does not offer. Clients read the list through `offeredGames` into
+`ConnectionState.games`; a screen asks `useGames` / `useOffersGame`, and the desktop's main process
+asks `offersGame` before any TFT call to a server. Local-only offers every game. A new TFT route
+goes inside `MapTftEndpoints`, and a new `game` parameter goes through `MustNameAGame(games)`, or it
+answers on a server with TFT off.
+
 - **The registry** is `packages/core/src/games`: `GAMES` (each game's queues with their labels and
   recording folders, its default history filter, its key scope, its post-game retry ladder and how
   long a recording waits for its match) and `LADDERS` (each ranked ladder's game, queue, URL

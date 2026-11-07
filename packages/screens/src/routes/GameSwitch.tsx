@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import type { Account } from '@foxfire/core'
 import { GAMES } from '@foxfire/core'
 import { gameOfPlayerPath, playerSlug } from '@foxfire/core/routes'
+import { useOffersGame } from '../client/useConnection'
 
 /**
  * League | TFT, on a player's pages.
@@ -16,12 +17,18 @@ import { gameOfPlayerPath, playerSlug } from '@foxfire/core/routes'
  *
  * Links rather than buttons, so a middle-click opens the other game in a tab
  * in a browser, and the address is the whole of the state.
+ *
+ * Not drawn where there is nothing to switch to: on a server whose host has
+ * not turned TFT on, and until the connection says whether it has.
  */
-export function GameSwitch({ account, className }: { account: Account; className?: string }): JSX.Element {
+export function GameSwitch({ account, className }: { account: Account; className?: string }): JSX.Element | null {
+  const tft = useOffersGame('tft')
   const game = useRouterState({
     select: (s) => gameOfPlayerPath(s.location.pathname, s.location.search as Record<string, unknown>)
   })
   const slug = playerSlug(account)
+
+  if (tft !== true) return null
 
   const option = (to: '/players/$slug' | '/players/$slug/tft', active: boolean, label: string): JSX.Element => (
     <Link
