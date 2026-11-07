@@ -281,6 +281,8 @@ mode — and Foxfire can now record your games by itself, with no OBS to install
   one cut short by a crash still plays, and each ends as the game's window closes rather than
   carrying the sound on over a still frame until the League client says the game is over. Every
   installed encoder is tried once at startup and the first that works is used.
+- The installer build fetches FFmpeg correctly when the temp folder is on another drive from the
+  checkout, as it is on GitHub's Windows runners: the files are copied out rather than moved.
 - An install that had capture set up before this version is pinned to OBS on first run, the way
   the old recording folder was pinned when the app was renamed.
 - Quitting mid-game with the native recorder writes the recording down where FFmpeg is writing

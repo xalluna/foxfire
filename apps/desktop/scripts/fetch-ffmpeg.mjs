@@ -24,7 +24,7 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -121,8 +121,11 @@ async function main() {
 
     await rm(OUT, { recursive: true, force: true })
     await mkdir(OUT, { recursive: true })
-    await rename(join(unpacked, 'bin', 'ffmpeg.exe'), join(OUT, 'ffmpeg.exe'))
-    await rename(join(unpacked, 'LICENSE.txt'), join(OUT, 'LICENSE.txt'))
+    // Copied, not renamed: a rename cannot cross volumes, and the temp
+    // directory is not always on the checkout's — on GitHub's Windows runners
+    // it is on C: and the workspace on D:. The originals go when `work` does.
+    await copyFile(join(unpacked, 'bin', 'ffmpeg.exe'), join(OUT, 'ffmpeg.exe'))
+    await copyFile(join(unpacked, 'LICENSE.txt'), join(OUT, 'LICENSE.txt'))
     await writeFile(STAMP, `${PIN.sha256}\n${PIN.name}\n`)
     console.log(`FFmpeg ${PIN.name} → resources/ffmpeg`)
   } finally {
