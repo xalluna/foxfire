@@ -43,6 +43,35 @@ describe('createServerApi', () => {
     ])
   })
 
+  it("asks for TFT under the account's /tft routes, and names a game only when it is not League", async () => {
+    const { calls, request } = recorder((path) => (path.includes('/editable') ? [] : { items: [], total: 0 }))
+    const api = createServerApi(request)
+
+    await api.tft.matches('acc-1', 20, 0, 1160)
+    await api.tft.lobby('acc-1', 'NA1_7')
+    await api.tft.rank.history('acc-1', 'RANKED_TFT_TURBO', '30d')
+    await api.tft.rank.saveManual('acc-1', 'RANKED_TFT', [])
+    await api.sync.start('acc-1', 'tft')
+    await api.sync.start('acc-1', 'lol')
+    await api.sync.getState('acc-1')
+    await api.seasons.list('tft')
+    await api.seasons.save([], 'tft')
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /riot-accounts/acc-1/tft/matches?limit=20&offset=0&queueId=1160',
+      'GET /riot-accounts/acc-1/tft/matches/NA1_7/lobby',
+      'GET /riot-accounts/acc-1/tft/rank/history?queueType=RANKED_TFT_TURBO&range=30d',
+      'POST /riot-accounts/acc-1/tft/rank/manual',
+      'GET /riot-accounts/acc-1/tft/rank/editable?queueType=RANKED_TFT',
+      'POST /sync/acc-1?game=tft',
+      'POST /sync/acc-1',
+      'GET /sync/acc-1',
+      'GET /seasons?game=tft',
+      'PUT /seasons?game=tft',
+      'GET /seasons?game=tft'
+    ])
+  })
+
   it("asks for a queue's thirty-day trend, never its whole history", async () => {
     const { calls, request } = recorder(() => ({ from: 0, to: 0, points: [], netLp: null }))
     const api = createServerApi(request)

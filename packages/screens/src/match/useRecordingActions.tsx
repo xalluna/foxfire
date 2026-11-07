@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { Account, AttachRecordingOutcome, MatchSummary } from '@foxfire/core'
+import type { Account, AttachRecordingOutcome, GameId } from '@foxfire/core'
 import { AttachLinkDialog, ConfirmDialog } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useConnection } from '../client/useConnection'
 import { queryKeys } from '../queries/keys'
+import type { RecordingTarget } from '../client/context'
 import type { MatchMenuActions, MatchMenuContext } from './matchMenu'
+
+/** A row's game, as far as its recording goes. League's and TFT's rows are both one. */
+type RecordableMatch = RecordingTarget['match']
 
 type RecordingMenuActions = Pick<
   MatchMenuActions,
@@ -21,8 +25,11 @@ type RecordingMenuActions = Pick<
  * answers are always about the account whose history this is — the row's
  * player — which is what keeps somebody else's recording off it.
  */
-export function useRecordingActions(account: Account): {
-  actionsFor: (match: MatchSummary) => RecordingMenuActions
+export function useRecordingActions(
+  account: Account,
+  game: GameId = 'lol'
+): {
+  actionsFor: (match: RecordableMatch) => RecordingMenuActions
   menuContext: Pick<MatchMenuContext, 'isAdmin' | 'serverMode'>
   dialogs: JSX.Element
 } {
@@ -31,8 +38,8 @@ export function useRecordingActions(account: Account): {
   const queryClient = useQueryClient()
   const connection = useConnection()
 
-  const [attaching, setAttaching] = useState<MatchSummary | null>(null)
-  const [detaching, setDetaching] = useState<MatchSummary | null>(null)
+  const [attaching, setAttaching] = useState<RecordableMatch | null>(null)
+  const [detaching, setDetaching] = useState<RecordableMatch | null>(null)
   const [detachBusy, setDetachBusy] = useState(false)
   const [detachError, setDetachError] = useState<string | null>(null)
 
@@ -43,15 +50,17 @@ export function useRecordingActions(account: Account): {
   const canAttach = youtube && (platform.attachRecordingLink !== undefined || serverRecordings !== undefined)
 
   const refresh = (): void => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.matchList(account.id) })
+    void queryClient.invalidateQueries({
+      queryKey: game === 'tft' ? queryKeys.tftMatchList(account.id) : queryKeys.matchList(account.id)
+    })
   }
 
-  const actionsFor = (match: MatchSummary): RecordingMenuActions => ({
+  const actionsFor = (match: RecordableMatch): RecordingMenuActions => ({
     onWatchRecording: platform.watchRecording
-      ? () => platform.watchRecording?.({ account, match })
+      ? () => platform.watchRecording?.({ account, match, game })
       : undefined,
     onUploadRecording: platform.uploadRecording
-      ? () => platform.uploadRecording?.({ account, match })
+      ? () => platform.uploadRecording?.({ account, match, game })
       : undefined,
     onAttachRecordingLink: canAttach ? () => setAttaching(match) : undefined,
     onDetachRecording: serverRecordings
@@ -67,8 +76,8 @@ export function useRecordingActions(account: Account): {
    * server directly when this machine has none of the game, as a browser
    * always does.
    */
-  const attach = async (match: MatchSummary, videoId: string, replace: boolean): Promise<AttachRecordingOutcome> => {
-    const fromThisMachine = await platform.attachRecordingLink?.({ account, match, videoId, replace })
+  const attach = async (match: RecordableMatch, videoId: string, replace: boolean): Promise<AttachRecordingOutcome> => {
+    const fromThisMachine = await platform.attachRecordingLink?.({ account, match, game, videoId, replace })
 
     const outcome: AttachRecordingOutcome =
       fromThisMachine ??
@@ -80,7 +89,7 @@ export function useRecordingActions(account: Account): {
     return outcome
   }
 
-  const detach = async (match: MatchSummary): Promise<void> => {
+  const detach = async (match: RecordableMatch): Promise<void> => {
     if (!serverRecordings) return
     setDetachBusy(true)
     try {

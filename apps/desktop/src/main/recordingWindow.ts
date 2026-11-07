@@ -2,6 +2,7 @@ import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { windowRoutes } from '@shared/windowRoutes'
 import { loadRoute } from './rendererUrl'
+import { attachZoom, currentZoom } from './zoom'
 
 /**
  * Recording windows, one per open recording — and more than one per recording if asked.
@@ -43,7 +44,8 @@ function openWindowAt(route: string): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      zoomFactor: currentZoom()
     }
   })
 
@@ -57,6 +59,7 @@ function openWindowAt(route: string): void {
     return { action: 'deny' }
   })
 
+  attachZoom(window)
   loadRoute(window, route)
 
   windows.add(window)

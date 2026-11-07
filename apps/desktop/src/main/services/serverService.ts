@@ -1,5 +1,14 @@
 import { app } from 'electron'
-import type { AccountEmail, AccountEmailResult, SessionUser } from '@foxfire/core'
+import {
+  GAME_IDS,
+  offeredGames,
+  type AccountEmail,
+  type AccountEmailResult,
+  type AdminActionResult,
+  type GameId,
+  type SessionUser,
+  type ShareLink
+} from '@foxfire/core'
 import {
   ServerError,
   createServerApi,
@@ -68,8 +77,8 @@ interface StoredServer {
    * Asking the server would make it async and every one of those an await.
    *
    * Refreshed from the session every time a token is renewed, which is how a
-   * promotion or a demotion arrives: the server revokes the sessions of anybody
-   * whose role changes, so the next renewal carries the new answer.
+   * promotion or a demotion arrives: a renewal reads the roles afresh, so the
+   * next one carries the new answer without signing anybody out.
    *
    * Optional because a server remembered by an older build has none of them.
    */
@@ -88,6 +97,20 @@ interface StoredServer {
    * "Copy link" stays hidden.
    */
   publicUrl?: string | null
+
+  /**
+   * Whether the server can be read without signing in — and so whether a
+   * profile needs sharing to reach somebody outside, or "Copy link" already
+   * does. Read when the publicUrl is, and kept current by an admin's own switch.
+   */
+  publicAccess?: boolean | null
+
+  /**
+   * The games the server offers, League first — League alone unless its host
+   * turned TFT on. Read when the publicUrl is. Absent from a row an older
+   * build wrote, which reads as League alone until the next handshake says.
+   */
+  games?: GameId[] | null
 }
 
 /**
@@ -273,6 +296,16 @@ export function isServerMode(): boolean {
   return activeUrl !== null && session !== null
 }
 
+/**
+ * Whether a game is to be asked about wherever the data lives now: always in
+ * local-only mode, where this machine's own key decides what it can reach, and
+ * on a server only when that server offers it. A server whose host has not
+ * turned TFT on refuses every TFT request, so none is made.
+ */
+export function offersGame(game: GameId): boolean {
+  return !isServerMode() || getServerState().games.includes(game)
+}
+
 export function getServerState(): ServerState {
   const active = readActive()
   const known = readKnown()
@@ -305,6 +338,8 @@ export function getServerState(): ServerState {
     servers,
     session,
     publicUrl: activeServer?.publicUrl ?? null,
+    publicAccess: activeServer?.publicAccess ?? false,
+    games: activeServer ? offeredGames(activeServer.games) : [...GAME_IDS],
     upgradeRequired: active ? upgradeRequired : null,
     serverOutdated: active ? serverOutdated : false,
     riotKeyRejected: active ? riotKeyRejected : false
@@ -374,9 +409,35 @@ export async function refreshServerInfo(): Promise<void> {
   if (!stored) return
 
   const name = probed.serverName ?? stored.name
-  if (stored.publicUrl === probed.publicUrl && stored.name === name) return
+  const publicAccess = probed.publicAccess ?? false
+  // A host turns TFT on or off with a restart, which this hears as the push
+  // channel connecting again.
+  const games = probed.games ?? offeredGames(stored.games)
+  if (
+    stored.publicUrl === probed.publicUrl &&
+    stored.name === name &&
+    (stored.publicAccess ?? false) === publicAccess &&
+    offeredGames(stored.games).join() === games.join()
+  ) {
+    return
+  }
 
-  writeKnown(readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl } : s)))
+  writeKnown(
+    readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl, publicAccess, games } : s))
+  )
+  announce()
+}
+
+/**
+ * Keeps an admin's own switch, so this window stops offering to share profiles
+ * the moment the server is open to everybody, rather than at the next connect.
+ */
+export function rememberPublicAccess(publicAccess: boolean): void {
+  const url = readActive()
+  const stored = url ? readKnown().find((s) => s.url === url) : undefined
+  if (!stored || (stored.publicAccess ?? false) === publicAccess) return
+
+  writeKnown(readKnown().map((s) => (s.url === url ? { ...s, publicAccess } : s)))
   announce()
 }
 
@@ -466,6 +527,8 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
       publicSignup: null,
       publicUrl: null,
       email: null,
+      publicAccess: null,
+      games: null,
       compatibility: 'unknown'
     }
   }
@@ -548,7 +611,9 @@ async function authenticate(
       email: user.email,
       isAdmin: user.isAdmin,
       isHeadAdmin: user.isHeadAdmin ?? false,
-      publicUrl: probed.publicUrl
+      publicUrl: probed.publicUrl,
+      publicAccess: probed.publicAccess,
+      games: probed.games
     })
 
     writeKnown(known)
@@ -650,6 +715,22 @@ export async function resendEmailConfirmation(): Promise<AccountEmailResult> {
 export async function cancelEmailChange(): Promise<AccountEmailResult> {
   if (!isServerMode()) return notConnected
   return serverApi().account.cancelEmailChange()
+}
+
+/**
+ * Opens a profile to somebody outside, for a week, as the member signed in.
+ * Only ever offered in server mode; a local-only install has nobody to share
+ * with and no web client for a link to open.
+ */
+export async function createShareLink(accountId: string): Promise<ShareLink> {
+  if (!isServerMode()) throw new Error('Not connected to a Foxfire server.')
+  return serverApi().shares.create(accountId)
+}
+
+/** Withdraws a share link: your own, or anybody's for an admin. */
+export async function revokeShareLink(id: string): Promise<AdminActionResult> {
+  if (!isServerMode()) return { ok: false, error: 'Not connected to a Foxfire server.' }
+  return serverApi().shares.revoke(id)
 }
 
 /**

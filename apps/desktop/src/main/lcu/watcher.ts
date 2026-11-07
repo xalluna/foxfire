@@ -8,12 +8,14 @@ import { onGamePhase } from '../capture/captureService'
 import { setAppIconLcu } from '../appIcon'
 import { createLogger } from '../telemetry/logger'
 import { recordLcuError, recordLcuPoll, recordLcuTransition } from '../telemetry/lcu'
-import { queueTypeForQueueId, TRACKED_QUEUES } from '@foxfire/core'
-import type { LcuStatus, QueueType } from '@shared/types'
+import { LADDERS, queueTypeForQueueId, type GameId } from '@foxfire/core'
+import type { LcuStatus } from '@shared/types'
 import { discoverLcu, type LcuCredentials } from './discovery'
-import { isGameEndTransition, isPlayingPhase } from './gameflow'
+import { isGameEndTransition, isPlayingPhase, isPreGamePhase } from './gameflow'
 import { setGameflowPhase } from './phase'
+import { readingsFromRankedStats, type LcuRankedQueue } from './rankedStats'
 import { isSettled, pendingReadingFor, type PendingRankReading } from './rankSettling'
+import { describeSession, sessionFacts, type GameflowSession } from './session'
 import { lcuGet } from './client'
 
 export const LCU_PATH_SETTING = 'lcu.installPath'
@@ -42,7 +44,23 @@ const POLL_CONNECTED_MS = 10_000
  */
 const POLL_IDLE_MS = 30_000
 
+/**
+ * How often the phase alone is read, between ticks, while a game is about to
+ * start — see isPreGamePhase. One loopback request, and the difference between
+ * capture arming at the start of the loading screen and up to ten seconds into
+ * it, or after it, which is how the first five seconds of a Practice Tool game
+ * went unrecorded.
+ */
+const PRE_GAME_POLL_MS = 1_000
+
 let timer: NodeJS.Timeout | null = null
+let preGameTimer: NodeJS.Timeout | null = null
+
+/** The client and account the last tick followed, for the pre-game reads between ticks. */
+let followed: { creds: LcuCredentials; accountId: string } | null = null
+
+/** Set while trackGameflow runs, so the pre-game read and a tick never interleave in it. */
+let tracking = false
 let running = false
 let status: LcuStatus = { state: 'disconnected' }
 
@@ -59,6 +77,20 @@ let lastPhase: string | null = null
  * is meaningful for a ranked game and noise for an ARAM.
  */
 let currentQueueId: number | null = null
+
+/**
+ * Which game is being played — League or TFT, both queued through this client
+ * though each game is a program of its own — read off the same session as the
+ * queue. Decides which end rule applies and which game's search a finished
+ * one starts.
+ */
+let currentGame: GameId = 'lol'
+
+/** Riot's id for the game being played, which with the platform names its match. */
+let currentGameId: number | null = null
+
+/** The game whose session has been logged, so each is logged once rather than every tick. */
+let loggedGameId: number | null = null
 
 /**
  * Whether the client is in a game right now, for the taskbar button, the tray
@@ -88,21 +120,8 @@ interface CurrentSummoner {
   tagLine: string
 }
 
-interface RankedQueue {
-  queueType: string
-  tier: string | null
-  division: string | null
-  leaguePoints: number | null
-  wins: number | null
-  losses: number | null
-}
-
 interface RankedStats {
-  queues: RankedQueue[]
-}
-
-interface GameflowSession {
-  gameData?: { queue?: { id?: number } }
+  queues: LcuRankedQueue[]
 }
 
 export function getLcuStatus(): LcuStatus {
@@ -119,16 +138,6 @@ function setStatus(next: LcuStatus): void {
   // status actually moved.
   setAppIconLcu(next)
   broadcast(CH.lcu.status, next)
-}
-
-/**
- * The client uses the literal string "NA" for "not applicable" in both tier and
- * division — an unranked queue reports tier "NA", and the apex tiers report
- * division "NA". Stored verbatim it would read as a real rank named NA, so it
- * is folded to null, which is what the ladder math already treats as unranked.
- */
-function normaliseRankField(value: string | null): string | null {
-  return !value || value === 'NA' ? null : value
 }
 
 /**
@@ -151,28 +160,86 @@ async function trackGameflow(creds: LcuCredentials, accountId: string): Promise<
   if (isPlayingPhase(phase)) {
     try {
       const session = await lcuGet<GameflowSession>(creds, '/lol-gameflow/v1/session')
-      currentQueueId = session.gameData?.queue?.id ?? null
+      const facts = sessionFacts(session)
+      currentQueueId = facts.queueId
+      currentGame = facts.game
+      currentGameId = facts.gameId
+
+      // Once a game, what the session said and how it was read — which game,
+      // which queue, which id — so a real client can be held to what this
+      // file assumes about one, TFT's above all.
+      if (facts.gameId !== loggedGameId) {
+        loggedGameId = facts.gameId
+        log.debug('Game session', describeSession(session))
+      }
     } catch (err) {
       log.debug('Gameflow session read failed', { error: String(err) })
     }
   }
 
   // The only signal capture gets that a game exists at all. Ten seconds is far
-  // too coarse to time a recording by, but arming does not need to be quick:
-  // the loading screen that follows lasts at least a minute, and the recording
-  // itself is started by the game answering on loopback.
+  // too coarse to time a recording by, and arming has to come before the game
+  // starts — a quick loading screen is over in less — so the moment a game is
+  // about to start, the phase is read every second between ticks
+  // (watchForGameStart). The recording itself is started by the game
+  // answering on loopback.
   inGame = isPlayingPhase(phase)
-  onGamePhase(accountId, currentQueueId, inGame)
+  onGamePhase(accountId, currentQueueId, inGame, { game: currentGame, gameId: currentGameId })
   setGameflowPhase(phase)
 
-  const ended = isGameEndTransition(lastPhase, phase)
+  const ended = isGameEndTransition(lastPhase, phase, currentGame)
   // Logged rather than pushed through recordLcuTransition: that helper dedupes
   // against a single lastState shared with the connection state, so feeding
   // phases into it would make every connected/disconnected change look new.
-  if (phase !== lastPhase) log.debug('Gameflow phase changed', { from: lastPhase, to: phase })
+  if (phase !== lastPhase) log.debug('Gameflow phase changed', { from: lastPhase, to: phase, game: currentGame })
+  if (ended) log.debug('Game ended', { game: currentGame, queueId: currentQueueId, from: lastPhase, to: phase })
   lastPhase = phase
 
   return ended
+}
+
+/** trackGameflow, unless the other caller of it is already inside. */
+async function trackGameflowOnce(creds: LcuCredentials, accountId: string): Promise<boolean> {
+  if (tracking) return false
+  tracking = true
+  try {
+    return await trackGameflow(creds, accountId)
+  } finally {
+    tracking = false
+  }
+}
+
+/**
+ * Reads the phase every second while a game is about to start, and hands the
+ * moment it starts to trackGameflow — which arms capture — rather than leaving
+ * it for the next tick. Only the phase: the rest of the tick, the account and
+ * the rank, can wait its ten seconds, and connected to a server some of it is
+ * a request to the server.
+ */
+function watchForGameStart(): void {
+  if (preGameTimer) {
+    clearTimeout(preGameTimer)
+    preGameTimer = null
+  }
+  if (!running || !followed || !isPreGamePhase(lastPhase)) return
+
+  preGameTimer = setTimeout(() => {
+    preGameTimer = null
+    void readPreGamePhase().finally(watchForGameStart)
+  }, PRE_GAME_POLL_MS)
+}
+
+async function readPreGamePhase(): Promise<void> {
+  const current = followed
+  if (!current) return
+  let phase: string | null
+  try {
+    phase = await lcuGet<string>(current.creds, '/lol-gameflow/v1/gameflow-phase')
+  } catch {
+    // The tick will say so if the client went away.
+    return
+  }
+  if (phase !== lastPhase) await trackGameflowOnce(current.creds, current.accountId)
 }
 
 /** Reads the phase for its own sake, for a client this app follows no account on. */
@@ -188,6 +255,7 @@ async function tick(): Promise<void> {
   const db = getDb()
 
   const creds = await discoverLcu(getSetting(db, LCU_PATH_SETTING))
+  followed = null
   if (!creds) {
     setStatus({ state: 'disconnected' })
     setGameflowPhase(null)
@@ -234,7 +302,8 @@ async function tick(): Promise<void> {
 
     // Read before the rank stats so the snapshot below can be forced when a
     // ranked game has just concluded.
-    const gameEnded = await trackGameflow(creds, account.id)
+    followed = { creds, accountId: account.id }
+    const gameEnded = await trackGameflowOnce(creds, account.id)
     // Again with the fresh phase. setStatus ignores an unchanged value, so the
     // repeat costs nothing on the many ticks where nothing moved.
     setStatus({ ...connected, inGame })
@@ -242,45 +311,53 @@ async function tick(): Promise<void> {
     // than a bare "was ranked" flag: only the ladder that was actually played on
     // is waited on, and forcing the other one writes a duplicate row that closes
     // an interval nothing measured.
+    // Every ladder either game has is recorded below, so any ranked game's,
+    // TFT's included, can be waited on.
     const endedQueueType = gameEnded ? queueTypeForQueueId(currentQueueId) : null
-    if (gameEnded) currentQueueId = null
+    const endedGame = currentGame
+    if (gameEnded) {
+      currentQueueId = null
+      currentGame = 'lol'
+      currentGameId = null
+    }
     if (endedQueueType) pendingReading = pendingReadingFor(endedQueueType, Date.now())
 
     const stats = await lcuGet<RankedStats>(creds, '/lol-ranked/v1/current-ranked-stats')
-    let moved = false
+    const readings = readingsFromRankedStats(stats)
+    // What the client said once a game was over, for holding a real client to
+    // what this file assumes about TFT's ladders and Hyper Roll's rating.
+    if (gameEnded) log.debug('Ranked readings after a game', { game: endedGame, readings })
 
-    for (const queue of stats.queues ?? []) {
-      const queueType = queue.queueType as QueueType
-      if (!TRACKED_QUEUES.includes(queueType)) continue
+    // Which games' standings moved, so each is refreshed on its own.
+    const moved = new Set<GameId>()
 
-      const tier = normaliseRankField(queue.tier)
-      // An unranked queue has no ladder position, so a snapshot of it would be
-      // an unplottable row saying nothing. Recording starts at placement.
-      if (!tier) continue
-
+    for (const reading of readings) {
       const now = Date.now()
-      const recorded = await reporting.recordRank(
-        account.id,
-        {
-          queueType,
-          tier,
-          rank: normaliseRankField(queue.division),
-          leaguePoints: queue.leaguePoints,
-          wins: queue.wins,
-          losses: queue.losses
-        },
-        // A ranked game that moved no LP — a loss at 0 LP with demotion
-        // protection — still has to close its interval, or the open one runs on
-        // and swallows the next game too, costing both their LP figure. Only
-        // once the reading has had time to settle, though; before that
-        // "unchanged" more often means the client has not caught up yet.
-        isSettled(pendingReading, queueType, now)
-      )
+      let recorded: boolean
+      try {
+        recorded = await reporting.recordRank(
+          account.id,
+          reading,
+          // A ranked game that moved no LP — a loss at 0 LP with demotion
+          // protection — still has to close its interval, or the open one runs on
+          // and swallows the next game too, costing both their LP figure. Only
+          // once the reading has had time to settle, though; before that
+          // "unchanged" more often means the client has not caught up yet.
+          isSettled(pendingReading, reading.queueType, now)
+        )
+      } catch (err) {
+        // One ladder a server will not take is no reason to drop the others, or
+        // the game end below that the post-game sync waits on. Left to the poll's
+        // own catch, a refused TFT reading did both on every tick, and showed the
+        // League client as disconnected while it was not.
+        log.debug('Rank reading not recorded', { queueType: reading.queueType, error: String(err) })
+        continue
+      }
 
       // Whether the reading moved on its own or was forced once settled, the
       // finished game's interval is now closed and nothing is left to wait for.
-      if (recorded && pendingReading?.queueType === queueType) pendingReading = null
-      moved ||= recorded
+      if (recorded && pendingReading?.queueType === reading.queueType) pendingReading = null
+      if (recorded) moved.add(LADDERS[reading.queueType].game)
     }
 
     if (gameEnded) {
@@ -290,7 +367,7 @@ async function tick(): Promise<void> {
       // The waiting is somebody else's job in server mode — match-v5 publishes
       // minutes late, and that ladder has to keep running after this laptop
       // closes — so this is a signal rather than a schedule.
-      await reporting.gameEnded(account.id)
+      await reporting.gameEnded(account.id, endedGame)
 
       // The client writes the .rofl around now, if the player has replays
       // switched on. The folder watcher will usually see it first; this is the
@@ -298,16 +375,15 @@ async function tick(): Promise<void> {
       void rescanReplays()
     }
 
-    if (moved) {
+    for (const game of moved) {
       // The reading is already stored; this brings the profile card's current
       // standing into line with it, and is skipped when nothing moved so an idle
       // client costs no Riot API budget.
-      reporting.refreshStanding(account.id).catch((err) => {
-        log.debug('Backstop rank refresh failed after LP change', { error: String(err) })
+      reporting.refreshStanding(account.id, game).catch((err) => {
+        log.debug('Backstop rank refresh failed after LP change', { game, error: String(err) })
       })
-
-      broadcast(CH.lcu.rankChanged, account.id)
     }
+    if (moved.size > 0) broadcast(CH.lcu.rankChanged, account.id)
 
     recordLcuPoll(Date.now() - pollStartedAt)
   } catch (err) {
@@ -330,6 +406,7 @@ async function loop(): Promise<void> {
   if (!running) return
   await tick()
   if (!running) return
+  watchForGameStart()
   timer = setTimeout(
     () => void loop(),
     status.state === 'disconnected' ? POLL_IDLE_MS : POLL_CONNECTED_MS
@@ -348,12 +425,20 @@ export function stopLcuWatcher(): void {
     clearTimeout(timer)
     timer = null
   }
+  if (preGameTimer) {
+    clearTimeout(preGameTimer)
+    preGameTimer = null
+  }
+  followed = null
   // Only cleared on a full stop, never on a transient disconnect. A poll that
   // fails mid-game would otherwise forget it was in one, and the end-of-game
   // transition on the next tick — the one moment this exists to catch — would
   // read as a phase appearing out of nowhere and be ignored.
   lastPhase = null
   currentQueueId = null
+  currentGame = 'lol'
+  currentGameId = null
+  loggedGameId = null
   inGame = false
   pendingReading = null
   setGameflowPhase(null)

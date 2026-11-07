@@ -131,7 +131,7 @@ internal sealed class AddTrackedAccountRequestHandler(
         }
 
         logger.LogInformation(
-            "Admin {UserId} started tracking {RiotId}, unclaimed", me.UserId, account.RiotId);
+            "{Actor} started tracking {RiotId}, unclaimed", me.Username, account.RiotId);
 
         // Cosmetic and best-effort, exactly as when linking: an account that
         // appears with an empty frame and no level reads as one that did not
@@ -149,6 +149,10 @@ internal sealed class AddTrackedAccountRequestHandler(
         // backfill target the sync state copies for itself, so there is no
         // second knob for admin-added accounts to disagree with.
         _ = sync.SyncAsync(account.Id, SyncTrigger.Manual, CancellationToken.None);
+
+        // And TFT's, on its own run: the same Riot ID has a second history, and
+        // a League-only player's costs one empty id list.
+        _ = sync.SyncAsync(account.Id, Foxfire.Core.Game.Tft, SyncTrigger.Manual, CancellationToken.None);
 
         return RiotAccountResponse.Describe(account, me.UserId);
     }

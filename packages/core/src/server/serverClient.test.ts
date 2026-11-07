@@ -88,6 +88,10 @@ describe('createServerClient', () => {
       publicUrl: 'https://fox.example',
       serverName: 'The Fox Den',
       session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
+      // A server too old to say whether it is open is not, and one too old to
+      // list its games offers League alone.
+      publicAccess: false,
+      games: ['lol'],
       riotKeyRejected: false,
       upgradeRequired: null
     })
@@ -107,6 +111,27 @@ describe('createServerClient', () => {
 
     expect(seen).toHaveBeenCalledTimes(1)
     expect(seen.mock.calls[0][0].upgradeRequired).toBe('reload')
+  })
+
+  it('carries an admin opening the server into the connection, without another handshake', async () => {
+    const { client, session, server } = webClient({
+      'PATCH /api/admin/settings/': json({
+        publicSignup: true,
+        publicAccess: true,
+        backfillTarget: 200,
+        replayByteCap: 0
+      })
+    })
+    await session.restore()
+    await client.connection.get()
+
+    const seen = vi.fn()
+    client.connection.onChanged(seen)
+    await client.admin.setSettings({ publicAccess: true })
+
+    expect(seen).toHaveBeenCalledTimes(1)
+    expect(seen.mock.calls[0][0].publicAccess).toBe(true)
+    expect(server.calls.filter((c) => c.path === '/version')).toHaveLength(1)
   })
 
   it('keeps favorites in its own store, without asking the server anything', async () => {

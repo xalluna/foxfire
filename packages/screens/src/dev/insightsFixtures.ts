@@ -56,7 +56,8 @@ function frameFor(window: InsightsWindow, now: number): InsightsFrame {
 
   const startedAt = now - 40 * MINUTE
   const downFrom = startedAt - 3 * MINUTE
-  const historyStart = now - 9 * DAY
+  // A server set up today has measured nothing from before it first started.
+  const historyStart = scenario === 'server-fresh' ? startedAt : now - 9 * DAY
 
   const up = Array.from({ length: points }, (_, i) => {
     const at = from + i * step
@@ -315,7 +316,7 @@ function sync(frame: InsightsFrame): InsightsSections['sync'] {
     return {
       accountId: `acc-${i}`,
       riotId: PLAYERS[i % PLAYERS.length],
-      trigger: i % 3 === 0 ? 'manual' : 'auto',
+      trigger: i % 3 === 0 ? 'manual' : i % 3 === 1 ? 'background' : 'auto',
       kind: i === 8 ? 'backfill' : outcome === 'failed' ? 'unknown' : 'delta',
       outcome,
       startedAt: now - (i * 7 + 2) * MINUTE,
@@ -331,7 +332,8 @@ function sync(frame: InsightsFrame): InsightsSections['sync'] {
     totals: {
       runs,
       manual: Math.round(runs * 0.3),
-      auto: runs - Math.round(runs * 0.3),
+      background: Math.round(runs * 0.25),
+      auto: runs - Math.round(runs * 0.3) - Math.round(runs * 0.25),
       failed: sum(failed),
       partial: sum(partial),
       stored: sum(stored),

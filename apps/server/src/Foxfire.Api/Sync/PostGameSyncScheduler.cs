@@ -1,3 +1,4 @@
+using Foxfire.Core;
 using Foxfire.Riot;
 
 namespace Foxfire.Api.Sync;
@@ -11,11 +12,12 @@ namespace Foxfire.Api.Sync;
 /// therefore usually finds nothing, which is exactly the failure this exists to
 /// remove: it would look fixed most evenings and broken on the rest.
 ///
-/// So it retries on a widening schedule until the match lands. A delta sync is
-/// two requests plus one per genuinely new match, so the cost of being patient
-/// is small even against one shared personal key. The last attempt sits at ten
-/// minutes because a match that has not appeared by then will not be caught by
-/// trying once more — the next sync for that account will get it.
+/// So it retries on a widening schedule until the match lands in the account's
+/// history, whichever sync put it there. A delta sync is two requests plus one
+/// per genuinely new match, so the cost of being patient is small even against
+/// one shared personal key. The last attempt sits at ten minutes because a match
+/// that has not appeared by then will not be caught by trying once more — the
+/// next sync for that account will get it.
 ///
 /// The ladder moved to the server from the desktop for a reason beyond tidiness:
 /// it has to keep running after the person who played closes their laptop, and
@@ -45,13 +47,16 @@ public sealed class PostGameSyncScheduler(
     ];
 
     private readonly Lock _gate = new();
-    private readonly Dictionary<Guid, CancellationTokenSource> _pending = [];
+    private readonly Dictionary<(Guid, Game), CancellationTokenSource> _pending = [];
     private readonly CancellationTokenSource _stopping = new();
 
     /// <summary>Whether a ladder is currently waiting on this account.</summary>
-    public bool IsScheduled(Guid riotAccountId)
+    public bool IsScheduled(Guid riotAccountId) => IsScheduled(riotAccountId, Game.Lol);
+
+    /// <summary>Whether a ladder is watching for this account's last game of this game.</summary>
+    public bool IsScheduled(Guid riotAccountId, Game game)
     {
-        lock (_gate) return _pending.ContainsKey(riotAccountId);
+        lock (_gate) return _pending.ContainsKey((riotAccountId, game));
     }
 
     /// <summary>How many accounts have a ladder waiting, for the insights page.</summary>
@@ -68,45 +73,83 @@ public sealed class PostGameSyncScheduler(
     /// game's schedule subsumes the earlier one — a delta sync fetches everything
     /// new, so the first game is picked up by the second game's attempts anyway.
     /// </summary>
-    public void Schedule(Guid riotAccountId)
+    public void Schedule(Guid riotAccountId) => Schedule(riotAccountId, Game.Lol);
+
+    /// <summary>
+    /// Watches for one game's finished match. A League game and a TFT game run
+    /// ladders of their own, on their own timings: a TFT match is published only
+    /// once its whole lobby is done, which can be twenty minutes after somebody
+    /// knocked out early tells the server their game ended.
+    /// </summary>
+    public void Schedule(Guid riotAccountId, Game game)
     {
         CancellationTokenSource cts;
+        var key = (riotAccountId, game);
+        var delays = game.PostGameRetryDelays();
 
         lock (_gate)
         {
             if (_stopping.IsCancellationRequested) return;
 
-            if (_pending.Remove(riotAccountId, out var previous))
+            if (_pending.Remove(key, out var previous))
             {
                 previous.Cancel();
                 previous.Dispose();
             }
 
             cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
-            _pending[riotAccountId] = cts;
+            _pending[key] = cts;
         }
 
         log.LogInformation(
-            "Watching for a finished game on {RiotAccountId} ({Attempts} attempts)",
+            "Watching for a finished {Game} game on {RiotAccountId} ({Attempts} attempts)",
+            game.Slug(),
             riotAccountId,
-            RetryDelays.Count);
+            delays.Count);
 
-        _ = Task.Run(() => RunLadderAsync(riotAccountId, cts.Token), CancellationToken.None);
+        _ = Task.Run(() => RunLadderAsync(riotAccountId, game, delays, cts.Token), CancellationToken.None);
     }
 
-    private async Task RunLadderAsync(Guid riotAccountId, CancellationToken cancellationToken)
+    private async Task RunLadderAsync(
+        Guid riotAccountId,
+        Game game,
+        IReadOnlyList<TimeSpan> delays,
+        CancellationToken cancellationToken)
     {
-        using var _ = log.BeginScope(new Dictionary<string, object> { ["RiotAccountId"] = riotAccountId });
+        using var _ = log.BeginScope(new Dictionary<string, object>
+        {
+            ["RiotAccountId"] = riotAccountId,
+            ["Game"] = game.Slug()
+        });
 
         try
         {
-            for (var attempt = 0; attempt < RetryDelays.Count; attempt++)
+            // Where the account's history stood when its game ended. Any sync of
+            // the account that moves it on has found the game, so there is
+            // nothing left to wait for — this ladder's own, or the owner pressing
+            // Sync now.
+            var before = await sync.MostRecentMatchIdAsync(riotAccountId, game, cancellationToken);
+
+            async Task<bool> MovedOnAsync() =>
+                await sync.MostRecentMatchIdAsync(riotAccountId, game, cancellationToken) != before;
+
+            for (var attempt = 0; attempt < delays.Count; attempt++)
             {
-                await Task.Delay(RetryDelays[attempt], time, cancellationToken);
+                await Task.Delay(delays[attempt], time, cancellationToken);
 
                 try
                 {
-                    var result = await sync.SyncAsync(riotAccountId, SyncTrigger.Auto, cancellationToken);
+                    if (await MovedOnAsync())
+                    {
+                        log.LogInformation(
+                            "Post-game sync for {RiotAccountId} stopped before attempt {Attempt}: another sync found the game",
+                            riotAccountId,
+                            attempt + 1);
+
+                        return;
+                    }
+
+                    var result = await sync.SyncAsync(riotAccountId, game, SyncTrigger.Auto, cancellationToken);
                     if (result.Stored > 0)
                     {
                         log.LogInformation(
@@ -117,8 +160,22 @@ public sealed class PostGameSyncScheduler(
 
                         return;
                     }
+
+                    // Found, but stored by somebody else. Two members in one game
+                    // each run a ladder, and the first to find the match stores it
+                    // for both — participants are shared — so the second's sync
+                    // stores nothing and only moves the marker past it.
+                    if (await MovedOnAsync())
+                    {
+                        log.LogInformation(
+                            "Post-game sync for {RiotAccountId} found the game already stored on attempt {Attempt}",
+                            riotAccountId,
+                            attempt + 1);
+
+                        return;
+                    }
                 }
-                catch (RiotApiException ex) when (ex.IsKeyRejection)
+                catch (RiotApiException ex) when (ex.IsKeyRejection || ex.NoProductAccess)
                 {
                     // A rejected key fails every remaining attempt the same way —
                     // the limiter latches paused until the server is restarted
@@ -141,13 +198,20 @@ public sealed class PostGameSyncScheduler(
             // Superseded by a later game, or the server is stopping. Either way
             // there is nothing to report.
         }
+        catch (Exception ex)
+        {
+            // Only the first reading of where the history stood can land here —
+            // each attempt catches its own failures — and without it there is no
+            // telling the game arriving from the game already being here.
+            log.LogDebug(ex, "Post-game sync could not start for {RiotAccountId}", riotAccountId);
+        }
         finally
         {
             lock (_gate)
             {
-                if (_pending.TryGetValue(riotAccountId, out var mine) && mine.Token == cancellationToken)
+                if (_pending.TryGetValue((riotAccountId, game), out var mine) && mine.Token == cancellationToken)
                 {
-                    _pending.Remove(riotAccountId);
+                    _pending.Remove((riotAccountId, game));
                     mine.Dispose();
                 }
             }

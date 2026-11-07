@@ -1,0 +1,524 @@
+{
+  "games": [
+    {
+      "id": "lol",
+      "folder": "LoL",
+      "keyScope": "main",
+      "queues": [
+        {
+          "id": 420,
+          "folder": "Solo-Duo"
+        },
+        {
+          "id": 440,
+          "folder": "Flex"
+        },
+        {
+          "id": 400,
+          "folder": "Normal-Draft"
+        },
+        {
+          "id": 430,
+          "folder": "Normal-Blind"
+        },
+        {
+          "id": 450,
+          "folder": "ARAM"
+        },
+        {
+          "id": 1700,
+          "folder": "Arena"
+        },
+        {
+          "id": 480,
+          "folder": "Swiftplay"
+        },
+        {
+          "id": 490,
+          "folder": "Quickplay"
+        },
+        {
+          "id": 700,
+          "folder": "Clash"
+        },
+        {
+          "id": 720,
+          "folder": "ARAM-Clash"
+        },
+        {
+          "id": 900,
+          "folder": "ARURF"
+        },
+        {
+          "id": 1900,
+          "folder": "URF"
+        },
+        {
+          "id": 0,
+          "folder": "Custom"
+        }
+      ],
+      "postGameRetryMs": [
+        30000,
+        90000,
+        180000,
+        360000,
+        600000
+      ]
+    },
+    {
+      "id": "tft",
+      "folder": "TFT",
+      "keyScope": "tft",
+      "queues": [
+        {
+          "id": 1100,
+          "folder": "Ranked"
+        },
+        {
+          "id": 1160,
+          "folder": "Double-Up"
+        },
+        {
+          "id": 1130,
+          "folder": "Hyper-Roll"
+        },
+        {
+          "id": 1090,
+          "folder": "Normal"
+        }
+      ],
+      "postGameRetryMs": [
+        60000,
+        180000,
+        360000,
+        600000,
+        900000,
+        1200000
+      ]
+    }
+  ],
+  "ladders": [
+    {
+      "id": "RANKED_SOLO_5x5",
+      "game": "lol",
+      "queueId": 420,
+      "scale": "divisioned",
+      "lpEditable": true,
+      "placementSlots": 0
+    },
+    {
+      "id": "RANKED_FLEX_SR",
+      "game": "lol",
+      "queueId": 440,
+      "scale": "divisioned",
+      "lpEditable": true,
+      "placementSlots": 0
+    },
+    {
+      "id": "RANKED_TFT",
+      "game": "tft",
+      "queueId": 1100,
+      "scale": "divisioned",
+      "lpEditable": true,
+      "placementSlots": 8
+    },
+    {
+      "id": "RANKED_TFT_DOUBLE_UP",
+      "game": "tft",
+      "queueId": 1160,
+      "scale": "divisioned",
+      "lpEditable": true,
+      "placementSlots": 4
+    },
+    {
+      "id": "RANKED_TFT_TURBO",
+      "game": "tft",
+      "queueId": 1130,
+      "scale": "rated",
+      "lpEditable": false,
+      "placementSlots": 8
+    }
+  ],
+  "ratedTierFloors": [
+    {
+      "tier": "GRAY",
+      "floor": 0
+    },
+    {
+      "tier": "GREEN",
+      "floor": 1400
+    },
+    {
+      "tier": "BLUE",
+      "floor": 2600
+    },
+    {
+      "tier": "PURPLE",
+      "floor": 3400
+    },
+    {
+      "tier": "ORANGE",
+      "floor": 4200
+    }
+  ],
+  "teamPlacements": [
+    {
+      "name": "individual places, teams in order",
+      "players": [
+        {
+          "puuid": "a",
+          "placement": 1,
+          "partnerGroupId": 1
+        },
+        {
+          "puuid": "b",
+          "placement": 2,
+          "partnerGroupId": 1
+        },
+        {
+          "puuid": "c",
+          "placement": 3,
+          "partnerGroupId": 2
+        },
+        {
+          "puuid": "d",
+          "placement": 4,
+          "partnerGroupId": 2
+        },
+        {
+          "puuid": "e",
+          "placement": 5,
+          "partnerGroupId": 3
+        },
+        {
+          "puuid": "f",
+          "placement": 6,
+          "partnerGroupId": 3
+        },
+        {
+          "puuid": "g",
+          "placement": 7,
+          "partnerGroupId": 4
+        },
+        {
+          "puuid": "h",
+          "placement": 8,
+          "partnerGroupId": 4
+        }
+      ],
+      "teams": {
+        "a": 1,
+        "b": 1,
+        "c": 2,
+        "d": 2,
+        "e": 3,
+        "f": 3,
+        "g": 4,
+        "h": 4
+      }
+    },
+    {
+      "name": "individual places, partners apart",
+      "players": [
+        {
+          "puuid": "a",
+          "placement": 1,
+          "partnerGroupId": 3
+        },
+        {
+          "puuid": "b",
+          "placement": 6,
+          "partnerGroupId": 3
+        },
+        {
+          "puuid": "c",
+          "placement": 2,
+          "partnerGroupId": 1
+        },
+        {
+          "puuid": "d",
+          "placement": 3,
+          "partnerGroupId": 1
+        },
+        {
+          "puuid": "e",
+          "placement": 4,
+          "partnerGroupId": 4
+        },
+        {
+          "puuid": "f",
+          "placement": 8,
+          "partnerGroupId": 4
+        },
+        {
+          "puuid": "g",
+          "placement": 5,
+          "partnerGroupId": 2
+        },
+        {
+          "puuid": "h",
+          "placement": 7,
+          "partnerGroupId": 2
+        }
+      ],
+      "teams": {
+        "a": 1,
+        "b": 1,
+        "c": 2,
+        "d": 2,
+        "e": 3,
+        "f": 3,
+        "g": 4,
+        "h": 4
+      }
+    },
+    {
+      "name": "shared team places",
+      "players": [
+        {
+          "puuid": "a",
+          "placement": 2,
+          "partnerGroupId": 9
+        },
+        {
+          "puuid": "b",
+          "placement": 2,
+          "partnerGroupId": 9
+        },
+        {
+          "puuid": "c",
+          "placement": 1,
+          "partnerGroupId": 4
+        },
+        {
+          "puuid": "d",
+          "placement": 1,
+          "partnerGroupId": 4
+        },
+        {
+          "puuid": "e",
+          "placement": 4,
+          "partnerGroupId": 2
+        },
+        {
+          "puuid": "f",
+          "placement": 4,
+          "partnerGroupId": 2
+        },
+        {
+          "puuid": "g",
+          "placement": 3,
+          "partnerGroupId": 7
+        },
+        {
+          "puuid": "h",
+          "placement": 3,
+          "partnerGroupId": 7
+        }
+      ],
+      "teams": {
+        "a": 2,
+        "b": 2,
+        "c": 1,
+        "d": 1,
+        "e": 4,
+        "f": 4,
+        "g": 3,
+        "h": 3
+      }
+    },
+    {
+      "name": "a tie broken by group id, and a player with no team",
+      "players": [
+        {
+          "puuid": "a",
+          "placement": 1,
+          "partnerGroupId": 5
+        },
+        {
+          "puuid": "b",
+          "placement": 1,
+          "partnerGroupId": 2
+        },
+        {
+          "puuid": "c",
+          "placement": 3,
+          "partnerGroupId": null
+        }
+      ],
+      "teams": {
+        "a": 2,
+        "b": 1
+      }
+    }
+  ],
+  "ratedMovements": [
+    {
+      "before": "GRAY",
+      "after": "GRAY",
+      "movement": "none"
+    },
+    {
+      "before": "GRAY",
+      "after": "GREEN",
+      "movement": "promotion"
+    },
+    {
+      "before": "GRAY",
+      "after": "BLUE",
+      "movement": "promotion"
+    },
+    {
+      "before": "GRAY",
+      "after": "PURPLE",
+      "movement": "promotion"
+    },
+    {
+      "before": "GRAY",
+      "after": "ORANGE",
+      "movement": "promotion"
+    },
+    {
+      "before": "GREEN",
+      "after": "GRAY",
+      "movement": "demotion"
+    },
+    {
+      "before": "GREEN",
+      "after": "GREEN",
+      "movement": "none"
+    },
+    {
+      "before": "GREEN",
+      "after": "BLUE",
+      "movement": "promotion"
+    },
+    {
+      "before": "GREEN",
+      "after": "PURPLE",
+      "movement": "promotion"
+    },
+    {
+      "before": "GREEN",
+      "after": "ORANGE",
+      "movement": "promotion"
+    },
+    {
+      "before": "BLUE",
+      "after": "GRAY",
+      "movement": "demotion"
+    },
+    {
+      "before": "BLUE",
+      "after": "GREEN",
+      "movement": "demotion"
+    },
+    {
+      "before": "BLUE",
+      "after": "BLUE",
+      "movement": "none"
+    },
+    {
+      "before": "BLUE",
+      "after": "PURPLE",
+      "movement": "promotion"
+    },
+    {
+      "before": "BLUE",
+      "after": "ORANGE",
+      "movement": "promotion"
+    },
+    {
+      "before": "PURPLE",
+      "after": "GRAY",
+      "movement": "demotion"
+    },
+    {
+      "before": "PURPLE",
+      "after": "GREEN",
+      "movement": "demotion"
+    },
+    {
+      "before": "PURPLE",
+      "after": "BLUE",
+      "movement": "demotion"
+    },
+    {
+      "before": "PURPLE",
+      "after": "PURPLE",
+      "movement": "none"
+    },
+    {
+      "before": "PURPLE",
+      "after": "ORANGE",
+      "movement": "promotion"
+    },
+    {
+      "before": "ORANGE",
+      "after": "GRAY",
+      "movement": "demotion"
+    },
+    {
+      "before": "ORANGE",
+      "after": "GREEN",
+      "movement": "demotion"
+    },
+    {
+      "before": "ORANGE",
+      "after": "BLUE",
+      "movement": "demotion"
+    },
+    {
+      "before": "ORANGE",
+      "after": "PURPLE",
+      "movement": "demotion"
+    },
+    {
+      "before": "ORANGE",
+      "after": "ORANGE",
+      "movement": "none"
+    },
+    {
+      "before": null,
+      "after": "BLUE",
+      "movement": "none"
+    },
+    {
+      "before": "BLUE",
+      "after": null,
+      "movement": "none"
+    },
+    {
+      "before": "BLUE",
+      "after": "TEAL",
+      "movement": "none"
+    }
+  ],
+  "gameEnds": [
+    {
+      "gameCreation": 1790000000000,
+      "timeEliminated": 1712.38,
+      "gameDuration": 2216,
+      "end": 1790001712380
+    },
+    {
+      "gameCreation": 1790000000000,
+      "timeEliminated": 0.4,
+      "gameDuration": 2216,
+      "end": 1790000000400
+    },
+    {
+      "gameCreation": 1790000000000,
+      "timeEliminated": 1712.5,
+      "gameDuration": 2216,
+      "end": 1790001712500
+    },
+    {
+      "gameCreation": 1790000000000,
+      "timeEliminated": null,
+      "gameDuration": 2216,
+      "end": 1790002216000
+    }
+  ]
+}

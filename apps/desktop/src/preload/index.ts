@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
+import type { GameId } from '@foxfire/core'
 import type {
   ArchiveCopyProgress,
   CaptureStatus,
+  DisplaySettings,
   LcuStatus,
   ReplayImportProgress,
   ServerState,
@@ -43,6 +45,8 @@ const api: Api = {
     accountEmail: () => ipcRenderer.invoke(CH.server.accountEmail),
     resendEmailConfirmation: () => ipcRenderer.invoke(CH.server.resendEmailConfirmation),
     cancelEmailChange: () => ipcRenderer.invoke(CH.server.cancelEmailChange),
+    createShareLink: (accountId) => ipcRenderer.invoke(CH.server.createShareLink, accountId),
+    revokeShareLink: (id) => ipcRenderer.invoke(CH.server.revokeShareLink, id),
     setActive: (url) => ipcRenderer.invoke(CH.server.setActive, url),
     forget: (url) => ipcRenderer.invoke(CH.server.forget, url),
     onChanged: (cb) => {
@@ -69,6 +73,7 @@ const api: Api = {
     sendTestEmail: (to) => ipcRenderer.invoke(CH.serverAdmin.sendTestEmail, to),
     getSettings: () => ipcRenderer.invoke(CH.serverAdmin.getSettings),
     setSettings: (patch) => ipcRenderer.invoke(CH.serverAdmin.setSettings, patch),
+    shareLinks: (page) => ipcRenderer.invoke(CH.serverAdmin.shareLinks, page),
     storage: () => ipcRenderer.invoke(CH.serverAdmin.storage),
     storedReplays: (page) => ipcRenderer.invoke(CH.serverAdmin.storedReplays, page),
     removeReplay: (matchId) => ipcRenderer.invoke(CH.serverAdmin.removeReplay, matchId),
@@ -88,7 +93,9 @@ const api: Api = {
     get: () => ipcRenderer.invoke(CH.settings.get),
     setApiKey: (key) => ipcRenderer.invoke(CH.settings.setApiKey, key),
     clearApiKey: () => ipcRenderer.invoke(CH.settings.clearApiKey),
-    setKeyType: (keyType, limits) => ipcRenderer.invoke(CH.settings.setKeyType, keyType, limits),
+    setKeyType: (keyType, limits, scope) => ipcRenderer.invoke(CH.settings.setKeyType, keyType, limits, scope),
+    setTftApiKey: (key) => ipcRenderer.invoke(CH.settings.setTftApiKey, key),
+    clearTftApiKey: () => ipcRenderer.invoke(CH.settings.clearTftApiKey),
     onKeyInvalid: (cb) => {
       const listener = (): void => cb()
       ipcRenderer.on(CH.settings.keyInvalid, listener)
@@ -124,8 +131,8 @@ const api: Api = {
     }
   },
   sync: {
-    start: (accountId) => ipcRenderer.invoke(CH.sync.start, accountId),
-    getState: (accountId) => ipcRenderer.invoke(CH.sync.getState, accountId),
+    start: (accountId, game) => ipcRenderer.invoke(CH.sync.start, accountId, game),
+    getState: (accountId, game) => ipcRenderer.invoke(CH.sync.getState, accountId, game),
     onProgress: (cb) => {
       const listener = (_e: IpcRendererEvent, event: SyncProgressEvent): void => cb(event)
       ipcRenderer.on(CH.sync.progress, listener)
@@ -140,8 +147,25 @@ const api: Api = {
       ipcRenderer.invoke(CH.champions.stats, accountId, queueId, range)
   },
   seasons: {
-    list: () => ipcRenderer.invoke(CH.seasons.list),
-    save: (seasons) => ipcRenderer.invoke(CH.seasons.save, seasons)
+    list: (game) => ipcRenderer.invoke(CH.seasons.list, game),
+    save: (seasons, game) => ipcRenderer.invoke(CH.seasons.save, seasons, game)
+  },
+  tft: {
+    dashboard: (accountId) => ipcRenderer.invoke(CH.tft.dashboard, accountId),
+    matchList: (accountId, limit, offset, queueId) =>
+      ipcRenderer.invoke(CH.tft.matchList, accountId, limit, offset, queueId),
+    matchSummary: (accountId, matchId) => ipcRenderer.invoke(CH.tft.matchSummary, accountId, matchId),
+    lobby: (accountId, matchId) => ipcRenderer.invoke(CH.tft.lobby, accountId, matchId),
+    rank: {
+      history: (accountId, queueType, range) => ipcRenderer.invoke(CH.tft.rankHistory, accountId, queueType, range),
+      trend: (accountId, queueType) => ipcRenderer.invoke(CH.tft.rankTrend, accountId, queueType),
+      periods: (accountId) => ipcRenderer.invoke(CH.tft.rankPeriods, accountId),
+      editable: (accountId, queueType) => ipcRenderer.invoke(CH.tft.editable, accountId, queueType),
+      saveManual: (accountId, queueType, edits) =>
+        ipcRenderer.invoke(CH.tft.saveManual, accountId, queueType, edits),
+      clearManual: (accountId, queueType, matchId) =>
+        ipcRenderer.invoke(CH.tft.clearManual, accountId, queueType, matchId)
+    }
   },
   mastery: {
     get: (accountId, refresh, queueId) =>
@@ -188,6 +212,15 @@ const api: Api = {
     get: () => ipcRenderer.invoke(CH.background.get),
     set: (patch) => ipcRenderer.invoke(CH.background.set, patch)
   },
+  display: {
+    get: () => ipcRenderer.invoke(CH.display.get),
+    set: (patch) => ipcRenderer.invoke(CH.display.set, patch),
+    onChanged: (cb) => {
+      const handler = (_e: IpcRendererEvent, settings: DisplaySettings): void => cb(settings)
+      ipcRenderer.on(CH.display.changed, handler)
+      return () => ipcRenderer.removeListener(CH.display.changed, handler)
+    }
+  },
   capture: {
     getSettings: () => ipcRenderer.invoke(CH.capture.getSettings),
     set: (patch) => ipcRenderer.invoke(CH.capture.setSettings, patch),
@@ -203,10 +236,12 @@ const api: Api = {
     },
     validate: () => ipcRenderer.invoke(CH.capture.validate),
     preview: () => ipcRenderer.invoke(CH.capture.preview),
-    reconnect: () => ipcRenderer.invoke(CH.capture.reconnect)
+    reconnect: () => ipcRenderer.invoke(CH.capture.reconnect),
+    nativeCheck: () => ipcRenderer.invoke(CH.capture.nativeCheck),
+    listMicrophones: () => ipcRenderer.invoke(CH.capture.listMicrophones)
   },
   recordings: {
-    list: (accountId, page) => ipcRenderer.invoke(CH.recordings.list, accountId, page),
+    list: (accountId, page, game) => ipcRenderer.invoke(CH.recordings.list, accountId, page, game),
     detail: (recordingId) => ipcRenderer.invoke(CH.recordings.detail, recordingId),
     usage: () => ipcRenderer.invoke(CH.recordings.usage),
     remove: (recordingId) => ipcRenderer.invoke(CH.recordings.remove, recordingId),
@@ -219,11 +254,11 @@ const api: Api = {
       ipcRenderer.on(CH.recordings.changed, listener)
       return () => ipcRenderer.removeListener(CH.recordings.changed, listener)
     },
-    showMatch: (accountId, matchId) =>
-      ipcRenderer.invoke(CH.recordings.showMatch, accountId, matchId),
+    showMatch: (accountId, matchId, game) =>
+      ipcRenderer.invoke(CH.recordings.showMatch, accountId, matchId, game),
     onShowMatch: (cb) => {
-      const listener = (_e: IpcRendererEvent, accountId: string, matchId: string): void =>
-        cb(accountId, matchId)
+      const listener = (_e: IpcRendererEvent, accountId: string, matchId: string, game?: GameId): void =>
+        cb(accountId, matchId, game)
       ipcRenderer.on(CH.recordings.showMatch, listener)
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
     },

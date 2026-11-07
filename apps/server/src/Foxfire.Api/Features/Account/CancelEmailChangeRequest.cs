@@ -1,9 +1,11 @@
 using Foxfire.Api.Common;
+using Foxfire.Api.Configuration;
 using Foxfire.Api.Email;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Foxfire.Api.Features.Account;
 
@@ -19,6 +21,7 @@ internal sealed class CancelEmailChangeRequestHandler(
     UserManager<FoxfireUser> users,
     FoxfireDbContext db,
     EmailOutbox outbox,
+    IOptions<AdminOptions> adminOptions,
     IIdentityContext me,
     TimeProvider time,
     ILogger<CancelEmailChangeRequestHandler> logger)
@@ -50,6 +53,6 @@ internal sealed class CancelEmailChangeRequestHandler(
             logger.LogInformation("{Username} cancelled moving to a new email address", user.UserName);
         }
 
-        return await AccountEmail.DescribeAsync(db, outbox, user, now, cancellationToken);
+        return await AccountEmail.DescribeAsync(db, outbox, user, adminOptions.Value.Email, now, cancellationToken);
     }
 }

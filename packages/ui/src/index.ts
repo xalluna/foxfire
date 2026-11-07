@@ -27,6 +27,7 @@ export {
   type ContextMenuState
 } from './components/ContextMenu'
 export { CopyLinkButton } from './components/CopyLinkButton'
+export { ShareLinkDialog, ShareProfileButton, type ShareLinkView } from './components/ShareLinkDialog'
 export { ConfirmDialog, Dialog, DialogActions } from './components/Dialog'
 export { Disclaimer } from './components/Disclaimer'
 export { EmptyState } from './components/EmptyState'
@@ -37,6 +38,7 @@ export { Logo } from './components/Logo'
 export { LpChip } from './components/LpChip'
 export { MatchDetailTable } from './components/MatchDetailTable'
 export { MatchListRow } from './components/MatchListRow'
+export { MilestoneTimeline } from './components/MilestoneTimeline'
 export { PlayerSearch, type PlayerSearchProps, type PlayerSearchSection } from './components/PlayerSearch'
 export { ProfileHeader } from './components/ProfileHeader'
 export { ProfileMarks, type FavoriteMark, type HomeMark } from './components/ProfileMarks'
@@ -104,10 +106,28 @@ export { LpEditorPage } from './pages/LpEditorPage'
 export { MatchPage } from './pages/MatchPage'
 export { RankPage } from './pages/RankPage'
 export { RankInput, RankLabel, isApexTier } from './pages/RankInput'
+export { TftProfilePage, type TftProfilePageProps } from './pages/TftProfilePage'
+
+// TFT
+export {
+  PlacementBadge,
+  PlacementCell,
+  TraitBadge,
+  TraitStrip,
+  UnitStrip,
+  UnitTile
+} from './components/tft/TftBoard'
+export { TftLobbyTable } from './components/tft/TftLobbyTable'
+export { TftMatchListRow } from './components/tft/TftMatchListRow'
+export { PlacementSpread, TftRankCard } from './components/tft/TftRankCard'
+export { TftRecentSummary } from './components/tft/TftRecentSummary'
+export { costColor, formatStage, placementTone, tftAsset, tftName, tftUnitCost, traitStyle } from './lib/tft'
+export { summariseTftRecent, type TftRecentSummary as TftRecentFigures } from './lib/tftRecent'
 export { ServerDataPage, type ServerDataPageProps } from './admin/ServerData'
 export { InvitesPage, type InvitesPageProps } from './admin/Invites'
 export { LeagueAccountsPage, type LeagueAccountsPageProps } from './admin/LeagueAccounts'
 export { MembersPage, type MembersPageProps } from './admin/Members'
+export { SignupChoiceNotice } from './admin/SignupChoiceNotice'
 export { EmailAdminPage, type EmailAdminPageProps, type EmailLogFilters } from './admin/Email'
 export { MailStatus, describeMail } from './admin/mailStatus'
 export {
@@ -137,9 +157,12 @@ export {
   championIconUrl,
   championName,
   itemIconUrl,
+  itemName,
   profileIconUrl,
   runeIconUrl,
-  spellIconUrl
+  runeName,
+  spellIconUrl,
+  spellName
 } from './lib/assets'
 export { mostPlayed } from './lib/champions'
 export { roundedPath, type Point } from './lib/curve'
@@ -165,6 +188,8 @@ export {
   isTier,
   queueLabel,
   rankRecord,
+  ratedTierColor,
+  ratedTierLabel,
   tierColor,
   tierCrest,
   tierLabel,

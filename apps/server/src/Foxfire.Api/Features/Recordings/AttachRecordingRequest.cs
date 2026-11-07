@@ -81,6 +81,8 @@ internal sealed class AttachRecordingRequestHandler(
     FoxfireDbContext db,
     IIdentityContext me,
     AccountOwnership ownership,
+    TftIdentity tftIdentity,
+    ServerGames games,
     IServerEvents events,
     TimeProvider time,
     ILogger<AttachRecordingRequestHandler> logger)
@@ -104,13 +106,20 @@ internal sealed class AttachRecordingRequestHandler(
             return Response<MatchRecordingResponse>.Failure(AccountOwnership.NotYours, AccountOwnership.NotYoursStatus);
         }
 
+        // On either game's board: League's by the account's puuid, TFT's by
+        // its puuid under TFT's key, which is the same one unless the server
+        // has a TFT key of its own. TFT's only while this server offers it.
+        var tftPuuid = games.Tft ? await tftIdentity.KnownPuuidAsync(account, cancellationToken) : null;
+
         var played = await db.MatchParticipants
-            .AnyAsync(p => p.MatchId == request.MatchId && p.Puuid == account.Puuid, cancellationToken);
+                .AnyAsync(p => p.MatchId == request.MatchId && p.Puuid == account.Puuid, cancellationToken)
+            || (tftPuuid is not null && await db.TftParticipants
+                .AnyAsync(p => p.MatchId == request.MatchId && p.Puuid == tftPuuid, cancellationToken));
 
         if (!played)
         {
             return Response<MatchRecordingResponse>.Failure(
-                new Error("not_in_match", "That League account is not in that game on this server."),
+                new Error("not_in_match", "That account is not in that game on this server."),
                 HttpStatusCode.NotFound);
         }
 

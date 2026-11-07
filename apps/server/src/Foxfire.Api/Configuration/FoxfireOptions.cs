@@ -69,6 +69,16 @@ public sealed class RateLimitOptions
     /// Thirty would have run out inside a couple of names.
     /// </summary>
     public int SearchPerMinute { get; set; } = 120;
+
+    /// <summary>
+    /// Reads by somebody who is not signed in: a visitor to an open server, or
+    /// whoever was handed a share link. Members are never counted against it.
+    ///
+    /// Opening a profile is about ten requests and each game expanded on it one
+    /// more, so this is a dozen profiles a minute from one address — far more
+    /// than a person reading, and a ceiling on anybody scraping the server.
+    /// </summary>
+    public int ReaderPerMinute { get; set; } = 120;
 }
 
 /// <summary>The one Riot API key this server has.</summary>
@@ -93,6 +103,29 @@ public sealed class RiotOptions
     /// the key is not one just means collecting 429s faster.
     /// </summary>
     public string KeyType { get; set; } = "personal";
+
+    /// <summary>
+    /// A key of TFT's own, for a server whose main key cannot reach TFT.
+    ///
+    /// Riot ties a registered key to a product, so a key registered for League
+    /// alone is refused by every TFT endpoint. Left empty, TFT is called with
+    /// the main key, which is right for a development key and for a product
+    /// registered for both. Set, TFT gets its own key, its own queue under its
+    /// own limits, and — since Riot encrypts a puuid per key — a second puuid
+    /// for every account.
+    /// </summary>
+    public TftRiotOptions Tft { get; set; } = new();
+}
+
+/// <summary>The optional TFT key, read from <c>Riot__Tft__ApiKey</c> and <c>Riot__Tft__KeyType</c>.</summary>
+public sealed class TftRiotOptions
+{
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>"personal" or "application", as for the main key.</summary>
+    public string KeyType { get; set; } = "personal";
+
+    public bool IsSet => !string.IsNullOrWhiteSpace(ApiKey);
 }
 
 /// <summary>Signing keys and token lifetimes.</summary>
@@ -146,6 +179,15 @@ public sealed class AuthOptions
     /// </summary>
     public TimeSpan PasswordResetLifetime { get; set; } = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// How long a share link opens its profile for.
+    ///
+    /// A week, the same for every link: long enough for whoever it was sent to
+    /// to get round to it, short enough that a link posted somewhere and
+    /// forgotten stops working on its own.
+    /// </summary>
+    public TimeSpan ShareLinkLifetime { get; set; } = TimeSpan.FromDays(7);
+
     public byte[] JwtSigningKeyBytes => Encoding.UTF8.GetBytes(JwtSigningKey);
 
     public byte[] InviteSigningKeyBytes => Encoding.UTF8.GetBytes(InviteSigningKey);
@@ -163,7 +205,10 @@ public sealed class AdminOptions
     /// because public signup is on by default: a server reachable before its
     /// owner has got round to registering would otherwise belong to whoever
     /// found it. There is no window here — the claim is decided before the
-    /// server accepts its first request.
+    /// server accepts its first request — but only because the address is the
+    /// host's own. Registering it proves nothing about the mailbox, so the
+    /// example address .env.example used to ship would have handed the server to
+    /// anybody who had read that file; <see cref="ConfigurationCheck"/> refuses it.
     ///
     /// It also survives an accident. An admin who deletes themselves can
     /// register again and be an admin again.
@@ -296,6 +341,46 @@ public sealed class TelemetryOptions
 }
 
 /// <summary>
+/// How this process takes part in syncing. Whether the server syncs everybody
+/// on a timer, and how often, is an admin's switch in Settings, not this — see
+/// Sync/BackgroundSyncs.cs.
+/// </summary>
+public sealed class SyncOptions
+{
+    public const string Section = "Sync";
+
+    /// <summary>
+    /// Whether this process runs the background sweep at all when an admin has
+    /// turned it on.
+    ///
+    /// On for every real server. Off is for the test suite, which starts dozens
+    /// of servers on one database: one test turning background sync on would
+    /// otherwise set every one of them sweeping everybody's accounts, through a
+    /// Riot client with no real key behind it. The sweep's tests drive it
+    /// themselves.
+    /// </summary>
+    public bool Background { get; set; } = true;
+}
+
+/// <summary>
+/// Whether this server offers TFT, read from <c>Tft__Enabled</c> when it starts.
+/// See <see cref="Common.ServerGames"/> for what it switches.
+/// </summary>
+public sealed class TftOptions
+{
+    public const string Section = "Tft";
+
+    /// <summary>
+    /// Off unless the host turns it on. TFT needs a Riot key registered for it,
+    /// and a personal key is registered for one product, so a server that has
+    /// only League's has no TFT to offer. Off, the server asks Riot nothing
+    /// about TFT, and no client connected to it offers TFT. Turning it on
+    /// needs no migration: the tables are there either way.
+    /// </summary>
+    public bool Enabled { get; set; }
+}
+
+/// <summary>
 /// Checks the whole configuration at once, before anything starts.
 ///
 /// All of it, in one message, rather than failing on the first missing value and
@@ -308,6 +393,18 @@ public static class ConfigurationCheck
 {
     /// <summary>Signing keys shorter than this are not worth the name.</summary>
     private const int MinimumSigningKeyLength = 32;
+
+    /// <summary>
+    /// The examples .env.example shipped as values before it shipped them blank.
+    ///
+    /// A server deployed from that file starts with them filled in, and the
+    /// address is the dangerous one: whoever registers it becomes head admin,
+    /// with no proof they own the mailbox. Matched exactly rather than by the
+    /// example.com domain, so a test or a host who really uses it is not refused.
+    /// </summary>
+    private const string ExampleAdminEmail = "you@example.com";
+
+    private const string ExamplePublicUrl = "https://foxfire.example.com";
 
     public static IReadOnlyList<string> Validate(
         string? connectionString,
@@ -349,6 +446,12 @@ public static class ConfigurationCheck
                 $"Server__PublicUrl is '{server.PublicUrl}'. Anything other than localhost must be https — "
                 + "passwords and account tokens travel over this.");
         }
+        else if (string.Equals(server.PublicUrl.Trim().TrimEnd('/'), ExamplePublicUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            problems.Add(
+                $"Server__PublicUrl is still {ExamplePublicUrl}, the example from .env.example. Set it to the "
+                + "address your members reach this server at — invite and reset links are built from it.");
+        }
 
         if (string.IsNullOrWhiteSpace(riot.ApiKey))
         {
@@ -358,6 +461,11 @@ public static class ConfigurationCheck
         if (riot.KeyType is not ("personal" or "application"))
         {
             problems.Add($"Riot__KeyType must be 'personal' or 'application', not '{riot.KeyType}'.");
+        }
+
+        if (riot.Tft.IsSet && riot.Tft.KeyType is not ("personal" or "application"))
+        {
+            problems.Add($"Riot__Tft__KeyType must be 'personal' or 'application', not '{riot.Tft.KeyType}'.");
         }
 
         CheckSigningKey(problems, "Auth__JwtSigningKey", auth.JwtSigningKey);
@@ -376,6 +484,22 @@ public static class ConfigurationCheck
             problems.Add(
                 "Admin__Email is not set. It names the account that becomes this server's admin when it "
                 + "registers — without it nobody can administer the server.");
+        }
+        else if (!admin.Email.Contains('@', StringComparison.Ordinal))
+        {
+            // Registration refuses an address without one, so nobody could ever
+            // become this server's admin.
+            problems.Add(
+                $"Admin__Email is '{admin.Email}', which is not an email address. It names the account that "
+                + "becomes this server's admin when it registers, and nobody can register without an @.");
+        }
+        else if (string.Equals(admin.Email.Trim(), ExampleAdminEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            problems.Add(
+                $"Admin__Email is still {ExampleAdminEmail}, the example from .env.example, and anybody who has "
+                + "read that file could register it and become this server's head admin. Set it to an address "
+                + "you own and restart. An account that already registered with it stays a head admin until a "
+                + "head admin demotes it on the Members page.");
         }
 
         foreach (var address in ServerOptions.Split(server.TrustedProxies))

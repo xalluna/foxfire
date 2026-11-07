@@ -5,6 +5,7 @@
  * these: the desktop from its main process, the web client from the browser.
  */
 
+import type { GameId } from '../games/registry'
 import type { PageOptions } from './domain'
 
 /**
@@ -41,6 +42,17 @@ export interface ServerProbe {
    */
   email: boolean | null
   /**
+   * Whether the server can be read without signing in. Null from a server
+   * older than the switch, and when it could not be reached.
+   */
+  publicAccess: boolean | null
+  /**
+   * The games the server offers, League first — League alone from a server
+   * with TFT off and from one older than TFT. Null when it could not be
+   * reached.
+   */
+  games: GameId[] | null
+  /**
    * How this build stands against that server's stated range. Advisory only:
    * the server's allow list is a set rather than a range, so a version between
    * the minimum and the newest can still be absent from it. This decides what
@@ -73,6 +85,16 @@ export interface VersionInfo {
   publicUrl?: string
   /** Whether the server sends email. Absent from a server older than mail. */
   email?: boolean
+  /**
+   * Whether the server can be read without signing in. Absent from a server
+   * older than the switch, which means no.
+   */
+  publicAccess?: boolean
+  /**
+   * The games the server offers, by slug. Absent from a server older than
+   * TFT, which means League alone. Read it through `offeredGames`.
+   */
+  games?: string[]
 }
 
 /** Who you are on a server, as the server says it. */
@@ -141,7 +163,11 @@ export interface ImportProgress {
    */
   phase: 'accounts' | 'comparing' | 'matches' | 'readings' | 'finishing' | 'done'
   current: number
-  /** Zero while finishing, which has no countable work. */
+  /**
+   * How many there are. While finishing, the server's accounts once its first
+   * page says — and zero until then, and throughout against a server that
+   * works them all out in one request.
+   */
   total: number
 }
 
@@ -168,6 +194,11 @@ export interface ImportResult {
   /** Games the server worked LP out for once everything had arrived. */
   attributed: number
   /**
+   * Everything landed, but working out LP stopped before every account was
+   * done. Importing the same file again sends nothing twice and finishes it.
+   */
+  lpUnfinished?: boolean
+  /**
    * Riot IDs the server could not resolve, almost always renames.
    *
    * Named rather than counted: the fix is to re-add each under the name it
@@ -178,6 +209,11 @@ export interface ImportResult {
   alreadyThere: { matches: number; readings: number; seasons: number }
   /** Games whose payload the server could not read. */
   matchesFailed: number
+  /**
+   * TFT games in the file that were not sent, because the server has TFT off.
+   * Importing the same file again once it is on sends them and nothing else.
+   */
+  tftLeftBehind?: number
   /** Readings for an account that never resolved, or a queue the server does not track. */
   readingsUnplaced: number
   /**
@@ -364,10 +400,60 @@ export interface AdminInvite {
   canEmail?: boolean
 }
 
+/**
+ * One profile, opened to whoever holds the link, for a week.
+ *
+ * What the member who shared it and the admins see. The link itself is the
+ * profile's own address with `?share=` and the token on it — see
+ * `paths.player` — so the same address works for a member and an outsider.
+ */
+export interface ShareLink {
+  id: string
+  riotAccountId: string
+  gameName: string
+  tagLine: string
+  /** Recomputed by the server each time, so copying it again gives the same link. */
+  token: string
+  createdAt: string
+  expiresAt: string
+  /** Who shared it. */
+  createdBy: string | null
+}
+
+/** Why a share link opens nothing. */
+export type ShareLinkEnd = 'expired' | 'withdrawn' | 'invalid'
+
+/** What somebody following a share link is told about it, before a page is built around it. */
+export interface ShareLinkOpen {
+  usable: boolean
+  /** Why not, when it is not — the server's words, for a person. */
+  message: string
+  /** Which way it failed, when it did. Absent from a server older than saying. */
+  reason?: ShareLinkEnd | null
+  riotAccountId: string | null
+  gameName: string | null
+  tagLine: string | null
+  expiresAt: string | null
+}
+
 /** The switches an admin can change while the server runs. */
 export interface ServerAdminSettings {
   publicSignup: boolean
+  /**
+   * Whether somebody has decided sign-up either way. False only on a server
+   * from before new ones started invite-only, open by a default nobody was told
+   * about. Absent from a server older than the field, and read as chosen, so
+   * nothing asks a question that server cannot record.
+   */
+  publicSignupChosen?: boolean
+  /**
+   * Whether anybody can read the server without signing in. Absent from a
+   * server older than the switch, which never could.
+   */
+  publicAccess?: boolean
   backfillTarget: number
+  /** How far back a new account's TFT goes, separately from League's. Absent from a server older than TFT. */
+  tftBackfillTarget?: number
 
   /**
    * How many bytes of blob storage replays may take. Zero means no cap.
@@ -378,6 +464,18 @@ export interface ServerAdminSettings {
    * starts, rather than learning it from a storage bill.
    */
   replayByteCap: number
+
+  /**
+   * Whether the server syncs every tracked account by itself, on a timer —
+   * what keeps the LP graph of somebody not running Foxfire accurate. Off
+   * unless an admin turns it on. Absent, with the two below, from a server
+   * older than the switch.
+   */
+  backgroundSync?: boolean
+  /** Minutes between the starts of two background sweeps. */
+  backgroundSyncMinutes?: number
+  /** A sweep leaves alone an account synced this many minutes ago or less. Always under the interval. */
+  backgroundSyncSkipMinutes?: number
 }
 
 /**
@@ -453,6 +551,12 @@ export interface AccountEmail {
   mailEnabled: boolean
   /** Mail to your address bounced or was reported, and is no longer sent. */
   suppressed: boolean
+  /**
+   * Your address is the one the server's configuration names as its head admin,
+   * so it is changed there rather than here. Absent from a server older than
+   * the field, which refuses the change on save instead.
+   */
+  addressPinned?: boolean
 }
 
 /**

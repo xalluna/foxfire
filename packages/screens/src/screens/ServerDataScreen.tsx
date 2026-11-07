@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import type { ImportProgress, ImportResult } from '@foxfire/core'
 import { ServerDataPage } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
-import { useIsHeadAdmin } from '../client/useConnection'
+import { useIsHeadAdmin, useOffersGame } from '../client/useConnection'
 import { queryKeys } from '../queries/keys'
 import { nextOffset, pageItems } from '../queries/paging'
 
@@ -19,6 +19,9 @@ export function ServerDataScreen(): JSX.Element {
   const platform = usePlatform()
   const queryClient = useQueryClient()
   const isHeadAdmin = useIsHeadAdmin()
+  // TFT's backfill target is a server's with TFT on; with it off there is
+  // nothing to backfill.
+  const tft = useOffersGame('tft') === true
 
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
@@ -86,6 +89,29 @@ export function ServerDataScreen(): JSX.Element {
       replayCap={settings.data?.replayByteCap}
       onSaveReplayCap={async (bytes) => {
         await client.admin.setSettings({ replayByteCap: bytes })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
+      }}
+      backfill={
+        settings.data
+          ? { league: settings.data.backfillTarget, tft: tft ? settings.data.tftBackfillTarget : undefined }
+          : undefined
+      }
+      onSaveBackfill={async (patch) => {
+        await client.admin.setSettings(patch)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
+      }}
+      backgroundSync={
+        // All three or none: a server older than the switch sends none of them.
+        settings.data?.backgroundSync !== undefined
+          ? {
+              enabled: settings.data.backgroundSync,
+              minutes: settings.data.backgroundSyncMinutes ?? 30,
+              skipMinutes: settings.data.backgroundSyncSkipMinutes ?? 15
+            }
+          : undefined
+      }
+      onSaveBackgroundSync={async (patch) => {
+        await client.admin.setSettings(patch)
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.settings() })
       }}
       replays={replays.data === undefined ? undefined : pageItems(replays.data, (replay) => replay.matchId)}

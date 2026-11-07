@@ -23,7 +23,14 @@ public enum SyncTrigger
     Manual,
 
     /// <summary>A game ended, or the server decided by itself. No spinner.</summary>
-    Auto
+    Auto,
+
+    /// <summary>
+    /// The background sweep: nobody asked and nothing is waiting, so its
+    /// requests go last in Riot's queue. Never on the wire — clients know
+    /// manual and auto, and to them this is auto. See <see cref="SyncProgressEvent.Trigger"/>.
+    /// </summary>
+    Background
 }
 
 /// <summary>Which part of a sync the numbers describe.</summary>
@@ -59,6 +66,11 @@ public enum SyncPhase
 /// for that round trip between the spinner stopping and the new time arriving.
 /// The desktop's own event never carries it: this PC alone has no cooldown.
 /// </param>
+/// <param name="Game">
+/// Whose history the sync is of, as a slug. Last, and League by default, so a
+/// desktop from before TFT reads every event it always did — and reads a TFT
+/// sync's as its account's, which costs it a spinner and nothing else.
+/// </param>
 public sealed record SyncProgressEvent(
     Guid AccountId,
     SyncPhase Phase,
@@ -66,7 +78,17 @@ public sealed record SyncProgressEvent(
     int Total,
     string? Message,
     SyncTrigger Trigger,
-    DateTimeOffset? CooldownUntil = null);
+    DateTimeOffset? CooldownUntil = null,
+    string Game = "lol")
+{
+    /// <summary>
+    /// Manual or auto, and nothing else. A client types the trigger as exactly
+    /// those two, and keeps quiet for auto; a background sweep is nothing
+    /// anybody is watching either, so it goes out as auto rather than as a value
+    /// a desktop already installed would not know what to do with.
+    /// </summary>
+    public SyncTrigger Trigger { get; } = Trigger == SyncTrigger.Background ? SyncTrigger.Auto : Trigger;
+}
 
 /// <summary>
 /// Everything this server tells the desktops connected to it.
@@ -98,9 +120,10 @@ public interface IServerEvents
 
     /// <summary>
     /// A rank was read for an account outside its own sync: a running League
-    /// client reported one that moved, or another member's sync read it after a
-    /// game the two shared (<see cref="CoPlayerRanks"/>). The wire name still
-    /// says "lcu", which is where it started.
+    /// client reported one that moved. The wire name says "lcu", which is where
+    /// it started. Another member's sync does not raise it: it queues the account
+    /// a sync of its own (<see cref="CoPlayerSyncs"/>), and that run's finished
+    /// event refreshes everything this would have.
     /// </summary>
     Task RankChangedAsync(Guid riotAccountId, CancellationToken cancellationToken = default);
 

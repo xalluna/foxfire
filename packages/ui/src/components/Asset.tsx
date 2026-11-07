@@ -10,6 +10,11 @@ import clsx from 'clsx'
  * returned null), or the CDN request failed (so onError fires). The manifest
  * arrives over IPC while images load from the CDN directly, so the two are
  * genuinely independent.
+ *
+ * `alt` is empty by default, for art beside a name that already says it. An
+ * icon that is the only place something is named — an item, a spell, a rune —
+ * passes its name, and the placeholder carries it too, so a failed image does
+ * not take the name with it.
  */
 export function Asset({
   src,
@@ -28,7 +33,14 @@ export function Asset({
   const [failed, setFailed] = useState(false)
 
   if (!src || failed) {
-    return <div className={clsx('shrink-0 bg-surface-2', rounded, className)} title={title} />
+    return (
+      <div
+        className={clsx('shrink-0 bg-surface-2', rounded, className)}
+        title={title}
+        role={alt ? 'img' : undefined}
+        aria-label={alt || undefined}
+      />
+    )
   }
 
   return (

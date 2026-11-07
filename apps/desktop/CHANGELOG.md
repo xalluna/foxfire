@@ -7,6 +7,305 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.17.0] — 2026-11-07
+
+Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
+and the LP each game moved, and recordings of it — tracked the way League always has been, on a
+server whose host has turned TFT on or on its own. Every new recording is filed by player, game and
+mode — and Foxfire can now record your games by itself, with no OBS to install.
+
+### Added
+
+- **Recording without OBS.** Settings › Game capture has a choice of recorder: Foxfire, or OBS.
+  Foxfire's own recorder needs nothing installed — it records League's or TFT's own window, so a
+  browser you alt-tab to, a notification or Discord on top of the game never ends up in the
+  footage, and it encodes on your graphics card (NVIDIA, AMD or Intel, or Windows' own encoder when
+  none of those is there). It records the PC's sound in stereo, as it played, and, if you want it,
+  your microphone, picked from a list. The quality presets mean the same as they do for OBS, and cost about the same disk.
+  The card under the choice says which encoder this PC is using, or what is stopping it, with a
+  button to check again after a driver update.
+- **Recordings at your monitor's refresh rate.** Two quality presets for Foxfire's recorder keep
+  every frame your monitor shows — 1080p or 1440p at 144 fps on a 144 Hz screen — so footage moves
+  the way the game did instead of the slight judder of 60 frames picked out of 144. They follow the
+  fastest monitor you have, and OBS records them at 60.
+- **A TFT profile for every player.** A League | TFT switch sits at the top of a player's page, and
+  the TFT side has a card for each ladder — Ranked, Double Up and Hyper Roll — with your rank (Hyper
+  Roll's colour and rating), the set's games, your average place and how often you made the top
+  half, laid out as a bar for each place you finished. Double Up counts your team's place, #1 to #4,
+  because that is what moved your LP. Ranked has a 30-day graph. Above the history, your last 20
+  games: top-4 rate, firsts, average place, the run of finishes and the traits you played most.
+- **TFT where your server offers it.** On a server, TFT is there only when its host has turned it
+  on — it needs a Riot key registered for TFT, which a personal key usually is not. On a server
+  without it, Foxfire is the League app it was: no League | TFT switch, no TFT pages or seasons,
+  and nothing about your TFT games is sent to it. Local-only, TFT is offered as before, and your
+  own key decides whether it can be synced.
+- **TFT match history.** Each game shows your place, its queue, the stage you reached, your traits
+  and your board — every unit with its stars and items — and the LP it moved. Open one to see all
+  eight boards in that lobby, with anybody Foxfire tracks a link to their own TFT profile. The
+  history filters by queue, as League's does.
+- **TFT rank history.** "Rank history" on any TFT card opens that ladder's climb over 7 days, 30
+  days, a set or all of it, with its promotions and demotions. Hyper Roll is drawn by its rating,
+  banded by its colours — Gray to Orange — and its milestones are the colours you crossed.
+- **Edit LP for TFT.** Right-click a Ranked or Double Up game whose LP could not be worked out to
+  enter the rank you finished at, as you can for League. Double Up rows show your team's place.
+  Hyper Roll has a rating and no LP, and the menu says so.
+- **TFT sets in Settings › Rank tracking.** The seasons card has a League | TFT switch: TFT's sets
+  have dates of their own, Set 13 to Set 18 already filled in, and saving one game's list never
+  touches the other's.
+- **A TFT key of its own, if you need one.** Riot grants each key its games, and a key registered
+  for League alone cannot reach TFT. Settings › Riot API key says whether yours can, and takes a
+  second key for TFT when it cannot — or when you would rather TFT's backfill had a budget of its
+  own. Without one, TFT uses the key you already have.
+- **All of it without a server, too.** On its own, Foxfire backfills each account's TFT history
+  beside its League history, reads TFT's ladders, works out the LP each game moved and lets you
+  type the ones it cannot, exactly as it does for League. A game ending starts the search for it,
+  waiting longer for TFT, whose games Riot publishes only once the whole lobby is done.
+- **TFT's LP from the League client.** With the client open, Foxfire reads your TFT ranks the
+  way it reads League's — Hyper Roll's colour and rating too — so each TFT game's LP lands as you
+  finish, connected to a server or not. Leaving a TFT game early with "Exit now" counts as
+  finishing it.
+- **Record your TFT games.** Settings › Game capture lists TFT's queues under their own heading —
+  unticked, so nothing changes until you tick one. A TFT recording finds its game by the id the
+  League client gave it, shows up on its TFT history row, and goes to YouTube like a League one,
+  titled by its own template — `{placement} · {queue} · {trait}` to start with, in Settings ›
+  YouTube. The Recordings tab can show all of them, or just League's or TFT's, and "View match
+  history" on a TFT recording opens its game on the TFT profile. TFT is a program of its own now,
+  not League's: Foxfire's own OBS setup captures both, and a scene of your own needs a game capture
+  of `TFTClient-Win64-Shipping.exe` beside League's.
+- **One size for the whole app, in Settings › Display.** Interface size draws the text and the
+  layout larger together — 100%, 110%, 125% or 150% — in every Foxfire window, and keeps it after a
+  restart. Ctrl + = and Ctrl + − step it from any window and Ctrl + 0 puts it back, where those
+  keys used to be forgotten the moment the app closed.
+- **Charts you can read from the keyboard.** Tab to a rank graph — the profile's, the Rank
+  page's — or a telemetry chart, and the arrow keys step through its readings with the same
+  tooltip the pointer shows; Home and End go to the first and the latest. A screen reader hears
+  each reading as you move.
+- **Right-click menus from the keyboard.** The menu key or Shift+F10 on a match row opens its menu
+  with focus inside it; the arrow keys walk it, and Escape or choosing an item puts you back on the
+  row. An item that cannot be used yet can still be reached, so its reason is read out.
+- **Share a profile with somebody who isn't on your server.** Connected to a server, Share takes
+  Copy link's place on every profile: a link that opens that player's profile — League and TFT,
+  ranks, champions and games — in a browser, without an account, for a week. Withdraw it from the
+  same dialog. Nothing else on the server opens with it. On a server its admins have opened to
+  everybody, Copy link already reaches anyone, so it stays and Share isn't offered.
+- **Server admins: open the server to anybody, and see what's been shared.** Settings › Invites has
+  "Anyone can look without signing in", and a list of every shared profile with who shared it and
+  when it runs out, to copy or withdraw.
+- **Server admins: background sync.** Settings › Data & storage can have the server sync every
+  account it tracks by itself — every 30 minutes, leaving alone anybody synced in the last 15 — so
+  the LP graph of somebody who isn't running Foxfire, or of an account nobody has claimed, no
+  longer goes flat between their games. Off until you turn it on, and both timings can be changed;
+  Server insights counts its runs on their own. Needs a server new enough to have it — on an older
+  one the card isn't there.
+
+### Changed
+
+- **Game capture starts on Foxfire's own recorder.** A new install records without OBS. If you
+  already record with OBS, nothing changes: you stay on it until you choose otherwise, and the
+  recorder can only be switched between games. "Game audio" means everything the PC plays, voice
+  chat and music included, with either recorder.
+- **Recordings are filed by player, game and mode.** A new recording lands in your recording
+  folder as `Faker-KR1\LoL\Solo-Duo\2026-10-23 21-04-17.mp4` — or `TFT\Ranked`, `TFT\Double-Up`
+  and so on — rather than loose beside every other. A recording that never learnt whose it was goes
+  under `Unknown`, and a mode Foxfire does not know under `Other`. Recordings you already have
+  stay where they are, and so does anything OBS was set to write somewhere else. Deleting the last
+  recording in a folder removes the folder too.
+- **Rank milestones are a timeline.** A ladder's promotions and demotions hang on one line, newest
+  at the top. Where you went back and forth over the same line — Plat III, Plat IV, Plat III, Plat
+  IV — the crossings fold into one quiet row that says between which two ranks, how many times and
+  where it ended, and opens to show each one. A rank higher than any you have held this season stays
+  out of the fold with its crest lit, and so does getting back to a rank you had been away from for
+  a week or more. It is the same in League and TFT, Hyper Roll's colours included.
+- **The Champions page drops its subtitle.** The line under the heading that counted your synced
+  games and noted that remakes are left out is gone; the season and queue pickers beside it already
+  say what the table covers.
+- **The backfill bar drops its footnote.** The line under "Backfilling history" that guessed the
+  minutes left "at the personal-key rate limit" is gone. That limit is the server's to know about,
+  and the bar's count already says how far it has got.
+- **Easier to read.** Secondary text — captions, timestamps, column headers, the description under
+  every setting — is a lighter grey that holds up against every panel, where before it was barely
+  there, and every colour text is written in now meets the WCAG AA contrast guideline. Text is a
+  size larger throughout, and no word or number is smaller than 11px: the 9px badges on match rows
+  have grown, and the explanations that were set at the smallest size are a step up. A setting that
+  cannot be changed yet dims its name, not the explanation of why.
+- **Edges you can see.** Panels sit a shade further off the background with an outline you can make
+  out, text boxes, dropdowns and buttons have an outline of their own, and a field you are typing
+  in turns bright blue. Checkboxes and dropdowns are drawn dark rather than white.
+- **Chart labels keep their size.** The rank graph and the telemetry charts used to scale their
+  labels with the window, to almost nothing in a narrow one. They are drawn at a fixed, readable
+  size now.
+- **Tier colours read on dark panels.** Iron, Bronze, Master and Grandmaster — and Hyper Roll's
+  Purple — are lighter shades of the same colours, so a tier's name is as easy to read as any
+  other. The crests are untouched.
+- **Things told apart by colour are told apart by shape as well.** The telemetry charts draw their
+  second line dashed and their third dotted, and the legend matches. An assist on a recording's
+  timeline is a shield, where it was the kill's crossed swords in a quieter colour. The scoreboard
+  names its columns — KDA, CS, Gold, Damage, Taken — so the two damage bars are not told apart by
+  colour alone.
+
+### Fixed
+
+- **A big import to a server no longer says it failed after it landed.** Working out LP now goes a
+  page of accounts at a time and counts them as it goes, and if it stops part-way the result says
+  everything was added and to import the same file again to finish.
+- **Saving seasons works the LP out again**, on a server for both games and on this PC for your
+  own accounts — a boundary added late used to leave the numbers on match rows describing the old
+  one. The editor says while it saves that this takes a while, and a refusal shows why.
+- **Recordings start when the game does.** Foxfire only looked for the start of a game every two
+  seconds, so a recording began up to two seconds in, and a quick loading screen could be missed
+  altogether, since the League client itself was only checked every ten seconds. Now, from the
+  queue to the game, the client is checked every second and the game's start noticed within a
+  quarter of one, and the recorder is made ready during the loading screen.
+- **OBS recordings no longer open on black.** OBS only got hold of the game a few seconds after
+  play began — Foxfire switched OBS into its own setup as recording started, and OBS's game capture
+  then took its time finding the game. Foxfire now switches over while the game loads, and sets its
+  game capture to hook as fast as OBS allows.
+- **Foxfire no longer starts a second OBS beside the one you already have open.** It only asked
+  whether OBS was answering on its websocket, which OBS does once it has finished loading — so an
+  OBS you had just opened, or one starting with Windows, looked like no OBS at all, and the copy
+  Foxfire launched sat on OBS's "already running" prompt. Changing a setting while it was still
+  checking could launch two as well. A running OBS is now left alone, and Foxfire connects to it as
+  soon as it is ready.
+- **An opened match lists each team by lane** — top, jungle, mid, bot, then support — rather than
+  in whatever order the game's data happened to arrive, which on a server was no order at all.
+- **The arrow that opens a match is back inside its row.** In a window 1280 wide, with the profile
+  beside the list, it sat past the edge of the list and was cut off.
+- **The account rail opens to the keyboard.** Tabbing into it slides it open with the names and
+  the Set home and Remove buttons, which until now only a pointer could reach.
+- **Focus rings are no longer cut off** on match rows, period and queue toggles, settings rows that
+  open a window, the "Rank history" and "All champions" links under the profile's cards, and
+  right-click menu items. Each is drawn inside the control where the card around it clips.
+- **Screen readers hear what the icons are:** champions, summoner spells, runes and items in match
+  history and on the scoreboard, each player's lane on the scoreboard, and TFT's units, stars,
+  traits, items and augments. Items are also named when you hover them.
+- **LP is read out as gained or lost** — "gained 19 LP", "lost 17 LP", "promoted to Gold III" — where
+  a screen reader heard "19 LP" for a win and a loss alike.
+- **Fields a screen reader can name.** The server address, invite, username, email and password
+  fields in Settings › Server, the Riot ID when adding an account, a patch typed in on Archived
+  clients, the telemetry panel's filters, YouTube's privacy and title templates, a size limit in
+  gigabytes, and the admin pages' invite email, test email and replay cap were named only by their
+  placeholder, or not at all.
+- **Smaller things a screen reader got wrong.** The Champions table reads its sort off its column
+  headers, the telemetry panel's tabs are tabs, the tier track under a rank says how far it is to
+  the next tier, and a recording's event markers — which sat inside the seek bar, where nothing is
+  read out — are buttons of their own, named by what happened. Home and End jump to either end of
+  the seek bar.
+- **Switching servers no longer installs a Foxfire your server refuses.** Every switch passes
+  through "Use this PC", which fetched the newest release, and it installed on the next quit even
+  though the server you went back to would turn it away. Using this PC is now held to the oldest
+  Foxfire the servers you are still signed in to accept, and an update already downloaded is taken
+  back — off the window and the tray, and not installed on quit — as soon as the active server would
+  refuse it.
+- **The configured head admin's Account page says their address is set in the server's
+  configuration**, instead of asking for their password and then refusing the change.
+- **A server's owner can find their way back in.** Settings › Server's sign-in form says how to
+  get back in after a forgotten password, and so does the owner's own row in Members. "Running
+  your own" links to the server's settings file and says to make your account with the address
+  you put in `ADMIN_EMAIL` — the account that runs the server.
+- **Members no longer offers to disable your own account**, which locked you out until another
+  admin let you back in, and its intro now says what really happens: a new role reaches somebody
+  within fifteen minutes without signing them out, and only disabling signs them out everywhere.
+- **A server whose owner never chose who can join asks them.** Older servers were open to anybody
+  with the address by a default nobody was told about; Settings › Server, Members and Invites now
+  ask an admin to choose "Invite only" or "Keep it open", and Invites says what an open sign-up
+  lets a stranger read. New servers start invite-only.
+- **Inviting an address that already has an account is refused, naming the member**, and an
+  invite used while sign-up is open now shows under Used with who joined. A mistyped invite code
+  says to check it was copied whole.
+
+### Under the hood
+
+- Games are a first-class idea. `@foxfire/core` holds a registry of the Riot titles Foxfire tracks
+  — League and TFT — with each one's queues, ladders, recording folders and Riot key, and every list
+  of queues League used to keep for itself is now read from it, with League's answers pinned by a
+  test so the move changed nothing. The server keeps its own copy, and `fixtures/game-registry.json`
+  holds the two together.
+- Which games a server offers comes from its `/version` (`games`), kept with the server this desktop
+  remembers and refreshed whenever the push channel connects, so a host turning TFT on or off is
+  heard after their restart. A screen reads it as the connection's `games`; in server mode the main
+  process asks a server for no TFT sync, game end, rank reading or binding candidates it does not
+  offer.
+- A ladder that is not Solo/Duo no longer reads as Flex wherever it becomes a queue id or a label,
+  which every ladder did while League's two were the only ones.
+- The client contract every screen reads through has a `tft` namespace — the TFT profile, a paged
+  history, a game's lobby, and rank on TFT's ladders — and syncs and seasons take a game. A server
+  answers it under `/api/riot-accounts/{id}/tft`; Data Dragon's TFT files join the asset manifest,
+  and a TFT file Data Dragon will not give costs TFT its icons rather than League its manifest.
+  What a finished sync refreshes depends on which game it was, and sync progress is kept per game.
+- Linking an account on a server starts its TFT backfill as well as its League one.
+- Migration 016. Matches, seasons, sync state and recordings say which game they are, and
+  everything already stored reads as League's. A TFT board has a table of its own
+  (`tft_participants`); Hyper Roll's colour and rating have columns on entries, readings and LP
+  rows; an account can hold an id under a TFT key (`account_scoped_puuids`). Seasons and sync
+  state were rebuilt to be one game's at a time, with every season keeping its id, so a picked
+  period or a link still names the same one. TFT's sets from Set 13 are seeded.
+- Each Riot key has a queue of its own. A 403 from TFT on the main key is read as "this key has
+  no TFT" — telemetry calls it `no_access` — and no longer stops League's queue the way a refused
+  key does.
+- Importing a stats.db into a server brings its TFT games, sets, TFT ids and Hyper Roll ratings
+  across. A file from before TFT imports exactly as it did.
+- A TFT game is placed among rank readings at your own elimination, not the end of its lobby:
+  TFT moves your LP the moment you are knocked out, and the lobby can play on for twenty minutes.
+- With a TFT key of its own, every account's TFT id is learnt from its Riot ID the first time TFT
+  syncs, and its games move with it; taking the key away moves them back. League's identity
+  repair after a new main key carries TFT's games along too while the two share it.
+- League's rank refresh keeps League's ladders, and TFT's keeps TFT's.
+- The League client watcher tells TFT from League by the gameflow session's mode and map, and
+  logs each game's session once, with the ranked readings after it, at debug level. A rank reading
+  that cannot be recorded is skipped on its own, rather than taking the poll's other readings and
+  its game end with it — and showing the League client as disconnected while it was not.
+- TFT's game serves nothing on loopback for a recording to read — no clock, no events — so a TFT
+  game starts recording ten seconds after the League client says it is on, and stops when the
+  client says it is over. A recording keeps the game's id and platform, which name its match
+  exactly; one without them is bound only when a single game's
+  span — its start to your elimination, give or take five minutes — holds it. TFT recordings wait
+  90 minutes for their game before being written off, League's 30. "Other and rotating modes" is
+  League's: it does not record a TFT event queue.
+- Capture drives a recorder through one seam (`capture/recorder.ts`), with OBS and the native
+  recorder behind it. Whichever started a game finishes it, so switching recorder mid-game takes
+  effect after the game. Nothing that reads the capture status — the taskbar badge, the tray, the
+  updater's restart guard, the YouTube upload hold — needed to know which one it is.
+- The native recorder is the FFmpeg 9.0 LGPL build from BtbN, about 135 MB of the install,
+  pinned by checksum in `scripts/fetch-ffmpeg.mjs` and shipped beside the app with its licence. The
+  release workflow caches it and refuses a build without it. Video is Windows Graphics Capture of
+  the game window (`gfxcapture`) at the display's own refresh rate, evened out to the preset's 30 or
+  60 fps, and handed to NVENC on the GPU or converted for the other encoders;
+  audio comes from a hidden page that captures the PC's output and the microphone through Chromium
+  and pipes them to FFmpeg, which keeps them apart from the capture so the sound never sets the
+  pace of the picture; the two are lined up on the wall clock. The PC's sound is taken with
+  Chromium's call processing turned off — left on, it was mixed down to mono and run through
+  automatic gain control, which made loud moments sound blown out. Each encoder hands frames
+  back as soon as they are encoded: NVENC's default queue held the picture back far enough for
+  FFmpeg to pause the sound, which came out with a tenth of a second missing every third of a
+  second. Files are fragmented MP4, so
+  one cut short by a crash still plays, and each ends as the game's window closes rather than
+  carrying the sound on over a still frame until the League client says the game is over. Every
+  installed encoder is tried once at startup and the first that works is used.
+- An install that had capture set up before this version is pinned to OBS on first run, the way
+  the old recording folder was pinned when the app was renamed.
+- Quitting mid-game with the native recorder writes the recording down where FFmpeg is writing
+  it; FFmpeg finishes the file after the app has gone.
+- The native recorder's hidden audio page never plays perfect silence. Chromium runs a page that
+  has been silent for 30 seconds off a timer instead of the sound card, and that timer did not
+  always keep up — some test recordings lost a tenth of a second of sound in every three from 30
+  seconds in. A constant at −120 dBFS keeps the sound card in charge.
+- A ladder's rank history carries the season's best reading from before the range it covers, so a
+  30-day view can tell a first time from a return. This PC reads it from its own database, and a
+  server answers it from 0.6.0; against an older server, a peak is judged from the range alone.
+- `styles/contrast.test.ts` in `@foxfire/ui` reads the palette out of the stylesheet and holds
+  every text colour, tier colours included, to 4.5:1 against every background and every control
+  outline to 3:1, so a colour change that falls short fails the build.
+- The interface size is `display.zoom` in the app settings, applied as each window's zoom factor;
+  Windows' caption buttons are resized with it so they stay level with the title strip.
+- The asset manifest carries item names, from Data Dragon's `item.json` — one more file each time
+  it is built, fetched on its own so that a missing one costs the icons their names and nothing
+  else. A chart's keyboard cursor is `chartCursor` in `@foxfire/ui`, tested in plain node, and the
+  charts are sliders to a screen reader, which is what hands it the arrow keys.
+- The browser harness's server is community-sized: League accounts and Invites › Shared profiles
+  have pages, and Data & storage counts the accounts it lists. `?scenario=server-member` signs in
+  as a member with no admin pages, and `?scenario=server-fresh` as the owner of a server set up
+  today — alone in it, with no mail provider or replay store yet.
+
 ## [0.16.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP. Needs Foxfire Server 0.5.1, which is
@@ -1356,6 +1655,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.17.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.1...desktop-v0.17.0
 [0.16.1]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.0...desktop-v0.16.1
 [0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0
 [0.15.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.14.0...desktop-v0.15.0

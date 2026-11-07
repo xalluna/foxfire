@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
+import type { GameId, TftTrait, TftUnit } from '@foxfire/core'
 import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
 import {
   canUploadRecording,
@@ -12,6 +13,7 @@ import type {
   RecordingEvent,
   RecordingEventRole,
   LinkedMatchInfo,
+  LinkedTftMatchInfo,
   UploadState,
   YouTubePrivacy
 } from '@shared/types'
@@ -33,6 +35,11 @@ export interface NewRecording {
   selfChampionId: number | null
   /** Champion ids of all ten players, the fingerprint the match is found by. */
   roster: number[]
+  /** League's unless it says; TFT's is bound by its game id rather than a roster. */
+  game?: GameId
+  /** Riot's id for the game and the platform it was on, which together are its match id. */
+  gameId?: number | null
+  platformId?: string | null
 }
 
 interface RecordingRow {
@@ -76,6 +83,13 @@ interface RecordingRow {
   m_kills: number | null
   m_deaths: number | null
   m_assists: number | null
+  game: string
+  // All null unless the recording is a bound TFT game with the board still stored.
+  t_placement: number | null
+  t_team_placement: number | null
+  t_time_eliminated: number | null
+  t_traits_json: string | null
+  t_units_json: string | null
 }
 
 /**
@@ -99,14 +113,41 @@ const SELECT_RECORDING = `
          m.game_creation AS m_game_creation, m.game_duration AS m_game_duration,
          m.game_mode AS m_game_mode, m.queue_id AS m_queue_id,
          p.win AS m_win, p.champion_id AS m_champion_id, p.champion_name AS m_champion_name,
-         p.kills AS m_kills, p.deaths AS m_deaths, p.assists AS m_assists
+         p.kills AS m_kills, p.deaths AS m_deaths, p.assists AS m_assists,
+         r.game,
+         t.placement AS t_placement, t.team_placement AS t_team_placement,
+         t.time_eliminated AS t_time_eliminated, t.traits_json AS t_traits_json, t.units_json AS t_units_json
     FROM recordings r
     LEFT JOIN youtube_uploads u ON u.recording_id = r.id
     LEFT JOIN recording_attachments a ON a.recording_id = r.id AND a.server_key = ?
     LEFT JOIN matches m ON m.match_id = r.match_id
     LEFT JOIN match_participants p
       ON p.match_id = r.match_id
-     AND p.puuid = (SELECT puuid FROM accounts WHERE id = r.account_id)`
+     AND p.puuid = (SELECT puuid FROM accounts WHERE id = r.account_id)
+    -- A TFT recording's board, under the account's TFT key's id while it has
+    -- one and its own puuid otherwise — see services/tftIdentity.ts.
+    LEFT JOIN tft_participants t
+      ON r.game = 'tft'
+     AND t.match_id = r.match_id
+     AND t.puuid = COALESCE(
+           (SELECT puuid FROM account_scoped_puuids WHERE account_id = r.account_id AND scope = 'tft'),
+           (SELECT puuid FROM accounts WHERE id = r.account_id))`
+
+/** A bound TFT game's board, as this PC holds it. */
+function toTftMatchInfo(row: RecordingRow): LinkedTftMatchInfo | null {
+  if (row.match_id === null || row.m_game_creation === null || row.t_placement === null) return null
+  return {
+    matchId: row.match_id,
+    gameCreation: row.m_game_creation,
+    gameDuration: row.m_game_duration ?? 0,
+    queueId: row.m_queue_id,
+    placement: row.t_placement,
+    teamPlacement: row.t_team_placement,
+    timeEliminated: row.t_time_eliminated ?? 0,
+    traits: row.t_traits_json ? (JSON.parse(row.t_traits_json) as TftTrait[]) : [],
+    units: row.t_units_json ? (JSON.parse(row.t_units_json) as TftUnit[]) : []
+  }
+}
 
 function toMatchInfo(row: RecordingRow): LinkedMatchInfo | null {
   if (row.match_id === null || row.m_game_creation === null || row.m_champion_id === null) {
@@ -144,7 +185,9 @@ function toRecording(row: RecordingRow): Recording {
     durationSeconds:
       row.ended_at === null ? null : Math.round((row.ended_at - row.started_at) / 1000),
     selfChampionId: row.self_champion_id,
+    game: row.game === 'tft' ? 'tft' : 'lol',
     match: toMatchInfo(row),
+    tftMatch: row.game === 'tft' ? toTftMatchInfo(row) : null,
     fileDeleted: row.file_deleted_at !== null,
     youtube:
       row.youtube_video_id === null
@@ -177,8 +220,8 @@ export function createRecording(db: DatabaseSync, input: NewRecording): number {
   db.prepare(
     `INSERT INTO recordings
        (account_id, riot_id, server_key, file_path, queue_id, started_at,
-        game_time_offset, self_champion_id, roster_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        game_time_offset, self_champion_id, roster_json, game, game_id, platform_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     input.accountId,
     input.riotId,
@@ -188,7 +231,10 @@ export function createRecording(db: DatabaseSync, input: NewRecording): number {
     input.startedAt,
     input.gameTimeOffset,
     input.selfChampionId,
-    JSON.stringify(input.roster)
+    JSON.stringify(input.roster),
+    input.game ?? 'lol',
+    input.gameId ?? null,
+    input.platformId ?? null
   )
 
   const row = db.prepare('SELECT last_insert_rowid() AS id').get() as unknown as { id: number }
@@ -256,7 +302,8 @@ export function insertRecordingEvents(
 }
 
 /**
- * A page of one account's recordings, newest first.
+ * A page of one account's recordings, newest first — one game's, when the
+ * Recordings tab is filtered to it, or both.
  *
  * The id breaks ties so a page boundary cannot fall between two recordings that
  * started in the same millisecond and come back in the other order next time.
@@ -264,24 +311,29 @@ export function insertRecordingEvents(
 export function getRecordings(
   db: DatabaseSync,
   account: AccountContext,
-  page: { limit: number; offset: number }
+  page: { limit: number; offset: number },
+  game: GameId | null = null
 ): Recording[] {
   const rows = db
     .prepare(
       `${SELECT_RECORDING}
         WHERE ${ownedBy('r.account_id', 'r.riot_id')}
+          AND (? IS NULL OR r.game = ?)
         ORDER BY r.started_at DESC, r.id DESC
         LIMIT ? OFFSET ?`
     )
-    .all(account.serverKey, ...ownedByParams(account), page.limit, page.offset) as unknown as RecordingRow[]
+    .all(account.serverKey, ...ownedByParams(account), game, game, page.limit, page.offset) as unknown as RecordingRow[]
   return rows.map(toRecording)
 }
 
 /** How many recordings one account has — the total beside a page of {@link getRecordings}. */
-export function countRecordings(db: DatabaseSync, account: AccountContext): number {
+export function countRecordings(db: DatabaseSync, account: AccountContext, game: GameId | null = null): number {
   const row = db
-    .prepare(`SELECT COUNT(*) AS n FROM recordings r WHERE ${ownedBy('r.account_id', 'r.riot_id')}`)
-    .get(...ownedByParams(account)) as { n: number }
+    .prepare(
+      `SELECT COUNT(*) AS n FROM recordings r
+        WHERE ${ownedBy('r.account_id', 'r.riot_id')} AND (? IS NULL OR r.game = ?)`
+    )
+    .get(...ownedByParams(account), game, game) as { n: number }
   return row.n
 }
 
@@ -459,6 +511,41 @@ export function getRecordingFilePath(db: DatabaseSync, recordingId: number): str
   return row?.file_path ?? null
 }
 
+/** What a finished recording's place on disk is worked out from. See capture/recordingLayout.ts. */
+export interface RecordingPlacementFacts {
+  riotId: string | null
+  game: GameId
+  queueId: number | null
+  startedAt: number
+}
+
+export function getRecordingPlacementFacts(db: DatabaseSync, recordingId: number): RecordingPlacementFacts | null {
+  const row = db
+    .prepare('SELECT riot_id, game, queue_id, started_at FROM recordings WHERE id = ?')
+    .get(recordingId) as unknown as
+    | { riot_id: string | null; game: string; queue_id: number | null; started_at: number }
+    | undefined
+  if (!row) return null
+  return {
+    riotId: row.riot_id,
+    game: row.game === 'tft' ? 'tft' : 'lol',
+    queueId: row.queue_id,
+    startedAt: row.started_at
+  }
+}
+
+/** Whether another recording already claims this file, which the UNIQUE on file_path would refuse. */
+export function isRecordingPathTaken(db: DatabaseSync, filePath: string, exceptId: number): boolean {
+  return (
+    db.prepare('SELECT 1 FROM recordings WHERE file_path = ? AND id != ?').get(filePath, exceptId) !== undefined
+  )
+}
+
+/** Points a recording at the file where it now is, after it was moved into place late. */
+export function updateRecordingFilePath(db: DatabaseSync, recordingId: number, filePath: string): void {
+  db.prepare('UPDATE recordings SET file_path = ? WHERE id = ?').run(filePath, recordingId)
+}
+
 /** Removes the row and returns the file the caller should now unlink. */
 export function deleteRecording(db: DatabaseSync, recordingId: number): string | null {
   const path = getRecordingFilePath(db, recordingId)
@@ -473,6 +560,10 @@ export interface BindableRecording {
   endedAt: number | null
   roster: number[]
   selfChampionId: number | null
+  game: GameId
+  /** TFT's: the client's id for the game, and the platform, which together are its match id. */
+  gameId: number | null
+  platformId: string | null
 }
 
 /**
@@ -495,7 +586,7 @@ export function getBindableRecordings(
 ): BindableRecording[] {
   const rows = db
     .prepare(
-      `SELECT id, account_id, started_at, ended_at, roster_json, self_champion_id
+      `SELECT id, account_id, started_at, ended_at, roster_json, self_champion_id, game, game_id, platform_id
          FROM recordings
         WHERE ${ownedBy('account_id', 'riot_id')}
           AND ended_at IS NOT NULL
@@ -510,6 +601,9 @@ export function getBindableRecordings(
     ended_at: number | null
     roster_json: string | null
     self_champion_id: number | null
+    game: string
+    game_id: number | null
+    platform_id: string | null
   }>
 
   return rows.map((row) => ({
@@ -518,7 +612,10 @@ export function getBindableRecordings(
     startedAt: row.started_at,
     endedAt: row.ended_at,
     roster: row.roster_json ? (JSON.parse(row.roster_json) as number[]) : [],
-    selfChampionId: row.self_champion_id
+    selfChampionId: row.self_champion_id,
+    game: row.game === 'tft' ? 'tft' : 'lol',
+    gameId: row.game_id,
+    platformId: row.platform_id
   }))
 }
 

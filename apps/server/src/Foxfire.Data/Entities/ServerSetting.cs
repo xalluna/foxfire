@@ -44,13 +44,28 @@ public static class ServerSettingKeys
     /// <summary>
     /// Whether anybody may register without an invite. "true" or "false".
     ///
-    /// Defaults to on, per the design: a community server that nobody can join
-    /// is the less useful mistake to make by accident. A host who wants it shut
-    /// turns it off and hands out invites, and the admin account is seeded from
-    /// configuration either way, so there is no window in which an open server
-    /// is also an unclaimed one.
+    /// A new server writes "false" when it first starts on an empty database, so
+    /// it is invite-only until its owner opens it. Absent means a server from
+    /// before that, which reads as open — the old default — and whose owner the
+    /// admin pages ask to choose, since nothing ever told them it was open.
     /// </summary>
     public const string PublicSignup = "signup.public";
+
+    /// <summary>
+    /// Whether anybody may read this server without signing in. "true" or "false".
+    ///
+    /// Off by default, the other way round from signup: a server that cannot be
+    /// read without an account is the one nobody is surprised by, and opening
+    /// every member's history to the internet is a decision somebody should
+    /// have made rather than inherited. Writes stay members-only either way.
+    /// </summary>
+    public const string PublicAccess = "access.public";
+
+    /// <summary>
+    /// How many TFT matches to fetch when an account is first linked. League's
+    /// <see cref="BackfillTarget"/> is its own, under the key it always had.
+    /// </summary>
+    public const string TftBackfillTarget = "sync.tftBackfillTarget";
 
     /// <summary>
     /// How many matches to fetch when an account is first linked.
@@ -63,6 +78,26 @@ public static class ServerSettingKeys
     /// does not arrive late and surprise anybody.
     /// </summary>
     public const string BackfillTarget = "sync.backfillTarget";
+
+    /// <summary>
+    /// Whether the server syncs every tracked account by itself, on a timer.
+    /// "true" or "false".
+    ///
+    /// Off by default. It is what keeps the LP graph of somebody who is not
+    /// running Foxfire accurate, and it is also a few Riot requests per account
+    /// every sweep, from the one budget the whole server shares — a decision for
+    /// the host, like the backfill target, rather than one to inherit.
+    /// </summary>
+    public const string BackgroundSync = "sync.background";
+
+    /// <summary>Minutes between the starts of two background sweeps.</summary>
+    public const string BackgroundSyncMinutes = "sync.backgroundMinutes";
+
+    /// <summary>
+    /// Minutes since its last sync inside which a sweep leaves an account alone.
+    /// Always shorter than <see cref="BackgroundSyncMinutes"/>.
+    /// </summary>
+    public const string BackgroundSyncSkipMinutes = "sync.backgroundSkipMinutes";
 
     /// <summary>
     /// How many bytes of blob storage replays may take. "0" means no cap.

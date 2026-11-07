@@ -35,10 +35,20 @@ public static class AttributionRebuild
         var built = await settings.GetAttributionRuleAsync(cancellationToken);
         if (built == RankAttribution.RuleVersion) return;
 
-        var accounts = await scope.ServiceProvider.GetRequiredService<FoxfireDbContext>().RiotAccounts
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var tftHasOwnKey = scope.ServiceProvider.GetRequiredService<TftRiot>().HasOwnKey;
+
+        var accounts = await db.RiotAccounts
             .AsNoTracking()
             .Select(a => new { a.Id, a.Puuid })
             .ToListAsync(cancellationToken);
+
+        // TFT's games are filed under the TFT key's puuid when there is one. An
+        // account never resolved under it has no TFT games to rebuild yet.
+        var tftPuuids = await db.ScopedPuuids
+            .AsNoTracking()
+            .Where(s => s.Scope == RiotKeyScope.Tft)
+            .ToDictionaryAsync(s => s.RiotAccountId, s => s.Puuid, cancellationToken);
 
         log.LogInformation(
             "Working out LP again for {Accounts} account(s) under attribution rule {Rule} (was {Previous})",
@@ -57,6 +67,12 @@ public static class AttributionRebuild
             var attribution = accountScope.ServiceProvider.GetRequiredService<AttributionRunner>();
 
             written += await attribution.RebuildAllAsync(account.Id, account.Puuid, cancellationToken);
+
+            var tftPuuid = tftHasOwnKey ? tftPuuids.GetValueOrDefault(account.Id) : account.Puuid;
+            if (tftPuuid is not null)
+            {
+                written += await attribution.RebuildAllAsync(account.Id, Game.Tft, tftPuuid, cancellationToken);
+            }
         }
 
         await settings.SetAttributionRuleAsync(RankAttribution.RuleVersion, cancellationToken);

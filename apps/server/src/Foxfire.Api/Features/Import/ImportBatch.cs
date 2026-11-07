@@ -1,5 +1,6 @@
 using FluentValidation;
 using Foxfire.Api.Common;
+using Foxfire.Core;
 using Foxfire.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -76,6 +77,53 @@ internal static class ImportTranslation
     }
 
     /// <summary>Which account each id the import might name belongs to, old and current.</summary>
+    public static async Task<IReadOnlyDictionary<string, string>> TftPuuidRewritesAsync(
+        FoxfireDbContext db,
+        bool tftHasOwnKey,
+        CancellationToken cancellationToken)
+    {
+        var retired = await db.RetiredPuuids.AsNoTracking()
+            .Select(r => new { r.RiotAccountId, r.Puuid })
+            .ToListAsync(cancellationToken);
+
+        var main = await db.RiotAccounts.AsNoTracking()
+            .Select(a => new { a.Id, a.Puuid })
+            .ToDictionaryAsync(a => a.Id, a => a.Puuid, cancellationToken);
+
+        var scoped = tftHasOwnKey
+            ? await db.ScopedPuuids.AsNoTracking()
+                .Where(s => s.Scope == RiotKeyScope.Tft)
+                .ToDictionaryAsync(s => s.RiotAccountId, s => s.Puuid, cancellationToken)
+            : [];
+
+        Dictionary<string, string> rewrites = new(StringComparer.Ordinal);
+
+        foreach (var row in retired)
+        {
+            // Where this server files the account's TFT games: under TFT's own
+            // key when it has one and the account has been resolved under it,
+            // under the main one otherwise. An account not yet resolved under
+            // a TFT key of its own cannot be translated onto it yet.
+            var current = tftHasOwnKey
+                ? scoped.GetValueOrDefault(row.RiotAccountId)
+                : main.GetValueOrDefault(row.RiotAccountId);
+
+            if (current is not null && current != row.Puuid) rewrites[row.Puuid] = current;
+        }
+
+        // Under TFT's own key, a desktop's main id meant the main id here too —
+        // and on the TFT side that is the scoped one.
+        if (tftHasOwnKey)
+        {
+            foreach (var (accountId, puuid) in main)
+            {
+                if (scoped.TryGetValue(accountId, out var tft)) rewrites[puuid] = tft;
+            }
+        }
+
+        return rewrites;
+    }
+
     public static async Task<IReadOnlyDictionary<string, Guid>> OwnersByPuuidAsync(
         FoxfireDbContext db,
         CancellationToken cancellationToken)

@@ -11,6 +11,376 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.6.0] — 2026-11-07
+
+Teamfight Tactics, beside League, for a host who turns it on. The server syncs every account's TFT —
+history, boards, its three ladders and the LP each game moved — on its Riot key or one of TFT's own,
+and the web client gains a TFT profile and rank page for every player. Everything League had stays
+as it was: the API is version 3 still, and a desktop from before TFT is served as it always was.
+
+### Added
+
+- **TFT is the host's to turn on.** Set `TFT_ENABLED=true` in the server's `.env` and restart to
+  offer it. Until then the server is the League server it was: it asks Riot nothing about TFT, and
+  nobody connected to it — in a browser or on the desktop — is offered TFT at all. There is no
+  League | TFT switch, no TFT pages, seasons or backfill target. TFT needs a Riot key registered for
+  it, and a personal key is registered for one product, so most servers have no TFT to offer.
+  Turning it on later needs no migration, and each account's TFT history fills in from its next
+  sync. A link to somebody's TFT profile on a server without TFT opens their League profile.
+
+- **A TFT profile for every player, in the web client.** `/players/{name}/tft`,
+  reached by a League | TFT switch beside a player's tabs: a card for each of
+  TFT's ladders — Ranked, Double Up and Hyper Roll — with the set's games,
+  average place, top-half rate and a bar for each place (by team in Double Up),
+  the last 20 games at a glance, and a history of every game's board that opens
+  onto all eight in its lobby. A link to somebody's TFT profile opens on it, so
+  it can be shared like any other page.
+- **TFT rank history in the web client**, at `/players/{name}/tft/rank`: each
+  ladder's climb with its milestones, Hyper Roll drawn by its rating and banded
+  by its colours. **Edit LP** takes TFT's Ranked and Double Up games too.
+- **A recording of a TFT game** plays like League's, under a header with the
+  place it finished, its strongest trait and its carry.
+- **History backfill on Data & storage.** How many games a newly added
+  account's history goes back is now set from the page, for League and TFT
+  separately, where it used to be an API call. Both share the server's one
+  Riot budget.
+- **Background sync, so everybody's LP graph stays true.** Data & storage has a
+  switch that has the server sync every account it tracks by itself — League
+  and TFT — every 30 minutes, leaving alone anybody synced in the last 15.
+  Until now an account synced only when its owner's Foxfire saw a game end,
+  somebody pressed Sync now, or another member's sync found it in a game, so a
+  member who wasn't running Foxfire, or an account nobody had claimed, had a
+  graph that went flat in between. Both timings can be changed, the second
+  always shorter than the first. It is off until an admin turns it on: each
+  sweep is a few Riot requests for every account, and they wait behind anybody
+  searching and every game that just ended. Insights › Sync counts its runs
+  separately.
+- **Charts you can read from the keyboard**, in the web client. Tab to a rank
+  graph or an Insights chart, and the arrow keys step through its readings
+  with the same tooltip the pointer shows; Home and End go to the first and the
+  latest. A screen reader hears each reading as you move.
+- **Right-click menus from the keyboard**, in the web client. The menu key or
+  Shift+F10 on a match row opens its menu with focus inside it; the arrow keys
+  walk it, and Escape or choosing an item puts you back on the row.
+- **A server anybody can read, if you want one.** Invites has a new switch,
+  "Anyone can look without signing in". On, the web client opens every profile,
+  game and rank page — and the search box — to whoever has the address, with a
+  Sign in button where your name would be. Off, which is how every server
+  starts, nothing has changed. Either way, somebody who is not signed in can't
+  sync, type LP, attach or download anything, isn't shown who claimed an
+  account or the YouTube recordings members attached, and never makes the
+  server call Riot.
+- **Sharing one profile with somebody outside.** On a server that isn't open,
+  Share takes Copy link's place on a profile: a link that opens it — League
+  and TFT, both rank pages, champions, and every game in its history — to
+  anybody, without an account, for a week. Nothing else on the server opens
+  with it: a teammate on a scoreboard, or a name typed into the address bar,
+  says it is for members. Sharing the same profile again within a day gives
+  back the same link, and whoever made a link can withdraw it from the same
+  dialog. A link that has expired or been withdrawn says exactly that —
+  whether it was opened that way or stopped working while the profile was
+  open — rather than asking whoever followed it to sign in.
+- **Shared profiles on the Invites page.** Admins see every link that still
+  opens something — whose profile, who shared it, when it runs out — and can
+  copy or withdraw any of them.
+
+### Changed
+
+- **Rank milestones are a timeline** in the web client, League's and TFT's
+  alike. Going back and forth over the same line folds into one quiet row that
+  opens to show each crossing; a rank higher than any held this season stays
+  out of the fold with its crest lit, and so does getting back to a rank after
+  a week or more away.
+- **The Champions page drops its subtitle** in the web client. The line under
+  the heading that counted your synced games and noted that remakes are left
+  out is gone; the season and queue pickers beside it already say what the
+  table covers.
+- **The backfill bar drops its footnote** in the web client. The line under
+  "Backfilling history" that guessed the minutes left "at the personal-key
+  rate limit" is gone: that limit is the server's to know about, and the bar's
+  count already says how far it has got.
+- **Easier to read** in the web client. Secondary text — captions,
+  timestamps, column headers, form hints — is a lighter grey that holds up
+  against every panel, and every colour text is written in now meets the WCAG
+  AA contrast guideline. Text is a size larger throughout, and no word or
+  number is smaller than 11px. For larger still, the browser's own zoom
+  (Ctrl + =) is remembered for the site.
+- **Edges you can see** in the web client. Panels sit a shade further off the
+  background with an outline you can make out, text boxes, dropdowns and
+  buttons have an outline of their own, and a field you are typing in turns
+  bright blue.
+- **Chart labels keep their size.** The rank graph and the insights charts
+  used to scale their labels with the window, to almost nothing on a phone.
+- **Tier colours read on dark panels.** Iron, Bronze, Master and Grandmaster
+  — and Hyper Roll's Purple — are lighter shades of the same colours. The
+  crests are untouched.
+- **Things told apart by colour are told apart by shape as well**, in the web
+  client. Insights charts draw their second line dashed and their third
+  dotted, and the legend matches; an assist on a recording's timeline is a
+  shield rather than the kill's swords in a quieter colour; and the scoreboard
+  names its columns, so the two damage bars are not told apart by colour alone.
+- **A server still set to the example admin address no longer starts.**
+  `.env.example` shipped `ADMIN_EMAIL=you@example.com`, and whoever registered
+  that address became head admin — registering proves nothing about the
+  mailbox — so a server started from the untouched file belonged to anybody who
+  had read it. The file now ships `ADMIN_EMAIL` and `SERVER_PUBLIC_URL` blank,
+  and a server whose `Admin__Email` is still `you@example.com` or has no `@`, or
+  whose `Server__PublicUrl` is still `https://foxfire.example.com`, refuses to
+  start and says why. **If yours was deployed from the old file:** set the
+  address to one you own and restart, then check Members for a head admin you
+  don't recognise — an account that registered the example address keeps the
+  role until a head admin demotes it.
+- **Promoting or demoting somebody no longer signs them out of every device.**
+  It never made the change land any sooner — a role lives in a token nothing
+  can cut short, and the next renewal, within fifteen minutes, reads it
+  afresh — so all it did was end a member's sessions, and drop a desktop to
+  local-only mid-game. Disabling somebody still signs them out everywhere.
+- **Nobody can disable their own account.** The lockout outlives every session
+  and only another admin can lift it, so one misclick on your own row locked an
+  admin out. The server refuses it (`self_disable`) and Members no longer offers
+  it on your own row; stepping down and removing your account are unchanged.
+- **A new server starts invite-only.** Sign-up used to be open until somebody
+  closed it, and nothing in an owner's first session said so — anybody with the
+  address could make an account and read everything a member can. A server
+  starting on an empty database now writes sign-up off; its owner can still
+  register with `ADMIN_EMAIL`, and opens it, or invites people, from Invites.
+  A server that already has members keeps what it had.
+- **An older server whose owner never chose is asked.** Open by a default
+  nobody was told about, it shows "Who can join" at the top of Members and
+  Invites, in the web client and on the desktop, until an admin picks "Invite
+  only" or "Keep it open". `/api/admin/settings` says `publicSignupChosen`.
+  The Joining and Looking in rows say what an open sign-up lets a stranger
+  read.
+
+### Fixed
+
+- **A big import no longer says it failed after it landed.** Its last step,
+  working out LP, was one request for the whole server, and on a big community
+  a client stopped waiting for it after fifteen seconds — so an admin was told
+  the import failed when every row had arrived. It now goes a page of accounts
+  at a time, the progress counts them ("Working out LP — 120 of 480
+  accounts"), and if it stops part-way the result says everything was added
+  and to import the same file again to finish.
+- **Saving the season table can't leave somebody's LP half-rebuilt.** The
+  rebuild carries on if the page stops waiting for it, where it could stop
+  between deleting an account's figures and working them out again — and
+  saving TFT's sets now rebuilds TFT's LP, which it did not at all. The editor
+  says while it saves that it is working LP out again, and a refusal shows the
+  server's reason.
+- **An opened match lists each team by lane** in the web client — top,
+  jungle, mid, bot, then support — rather than in no particular order.
+- **Focus rings are no longer cut off** in the web client, on match rows,
+  period and queue toggles, the links under the profile's cards and right-click
+  menu items.
+- **Screen readers hear what the icons are** in the web client — champions,
+  spells, runes and items, each player's lane on the scoreboard, and TFT's
+  units, stars, traits, items and augments — and hear LP as gained or lost,
+  where "19 LP" used to stand for a win and a loss alike.
+- **The admin pages' fields have names**: the invite's email, the test email's
+  address and the replay cap were named only by their placeholder.
+- **Smaller things a screen reader got wrong**, in the web client: the
+  Champions table reads its sort off its column headers, the tier track says
+  how far it is to the next tier, and a recording's event markers are buttons
+  of their own rather than sitting unread inside the seek bar.
+- **A friend's games arrive with the one you played together.** When your sync
+  finds another member of the server in a game — a duo, a five-stack, a TFT
+  lobby, ranked or not — their history is synced too, where it used to only
+  read their rank. Somebody who had played three games on their own since
+  their last sync found those missing until they pressed Sync now, and the
+  game you shared was given the LP of all four.
+- **The configured head admin's Account page says their address is set in the
+  server's configuration**, instead of asking for their password and then
+  refusing the change.
+- **An owner who signed up under another address is told why the admin pages
+  never appeared.** The web client's "Administrators only" page says the head
+  admin is the account in `ADMIN_EMAIL` and how to change it; trying to move an
+  account onto that address says the same; and the server logs a Warning, at
+  startup and at the next registration, while it has accounts and no head admin.
+- **The way back after a forgotten password is written where an owner will look
+  for it**: on the sign-in page, on their own row in Members ("Reset link below
+  makes you one"), and first in `.env.example`'s `ADMIN_EMAIL` notes, which now
+  also finish the spare-address route — set it back and remove the spare.
+- **Joining through an invite while sign-up is open uses the invite up**, so it
+  shows under Used with who joined, and a link shared in a channel lets in one
+  person, as it says. An invite to an address that then joins another way is
+  closed too, rather than offering to email a member a link they cannot use.
+- **An invite can't be made for an address that already has an account.** It
+  is refused, naming the member, before anything is saved or emailed; one
+  waiting to be sent when that address joins is dropped ("that address joined
+  another way"). Registering with a taken address says to sign in or reset the
+  password, instead of Identity's own sentence.
+- **A dead invite or reset link says so, and what to do next**, in the web
+  client: its title follows the state ("This invite can't be used"), every
+  reason carries its own next step — a used invite says to sign in, a mistyped
+  one to check it was copied whole — and on a server anybody can join, a spent
+  invite points at making an account without it. The reset page no longer adds
+  "ask for a new one" to reasons it does not fit.
+
+### Under the hood
+
+- Reads have a policy of their own, `FoxfirePolicies.Reader`: a member, or
+  anybody while `access.public` is on, or a share link whose `ShareCoverage`
+  includes the route. Each read route says which with `AllowOutsiders`, and
+  every write is `RequireAuthorization()` on its own, so the route groups that
+  mixed the two are split. A share link's token travels in `X-Foxfire-Share`
+  and is checked against its row on every request; the request line records
+  the link's id, never its token.
+- Reads without a member are limited per address, at
+  `RateLimit__ReaderPerMinute` (120 by default); members are never counted.
+  The rate limiter now runs after authentication so it can tell them apart.
+  A rejection says "too many requests" rather than "too many attempts".
+- `/version` says `publicAccess`. Server settings carry it, cached for fifteen
+  seconds a process.
+- The `ShareLinks` table, migration `AddShareLinks`. Share tokens are signed
+  with a key derived from the invite key under a label of their own, so none
+  ever verifies as an invite or a reset.
+- Games are a first-class idea. `Foxfire.Core` has `Game` and the ladders of
+  both — `RankedQueue` gains TFT's Ranked, Double Up and Hyper Roll, and Hyper
+  Roll's rating has a scale of its own — kept in step with `@foxfire/core`'s
+  registry by `fixtures/game-registry.json`. Everything that meant League's two
+  ladders asks for League's by name.
+- A rank reading on a queue no ladder answers to is an error rather than a
+  Solo/Duo reading. Nothing writes one.
+- Migration `Games`. Matches, seasons and sync state say which game they are
+  of, and everything already stored reads as League's. A TFT board has a table
+  of its own (`TftParticipants`) beside a match like any other, so LP,
+  hand-entered LP and recordings reach a TFT game by the keys they already use.
+  Hyper Roll's colour and rating have columns on entries, readings and LP rows,
+  and an account can hold a puuid under a TFT key (`ScopedPuuids`). TFT's sets
+  from Set 13 to Set 18 are seeded as seasons that reset rank.
+- Seasons are one game's at a time. `GET` and `PUT /api/seasons` take an
+  optional `?game=`, and without one they mean League — so a desktop from
+  before TFT saving its season list replaces League's and never touches TFT's.
+- League's dashboard, match page, season periods and sync state read League's
+  rows alone.
+- The server talks to Riot's TFT API — matches, league entries and status —
+  with its main key, or with `Riot__Tft__ApiKey` when a host sets one, on a
+  queue of its own under `Riot__Tft__KeyType`'s limits. A key registered for
+  League alone gets a 403 from every TFT endpoint, the same status an expired
+  key gets; on the main key that is read as "no TFT here" rather than a refused
+  key, so it never stops League syncing. The server probes TFT at boot, logs a
+  warning once when it cannot reach it, and `/health` says `tftAccess`. A TFT
+  sync on such a key completes with nothing fetched and says why, rather than
+  failing — a League-only server is a healthy one, and its log should not say
+  otherwise for every account at every launch. Both settings are in
+  docker-compose and `.env.example`.
+- All of that only with `Tft__Enabled` (`TFT_ENABLED` in docker-compose), read
+  once at startup and off by default. `/version` lists the games the server
+  offers as `games` — `["lol"]` with TFT off, which is also what its absence
+  from an older server means — and both clients read their League | TFT
+  choices from it. Off, the routes under `/api/riot-accounts/{id}/tft` and
+  `/api/admin/import/tft-matches` are not mapped and fall to the API's JSON
+  404, a request naming TFT (`?game=tft`, a TFT ladder's rank reading) is
+  refused as `unknown_game` or `unknown_queue`, the boot probe, syncs, sweeps
+  and post-game ladders leave TFT alone, `/health` says `tftAccess: "off"`, and
+  an import leaves a file's TFT games, sets and readings behind and says how
+  many games. A TFT key set while TFT is off is a warning at boot. What was
+  stored while TFT was on stays in the database, unread.
+- Syncs are per account and per game. A TFT sync fetches TFT's games and
+  boards, reads TFT's ladders (Hyper Roll's colour and rating included),
+  attributes LP and syncs co-players, on its own sync state, its own cooldown
+  and its own post-game ladder — a longer one, since Riot publishes a TFT match
+  only when its whole lobby is done. `POST /api/sync/{id}` and `GET` take
+  `?game=tft`; `POST /api/sync/game-ended` and `/api/rank-readings` take a
+  `game`, and without one mean League, which is what a desktop from before TFT
+  sends. Progress events carry the game.
+- A post-game ladder stops once the account's history has moved past where it
+  stood when the game ended, whichever sync moved it, rather than only when its
+  own sync stored something. Two members in one game each run a ladder, and the
+  first to find the match stores it for both; the second's sync then found it
+  already stored and kept looking, spending a delta's worth of Riot requests on
+  every attempt it had left — up to four of League's five, five of TFT's six. A
+  Sync now pressed while a ladder waits ends it the same way, before it asks
+  Riot again.
+- A TFT game is placed at its player's own elimination, not the end of its
+  lobby. TFT moves LP the moment somebody is knocked out, and the lobby can play
+  on for twenty minutes.
+- With a TFT key of its own, every account gets a puuid under that key, and TFT
+  games are filed under it; taking the key away moves them back. A dead TFT
+  puuid is re-resolved like a dead League one.
+- An admin-added account backfills TFT as well as League. The TFT backfill
+  target is a setting of its own (`tftBackfillTarget`, default 200).
+- League's rank refresh keeps League's ladders. It used to store whatever
+  league-v4 answered with.
+- The insights page's recent syncs say which game each was.
+- TFT's reads, under `/api/riot-accounts/{id}/tft`: the dashboard (TFT's
+  ladders, its sync state, and each ladder's placements over the current set —
+  by team in Double Up), a paged history (`/matches`, 20 a page, in
+  `WireShapeTests`' list of lists that grow), one game, its eight-board lobby,
+  rank history, trend and periods on TFT's seasons, and the LP editor's list,
+  save and clear for Ranked and Double Up — Hyper Roll has a rating and nothing
+  to type. Rank history carries Hyper Roll's colour and rating. League's routes
+  refuse a TFT ladder, and TFT's a League one.
+- A recording attaches to a TFT game as it does to League's, and rides on its
+  TFT history row.
+- A stats.db's TFT games import through `/api/admin/import/tft-matches`,
+  rewritten onto whichever id this server files TFT under; an account can
+  bring its TFT id along, and finishing an import works out TFT's LP too.
+  Imported seasons say whose they are, and are matched within their game —
+  a TFT set and a League season can open on the same day — and an imported
+  reading can be on any game's ladder, Hyper Roll's arriving with its colour
+  and rating.
+- The web client reads TFT through the same contract the desktop does, and its
+  asset manifest carries Data Dragon's TFT units, traits, items and augments
+  when Data Dragon gives them — and League's item names, from `item.json`,
+  fetched on its own so a missing one costs the icons their names and nothing
+  else.
+- `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 under
+  `Foxfire.Data`. The 9.0.11 that SQL Server's client asks for carries two
+  advisories, and with warnings as errors a restore refused to start.
+- `/api/riot-accounts/{id}/rank/history`, and TFT's, answer `peakBefore` as
+  well: the highest reading since the ladder last reset, from before the range —
+  what the Rank page measures a new peak against. It is additive, and the API
+  is version 3 still.
+- `styles/contrast.test.ts` in `@foxfire/ui` holds every text colour in the
+  palette, tier colours included, to 4.5:1 against every background and every
+  control outline to 3:1, so a colour change that falls short fails the build.
+- The Insights test that counts a request under its status sums the window
+  rather than reading its last ten seconds, which three requests could straddle,
+  so it no longer fails at random in CI.
+- `CoPlayerRanks` is `CoPlayerSyncs`. After a sync that is not a backfill
+  stores games, every other tracked account in them — League's from the
+  participants, TFT's from the boards, any queue — is started on a sync of its
+  own for that game, as an automatic one, so its requests go as post-game work.
+  An account whose own sync is under way, or whose own post-game ladder is
+  waiting, is left to it. The run stores what was missing before it reads rank,
+  which is what keeps the reading from closing an interval on games that had not
+  arrived. That trades one league-v4 request per co-player for their delta — the
+  id list, the reading, the profile and whatever is new — and the account's own
+  finished event refreshes its screens, so `lcu:rankChanged` is no longer raised
+  for it.
+- Background sync is `Sync/BackgroundSyncs.cs`, a hosted service that reads
+  `sync.background`, `sync.backgroundMinutes` and `sync.backgroundSkipMinutes`
+  every minute. A sweep goes stalest history first and never-synced last, one
+  account at a time, and skips one whose sync is under way or whose post-game
+  ladder is waiting, and TFT altogether while the key cannot reach it. Its runs
+  are `SyncTrigger.Background`: Riot's backfill queue, and `background` in the
+  sync metrics and `InsightsSyncTotals.Background` — but `auto` on the wire,
+  since clients know only manual and auto. One process sweeps at a time, under
+  an `sp_getapplock` that the email dispatcher now takes through the same
+  `SqlAppLock`. `Sync__Background=false` keeps a process from sweeping at all,
+  which is the test fixture's: its hosts share one database.
+- Admin actions name who did them, and to whom, in the log — so the Insights
+  Logs tab and the stored logs answer "who unlinked this?". An unlink names
+  the admin and the former owner by name rather than a user id (and an account
+  already unclaimed is left alone without a line); adding an account, making
+  and withdrawing invites, removing somebody's replay, and every settings
+  change — sign-up, backfill, the replay cap, which logged nothing before —
+  carry `{Actor}`, which replaces the two `{Admin}` properties. A claim reads
+  `{Username} claimed {RiotId}`, and a registration says which invite let
+  somebody in.
+- The web client's design harness administers a community-sized server: League
+  accounts and Invites › Shared profiles have pages, and Data & storage counts
+  the accounts it lists. `?scenario=server-member` signs in as a member who is no
+  admin, and `?scenario=server-fresh` as the owner on the day a server was set
+  up — alone in it, with no mail provider or replay store yet.
+- `POST /api/admin/import/finish` takes `offset` and `limit` (at most 25
+  accounts) and answers `total` and `nextOffset`; asked for neither, it does
+  the whole server as before, so an older desktop's import still finishes.
+  The import's finish and a season save each run every account in a scope of
+  its own, on the host's shutdown token rather than the request's. Saving
+  seasons is logged at Warning with the admin who did it.
+
 ## [0.5.1] — 2026-09-27
 
 A fix for LP in match history that disagreed with Edit LP, and for games played
@@ -970,6 +1340,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.6.0]: https://github.com/xalluna/foxfire/compare/server-v0.5.1...server-v0.6.0
 [0.5.1]: https://github.com/xalluna/foxfire/compare/server-v0.5.0...server-v0.5.1
 [0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
 [0.4.0]: https://github.com/xalluna/foxfire/compare/server-v0.3.1...server-v0.4.0

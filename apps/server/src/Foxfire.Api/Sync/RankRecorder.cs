@@ -26,7 +26,9 @@ public sealed record RankReadingInput(
     RankDivision? Division,
     int? LeaguePoints,
     int? Wins,
-    int? Losses);
+    int? Losses,
+    RatedTier? RatedTier = null,
+    int? RatedRating = null);
 
 /// <summary>
 /// Recording rank, for both the things that observe it.
@@ -43,7 +45,7 @@ public sealed record RankReadingInput(
 /// refresh. RankSnapshots is append-only, and everything about LP is derived
 /// from pairs of rows in it.
 /// </summary>
-public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvider time)
+public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TftRiot tft, TimeProvider time)
 {
     /// <summary>
     /// Asks Riot where this account stands and records what it says.
@@ -63,7 +65,10 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
 
         var now = time.GetUtcNow();
 
-        foreach (var entry in entries)
+        // League's ladders only. league-v4 has answered with queues nobody
+        // tracks before, and every one of them used to be stored and read back
+        // onto League's profile.
+        foreach (var entry in entries.Where(e => RankedQueues.FromRiotName(e.QueueType, Game.Lol) is not null))
         {
             // Riot's spelling, turned into the type, once — and null when it
             // is a tier this server has never heard of, which reads the same
@@ -111,11 +116,73 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
 
         await db.SaveChangesAsync(cancellationToken);
 
+        var ladders = RankedQueues.Of(Game.Lol).Select(q => q.RiotName()).ToList();
+
         return await db.LeagueEntries
             .AsNoTracking()
-            .Where(l => l.RiotAccountId == account.Id)
+            .Where(l => l.RiotAccountId == account.Id && ladders.Contains(l.QueueType))
             .OrderBy(l => l.QueueType)
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The same for TFT: tft-league-v1, with the TFT client and the account's
+    /// puuid under TFT's key — which is the main one unless the server has a
+    /// TFT key of its own.
+    ///
+    /// Hyper Roll comes back rated, with a colour and a rating where the others
+    /// have tier, division and LP, and is stored and read the same way.
+    /// </summary>
+    public async Task RefreshTftFromRiotAsync(
+        RiotAccount account,
+        string tftPuuid,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        var entries = await tft.Client.GetTftLeagueEntriesAsync(
+            account.Platform, tftPuuid, priority, cancellationToken);
+
+        var now = time.GetUtcNow();
+
+        foreach (var entry in entries.Where(e => RankedQueues.FromRiotName(e.QueueType, Game.Tft) is not null))
+        {
+            var tier = RankTiers.FromRiotName(entry.Tier);
+            var division = RankDivisions.FromRiotName(entry.Division);
+            var ratedTier = RatedTiers.FromRiotName(entry.RatedTier);
+
+            var existing = await db.LeagueEntries.FirstOrDefaultAsync(
+                l => l.RiotAccountId == account.Id && l.QueueType == entry.QueueType,
+                cancellationToken);
+
+            if (existing is null)
+            {
+                existing = new LeagueEntry { RiotAccountId = account.Id, QueueType = entry.QueueType };
+                db.LeagueEntries.Add(existing);
+            }
+
+            existing.Tier = tier;
+            existing.Division = division;
+            existing.LeaguePoints = entry.LeaguePoints;
+            existing.Wins = entry.Wins;
+            existing.Losses = entry.Losses;
+            existing.RatedTier = ratedTier;
+            existing.RatedRating = entry.RatedRating;
+            existing.FetchedAt = now;
+
+            await RecordAsync(
+                account.Id,
+                new RankReadingInput(
+                    entry.QueueType, tier, division, entry.LeaguePoints, entry.Wins, entry.Losses,
+                    ratedTier, entry.RatedRating),
+                RankSources.LeagueV4,
+                now.ToUnixTimeMilliseconds(),
+                force: false,
+                cancellationToken);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -149,7 +216,9 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
             && previous is not null
             && previous.Tier == input.Tier
             && previous.Division == input.Division
-            && previous.LeaguePoints == input.LeaguePoints)
+            && previous.LeaguePoints == input.LeaguePoints
+            && previous.RatedTier == input.RatedTier
+            && previous.RatedRating == input.RatedRating)
         {
             return false;
         }
@@ -166,7 +235,12 @@ public sealed class RankRecorder(FoxfireDbContext db, RiotClient riot, TimeProvi
 
             // Stamped on write so a graph never has to recompute it, and so the
             // row keeps the answer the ladder maths gave at the time.
-            LadderPosition = Ladder.LadderPosition(new Rank(input.Tier, input.Division, input.LeaguePoints)),
+            // On a rated ladder, the rating.
+            LadderPosition = RankedQueues.FromRiotName(input.QueueType) is { } queue
+                ? Ladders.PositionOf(queue, new Rank(input.Tier, input.Division, input.LeaguePoints), input.RatedRating)
+                : Ladder.LadderPosition(new Rank(input.Tier, input.Division, input.LeaguePoints)),
+            RatedTier = input.RatedTier,
+            RatedRating = input.RatedRating,
 
             Source = source,
             CapturedAt = capturedAtMs

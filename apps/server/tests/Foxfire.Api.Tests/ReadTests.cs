@@ -655,6 +655,41 @@ public class ReadTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task The_rank_page_knows_the_seasons_best_before_its_month()
+    {
+        // What a milestone in the month is measured against to be a new peak:
+        // the highest reading since the ladder reset, not just since the month.
+        await using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<FoxfireDbContext>();
+        var reads = new RankReads(db, new FixedClock(June));
+
+        var now = June.ToUnixTimeMilliseconds();
+        var account = await AddAccountAsync(db);
+        var queue = RankedQueue.SoloDuo.RiotName();
+
+        // Last season, across the seeded January reset: higher, and not this ladder.
+        await AddReadingAsync(db, account.Id, 2000, new DateTimeOffset(2025, 12, 20, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds());
+
+        // This season before the month: a tie at the top, the later one standing.
+        await AddReadingAsync(db, account.Id, 1300, now - (120 * DayMs));
+        await AddReadingAsync(db, account.Id, 1300, now - (90 * DayMs));
+        await AddReadingAsync(db, account.Id, 1100, now - (45 * DayMs));
+
+        // Inside the month, however high, is not before it.
+        await AddReadingAsync(db, account.Id, 1500, now - (10 * DayMs));
+
+        var month = await reads.HistoryAsync(account.Id, queue, "30d");
+
+        Assert.NotNull(month.PeakBefore);
+        Assert.Equal(1300, month.PeakBefore.LadderPosition);
+        Assert.Equal(now - (90 * DayMs), month.PeakBefore.CapturedAt);
+
+        // A range with no start has no season before it either.
+        var all = await reads.HistoryAsync(account.Id, queue, "all");
+        Assert.Null(all.PeakBefore);
+    }
+
+    [Fact]
     public async Task The_rank_trend_is_refused_for_an_unranked_queue_and_an_unknown_account()
     {
         var (client, admin) = await server.AdminAsync();

@@ -1,4 +1,4 @@
-import type { ConnectionState, FoxfireClient } from '@foxfire/core'
+import { GAME_IDS, type ConnectionState, type FoxfireClient } from '@foxfire/core'
 import type { Api } from '@shared/api'
 import { YOUTUBE_ENABLED } from '@shared/features'
 import type { ServerState } from '@shared/types'
@@ -51,6 +51,7 @@ export function createIpcClient(api: Api): FoxfireClient {
     },
 
     seasons: api.seasons,
+    tft: api.tft,
     search: api.search,
     favorites: api.favorites,
 
@@ -74,6 +75,11 @@ export function createIpcClient(api: Api): FoxfireClient {
       cancelEmailChange: api.server.cancelEmailChange
     },
 
+    shares: {
+      create: api.server.createShareLink,
+      revoke: api.server.revokeShareLink
+    },
+
     admin: {
       users: api.serverAdmin.users,
       updateUser: api.serverAdmin.updateUser,
@@ -87,6 +93,7 @@ export function createIpcClient(api: Api): FoxfireClient {
       emailInvite: api.serverAdmin.emailInvite,
       getSettings: api.serverAdmin.getSettings,
       setSettings: api.serverAdmin.setSettings,
+      shareLinks: api.serverAdmin.shareLinks,
       storage: api.serverAdmin.storage,
       storedReplays: api.serverAdmin.storedReplays,
       removeReplay: api.serverAdmin.removeReplay,
@@ -136,6 +143,10 @@ export function connectionFrom(state: ServerState): ConnectionState {
           isHeadAdmin: state.session.isHeadAdmin
         }
       : null,
+    publicAccess: connected ? state.publicAccess : false,
+    // The server's to say while reading from it; local-only, this machine's
+    // own key decides what it can reach, and every game is offered.
+    games: connected ? state.games : [...GAME_IDS],
     riotKeyRejected: state.riotKeyRejected,
     upgradeRequired: state.upgradeRequired
   }

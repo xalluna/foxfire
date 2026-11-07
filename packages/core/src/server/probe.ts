@@ -1,3 +1,4 @@
+import { offeredGames } from '../games/registry'
 import type { ServerProbe, VersionInfo } from '../types'
 import { ServerError } from './errors'
 import type { ClientIdentity } from './identity'
@@ -44,6 +45,8 @@ export async function probeServer(
     publicSignup: null,
     publicUrl: null,
     email: null,
+    publicAccess: null,
+    games: null,
     compatibility: 'unknown'
   })
 
@@ -62,6 +65,8 @@ export async function probeServer(
       publicSignup: version.publicSignup,
       publicUrl: version.publicUrl ?? null,
       email: version.email ?? null,
+      publicAccess: version.publicAccess ?? null,
+      games: offeredGames(version.games),
       compatibility:
         identity.kind === 'desktop'
           ? judge(identity.version, version.minimumDesktop, version.recommendedDesktop)

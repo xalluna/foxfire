@@ -46,7 +46,7 @@ describe('schedulePostGameSync', () => {
 
     await vi.advanceTimersByTimeAsync(PAST_EVERYTHING)
     expect(syncAccount).toHaveBeenCalledTimes(1)
-    expect(syncAccount).toHaveBeenCalledWith(ACCOUNT, 'auto')
+    expect(syncAccount).toHaveBeenCalledWith(ACCOUNT, 'auto', 'lol')
   })
 
   it('keeps retrying while the match is still missing, then stops when it lands', async () => {
@@ -118,4 +118,26 @@ describe('schedulePostGameSync', () => {
     expect(syncAccount).not.toHaveBeenCalled()
   })
 
+  it('waits longer for TFT, whose game is published only once its whole lobby is done', async () => {
+    syncAccount.mockResolvedValue(FOUND)
+
+    schedulePostGameSync(ACCOUNT, 'tft')
+    // Past League's first attempt, short of TFT's.
+    await vi.advanceTimersByTimeAsync(45_000)
+    expect(syncAccount).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(syncAccount).toHaveBeenCalledWith(ACCOUNT, 'auto', 'tft')
+  })
+
+  it('keeps a League game’s search and a TFT game’s apart', async () => {
+    syncAccount.mockResolvedValue(FOUND)
+
+    // One does not replace the other, as a second League game's would.
+    schedulePostGameSync(ACCOUNT, 'lol')
+    schedulePostGameSync(ACCOUNT, 'tft')
+    await vi.advanceTimersByTimeAsync(2 * PAST_EVERYTHING)
+
+    expect(syncAccount.mock.calls.map((call) => call[2])).toEqual(['lol', 'tft'])
+  })
 })

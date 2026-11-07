@@ -10,7 +10,9 @@ import * as Icon from './icons'
  * The account switcher.
  *
  * Collapsed it is a 64px strip of avatars; hovering slides it out to 224px to
- * reveal names and the per-account actions. The expanding element is
+ * reveal names and the per-account actions, and so does focus inside it, so a
+ * keyboard that tabs into the rail gets the same names and the same Set home
+ * and Remove buttons a pointer does. The expanding element is
  * absolutely positioned inside a fixed-width shell, so opening it draws over
  * the content rather than reflowing the two columns beside it — a layout shift
  * on hover would be intolerable over a list of match rows.
@@ -80,15 +82,17 @@ export function AccountRail({
         ref={railRef}
         // Every `group-hover:` reveal below is paired with a `group-data-[open]:`
         // one, so a pinned rail looks the same with the pointer away as it does
-        // under it — 224px of names, not 224px of gap.
+        // under it — 224px of names, not 224px of gap — and with a
+        // `group-focus-within:` one, so it opens to a keyboard too.
         data-open={adding || undefined}
         className={clsx(
           'group absolute inset-y-0 left-0 z-30 flex flex-col border-r border-hairline bg-canvas',
           'transition-[width] duration-150 ease-out hover:w-rail-open hover:shadow-flyout',
+          'focus-within:w-rail-open focus-within:shadow-flyout',
           adding ? 'w-rail-open shadow-flyout' : 'w-rail'
         )}
       >
-        <p className="overflow-hidden whitespace-nowrap px-4 pb-1.5 pt-3 text-2xs font-medium uppercase tracking-widest text-text-mute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">
+        <p className="overflow-hidden whitespace-nowrap px-4 pb-1.5 pt-3 text-2xs font-medium uppercase tracking-widest text-text-mute opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-data-[open]:opacity-100">
           Accounts
         </p>
 
@@ -100,6 +104,7 @@ export function AccountRail({
                 <button
                   onClick={() => onSelect(account.id)}
                   title={`${account.gameName}#${account.tagLine}`}
+                  aria-current={isActive || undefined}
                   className={clsx(
                     'flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition',
                     isActive ? 'bg-accent/10' : 'hover:bg-surface'
@@ -130,7 +135,7 @@ export function AccountRail({
                   </span>
 
                   {/* Revealed by the rail expanding; kept mounted so the row keeps its height. */}
-                  <span className="min-w-0 flex-1 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">
+                  <span className="min-w-0 flex-1 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-data-[open]:opacity-100">
                     <span
                       className={clsx(
                         'block truncate text-sm',
@@ -146,10 +151,11 @@ export function AccountRail({
                   </span>
                 </button>
 
-                <div className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 gap-0.5 group-hover:flex group-data-[open]:flex">
+                <div className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 gap-0.5 group-hover:flex group-focus-within:flex group-data-[open]:flex">
                   {!account.isHomeAccount && (
                     <button
                       title="Set as home account"
+                      aria-label={`Set ${account.gameName}#${account.tagLine} as home account`}
                       onClick={() => onSetHome(account.id)}
                       className="rounded p-1 text-text-mute transition hover:bg-surface-2 hover:text-accent"
                     >
@@ -159,6 +165,7 @@ export function AccountRail({
                   {onRemove && (
                     <button
                       title="Remove account"
+                      aria-label={`Remove ${account.gameName}#${account.tagLine}`}
                       onClick={() => {
                         if (confirm(`Remove ${account.gameName}#${account.tagLine}?`)) {
                           onRemove(account.id)
@@ -188,7 +195,7 @@ export function AccountRail({
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-accent-dim">
                   <Icon.Plus />
                 </span>
-                <span className="whitespace-nowrap text-sm opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:opacity-100">
+                <span className="whitespace-nowrap text-sm opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-data-[open]:opacity-100">
                   Add account
                 </span>
               </button>

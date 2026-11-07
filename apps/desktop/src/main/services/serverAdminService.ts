@@ -8,9 +8,10 @@ import type {
   InsightsSections,
   InsightsWindow,
   ServerLogEntry,
-  ServerLogQuery
+  ServerLogQuery,
+  ShareLink
 } from '@foxfire/core'
-import { serverApi } from './serverService'
+import { rememberPublicAccess, serverApi } from './serverService'
 import type {
   Account,
   AdminActionResult,
@@ -144,5 +145,12 @@ export async function getSettings(): Promise<ServerAdminSettings> {
 export async function setSettings(
   patch: Partial<ServerAdminSettings>
 ): Promise<ServerAdminSettings> {
-  return serverApi().admin.setSettings(patch)
+  const settings = await serverApi().admin.setSettings(patch)
+  if (settings.publicAccess !== undefined) rememberPublicAccess(settings.publicAccess)
+  return settings
+}
+
+/** A page of the share links that still open something, newest first. */
+export async function listShareLinks(page?: PageOptions): Promise<Page<ShareLink>> {
+  return serverApi().admin.shareLinks(page)
 }

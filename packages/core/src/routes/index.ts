@@ -1,6 +1,7 @@
 export { isPlayer, parsePlayerSlug, playerSlug } from './slug'
 export {
   absoluteUrl,
+  gameOfPlayerPath,
   parseQueueParam,
   parseRangeParam,
   parseRankQueueParam,

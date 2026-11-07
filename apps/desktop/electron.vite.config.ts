@@ -1,5 +1,6 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { featureDefines } from '../../tooling/vite/features'
 import { fsAllow } from '../../tooling/vite/fsAllow'
@@ -8,6 +9,31 @@ import { fsAllow } from '../../tooling/vite/fsAllow'
 // preload and the renderer cannot be built disagreeing about whether a feature
 // exists. See tooling/vite/features.ts and src/shared/features.ts.
 const features = featureDefines()
+
+/**
+ * Fails the build if the preloads share a chunk.
+ *
+ * Every window runs sandboxed, and a sandboxed preload cannot load a file of
+ * its own beside it — so when two preload entries import the same module and
+ * Rollup splits it out, both break at runtime, with nothing wrong until a
+ * window opens. The native recorder's audio page has a preload of its own, and
+ * the two must import nothing in common; this is what keeps that true.
+ */
+function preloadsStandAlone(): Plugin {
+  return {
+    name: 'foxfire-preloads-stand-alone',
+    generateBundle(_options, bundle) {
+      const shared = Object.values(bundle).filter((file) => file.type === 'chunk' && !file.isEntry)
+      if (shared.length > 0) {
+        this.error(
+          `Preloads must not share code — sandboxed, they cannot load ${shared
+            .map((file) => file.fileName)
+            .join(', ')}. Keep the modules each preload imports apart.`
+        )
+      }
+    }
+  }
+}
 
 /**
  * Why @foxfire/core ends up inside the main and preload bundles.
@@ -39,7 +65,7 @@ export default defineConfig({
   },
   preload: {
     define: features,
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), preloadsStandAlone()],
     resolve: {
       alias: {
         '@shared': resolve('src/shared')
@@ -48,7 +74,9 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/preload/index.ts')
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          // The native recorder's audio page, which gets this and nothing else.
+          captureAudio: resolve(__dirname, 'src/preload/captureAudio.ts')
         }
       }
     }
@@ -67,6 +95,15 @@ export default defineConfig({
         // Dev-server only: the screens are served from packages/, and in a
         // worktree the dependencies may be in the main checkout — see fsAllow.
         allow: fsAllow(__dirname)
+      }
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          // Hidden, and no React: the native recorder's audio page.
+          captureAudio: resolve(__dirname, 'src/renderer/capture-audio.html')
+        }
       }
     },
     plugins: [react()]

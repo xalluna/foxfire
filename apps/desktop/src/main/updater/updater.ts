@@ -10,8 +10,8 @@ import { createLogger } from '../telemetry/logger'
 import { blockerFor } from './blocker'
 import { feedUrl, overrideFeed } from './feed'
 import { newestDesktopVersion } from './newest'
-import { markRelaunchHidden, notesFor, setPendingInstall, type PendingInstall } from './pending'
-import { resolveTarget, type ActiveServer } from './target'
+import { clearPendingInstall, markRelaunchHidden, notesFor, setPendingInstall, type PendingInstall } from './pending'
+import { pendingVerdict, resolveTarget, type ActiveServer } from './target'
 import type { UpdateBlocker, UpdateState, UpdateStatus } from '@shared/types'
 
 /**
@@ -49,6 +49,12 @@ let justInstalled: UpdateState['justInstalled'] = null
 
 /** Guards against a scheduled check and a clicked one running at once. */
 let checking = false
+
+/**
+ * A server change that arrived while a check was running. That check was asked
+ * about the server as it was, so one more runs once it is done.
+ */
+let recheckPending = false
 
 /** What the last announcement said about the server, to avoid idle re-checks. */
 let lastServerKey = ''
@@ -139,25 +145,33 @@ export function initUpdater(installed: PendingInstall | null): void {
  * app exactly as it was.
  */
 export async function checkForUpdates(): Promise<UpdateState> {
-  if (!app.isPackaged || checking) return getUpdateState()
+  if (!app.isPackaged) return getUpdateState()
+  if (checking) {
+    recheckPending = true
+    return getUpdateState()
+  }
 
-  // Already downloaded, or on the way. Nothing to learn from asking again, and
-  // a check that reset this would take the Restart button off the screen.
-  //
-  // Switching servers between the download and the restart is the one case
-  // this gets wrong: the offer still names the version the previous server
-  // wanted. Left alone deliberately — electron-updater installs a downloaded
-  // update on quit whatever this module believes, so withdrawing the offer
-  // would only make the same install happen with no warning first. The outcome
-  // is a server reporting itself older than this copy, which the Server page
-  // already explains and which its host can fix.
-  if (status === 'ready' || status === 'downloading') return getUpdateState()
+  // On the way: asked about when it lands, in the update-downloaded handler.
+  if (status === 'downloading') return getUpdateState()
 
   checking = true
-  status = 'checking'
-  announce()
 
   try {
+    // Already downloaded. It installs on the next quit unless it is taken
+    // back, so it is asked about again rather than left alone: every way from
+    // one server to another passes through local-only, which fetches the
+    // newest release, and that is a build the server being returned to may
+    // refuse. electron-updater reads autoInstallOnAppQuit when the app quits,
+    // so turning it off withdraws the install — see withdraw(). Asked quietly,
+    // so a build that is still fine keeps its Restart button on screen. A
+    // rehearsal feed has no server with an opinion, so what it fetched stays.
+    if (status === 'ready' && (overrideFeed() !== null || (await pendingStillAccepted()))) {
+      return getUpdateState()
+    }
+
+    status = 'checking'
+    announce()
+
     // A feed named in the environment answers for everybody. It exists to
     // rehearse an update against a folder on one machine — there is no
     // releases page there to read a newest version from, and no server with an
@@ -173,9 +187,9 @@ export async function checkForUpdates(): Promise<UpdateState> {
       return getUpdateState()
     }
 
-    const server = await activeServer()
+    const { server, signedIn } = await authorities()
     const newest = await newestRelease()
-    const decision = resolveTarget({ current: app.getVersion(), server, newest })
+    const decision = resolveTarget({ current: app.getVersion(), server, newest, signedIn })
 
     heldBy =
       decision.kind === 'held'
@@ -192,6 +206,8 @@ export async function checkForUpdates(): Promise<UpdateState> {
     }
 
     log.info('Fetching an update', { version: decision.version })
+    // Back on for whatever this fetches, if an earlier build was withdrawn.
+    autoUpdater.autoInstallOnAppQuit = true
     autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl(decision.version) })
     await autoUpdater.checkForUpdates()
     return getUpdateState()
@@ -201,6 +217,11 @@ export async function checkForUpdates(): Promise<UpdateState> {
   } finally {
     checking = false
     announce()
+
+    if (recheckPending) {
+      recheckPending = false
+      void checkForUpdates()
+    }
   }
 }
 
@@ -269,24 +290,81 @@ function wireUpdaterEvents(): void {
     announce()
   })
 
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-    status = 'ready'
-    percent = 100
-    target = info.version
-    notes = notesFrom(info)
-    error = null
-    // Written down before anything is offered: from here on the install can
-    // happen on a quit nobody announced, and the build that comes back has to
-    // know what it arrived with.
-    setPendingInstall({ version: info.version, notes, relaunchHidden: false })
-    log.info('Ready to install', { version: info.version })
-    announce()
-  })
+  autoUpdater.on('update-downloaded', (info: UpdateInfo) => void downloaded(info))
 
   autoUpdater.on('error', (err: Error) => {
     record(err)
     announce()
   })
+}
+
+/**
+ * A build has finished downloading: asked about once more before it is offered.
+ *
+ * The server may have changed while it downloaded, and from here it installs
+ * on the next quit. electron-updater adds its quit handler straight after this
+ * event, and only while installing on quit is on — so it is turned off after
+ * that has happened rather than before, and on again only for a build the
+ * server still accepts.
+ */
+async function downloaded(info: UpdateInfo): Promise<void> {
+  await Promise.resolve()
+
+  if (overrideFeed() === null) {
+    autoUpdater.autoInstallOnAppQuit = false
+    const { server, signedIn } = await authorities()
+
+    if (pendingVerdict({ pending: info.version, server, signedIn }) === 'withdraw') {
+      withdraw(info.version)
+      announce()
+      // The build this server does accept, if there is one.
+      void checkForUpdates()
+      return
+    }
+
+    autoUpdater.autoInstallOnAppQuit = true
+  }
+
+  status = 'ready'
+  percent = 100
+  target = info.version
+  notes = notesFrom(info)
+  error = null
+  // Written down before anything is offered: from here on the install can
+  // happen on a quit nobody announced, and the build that comes back has to
+  // know what it arrived with.
+  setPendingInstall({ version: info.version, notes, relaunchHidden: false })
+  log.info('Ready to install', { version: info.version })
+  announce()
+}
+
+/**
+ * Whether the build waiting to install is still one the server accepts.
+ * Withdraws it when it is not.
+ */
+async function pendingStillAccepted(): Promise<boolean> {
+  if (target === null) return true
+
+  const { server, signedIn } = await authorities()
+  if (pendingVerdict({ pending: target, server, signedIn }) === 'keep') return true
+
+  withdraw(target)
+  return false
+}
+
+/**
+ * Takes a downloaded build back: it will not install on quit, and nothing
+ * offers it. The check that follows says what is holding it, when something is.
+ */
+function withdraw(version: string): void {
+  autoUpdater.autoInstallOnAppQuit = false
+  clearPendingInstall()
+  log.info('Withdrew a downloaded update the server will not accept', { version })
+
+  status = 'idle'
+  target = null
+  percent = null
+  notes = null
 }
 
 /**
@@ -312,6 +390,35 @@ function record(err: unknown): void {
   percent = null
   error = text
   log.warn('Update check failed', { error: text })
+}
+
+/**
+ * Everybody with a say in which build may run: the active server, or in
+ * local-only mode each server this install is still signed in to.
+ */
+async function authorities(): Promise<{ server: ActiveServer | null; signedIn: ActiveServer[] }> {
+  const server = await activeServer()
+  return { server, signedIn: server === null ? await keptSignIns() : [] }
+}
+
+/**
+ * Each server this install is still signed in to while it reads from this PC.
+ *
+ * "Use this PC" keeps the credential so coming back needs no password, and a
+ * build newer than one of them accepts would be refused there on the way back.
+ * Asked without a session, as the connect form asks.
+ */
+async function keptSignIns(): Promise<ActiveServer[]> {
+  const kept = getServerState().servers.filter((s) => s.username !== null)
+
+  return Promise.all(
+    kept.map(async (known): Promise<ActiveServer> => {
+      const probed = await probeServer(known.url, clientIdentity())
+      return !probed.reachable || probed.recommendedDesktop === null
+        ? { name: known.name, reachable: false }
+        : { name: known.name, reachable: true, recommended: probed.recommendedDesktop }
+    })
+  )
 }
 
 /** What the active server accepts, or null when nothing is answering for one. */

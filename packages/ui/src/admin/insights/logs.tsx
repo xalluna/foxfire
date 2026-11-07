@@ -109,7 +109,7 @@ function LogLine({ entry }: { entry: ServerLogEntry }): JSX.Element {
           <summary className="cursor-pointer text-2xs text-text-mute hover:text-accent">
             {entry.exception.split('\n', 1)[0]}
           </summary>
-          <pre className="mt-1 max-h-72 overflow-auto rounded border border-hairline bg-canvas p-2 text-2xs leading-relaxed text-text-dim">
+          <pre className="mt-1 max-h-72 overflow-auto rounded border border-hairline bg-canvas p-2 text-xs leading-relaxed text-text-dim">
             {entry.exception}
           </pre>
         </details>

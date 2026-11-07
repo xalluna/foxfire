@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createConnection } from 'node:net'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { createLogger } from '../telemetry/logger'
 
 /**
@@ -24,6 +24,9 @@ const DEFAULT_PATHS = [
 ]
 
 let ourProcess: ReturnType<typeof spawn> | null = null
+
+/** The launch under way, so two calls at once cannot both decide to start one. */
+let launching: Promise<void> | null = null
 
 /**
  * Resolves the executable from a configured path.
@@ -55,8 +58,9 @@ export function isObsRunningFromUs(): boolean {
 /**
  * Whether something is already listening on the websocket port.
  *
- * This is the condition that actually matters — not "is an obs64.exe running"
- * but "is there an OBS we can talk to" — and it needs no process enumeration.
+ * Asked first because it is the quickest answer and the only one that counts an
+ * OBS on another machine. A no from it does not mean there is no OBS, though:
+ * see obsIsRunning.
  *
  * Observed rather than assumed: this used to launch unconditionally on the
  * theory that a second OBS exits on its own. It does not. Two instances were
@@ -77,16 +81,57 @@ function websocketIsListening(host: string, port: number, timeoutMs = 400): Prom
 }
 
 /**
+ * Whether an OBS is running on this PC at all, listening or not.
+ *
+ * The port alone could not say. OBS opens its websocket only once it has
+ * finished loading, seconds after it starts, and never while the server is
+ * switched off in its settings — so an OBS the user had just opened, or one
+ * starting alongside this app at sign-in, read as no OBS, and a second one was
+ * launched beside it to sit on OBS's "already running" prompt. A running OBS is
+ * all this app needs: the websocket client keeps retrying until it answers.
+ *
+ * A query that fails reads as no OBS, so the launch goes ahead as it did before.
+ */
+function obsIsRunning(image: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(
+      'tasklist',
+      ['/FI', `IMAGENAME eq ${image}`, '/FO', 'CSV', '/NH'],
+      { timeout: 5000, windowsHide: true },
+      (err, stdout) => {
+        // A match is a row opening with the name in quotes. Read for that rather
+        // than for the "no tasks" line, which Windows prints in its own language.
+        resolve(!err && String(stdout).toLowerCase().includes(`"${image.toLowerCase()}"`))
+      }
+    )
+  })
+}
+
+/**
  * Starts OBS minimised, unless one is already there.
  *
- * Checked against the port rather than a process list, so an OBS the user
- * started themselves — including one left over from a previous run of this app
- * — counts and is left alone.
+ * An OBS the user started themselves — including one left over from a previous
+ * run of this app — counts and is left alone. Called on every settings change as
+ * well as at startup, so a call made while the checks are still out joins them:
+ * two sets of checks side by side would both find no OBS, and both launch one.
  */
-export async function launchObs(
+export function launchObs(
   configuredPath: string | null,
   host = '127.0.0.1',
   port = 4455
+): Promise<void> {
+  if (!launching) {
+    launching = launchUnlessRunning(configuredPath, host, port).finally(() => {
+      launching = null
+    })
+  }
+  return launching
+}
+
+async function launchUnlessRunning(
+  configuredPath: string | null,
+  host: string,
+  port: number
 ): Promise<void> {
   if (isObsRunningFromUs()) return
   if (await websocketIsListening(host, port)) {
@@ -97,6 +142,13 @@ export async function launchObs(
   const exe = resolveObsExecutable(configuredPath)
   if (!exe) {
     log.debug('OBS executable not found', { configuredPath })
+    return
+  }
+  if (await obsIsRunning(basename(exe))) {
+    log.debug('OBS already running; connecting to it rather than launching another', {
+      host,
+      port
+    })
     return
   }
 

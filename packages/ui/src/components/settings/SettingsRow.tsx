@@ -43,7 +43,7 @@ export function SettingsRow({
       <div className="min-w-0 flex-1">
         <span className="block text-sm text-text">{label}</span>
         {description !== undefined && (
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
         )}
       </div>
       {control !== undefined && <div className="flex shrink-0 items-center gap-2">{control}</div>}
@@ -69,7 +69,7 @@ export function SettingsBlock({
     <div className={clsx('px-4 py-3', className)}>
       {label !== undefined && <span className="block text-sm text-text">{label}</span>}
       {description !== undefined && (
-        <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
       )}
       <div className={titled ? 'mt-2.5' : undefined}>{children}</div>
     </div>
@@ -98,17 +98,19 @@ export function ToggleRow({
   disabled: boolean
   onChange: (value: boolean) => void
 }): JSX.Element {
+  // Disabled dims the label and the box, never the description: it is usually
+  // what says why the switch cannot be used yet, so it stays readable.
   return (
     <label
       className={clsx(
         'flex cursor-pointer items-center gap-4 px-4 py-3 transition hover:bg-surface-2/40',
-        disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent'
+        disabled && 'cursor-not-allowed hover:bg-transparent'
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm text-text">{label}</span>
+        <span className={clsx('block text-sm', disabled ? 'text-text-mute' : 'text-text')}>{label}</span>
         {description !== undefined && (
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
         )}
       </span>
       <input
@@ -224,7 +226,8 @@ export function PathRow({
  *
  * Both of the extra windows — archived clients and the telemetry panel — are
  * reached this way, and the glyph is the promise: this leaves the page rather
- * than expanding it.
+ * than expanding it. The row is the card's full width and the card clips to its
+ * corners, so the focus ring is drawn inside it.
  */
 export function LinkRow({
   label,
@@ -239,12 +242,12 @@ export function LinkRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-surface-2/40"
+      className="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-surface-2/40 focus-visible:outline-offset-[-2px]"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-sm text-text">{label}</span>
         {description !== undefined && (
-          <span className="mt-0.5 block text-2xs leading-relaxed text-text-mute">{description}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-text-mute">{description}</span>
         )}
       </span>
       <Icon.ExternalLink className="shrink-0 text-text-mute" width={14} height={14} />
@@ -280,6 +283,7 @@ export function ByteCapRow({
             min={0}
             disabled={disabled}
             value={Math.round(bytes / GB)}
+            aria-label={`${label}, in ${unit}`}
             onChange={(event) => onChange(Math.max(0, Number(event.target.value)) * GB)}
             className={clsx(inputClass, 'w-20 tabular-nums')}
           />

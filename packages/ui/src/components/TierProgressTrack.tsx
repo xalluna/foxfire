@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import type { LeagueEntry } from '@foxfire/core'
-import { tierColor, tierProgress } from '../lib/rank'
+import { tierColor, tierLabel, tierProgress } from '../lib/rank'
 
 /**
  * How far through the tier: its four divisions, then the crest they lead to.
@@ -9,6 +9,9 @@ import { tierColor, tierProgress } from '../lib/rank'
  * where the LP puts it between that division and the next. Nothing for the
  * apex tiers — past Diamond there are no divisions to walk and no fixed LP to
  * the next tier — or for anybody unranked.
+ *
+ * A meter to a screen reader, which hears the share of the tier covered and
+ * where it leads rather than five division labels in a row.
  */
 export function TierProgressTrack({
   entry
@@ -22,9 +25,18 @@ export function TierProgressTrack({
   const percent = `${progress.fraction * 100}%`
   const last = progress.stops.length - 1
   const at = (i: number): string => `${(i / last) * 100}%`
+  const covered = Math.round(progress.fraction * 100)
 
   return (
-    <div className="px-1.5 pb-0.5 pt-2" aria-label="Progress to the next tier">
+    <div
+      className="px-1.5 pb-0.5 pt-2"
+      role="meter"
+      aria-label="Progress to the next tier"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={covered}
+      aria-valuetext={`${covered}% of the way to ${tierLabel(progress.stops[last].tier, null)}`}
+    >
       <div className="relative h-3">
         {/* The rail, then what has been covered of it. */}
         <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-hairline" />

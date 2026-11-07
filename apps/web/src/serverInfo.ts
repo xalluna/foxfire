@@ -1,7 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
-import type { EmailConfirmation, InvitePreview, PasswordResetPreview, VersionInfo } from '@foxfire/core'
+import type {
+  EmailConfirmation,
+  InvitePreview,
+  PasswordResetPreview,
+  ShareLinkOpen,
+  VersionInfo
+} from '@foxfire/core'
 import { getVersionInfo } from '@foxfire/core/server'
-import { session } from './session/session'
+import { session, useAuth } from './session/session'
+import { LAPSED, grantFrom, hasLapsed, rememberShare, rememberedShare } from './session/share'
 
 /**
  * What the server says before anybody signs in: its name, and whether it takes
@@ -15,6 +22,8 @@ export interface ServerInfoSource {
   requestPasswordReset(email: string): Promise<{ message: string }>
   /** Opens a confirmation link. The token goes in the body, never the path. */
   confirmEmail(token: string): Promise<EmailConfirmation>
+  /** Says whose profile a share link opens, or why it opens nothing. The token in the body again. */
+  openShare(token: string): Promise<ShareLinkOpen>
 }
 
 let source: ServerInfoSource = {
@@ -34,12 +43,64 @@ let source: ServerInfoSource = {
     session.transport.request<EmailConfirmation>('/api/email-verifications/confirm', {
       method: 'POST',
       body: { token }
-    })
+    }),
+  openShare: (token) =>
+    session.transport.request<ShareLinkOpen>('/api/shares/open', { method: 'POST', body: { token } })
 }
 
 /** For the design harness only. */
 export function replaceServerInfoSource(replacement: ServerInfoSource): void {
   source = replacement
+}
+
+/**
+ * What somebody who is not signed in may read, settled before the first page
+ * renders — so the router can tell a visitor it may let in from one to send to
+ * the sign-in page.
+ *
+ * Whether the server is open comes from its handshake. A share link is opened
+ * here, once, when the page was loaded with one; otherwise the one this tab
+ * was opened with earlier is picked back up — and if it has run out since,
+ * that is what the page says. A member signed in needs neither, and their
+ * tab's remembered link is left for whenever they sign out.
+ */
+export async function prepareAccess(shareToken: string | null): Promise<void> {
+  const version = await source.version().catch(() => null)
+  const publicAccess = version?.publicAccess ?? false
+
+  if (useAuth.getState().user !== null) {
+    useAuth.setState({ publicAccess })
+    return
+  }
+
+  if (shareToken === null) {
+    const kept = rememberedShare()
+
+    if (kept && hasLapsed(kept)) {
+      rememberShare(null)
+      useAuth.setState({ publicAccess, share: null, shareRefused: LAPSED })
+    } else {
+      useAuth.setState({ publicAccess, share: kept, shareRefused: null })
+    }
+    return
+  }
+
+  try {
+    const opened = await source.openShare(shareToken)
+    const share = grantFrom(shareToken, opened)
+    rememberShare(share)
+    useAuth.setState({
+      publicAccess,
+      share,
+      shareRefused: share ? null : { reason: opened.reason ?? 'invalid', message: opened.message }
+    })
+  } catch (err) {
+    useAuth.setState({
+      publicAccess,
+      share: null,
+      shareRefused: { reason: 'unreachable', message: describeError(err) }
+    })
+  }
 }
 
 /** The server's handshake, read once per page load. */

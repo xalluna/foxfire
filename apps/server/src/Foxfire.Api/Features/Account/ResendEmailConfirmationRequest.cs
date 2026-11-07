@@ -1,10 +1,12 @@
 using System.Net;
 using Foxfire.Api.Common;
+using Foxfire.Api.Configuration;
 using Foxfire.Api.Email;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Foxfire.Email;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 
 namespace Foxfire.Api.Features.Account;
 
@@ -22,6 +24,7 @@ internal sealed class ResendEmailConfirmationRequestHandler(
     UserManager<FoxfireUser> users,
     FoxfireDbContext db,
     EmailOutbox outbox,
+    IOptions<AdminOptions> adminOptions,
     IIdentityContext me,
     TimeProvider time,
     ILogger<ResendEmailConfirmationRequestHandler> logger)
@@ -72,6 +75,6 @@ internal sealed class ResendEmailConfirmationRequestHandler(
 
         logger.LogInformation("{Username} asked for another link to confirm {Email}", user.UserName, address);
 
-        return await AccountEmail.DescribeAsync(db, outbox, user, now, cancellationToken);
+        return await AccountEmail.DescribeAsync(db, outbox, user, adminOptions.Value.Email, now, cancellationToken);
     }
 }

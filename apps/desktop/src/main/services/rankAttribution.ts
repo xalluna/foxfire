@@ -5,7 +5,7 @@ import {
   upsertMatchRank
 } from '../db/repositories/rankHistory.repo'
 import { listSeasons } from '../db/repositories/seasons.repo'
-import { rankMovement, queueIdForQueueType, TRACKED_QUEUES, resetsBetween } from '@foxfire/core'
+import { ladderMovementFor, laddersOf, queueIdForQueueType, resetsBetween, type GameId } from '@foxfire/core'
 import type { QueueType, RankSnapshot, Season } from '@shared/types'
 
 /**
@@ -28,6 +28,11 @@ import type { QueueType, RankSnapshot, Season } from '@shared/types'
  *
  * Kept free of getDb() so it can be tested against an in-memory database —
  * importing the app's db module would pull in Electron.
+ *
+ * Either game's ladder. A TFT game is placed at its player's elimination
+ * rather than the lobby's end, and its puuid is whatever id TFT files the
+ * account under — see getRankedMatchesBetween. Hyper Roll's delta is in rating
+ * and its movement between colours.
  *
  * Returns true when a row was written.
  */
@@ -66,7 +71,7 @@ export function attributeInterval(
   )
   if (matches.length !== 1) return false
 
-  const movement = rankMovement(before, after)
+  const movement = ladderMovementFor(queueType, before, after)
 
   upsertMatchRank(db, {
     matchId: matches[0].matchId,
@@ -82,7 +87,8 @@ export function attributeInterval(
     // division or tier boundary where LP itself wraps back around to near zero.
     lpDelta: after.ladderPosition - before.ladderPosition,
     isPromotion: movement === 'promotion',
-    isDemotion: movement === 'demotion'
+    isDemotion: movement === 'demotion',
+    ...(after.ratedRating != null ? { ratedTierBefore: before.ratedTier ?? null, ratedTierAfter: after.ratedTier ?? null } : {})
   })
 
   return true
@@ -119,21 +125,25 @@ export const ATTRIBUTION_REPLAY_WINDOW_MS = 30 * 86_400_000
  * holds exactly one game, and upsertMatchRank is idempotent, so re-running is
  * safe and can only ever add information.
  *
+ * One game's ladders at a time, against that game's seasons: `puuid` is the
+ * id that game files the account under.
+ *
  * Returns the number of intervals that wrote a row.
  */
 export function replayAttribution(
   db: DatabaseSync,
   accountId: number,
   puuid: string,
-  sinceMs: number | null = null
+  sinceMs: number | null = null,
+  game: GameId = 'lol'
 ): number {
   // Loaded once rather than per interval: this walks every stored snapshot pair
-  // for both ladders, and the list is a handful of rows that cannot change
+  // for every ladder, and the list is a handful of rows that cannot change
   // mid-replay.
-  const seasons = listSeasons(db)
+  const seasons = listSeasons(db, game)
   let attributed = 0
 
-  for (const queueType of TRACKED_QUEUES) {
+  for (const queueType of laddersOf(game)) {
     const snapshots = getRankSnapshots(db, accountId, queueType, sinceMs)
     for (let i = 1; i < snapshots.length; i++) {
       const wrote = attributeInterval(

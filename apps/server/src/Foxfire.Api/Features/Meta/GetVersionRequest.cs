@@ -27,6 +27,17 @@ namespace Foxfire.Api.Features.Meta;
 /// Whether this server sends mail — and so whether its sign-in page can offer
 /// "Forgot password?". Missing from a server from before it could.
 /// </param>
+/// <param name="PublicAccess">
+/// Whether this server can be read without signing in — and so whether the web
+/// client opens its pages to somebody who has not, or sends them to sign in.
+/// Missing from a server from before it could, which means no.
+/// </param>
+/// <param name="Games">
+/// The games this server offers, by slug, League first — and so which a client
+/// offers while it is connected here. League alone unless the host turned TFT
+/// on (<see cref="ServerGames"/>). Missing from a server from before TFT,
+/// which means League alone.
+/// </param>
 public sealed record VersionResponse(
     string ServerName,
     string ServerVersion,
@@ -36,7 +47,9 @@ public sealed record VersionResponse(
     bool PublicSignup,
     string ApiBase,
     string PublicUrl,
-    bool Email);
+    bool Email,
+    bool PublicAccess,
+    IReadOnlyList<string> Games);
 
 /// <summary>
 /// The handshake.
@@ -48,16 +61,18 @@ public sealed record VersionResponse(
 /// desktop's updater asks, on a schedule and before anybody has signed in:
 /// <c>recommendedDesktop</c> is the build it will install.
 ///
-/// It gives away the server's name, its version and whether signup is open. All
-/// three are things anybody who could register would see anyway, and none of
-/// them says who is on it.
+/// It gives away the server's name, its version, whether signup is open,
+/// whether it can be read signed out and which games it offers. All of them
+/// are things anybody who could register or look would see anyway, and none
+/// of them says who is on it.
 /// </summary>
 public sealed record GetVersionRequest : IDomainRequest<VersionResponse>;
 
 internal sealed class GetVersionRequestHandler(
     IOptions<ServerOptions> server,
     ServerSettingsService settings,
-    ActiveEmailProvider email)
+    ActiveEmailProvider email,
+    ServerGames games)
     : IDomainRequestHandler<GetVersionRequest, VersionResponse>
 {
     public async Task<Response<VersionResponse>> Handle(
@@ -72,16 +87,25 @@ internal sealed class GetVersionRequestHandler(
             PublicSignup: await settings.IsPublicSignupEnabledAsync(cancellationToken),
             ApiBase: ApiPaths.Base,
             PublicUrl: server.Value.PublicUrl.TrimEnd('/'),
-            Email: email.IsEnabled);
+            Email: email.IsEnabled,
+            PublicAccess: await settings.IsPublicAccessEnabledAsync(cancellationToken),
+            Games: [.. games.All.Select(game => game.Slug())]);
 }
 
 /// <summary>Whether the server can currently reach Riot, and how busy the queue is.</summary>
-public sealed record HealthResponse(string Status, bool RiotKeyRejected, int QueueDepth);
+/// <param name="TftAccess">
+/// Whether this server's key reaches TFT: unknown, granted or denied — or off,
+/// when the host has not turned TFT on and so the server never asks.
+/// </param>
+public sealed record HealthResponse(string Status, bool RiotKeyRejected, int QueueDepth, string TftAccess);
 
 /// <summary>The health check, which a container orchestrator and a curl both read.</summary>
 public sealed record GetHealthRequest : IDomainRequest<HealthResponse>;
 
-internal sealed class GetHealthRequestHandler(Foxfire.Riot.RiotClient riot)
+internal sealed class GetHealthRequestHandler(
+    Foxfire.Riot.RiotClient riot,
+    Foxfire.Api.Sync.TftAccess tft,
+    ServerGames games)
     : IDomainRequestHandler<GetHealthRequest, HealthResponse>
 {
     public Task<Response<HealthResponse>> Handle(GetHealthRequest request, CancellationToken cancellationToken)
@@ -96,6 +120,9 @@ internal sealed class GetHealthRequestHandler(Foxfire.Riot.RiotClient riot)
         return Task.FromResult<Response<HealthResponse>>(new HealthResponse(
             Status: rejected ? "degraded" : "healthy",
             RiotKeyRejected: rejected,
-            QueueDepth: riot.Limiter.QueueDepth));
+            QueueDepth: riot.Limiter.QueueDepth,
+            // Never the status: a server whose key has no TFT is a League
+            // server, and healthy at being one.
+            TftAccess: games.Tft ? tft.Slug : "off"));
     }
 }

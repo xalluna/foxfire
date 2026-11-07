@@ -11,6 +11,13 @@ import {
   validateLpEditorSearch,
   validateMatchSearch,
   validateRankSearch,
+  validateRecordingSearch,
+  validateTftRankSearch,
+  validateTftSearch,
+  tftLadderFrom,
+  tftQueueIdFrom,
+  tftQueueSearchFor,
+  tftRankQueueSearchFor,
   type DashboardSearch
 } from './params'
 import { rememberSearch } from './rememberSearch'
@@ -157,5 +164,52 @@ describe('links core writes, as the routes read them', () => {
     expect(validateMatchSearch(searchOf(paths.match('KR_7', { player: FAKER })))).toEqual({
       player: 'Faker-KR1'
     })
+  })
+
+  it('agrees on the TFT history, its rank page and a TFT recording', () => {
+    expect(validateTftSearch(searchOf(paths.tft(FAKER, { queue: 1160, match: 'KR_8' })))).toEqual({
+      queue: 1160,
+      match: 'KR_8'
+    })
+    expect(validateTftRankSearch(searchOf(paths.tftRank(FAKER, { queue: 'hyper-roll', range: '7d' })))).toEqual({
+      queue: 'hyper-roll',
+      range: '7d'
+    })
+    expect(validateRecordingSearch(searchOf(paths.recording(FAKER, 'KR_8', { game: 'tft' })))).toEqual({
+      game: 'tft'
+    })
+  })
+})
+
+describe('TFT search', () => {
+  it('opens the history on every queue, and says nothing in the URL while it does', () => {
+    expect(tftQueueIdFrom(undefined)).toBeNull()
+    expect(tftQueueSearchFor(null)).toBeUndefined()
+    expect(tftQueueIdFrom(tftQueueSearchFor(1100))).toBe(1100)
+  })
+
+  it('opens the rank page on Ranked, and says nothing in the URL while it does', () => {
+    expect(tftLadderFrom(undefined)).toBe('RANKED_TFT')
+    expect(tftRankQueueSearchFor('RANKED_TFT')).toBeUndefined()
+    expect(tftLadderFrom(tftRankQueueSearchFor('RANKED_TFT_DOUBLE_UP'))).toBe('RANKED_TFT_DOUBLE_UP')
+  })
+
+  it('reads the other game’s ladder as absent rather than as a ladder', () => {
+    // A League page asked for a TFT ladder opens on its own default, and the
+    // other way round, rather than asking for a history it does not draw.
+    expect(validateRankSearch({ queue: 'tft' })).toEqual({})
+    expect(validateTftRankSearch({ queue: 'solo' })).toEqual({})
+    expect(tftLadderFrom('flex')).toBe('RANKED_TFT')
+  })
+
+  it('keeps Hyper Roll out of the LP editor, which has no LP to type for it', () => {
+    expect(validateLpEditorSearch({ queue: 'double-up' })).toEqual({ queue: 'double-up' })
+    expect(validateLpEditorSearch({ queue: 'hyper-roll' })).toEqual({})
+  })
+
+  it('says only a TFT recording’s game, since League is what a recording is otherwise', () => {
+    expect(paths.recording(FAKER, 'KR_8')).toBe('/players/Faker-KR1/recordings/KR_8')
+    expect(paths.recording(FAKER, 'KR_8', { game: 'lol' })).toBe('/players/Faker-KR1/recordings/KR_8')
+    expect(validateRecordingSearch({ game: 'chess' })).toEqual({})
   })
 })

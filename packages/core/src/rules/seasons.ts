@@ -15,9 +15,22 @@
  * Every list passed in must be ordered oldest first. listSeasons guarantees it.
  */
 
+import type { GameId } from '../games/registry'
 import type { RankRange, Season } from '../types'
 
 const DAY_MS = 86_400_000
+
+/**
+ * One game's seasons, in the order given.
+ *
+ * Every function below works on a single game's list: League's annual reset
+ * says nothing about a TFT set, and a TFT set boundary in League's list would
+ * split a League season in two. A season with no game is League's, which is
+ * what every row was before there were two games.
+ */
+export function seasonsOfGame(seasons: Season[], game: GameId): Season[] {
+  return seasons.filter((s) => (s.game ?? 'lol') === game)
+}
 
 const SEASON_PREFIX = 'season:'
 
@@ -76,6 +89,22 @@ export function seasonBoundsOf(
  */
 export function resetsBetween(seasons: Season[], afterMs: number, untilMs: number): boolean {
   return seasons.some((s) => s.resetsRank && s.startsAt > afterMs && s.startsAt <= untilMs)
+}
+
+/**
+ * When the ladder last reset at or before a moment, or null when no recorded
+ * boundary has.
+ *
+ * A reading taken at the reset's own instant is the first of the new ladder,
+ * as resetsBetween reads it, so "since the last reset" is `>= this`. Only a
+ * boundary that reset counts: rank carries through a preseason, and so does
+ * whatever somebody reached before it.
+ */
+export function lastResetAt(seasons: Season[], ms: number): number | null {
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    if (seasons[i].resetsRank && seasons[i].startsAt <= ms) return seasons[i].startsAt
+  }
+  return null
 }
 
 /** A season as a RankRange, which is how a selected period travels to whichever client answers. */

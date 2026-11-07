@@ -27,7 +27,9 @@ public sealed record RankSnapshotResponse(
     int? LadderPosition,
     string Source,
     long CapturedAt,
-    int? SeasonId);
+    int? SeasonId,
+    string? RatedTier = null,
+    int? RatedRating = null);
 
 /// <summary>A crossing worth marking on the graph.</summary>
 public sealed record RankMilestoneResponse(
@@ -35,17 +37,25 @@ public sealed record RankMilestoneResponse(
     string Movement,
     string? Tier,
     string? Rank,
-    long CapturedAt);
+    long CapturedAt,
+    string? RatedTier = null);
 
 /// <param name="Before">
 /// The last reading before the range began, which is what "over this period"
 /// counts from — see rankNetChange in packages/core. Null when the range has no
 /// start, or nothing precedes it.
 /// </param>
+/// <param name="PeakBefore">
+/// The highest reading since the ladder last reset, taken before the range
+/// began — what a milestone is measured against to be a new peak for the season
+/// (milestoneTimeline in packages/core). Null when the range has no start, or
+/// nothing that season precedes it.
+/// </param>
 public sealed record RankHistoryResponse(
     IReadOnlyList<RankSnapshotResponse> Snapshots,
     IReadOnlyList<RankMilestoneResponse> Milestones,
-    RankSnapshotResponse? Before);
+    RankSnapshotResponse? Before,
+    RankSnapshotResponse? PeakBefore = null);
 
 /// <summary>One day's close on the profile's graph. See <see cref="RankTrends"/>.</summary>
 /// <param name="At">Where it is drawn: the end of its day.</param>
@@ -68,7 +78,7 @@ public sealed record RankTrendResponse(
     int? NetLp);
 
 /// <summary>A ranked season, as the pickers show it.</summary>
-public sealed record SeasonResponse(int Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
+public sealed record SeasonResponse(int Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank, string Game);
 
 /// <summary>
 /// The rank graph, its milestones, and which periods an account has history in.
@@ -103,7 +113,9 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
         string? range,
         CancellationToken cancellationToken = default)
     {
-        var seasons = await SeasonsAsync(cancellationToken);
+        // The ladder's own game's seasons: a TFT set boundary is no reset of
+        // League's, and the other way round.
+        var seasons = await SeasonsAsync(GameOf(queueType), cancellationToken);
         var bounds = RankedSeasons.RangeBounds(range, seasons, time.GetUtcNow().ToUnixTimeMilliseconds());
 
         var rows = await db.RankSnapshots
@@ -125,12 +137,21 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             r.LadderPosition,
             r.Source,
             r.CapturedAt,
-            RankedSeasons.SeasonAt(seasons, r.CapturedAt)?.Id);
+            RankedSeasons.SeasonAt(seasons, r.CapturedAt)?.Id,
+            r.RatedTier?.RiotName(),
+            r.RatedRating);
 
         var snapshots = rows.Select(Describe).ToList();
 
         var before = bounds.StartMs is { } start
             ? await LastBeforeAsync(riotAccountId, queueType, start, cancellationToken)
+            : null;
+
+        // The season's best before the range, so a milestone on a thirty-day view
+        // can still say it is the first time this season rather than this month.
+        var peakBefore = bounds.StartMs is { } from
+            ? await PeakBeforeAsync(
+                riotAccountId, queueType, RankedSeasons.LastResetAt(seasons, from), from, cancellationToken)
             : null;
 
         List<RankMilestoneResponse> milestones = [];
@@ -143,7 +164,7 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             // anybody did.
             if (RankedSeasons.ResetsBetween(seasons, rows[i - 1].CapturedAt, rows[i].CapturedAt)) continue;
 
-            var movement = Ladder.Movement(rows[i - 1].ToReading(), rows[i].ToReading());
+            var movement = Ladders.Movement(rows[i - 1].ToReading(), rows[i].ToReading());
             if (movement == RankMovement.None) continue;
 
             milestones.Add(new RankMilestoneResponse(
@@ -151,12 +172,17 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
                 movement == RankMovement.Promotion ? "promotion" : "demotion",
                 rows[i].Tier?.RiotName(),
                 rows[i].Division?.RiotName(),
-                rows[i].CapturedAt));
+                rows[i].CapturedAt,
+                rows[i].RatedTier?.RiotName()));
         }
 
         milestones.Reverse();
 
-        return new RankHistoryResponse(snapshots, milestones, before is null ? null : Describe(before));
+        return new RankHistoryResponse(
+            snapshots,
+            milestones,
+            before is null ? null : Describe(before),
+            peakBefore is null ? null : Describe(peakBefore));
     }
 
     /// <summary>
@@ -173,7 +199,7 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
         string queueType,
         CancellationToken cancellationToken = default)
     {
-        var seasons = await SeasonsAsync(cancellationToken);
+        var seasons = await SeasonsAsync(GameOf(queueType), cancellationToken);
         var now = time.GetUtcNow().ToUnixTimeMilliseconds();
         var since = RankTrends.Since(now);
 
@@ -219,6 +245,30 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
+    /// The highest reading from <paramref name="sinceMs"/> (the last reset, or
+    /// the beginning when there was none) up to, not including, <paramref name="beforeMs"/>.
+    ///
+    /// Highest by ladder position, the later of a tie — exact for divisions and
+    /// ratings. Master, Grandmaster and Challenger share one scale, so among them
+    /// the most LP wins whatever its tier was called.
+    /// </summary>
+    private Task<RankSnapshot?> PeakBeforeAsync(
+        Guid riotAccountId,
+        string queueType,
+        long? sinceMs,
+        long beforeMs,
+        CancellationToken cancellationToken) =>
+        db.RankSnapshots
+            .AsNoTracking()
+            .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueType && r.CapturedAt < beforeMs)
+            .Where(r => sinceMs == null || r.CapturedAt >= sinceMs)
+            .Where(r => r.LadderPosition != null)
+            .OrderByDescending(r => r.LadderPosition)
+            .ThenByDescending(r => r.CapturedAt)
+            .ThenByDescending(r => r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
     /// The seasons this account has history in, newest first.
     ///
     /// Drives the picker on the Rank and Champions screens, and its first entry
@@ -229,15 +279,24 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
     /// An account with no history at all reports the season it is currently in,
     /// so the picker is never empty.
     /// </summary>
+    public Task<IReadOnlyList<SeasonResponse>> PeriodsAsync(
+        Guid riotAccountId,
+        string puuid,
+        CancellationToken cancellationToken = default) =>
+        PeriodsAsync(riotAccountId, puuid, Game.Lol, cancellationToken);
+
+    /// <summary>One game's periods, from that game's seasons and that game's history.</summary>
+    /// <param name="puuid">The account's puuid under the key that game is fetched with.</param>
     public async Task<IReadOnlyList<SeasonResponse>> PeriodsAsync(
         Guid riotAccountId,
         string puuid,
+        Game game,
         CancellationToken cancellationToken = default)
     {
-        var seasons = await SeasonsAsync(cancellationToken);
+        var seasons = await SeasonsAsync(game, cancellationToken);
         if (seasons.Count == 0) return [];
 
-        var span = await SpanAsync(riotAccountId, puuid, cancellationToken);
+        var span = await SpanAsync(riotAccountId, puuid, game, cancellationToken);
 
         if (span is null)
         {
@@ -248,17 +307,29 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
         return [.. RankedSeasons.Spanning(seasons, span.Value.OldestMs, span.Value.NewestMs).Select(Describe)];
     }
 
-    /// <summary>Every recorded boundary, oldest first — the order everything else assumes.</summary>
-    public async Task<IReadOnlyList<Season>> SeasonsAsync(CancellationToken cancellationToken = default)
+    /// <summary>The game a ladder's queue type belongs to; League for anything unrecognised.</summary>
+    private static Game GameOf(string queueType) => RankedQueues.FromRiotName(queueType)?.Game() ?? Game.Lol;
+
+    /// <summary>League's boundaries, oldest first — what every read from before TFT means by seasons.</summary>
+    public Task<IReadOnlyList<Season>> SeasonsAsync(CancellationToken cancellationToken = default) =>
+        SeasonsAsync(Game.Lol, cancellationToken);
+
+    /// <summary>One game's recorded boundaries, oldest first — the order everything else assumes.</summary>
+    public async Task<IReadOnlyList<Season>> SeasonsAsync(Game game, CancellationToken cancellationToken = default)
     {
-        var rows = await db.Seasons.AsNoTracking().OrderBy(s => s.StartsAt).ToListAsync(cancellationToken);
+        var rows = await db.Seasons.AsNoTracking()
+            .Where(s => s.Game == game)
+            .OrderBy(s => s.StartsAt)
+            .ToListAsync(cancellationToken);
+
         return [.. rows.Select(s => s.ToDomain())];
     }
 
     public static SeasonResponse Describe(Season season)
     {
         ArgumentNullException.ThrowIfNull(season);
-        return new SeasonResponse(season.Id, season.Label, season.StartsAt, season.IsPreseason, season.ResetsRank);
+        return new SeasonResponse(
+            season.Id, season.Label, season.StartsAt, season.IsPreseason, season.ResetsRank, season.Game.Slug());
     }
 
     /// <summary>
@@ -277,17 +348,28 @@ public sealed class RankReads(FoxfireDbContext db, TimeProvider time)
     private async Task<(long OldestMs, long NewestMs)?> SpanAsync(
         Guid riotAccountId,
         string puuid,
+        Game game,
         CancellationToken cancellationToken)
     {
+        // One game's ladders only: a TFT reading says nothing about which
+        // League seasons somebody has history in.
+        var ladders = RankedQueues.Of(game).Select(q => q.RiotName()).ToList();
+
         var readings = await db.RankSnapshots.AsNoTracking()
-            .Where(r => r.RiotAccountId == riotAccountId)
+            .Where(r => r.RiotAccountId == riotAccountId && ladders.Contains(r.QueueType))
             .GroupBy(_ => 1)
             .Select(g => new { Min = (long?)g.Min(r => r.CapturedAt), Max = (long?)g.Max(r => r.CapturedAt) })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var games = await db.MatchParticipants.AsNoTracking()
-            .Where(p => p.Puuid == puuid)
-            .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => m.GameCreation)
+        var creations = game == Game.Tft
+            ? db.TftParticipants.AsNoTracking()
+                .Where(p => p.Puuid == puuid)
+                .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => m.GameCreation)
+            : db.MatchParticipants.AsNoTracking()
+                .Where(p => p.Puuid == puuid)
+                .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => m.GameCreation);
+
+        var games = await creations
             .GroupBy(_ => 1)
             .Select(g => new { Min = (long?)g.Min(), Max = (long?)g.Max() })
             .FirstOrDefaultAsync(cancellationToken);

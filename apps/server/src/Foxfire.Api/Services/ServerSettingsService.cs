@@ -1,8 +1,15 @@
+using Foxfire.Core;
 using Foxfire.Data;
 using Foxfire.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Foxfire.Api.Services;
+
+/// <summary>Whether the server sweeps by itself, how often, and whom it leaves alone.</summary>
+/// <param name="Interval">Between the starts of two sweeps.</param>
+/// <param name="Skip">An account synced more recently than this is left alone.</param>
+public sealed record BackgroundSyncSettings(bool Enabled, TimeSpan Interval, TimeSpan Skip);
 
 /// <summary>
 /// The handful of switches an admin can change without a restart.
@@ -11,14 +18,35 @@ namespace Foxfire.Api.Services;
 /// written, so a fresh database behaves like a configured one and seeding is a
 /// convenience rather than a precondition.
 /// </summary>
-public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time)
+public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time, IMemoryCache cache)
 {
     /// <summary>
-    /// On unless somebody has turned it off.
+    /// Off unless somebody has turned it on. See <see cref="ServerSettingKeys.PublicAccess"/>.
+    /// </summary>
+    public const bool PublicAccessDefault = false;
+
+    /// <summary>
+    /// How long one process trusts its last reading of <see cref="ServerSettingKeys.PublicAccess"/>.
     ///
-    /// A community server nobody can join is the less useful way to be wrong by
-    /// accident, and the admin account is seeded from configuration, so an open
-    /// server is never also an unclaimed one.
+    /// The reader policy asks on every request without a member's token, which
+    /// on an open server is most of them, and every other setting here is a
+    /// query. Turning it off in this process is immediate, because the write
+    /// drops the reading; another process overlapping a deploy catches up
+    /// within this.
+    /// </summary>
+    public static readonly TimeSpan PublicAccessCacheLifetime = TimeSpan.FromSeconds(15);
+
+    private const string PublicAccessCacheKey = "settings:" + ServerSettingKeys.PublicAccess;
+
+    /// <summary>
+    /// What a server that never chose reads sign-up as: open.
+    ///
+    /// Only a server from before new servers started invite-only can be in that
+    /// state now — <see cref="Foxfire.Api.Startup.DatabasePreparation"/> writes the setting
+    /// off when it finds an empty database — and it keeps the behaviour it has
+    /// always had rather than closing under a community that joins freely. The
+    /// admin pages ask its owner to choose (<see cref="IsPublicSignupChosenAsync"/>),
+    /// because nothing ever told them it was open.
     /// </summary>
     public const bool PublicSignupDefault = true;
 
@@ -38,8 +66,29 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
         return raw is null ? PublicSignupDefault : raw == "true";
     }
 
+    /// <summary>Whether somebody has decided sign-up either way, rather than it being open by default.</summary>
+    public async Task<bool> IsPublicSignupChosenAsync(CancellationToken cancellationToken = default) =>
+        await ReadAsync(ServerSettingKeys.PublicSignup, cancellationToken) is not null;
+
     public Task SetPublicSignupAsync(bool enabled, CancellationToken cancellationToken = default) =>
         WriteAsync(ServerSettingKeys.PublicSignup, enabled ? "true" : "false", cancellationToken);
+
+    public async Task<bool> IsPublicAccessEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        if (cache.TryGetValue(PublicAccessCacheKey, out bool cached)) return cached;
+
+        var raw = await ReadAsync(ServerSettingKeys.PublicAccess, cancellationToken);
+        var enabled = raw is null ? PublicAccessDefault : raw == "true";
+
+        cache.Set(PublicAccessCacheKey, enabled, PublicAccessCacheLifetime);
+        return enabled;
+    }
+
+    public async Task SetPublicAccessAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        await WriteAsync(ServerSettingKeys.PublicAccess, enabled ? "true" : "false", cancellationToken);
+        cache.Remove(PublicAccessCacheKey);
+    }
 
     public Task SetBackfillTargetAsync(int matches, CancellationToken cancellationToken = default) =>
         WriteAsync(ServerSettingKeys.BackfillTarget, matches.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
@@ -69,6 +118,67 @@ public sealed class ServerSettingsService(FoxfireDbContext db, TimeProvider time
         var raw = await ReadAsync(ServerSettingKeys.BackfillTarget, cancellationToken);
         return int.TryParse(raw, out var value) && value > 0 ? value : BackfillTargetDefault;
     }
+
+    /// <summary>
+    /// How many TFT matches a newly linked account backfills — the same default
+    /// as League's, and a setting of its own, because a host whose community
+    /// barely plays TFT may well want to spend less of the key on it.
+    /// </summary>
+    public async Task<int> GetTftBackfillTargetAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.TftBackfillTarget, cancellationToken);
+        return int.TryParse(raw, out var value) && value > 0 ? value : BackfillTargetDefault;
+    }
+
+    public Task SetTftBackfillTargetAsync(int matches, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.TftBackfillTarget, matches.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    /// <summary>One game's backfill target.</summary>
+    public Task<int> GetBackfillTargetAsync(Foxfire.Core.Game game, CancellationToken cancellationToken = default) =>
+        game == Foxfire.Core.Game.Tft
+            ? GetTftBackfillTargetAsync(cancellationToken)
+            : GetBackfillTargetAsync(cancellationToken);
+
+    /// <summary>Off unless somebody has turned it on. See <see cref="ServerSettingKeys.BackgroundSync"/>.</summary>
+    public const bool BackgroundSyncDefault = false;
+
+    public async Task<bool> IsBackgroundSyncEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.BackgroundSync, cancellationToken);
+        return raw is null ? BackgroundSyncDefault : raw == "true";
+    }
+
+    public Task SetBackgroundSyncAsync(bool enabled, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.BackgroundSync, enabled ? "true" : "false", cancellationToken);
+
+    public async Task<int> GetBackgroundSyncMinutesAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.BackgroundSyncMinutes, cancellationToken);
+        return int.TryParse(raw, out var value)
+            && value is >= BackgroundSyncRules.MinIntervalMinutes and <= BackgroundSyncRules.MaxIntervalMinutes
+                ? value
+                : BackgroundSyncRules.IntervalMinutesDefault;
+    }
+
+    public Task SetBackgroundSyncMinutesAsync(int minutes, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.BackgroundSyncMinutes, minutes.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    public async Task<int> GetBackgroundSyncSkipMinutesAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await ReadAsync(ServerSettingKeys.BackgroundSyncSkipMinutes, cancellationToken);
+        return int.TryParse(raw, out var value) && value >= BackgroundSyncRules.MinSkipMinutes
+            ? value
+            : BackgroundSyncRules.SkipMinutesDefault;
+    }
+
+    public Task SetBackgroundSyncSkipMinutesAsync(int minutes, CancellationToken cancellationToken = default) =>
+        WriteAsync(ServerSettingKeys.BackgroundSyncSkipMinutes, minutes.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+
+    /// <summary>All three background sync switches, as the sweep reads them.</summary>
+    public async Task<BackgroundSyncSettings> GetBackgroundSyncAsync(CancellationToken cancellationToken = default) =>
+        new(await IsBackgroundSyncEnabledAsync(cancellationToken),
+            TimeSpan.FromMinutes(await GetBackgroundSyncMinutesAsync(cancellationToken)),
+            TimeSpan.FromMinutes(await GetBackgroundSyncSkipMinutesAsync(cancellationToken)));
 
     /// <summary>
     /// The attribution rule the stored LP figures were built under.

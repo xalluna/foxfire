@@ -111,6 +111,21 @@ public sealed class EmailOffTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task Only_the_configured_head_admin_is_told_their_address_is_pinned()
+    {
+        var (admin, _) = await server.AdminAsync();
+        using var _ = admin;
+        var pinned = await admin.GetFromJsonAsync<JsonElement>(Api("/api/account/email"));
+        Assert.True(pinned.GetProperty("addressPinned").GetBoolean());
+
+        using var member = server.Client();
+        var name = Unique("unpinned");
+        FoxfireServerFixture.Authenticated(member, await server.RegisterAsync(member, name, $"{name}@example.com"));
+        var mine = await member.GetFromJsonAsync<JsonElement>(Api("/api/account/email"));
+        Assert.False(mine.GetProperty("addressPinned").GetBoolean());
+    }
+
+    [Fact]
     public async Task The_email_page_says_nothing_is_configured()
     {
         var (admin, _) = await server.AdminAsync();

@@ -57,6 +57,11 @@ export function SignInPage(): JSX.Element {
               Forgotten your password? Ask this server&rsquo;s administrator for a reset link.
             </p>
           )}
+          {/* For the one person there is no administrator to ask. */}
+          <p className="mt-1 text-2xs text-text-mute">
+            Run this server yourself? If you&rsquo;re still signed in anywhere, Members › your own row
+            makes you a reset link. If not, ADMIN_EMAIL in the server&rsquo;s .env says how to get back in.
+          </p>
         </>
       }
     >

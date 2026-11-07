@@ -19,7 +19,7 @@
 /*
  * Hextech tokens.
  *
- * Dark only by design — the greys and the semantic colours below still follow
+ * Dark only by design — the backgrounds and the semantic colours below follow
  * Riot's own client UI, which is what the app is read alongside.
  *
  * The accent is the exception, and deliberately so. It was Riot's gold until
@@ -34,26 +34,40 @@
  * colour, the way a currency symbol does. It is deliberately not --amber, which
  * means "something needs your attention" everywhere else in the app.
  *
+ * The greys were Riot's too until 0.17.0, and gave way to legibility. They put
+ * secondary text at 2.5:1 and every border at barely more than 1:1, so a
+ * caption was hard to read and an input hard to find. Now every colour text is
+ * drawn in reads at 4.5:1 or better against all three backgrounds, and --edge,
+ * the outline of anything you type into or press, at 3:1 or better — WCAG AA
+ * for text and for controls. The surfaces sit a little further off the canvas,
+ * and --hairline is a line you can see. src/styles/contrast.test.ts holds
+ * every pair to that, so a colour changed here that falls short fails the
+ * build rather than a reader.
+ *
  * Defined as custom properties so a second theme is a variable swap rather
  * than a rewrite; tailwind.preset.js maps every colour utility onto them.
  */
 :root {
+  /* Native checkboxes, radios, selects and scrollbars draw dark too. */
+  color-scheme: dark;
+
   --canvas: 1 10 19; /* #010A13 */
-  --surface: 10 20 40; /* #0A1428 */
-  --surface-2: 15 27 45; /* #0F1B2D */
-  --hairline: 30 35 40; /* #1E2328 */
+  --surface: 13 25 48; /* #0D1930 */
+  --surface-2: 20 34 56; /* #142238 */
+  --hairline: 64 76 92; /* #404C5C — panels, rows, dividers */
+  --edge: 106 122 146; /* #6A7A92 — inputs, selects, buttons */
 
   --accent: 157 200 255; /* #9DC8FF */
-  --accent-dim: 62 95 138; /* #3E5F8A */
+  --accent-dim: 84 124 174; /* #547CAE */
 
   --teal: 10 200 185; /* #0AC8B9 */
-  --red: 232 64 87; /* #E84057 */
+  --red: 240 82 102; /* #F05266 */
   --amber: 235 156 0; /* #EB9C00 */
   --gold: 200 170 110; /* #C8AA6E — the currency, not the accent */
 
   --text: 240 230 210; /* #F0E6D2 */
-  --text-dim: 160 155 140; /* #A09B8C */
-  --text-mute: 91 90 86; /* #5B5A56 */
+  --text-dim: 178 172 156; /* #B2AC9C */
+  --text-mute: 141 140 133; /* #8D8C85 */
 }
 
 @layer base {
@@ -82,7 +96,7 @@
     @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full border-2 border-solid border-transparent bg-hairline bg-clip-content;
+    @apply rounded-full border-2 border-solid border-transparent bg-edge bg-clip-content;
   }
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-accent-dim bg-clip-content;

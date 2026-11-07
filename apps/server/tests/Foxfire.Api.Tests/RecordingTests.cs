@@ -114,6 +114,29 @@ public class RecordingTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task Somebody_on_a_share_link_reads_the_game_but_never_the_recording()
+    {
+        // A member posted the video for the people they play with, not for
+        // whoever their profile is shared with.
+        var (matchId, ahri, _) = await GameAsync();
+        (await ahri.Client.PutAsJsonAsync(RecordingUri(ahri.AccountId, matchId), Upload(VideoA)))
+            .EnsureSuccessStatusCode();
+
+        var share = await ahri.Client.PostAsJsonAsync(
+            new Uri("/api/shares", UriKind.Relative), new { riotAccountId = ahri.AccountId });
+        share.EnsureSuccessStatusCode();
+        var token = (await share.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+
+        using var outsider = server.WebClient();
+        outsider.DefaultRequestHeaders.Add(Foxfire.Api.Auth.ShareAccess.Header, token);
+
+        Assert.Equal(JsonValueKind.Null, (await RowAsync(outsider, ahri.AccountId, matchId)).ValueKind);
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await outsider.GetAsync(RecordingUri(ahri.AccountId, matchId))).StatusCode);
+    }
+
+    [Fact]
     public async Task The_owner_attaches_one_and_their_row_offers_it_with_its_markers()
     {
         var (matchId, ahri, _) = await GameAsync();

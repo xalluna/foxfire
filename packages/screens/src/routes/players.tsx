@@ -12,12 +12,15 @@ import type { Account, RiotIdInput } from '@foxfire/core'
 import { isPlayer, parsePlayerSlug, playerSlug } from '@foxfire/core/routes'
 import { EmptyState, Icon, type MatchFocus } from '@foxfire/ui'
 import { PlayerBackLink } from './PlayerBackLink'
+import { useOffersGame } from '../client/useConnection'
 import { useAccount, useAccountByRiotId } from '../queries/accounts'
+import { isRefused } from '../queries/queryClient'
 import { ChampionsScreen } from '../screens/ChampionsScreen'
 import { DashboardScreen } from '../screens/DashboardScreen'
 import { LpEditorScreen } from '../screens/LpEditorScreen'
 import { RankScreen } from '../screens/RankScreen'
 import { RecordingScreen } from '../screens/RecordingScreen'
+import { TftProfileScreen } from '../screens/TftProfileScreen'
 import {
   DEFAULT_RANK_RANGE,
   queueIdFrom,
@@ -29,10 +32,20 @@ import {
   validateDashboardSearch,
   validateLpEditorSearch,
   validateRankSearch,
+  validateRecordingSearch,
+  validateTftRankSearch,
+  validateTftSearch,
+  tftLadderFrom,
+  tftQueueIdFrom,
+  tftQueueSearchFor,
+  tftRankQueueSearchFor,
   type ChampionsSearch,
   type DashboardSearch,
   type LpEditorSearch,
-  type RankSearch
+  type RankSearch,
+  type RecordingSearch,
+  type TftRankSearch,
+  type TftSearch
 } from './params'
 import { rememberSearch } from './rememberSearch'
 import { useRouteSearch } from './useRouteSearch'
@@ -92,6 +105,7 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   // never share what somebody last picked.
   const dashboardMemory = rememberSearch<DashboardSearch>(['queue'])
   const championsMemory = rememberSearch<ChampionsSearch>(['queue'])
+  const tftMemory = rememberSearch<TftSearch>(['queue'])
 
   const player = createRoute({
     getParentRoute: () => parent,
@@ -143,10 +157,36 @@ export function createPlayerRoutes<TParent extends AnyRoute>(
   const recording = createRoute({
     getParentRoute: () => player,
     path: 'recordings/$matchId',
+    validateSearch: validateRecordingSearch,
     component: RecordingRoute
   })
 
-  return { player, dashboard, champions, rank, lpEditor, recording }
+  // TFT, under the same player: the Riot ID is shared, so its pages sit
+  // beside League's rather than under a game of their own.
+  const tft = createRoute({
+    getParentRoute: () => player,
+    path: 'tft',
+    component: TftBoundary
+  })
+
+  const tftProfile = createRoute({
+    getParentRoute: () => tft,
+    path: '/',
+    validateSearch: validateTftSearch,
+    search: { middlewares: [tftMemory.middleware as never] },
+    onEnter: (match) => tftMemory.record(match.search as TftSearch),
+    onStay: (match) => tftMemory.record(match.search as TftSearch),
+    component: TftProfileRoute
+  })
+
+  const tftRank = createRoute({
+    getParentRoute: () => tft,
+    path: 'rank',
+    validateSearch: validateTftRankSearch,
+    component: TftRankRoute
+  })
+
+  return { player, dashboard, champions, rank, lpEditor, recording, tft, tftProfile, tftRank }
 }
 
 /**
@@ -183,6 +223,10 @@ function PlayerBoundary({ layout: Layout }: { layout: ComponentType<PlayerLayout
   }
 
   if (found.isError) {
+    // Somebody reading without an account, through a link to one profile,
+    // who followed it to another — a teammate on a scoreboard, say.
+    if (isRefused(found.error)) return <MembersOnly Layout={Layout} />
+
     return (
       <Layout account={null}>
         <EmptyState
@@ -238,6 +282,19 @@ function NoSuchPlayer({
   )
 }
 
+/** A player the server keeps for its members, asked for by somebody who is not one. */
+function MembersOnly({ Layout }: { Layout: ComponentType<PlayerLayoutProps> }): JSX.Element {
+  return (
+    <Layout account={null}>
+      <EmptyState
+        icon={<Icon.Shield />}
+        title="Only this server's members can see this player"
+        description="The link you were given opens one profile, and this is another. Signing in shows the rest of this server."
+      />
+    </Layout>
+  )
+}
+
 function DashboardRoute(): JSX.Element {
   const account = usePlayer()
   const [search, setSearch] = useRouteSearch<DashboardSearch>()
@@ -258,6 +315,47 @@ function DashboardRoute(): JSX.Element {
       account={account}
       queueId={queueIdFrom(search.queue)}
       onQueueChange={(queueId) => setSearch({ queue: queueSearchFor(queueId) })}
+      focus={focus}
+    />
+  )
+}
+
+/**
+ * TFT's pages, where TFT is on offer.
+ *
+ * A server whose host has not turned TFT on has none to show, so a link to a
+ * player's TFT — one shared from a server that had it, or kept from before it
+ * was turned off — opens the same player's League profile instead of pages
+ * that cannot load. Nothing is drawn until the connection says which.
+ */
+function TftBoundary(): JSX.Element | null {
+  const account = usePlayer()
+  const tft = useOffersGame('tft')
+
+  if (tft === undefined) return null
+  if (!tft) return <Navigate to={'/players/$slug' as never} params={{ slug: playerSlug(account) } as never} replace />
+
+  return <Outlet />
+}
+
+function TftProfileRoute(): JSX.Element {
+  const account = usePlayer()
+  const [search, setSearch] = useRouteSearch<TftSearch>()
+  const [focus, setFocus] = useState<MatchFocus | null>(null)
+
+  // A game asked for from elsewhere, opened and then taken out of the URL, as
+  // on League's profile.
+  useEffect(() => {
+    if (search.match === undefined) return
+    setFocus({ matchId: search.match })
+    setSearch({ match: undefined }, { replace: true })
+  }, [search.match, setSearch])
+
+  return (
+    <TftProfileScreen
+      account={account}
+      queueId={tftQueueIdFrom(search.queue)}
+      onQueueChange={(queueId) => setSearch({ queue: tftQueueSearchFor(queueId) })}
       focus={focus}
     />
   )
@@ -295,15 +393,35 @@ function RankRoute(): JSX.Element {
   )
 }
 
+function TftRankRoute(): JSX.Element {
+  const account = usePlayer()
+  const [search, setSearch] = useRouteSearch<TftRankSearch>()
+
+  return (
+    <RankScreen
+      account={account}
+      game="tft"
+      queueType={tftLadderFrom(search.queue)}
+      onQueueTypeChange={(queueType) => setSearch({ queue: tftRankQueueSearchFor(queueType) })}
+      range={search.range ?? DEFAULT_RANK_RANGE}
+      onRangeChange={(range) => setSearch({ range: rankRangeSearchFor(range) })}
+      back={<PlayerBackLink account={account} label="profile" game="tft" />}
+    />
+  )
+}
+
 function RecordingRoute(): JSX.Element {
   const account = usePlayer()
   const { matchId } = useParams({ strict: false }) as { matchId: string }
+  const [search] = useRouteSearch<RecordingSearch>()
+  const game = search.game ?? 'lol'
 
   return (
     <RecordingScreen
       account={account}
       matchId={matchId}
-      back={<PlayerBackLink account={account} label="history" match={matchId} />}
+      game={game}
+      back={<PlayerBackLink account={account} label="history" match={matchId} game={game} />}
     />
   )
 }

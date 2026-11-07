@@ -84,8 +84,169 @@ public sealed record EditableMatchResponse(
 /// the Foxfire account that has claimed the Riot account may type its LP, or a
 /// head admin, and the endpoint enforces that before any of this runs.
 /// </summary>
+/// <summary>A ranked TFT game with no LP figure, as the editor lists it. See @foxfire/core's TftEditableMatch.</summary>
+public sealed record TftEditableMatchResponse(
+    string MatchId,
+    long GameCreation,
+    int GameDuration,
+    int QueueId,
+    int Placement,
+    int? TeamPlacement,
+    ManualRankDto? Before,
+    long? BeforeAt,
+    bool BeforeUsable,
+    ManualRankDto? Manual);
+
 public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attribution)
 {
+    /// <summary>
+    /// One ranked game as the editor needs it, from whichever game's table:
+    /// when it was, and where it is placed among readings — its end for League,
+    /// its player's elimination for TFT.
+    /// </summary>
+    private sealed record EditableGame(string MatchId, long GameCreation, int GameDuration, long PlacedAt);
+
+    /// <summary>
+    /// The ranked TFT games on one ladder with no LP figure, or with one typed
+    /// in — the same rule and the same "before" reading as League's, from TFT's
+    /// boards and placed at the player's elimination.
+    /// </summary>
+    public async Task<IReadOnlyList<TftEditableMatchResponse>> TftEditableAsync(
+        Guid riotAccountId,
+        string puuid,
+        RankedQueue queue,
+        CancellationToken cancellationToken = default)
+    {
+        var queueType = queue.RiotName();
+        var queueId = queue.QueueId();
+        var entered = await EnteredAsync(riotAccountId, queueType, cancellationToken);
+
+        var games = await db.TftParticipants.AsNoTracking()
+            .Where(p => p.Puuid == puuid)
+            .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => new { p, m })
+            .Where(x => x.m.QueueId == queueId)
+            .Where(x =>
+                !db.MatchRanks.Any(r => r.MatchId == x.p.MatchId && r.RiotAccountId == riotAccountId)
+                || db.RankSnapshots.Any(s =>
+                    s.MatchId == x.p.MatchId
+                    && s.RiotAccountId == riotAccountId
+                    && s.Source == RankSources.Manual))
+            .OrderByDescending(x => x.m.GameCreation)
+            .Select(x => new
+            {
+                x.m.MatchId,
+                x.m.GameCreation,
+                x.m.GameDuration,
+                x.p.TimeEliminated,
+                x.p.Placement,
+                x.p.TeamPlacement
+            })
+            .ToListAsync(cancellationToken);
+
+        List<TftEditableMatchResponse> result = [];
+
+        foreach (var game in games)
+        {
+            var placedAt = TftPlacements.GameEnd(game.GameCreation, game.TimeEliminated, game.GameDuration);
+            var after = entered.FirstOrDefault(e => e.MatchId == game.MatchId && e.CapturedAt > game.GameCreation);
+            var ownBefore = entered.FirstOrDefault(e => e.MatchId == game.MatchId && e.CapturedAt < game.GameCreation);
+            var previous = await LastBeforeAsync(riotAccountId, queueType, placedAt, cancellationToken);
+
+            result.Add(new TftEditableMatchResponse(
+                game.MatchId,
+                game.GameCreation,
+                game.GameDuration,
+                queueId,
+                game.Placement,
+                game.TeamPlacement,
+                ownBefore?.Rank ?? Describe(previous),
+                previous?.CapturedAt,
+                previous is not null && previous.LadderPosition is not null,
+                after?.Rank));
+        }
+
+        return result;
+    }
+
+    private sealed record Entered(string MatchId, long CapturedAt, ManualRankDto Rank);
+
+    /// <summary>The hand-entered readings on one ladder, oldest first.</summary>
+    private async Task<List<Entered>> EnteredAsync(Guid riotAccountId, string queueType, CancellationToken cancellationToken)
+    {
+        var manual = await db.RankSnapshots.AsNoTracking()
+            .Where(r => r.RiotAccountId == riotAccountId
+                && r.QueueType == queueType
+                && r.Source == RankSources.Manual
+                && r.MatchId != null
+                && r.Tier != null)
+            .OrderBy(r => r.CapturedAt)
+            .ToListAsync(cancellationToken);
+
+        return
+        [
+            .. manual
+                .Where(r => r.Tier is not null)
+                .Select(r => new Entered(
+                    r.MatchId!,
+                    r.CapturedAt,
+                    new ManualRankDto(r.Tier!.Value.RiotName(), r.Division?.RiotName(), r.LeaguePoints ?? 0)))
+        ];
+    }
+
+    /// <summary>The newest reading before a moment on one ladder, the later row winning a tie.</summary>
+    private Task<RankSnapshot?> LastBeforeAsync(
+        Guid riotAccountId,
+        string queueType,
+        long beforeMs,
+        CancellationToken cancellationToken) =>
+        db.RankSnapshots.AsNoTracking()
+            .Where(r => r.RiotAccountId == riotAccountId && r.QueueType == queueType && r.CapturedAt < beforeMs)
+            .OrderByDescending(r => r.CapturedAt)
+            .ThenByDescending(r => r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static ManualRankDto? Describe(RankSnapshot? reading) =>
+        reading?.Tier is { } tier
+            ? new ManualRankDto(tier.RiotName(), reading.Division?.RiotName(), reading.LeaguePoints ?? 0)
+            : null;
+
+    /// <summary>The ranked games a set of edits names, on one ladder, from that ladder's game.</summary>
+    private async Task<Dictionary<string, EditableGame>> GamesAsync(
+        string puuid,
+        RankedQueue queue,
+        IReadOnlyList<string> matchIds,
+        CancellationToken cancellationToken)
+    {
+        var queueId = queue.QueueId();
+
+        if (queue.Game() == Game.Tft)
+        {
+            var boards = await db.TftParticipants.AsNoTracking()
+                .Where(p => p.Puuid == puuid && matchIds.Contains(p.MatchId))
+                .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => new { m, p.TimeEliminated })
+                .Where(x => x.m.QueueId == queueId)
+                .Select(x => new { x.m.MatchId, x.m.GameCreation, x.m.GameDuration, x.TimeEliminated })
+                .ToListAsync(cancellationToken);
+
+            return boards.ToDictionary(
+                b => b.MatchId,
+                b => new EditableGame(
+                    b.MatchId, b.GameCreation, b.GameDuration,
+                    TftPlacements.GameEnd(b.GameCreation, b.TimeEliminated, b.GameDuration)));
+        }
+
+        var games = await db.MatchParticipants.AsNoTracking()
+            .Where(p => p.Puuid == puuid && !p.GameEndedInEarlySurrender && matchIds.Contains(p.MatchId))
+            .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => m)
+            .Where(m => m.QueueId == queueId)
+            .Select(m => new { m.MatchId, m.GameCreation, m.GameDuration })
+            .ToListAsync(cancellationToken);
+
+        return games.ToDictionary(
+            g => g.MatchId,
+            g => new EditableGame(g.MatchId, g.GameCreation, g.GameDuration, ManualRanks.AfterTime(g.GameCreation, g.GameDuration)));
+    }
+
     /// <summary>
     /// The games the editor can offer, newest first.
     ///
@@ -222,17 +383,11 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
     {
         ArgumentNullException.ThrowIfNull(edits);
 
+        if (!queue.LpEditable()) return $"{queue.RiotName()} has no LP to type.";
+
         var queueType = queue.RiotName();
-        var queueId = queue.QueueId();
-
         var matchIds = edits.Select(e => e.MatchId).ToList();
-
-        var games = await db.MatchParticipants.AsNoTracking()
-            .Where(p => p.Puuid == puuid && !p.GameEndedInEarlySurrender && matchIds.Contains(p.MatchId))
-            .Join(db.Matches.AsNoTracking(), p => p.MatchId, m => m.MatchId, (p, m) => m)
-            .Where(m => m.QueueId == queueId)
-            .Select(m => new { m.MatchId, m.GameCreation, m.GameDuration })
-            .ToDictionaryAsync(m => m.MatchId, cancellationToken);
+        var games = await GamesAsync(puuid, queue, matchIds, cancellationToken);
 
         foreach (var edit in edits)
         {
@@ -275,9 +430,11 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
                             ManualRanks.BeforeTime(game.GameCreation)));
                 }
 
+                // Where the game is placed among readings, so the entry closes
+                // its own interval: a League game's end, a TFT player's
+                // elimination.
                 db.RankSnapshots.Add(
-                    Reading(riotAccountId, queueType, edit.MatchId, edit.After,
-                        ManualRanks.AfterTime(game.GameCreation, game.GameDuration)));
+                    Reading(riotAccountId, queueType, edit.MatchId, edit.After, game.PlacedAt));
             }
 
             await db.SaveChangesAsync(cancellationToken);
@@ -297,12 +454,25 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
     /// be stranded: the interval would be ambiguous again, nothing would be
     /// written, and the stale hand-entered value would sit there looking measured.
     /// </summary>
-    public async Task<bool> ClearAsync(
+    public Task<bool> ClearAsync(
         Guid riotAccountId,
         string puuid,
         string matchId,
+        CancellationToken cancellationToken = default) =>
+        ClearAsync(riotAccountId, _ => Task.FromResult<string?>(puuid), matchId, cancellationToken);
+
+    /// <summary>
+    /// Clears a hand-entered rank on whichever game's ladder it was typed for,
+    /// rebuilding that ladder against the account's puuid in that game.
+    /// </summary>
+    public async Task<bool> ClearAsync(
+        Guid riotAccountId,
+        Func<Game, Task<string?>> puuidFor,
+        string matchId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(puuidFor);
+
         var queueType = await db.RankSnapshots.AsNoTracking()
             .Where(r => r.RiotAccountId == riotAccountId
                 && r.MatchId == matchId
@@ -314,6 +484,9 @@ public sealed class ManualRankEditor(FoxfireDbContext db, AttributionRunner attr
 
         var queue = RankedQueues.FromRiotName(queueType);
         if (queue is null) return false;
+
+        var puuid = await puuidFor(queue.Value.Game());
+        if (puuid is null) return false;
 
         await db.RankSnapshots
             .Where(r => r.RiotAccountId == riotAccountId

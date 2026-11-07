@@ -219,7 +219,7 @@ export function PlayerSearch({
         onMouseDown={() => setOpen(true)}
         onKeyDown={onKeyDown}
         onBlur={() => setOpen(false)}
-        className="h-7 w-full rounded-md border border-hairline bg-surface-2 pl-8 pr-14 text-sm text-text transition placeholder:text-text-mute focus:border-accent-dim focus:outline-none"
+        className="h-7 w-full rounded-md border border-edge bg-surface-2 pl-8 pr-14 text-sm text-text transition placeholder:text-text-mute focus:border-accent focus:outline-none"
       />
 
       {query ? (
@@ -251,11 +251,11 @@ export function PlayerSearch({
           className="animate-flyout-in absolute top-full z-50 mt-1.5 overflow-hidden rounded-md border border-hairline bg-surface shadow-flyout"
         >
           {notice && (
-            <p role="alert" className="border-b border-hairline px-3 py-2 text-2xs text-amber">
+            <p role="alert" className="border-b border-hairline px-3 py-2 text-xs text-amber">
               {notice}
             </p>
           )}
-          <p role="status" className={clsx('px-3 text-2xs text-text-mute', status && 'py-2')}>
+          <p role="status" className={clsx('px-3 text-xs text-text-mute', status && 'py-2')}>
             {status}
           </p>
 

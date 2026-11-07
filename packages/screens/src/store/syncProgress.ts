@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SyncProgressEvent, SyncState } from '@foxfire/core'
+import type { GameId, SyncProgressEvent, SyncState } from '@foxfire/core'
 
 interface SyncProgressState {
   /** The latest event for each account, whichever phase it is in. */
@@ -18,12 +18,21 @@ interface SyncProgressState {
 export const useSyncProgressStore = create<SyncProgressState>((set) => ({
   byAccount: {},
   record: (event) =>
-    set((state) => ({ byAccount: { ...state.byAccount, [event.accountId]: event } }))
+    set((state) => ({ byAccount: { ...state.byAccount, [progressKey(event.accountId, event.game)]: event } }))
 }))
 
+/**
+ * Where an account's progress is kept: per game, since League's and TFT's
+ * syncs run side by side. An event that names no game is League's, which is
+ * every event a server or desktop from before TFT sends.
+ */
+function progressKey(accountId: string, game: GameId | undefined): string {
+  return `${accountId}:${game ?? 'lol'}`
+}
+
 /** The latest sync event for one account. */
-export function useSyncProgress(accountId: string): SyncProgressEvent | undefined {
-  return useSyncProgressStore((state) => state.byAccount[accountId])
+export function useSyncProgress(accountId: string, game: GameId = 'lol'): SyncProgressEvent | undefined {
+  return useSyncProgressStore((state) => state.byAccount[progressKey(accountId, game)])
 }
 
 /** Whether a sync is running, as opposed to finished or failed. */

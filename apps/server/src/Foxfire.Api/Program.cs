@@ -35,6 +35,8 @@ builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOpt
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
 builder.Services.Configure<LogOptions>(builder.Configuration.GetSection(LogOptions.Section));
+builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.Section));
+builder.Services.Configure<TftOptions>(builder.Configuration.GetSection(TftOptions.Section));
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new();
 var riotOptions = builder.Configuration.GetSection(RiotOptions.Section).Get<RiotOptions>() ?? new();
@@ -167,6 +169,10 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+// Who may read: a member, anybody while the server is open, or a share link's
+// holder for the profile it opens. See Auth/ReaderAccess.cs.
+builder.Services.AddFoxfireReaderAccess();
+
 // One hub for everything the server pushes. The desktop holds a single
 // connection to a single active server, and every event on it is addressed
 // the same way, so splitting by concern would multiply connections without
@@ -205,21 +211,29 @@ builder.Services.AddScoped<ServerSettingsService>();
 // little logic on top of it; the engine that drives them is not, because a
 // sync outlives the request that asked for it.
 builder.Services.AddScoped<MatchIngestion>();
+builder.Services.AddScoped<TftMatchIngestion>();
+builder.Services.AddScoped<TftIdentity>();
 builder.Services.AddScoped<RankRecorder>();
 builder.Services.AddScoped<AccountProfile>();
 builder.Services.AddScoped<AttributionRunner>();
-builder.Services.AddScoped<CoPlayerRanks>();
+builder.Services.AddScoped<CoPlayerSyncs>();
 builder.Services.AddScoped<IdentityRepair>();
 
 // The read half. Every screen the desktop draws in server mode comes
 // through one of these.
 builder.Services.AddScoped<MatchReads>();
 builder.Services.AddScoped<RankReads>();
+builder.Services.AddScoped<TftReads>();
 builder.Services.AddScoped<ManualRankEditor>();
 
 builder.Services.AddSingleton<IServerEvents, SignalRServerEvents>();
 builder.Services.AddSingleton<SyncService>();
 builder.Services.AddSingleton<PostGameSyncScheduler>();
+
+// Everybody, on a timer, when an admin has turned it on — see Sync/BackgroundSyncs.cs.
+// A singleton the tests can drive, and the hosted service that keeps it going.
+builder.Services.AddSingleton<BackgroundSyncs>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundSyncs>());
 
 builder.Services.AddHttpClient(RiotClient.HttpClientName, http =>
 {
@@ -238,6 +252,45 @@ builder.Services.AddSingleton(sp => new RiotClient(
     riotOptions.ApiKey,
     sp.GetRequiredService<ILogger<RiotClient>>(),
     sp.GetRequiredService<RiotMetrics>()));
+
+// TFT's client: its own key and its own queue when the host has given it one,
+// and otherwise the main key through the main queue — where a 403 from a TFT
+// endpoint means "this key has no TFT", not "this key is dead". The main
+// RiotClient and RiotRateLimiter are registered exactly as they were, so
+// nothing that injects them changes. TFT's client is registered whether or not
+// the server offers TFT (ServerGames, from Tft__Enabled), so nothing that
+// injects it has to ask; with TFT off, nothing calls it.
+builder.Services.AddSingleton<ServerGames>();
+builder.Services.AddSingleton<TftAccess>();
+builder.Services.AddSingleton(sp =>
+{
+    var http = sp.GetRequiredService<IHttpClientFactory>();
+    var metrics = sp.GetRequiredService<RiotMetrics>();
+    var logger = sp.GetRequiredService<ILogger<RiotClient>>();
+
+    // Read when the client is first asked for rather than from the options
+    // bound above, so a test host can give TFT a key of its own.
+    var tftOptions = sp.GetRequiredService<IConfiguration>()
+        .GetSection($"{RiotOptions.Section}:Tft").Get<TftRiotOptions>() ?? new();
+
+    if (!tftOptions.IsSet)
+    {
+        return new TftRiot(
+            new RiotClient(http, sp.GetRequiredService<RiotRateLimiter>(), riotOptions.ApiKey, logger, metrics,
+                tftForbiddenMeansNoAccess: true),
+            HasOwnKey: false);
+    }
+
+    var limiter = new RiotRateLimiter(
+        tftOptions.KeyType == "application" ? RiotRateLimits.ApplicationKey : RiotRateLimits.PersonalKey,
+        sp.GetRequiredService<TimeProvider>(),
+        sp.GetRequiredService<ILogger<RiotRateLimiter>>());
+
+    var access = sp.GetRequiredService<TftAccess>();
+    limiter.KeyRejectedOnce += () => access.Deny("Riot rejected this server's TFT key.");
+
+    return new TftRiot(new RiotClient(http, limiter, tftOptions.ApiKey, logger, metrics), HasOwnKey: true);
+});
 
 // Optional, and the server says so rather than refusing to start: a
 // community that never uploads a replay needs no blob store, and everything
@@ -294,13 +347,18 @@ app.UseForwardedHeaders();
 spa.UseFiles(app);
 
 app.UseRouting();
-app.UseRateLimiter();
 
 // Before authentication: a client this server does not speak to should be told
 // so, not handed an authentication failure it cannot act on.
 app.UseDesktopVersionGate();
 
 app.UseAuthentication();
+
+// After authentication, because the outsiders' limit is only for outsiders and
+// it is authentication that says who is a member. Checking a token's signature
+// is cheap enough to do before turning somebody away.
+app.UseRateLimiter();
+
 app.UseRequestLogContext();
 app.UseAuthorization();
 
@@ -323,7 +381,18 @@ api.MapRiotLinkEndpoints();
 api.MapSyncEndpoints();
 api.MapDashboardEndpoints();
 api.MapRankEndpoints();
+
+// Only on a server that offers TFT — see Common/GameParam.cs. Without it TFT's
+// routes fall through to the JSON 404 below, as YouTube's do in a build
+// without them, and no client connected here asks for them: /version says.
+var games = app.Services.GetRequiredService<ServerGames>();
+if (games.Tft)
+{
+    api.MapTftEndpoints();
+}
+
 api.MapSearchEndpoints();
+api.MapShareLinkEndpoints();
 api.MapReplayEndpoints();
 
 // Only in a build made with YouTube — see Foxfire.Core/BuildFeatures.cs. Without it
@@ -485,6 +554,43 @@ _ = Task.Run(async () =>
             + "fetched. Personal keys expire every 24 hours — replace Riot__ApiKey and restart.");
     }
 });
+
+// The same for TFT, whose answer is a different question: not whether the key
+// works, but whether it reaches TFT at all. Not asked on a server that does
+// not offer TFT, which asks Riot nothing about it.
+if (games.Tft)
+{
+    _ = Task.Run(async () =>
+    {
+        var tft = app.Services.GetRequiredService<TftRiot>();
+        var access = app.Services.GetRequiredService<TftAccess>();
+        var reached = await tft.Client.ValidateTftAccessAsync(app.Lifetime.ApplicationStopping);
+
+        if (reached is true)
+        {
+            access.Grant();
+            startup.LogInformation(
+                tft.HasOwnKey ? "Riot accepted this server's TFT key." : "This server's Riot key reaches TFT.");
+        }
+        else if (reached is false)
+        {
+            access.Deny(tft.HasOwnKey
+                ? "Riot rejected this server's TFT key."
+                : "This server's Riot key has no TFT access. Set Riot__Tft__ApiKey to a key registered for TFT.");
+        }
+    });
+}
+else if (app.Services.GetRequiredService<IConfiguration>()
+    .GetSection($"{RiotOptions.Section}:Tft").Get<TftRiotOptions>() is { IsSet: true })
+{
+    // A key nothing will use is a host who meant TFT to be on.
+    startup.LogWarning(
+        "Riot__Tft__ApiKey is set, but TFT is off, so the key is not used. Set Tft__Enabled=true to offer TFT.");
+}
+else
+{
+    startup.LogInformation("TFT is off. Set Tft__Enabled=true to offer it.");
+}
 
 await app.RunAsync();
 

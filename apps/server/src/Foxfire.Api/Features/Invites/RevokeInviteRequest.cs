@@ -18,6 +18,7 @@ public sealed record RevokeInviteRequest(Guid Id) : IEmptyDomainRequest;
 internal sealed class RevokeInviteRequestHandler(
     FoxfireDbContext db,
     EmailOutbox outbox,
+    IIdentityContext me,
     TimeProvider time,
     ILogger<RevokeInviteRequestHandler> logger)
     : IDomainRequestHandler<RevokeInviteRequest>
@@ -40,7 +41,14 @@ internal sealed class RevokeInviteRequestHandler(
             invite.RevokedAt = time.GetUtcNow();
             await db.SaveChangesAsync(cancellationToken);
             await outbox.WithdrawAsync(EmailKinds.Invite, invite.Id, "revoked", cancellationToken);
-            logger.LogInformation("Withdrew invite {InviteId}", invite.Id);
+            if (invite.Email is null)
+            {
+                logger.LogInformation("{Actor} withdrew invite {InviteId} for whoever opens the link", me.Username, invite.Id);
+            }
+            else
+            {
+                logger.LogInformation("{Actor} withdrew invite {InviteId} for {Email}", me.Username, invite.Id, invite.Email);
+            }
         }
 
         return Response.Success();

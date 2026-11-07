@@ -13,8 +13,19 @@ import { formatTierShort, tierColor, tierCrest, tierLabel } from '../lib/rank'
  * Promotions replace the number with the tier crest, which is the moment worth
  * showing; demotions keep the LP figure and get only a dimmed crest, so the two
  * read differently at a glance without the bad news shouting.
+ *
+ * The arrow and the colour are what say which way it went, and neither reaches
+ * a screen reader, so it is told in words: "gained 12 LP", "lost 12 LP",
+ * "promoted to Gold IV".
  */
-export function LpChip({ rank }: { rank: MatchRankInfo | null }): JSX.Element | null {
+export function LpChip({
+  rank,
+  unit = 'LP'
+}: {
+  rank: MatchRankInfo | null
+  /** What the figure counts: LP, or Hyper Roll's rating, which has no crest to promote into. */
+  unit?: 'LP' | 'rating'
+}): JSX.Element | null {
   if (!rank || rank.lpDelta === null) return null
 
   const gained = rank.lpDelta > 0
@@ -32,7 +43,8 @@ export function LpChip({ rank }: { rank: MatchRankInfo | null }): JSX.Element | 
       >
         <span aria-hidden>{arrow}</span>
         <img src={crest} alt="" className="h-3.5 w-3.5 object-contain" />
-        {short}
+        <span aria-hidden>{short}</span>
+        <span className="sr-only">Promoted to {fullLabel}</span>
       </p>
     )
   }
@@ -46,12 +58,14 @@ export function LpChip({ rank }: { rank: MatchRankInfo | null }): JSX.Element | 
       title={rank.isDemotion ? `Demoted to ${fullLabel}` : undefined}
     >
       <span aria-hidden>{arrow}</span>
-      {Math.abs(rank.lpDelta)} LP
+      {rank.lpDelta !== 0 && <span className="sr-only">{gained ? 'gained ' : 'lost '}</span>}
+      {Math.abs(rank.lpDelta)} {unit}
       {/* Demotions are understated on purpose: a muted crest marks the drop
           without giving it the prominence a promotion gets. */}
       {rank.isDemotion && crest && (
         <img src={crest} alt="" className="h-3.5 w-3.5 object-contain opacity-40" />
       )}
+      {rank.isDemotion && <span className="sr-only">, demoted to {fullLabel}</span>}
     </p>
   )
 }

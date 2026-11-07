@@ -4,8 +4,11 @@ import type {
   Account,
   AppSettingsPublic,
   BackgroundSettings,
+  DisplaySettings,
+  CaptureMicrophone,
   CaptureSettings,
   CaptureStatus,
+  NativeCaptureCheck,
   EmailChange,
   LcuStatus,
   Page,
@@ -57,12 +60,17 @@ import {
   scenario
 } from '@foxfire/screens/dev'
 import {
+  DEFAULT_TFT_TITLE_TEMPLATE,
   DEFAULT_TITLE_TEMPLATE,
+  UNMATCHED_TFT_TITLE_TEMPLATE,
   UNMATCHED_TITLE_TEMPLATE,
   buildRecordingDescription,
-  renderRecordingTitle
+  buildTftRecordingDescription,
+  renderRecordingTitle,
+  renderTftRecordingTitle
 } from '@foxfire/core/youtube'
-import { pageOf } from '@foxfire/core'
+import { pageOf, tftDisplayName, type GameId, type RiotKeyScope } from '@foxfire/core'
+import { tftTitleFacts } from '@shared/tftRecordingTitle'
 import { canUploadRecording } from '@shared/uploadEligibility'
 import {
   RECORDINGS,
@@ -80,8 +88,9 @@ import {
  */
 const fixture = createFixtureClient({
   describe: ownedAs,
-  // Everybody else is on the server; a local database has only its own.
-  community: () => serverState.session !== null
+  // Everybody else is on the server; a local database has only its own, and a
+  // server set up today has nobody else yet.
+  community: () => serverState.session !== null && scenario !== 'server-fresh'
 })
 
 /**
@@ -100,7 +109,8 @@ let youtubeState: YouTubeState = {
 let youtubeSettings: YouTubeSettings = {
   autoUpload: false,
   defaultPrivacy: 'unlisted',
-  titleTemplate: DEFAULT_TITLE_TEMPLATE
+  titleTemplate: DEFAULT_TITLE_TEMPLATE,
+  tftTitleTemplate: DEFAULT_TFT_TITLE_TEMPLATE
 }
 const youtubeListeners = new Set<(state: YouTubeState) => void>()
 
@@ -124,14 +134,19 @@ function setYouTubeState(patch: Partial<YouTubeState>): void {
  * Dev-only — loaded lazily from main.tsx behind import.meta.env.DEV.
  */
 
-/** Mutable, so toggling a setting in the harness actually sticks for the session. */
+/**
+ * Mutable, so toggling a setting in the harness actually sticks for the session.
+ * Native, as a fresh install starts — except where the scenario is about OBS.
+ */
 const CAPTURE_SETTINGS: CaptureSettings = {
   enabled: true,
+  driver: scenario === 'no-obs' ? 'obs' : 'native',
   mode: 'managed',
   folder: 'D:\\Recordings',
   queues: [420, 440],
   otherQueues: false,
-  audio: 'game',
+  audio: 'game+mic',
+  micDeviceId: null,
   quality: '1080p60',
   softCapBytes: 50 * 1024 * 1024 * 1024,
   obsHost: '127.0.0.1',
@@ -149,6 +164,26 @@ const keyInvalidListeners = new Set<() => void>()
 // does not exist in the browser harness.
 let keyType: RiotKeyType = 'personal'
 let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+let hasTftKey = false
+let tftKeyType: RiotKeyType = 'personal'
+let tftApplicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000 }
+
+/** The Riot key settings as they stand in the harness, both keys. */
+function mockSettings(): AppSettingsPublic {
+  return {
+    hasApiKey: scenario !== 'no-key',
+    homeAccountId: scenario === 'no-accounts' ? null : 1,
+    keyRejected: scenario === 'key-expired',
+    keyType,
+    applicationLimits,
+    hasTftApiKey: hasTftKey,
+    tftKeyRejected: false,
+    tftKeyType,
+    tftApplicationLimits,
+    // `tft-no-access` is the main key with no TFT on it, until a key of its own is added.
+    tftAccess: scenario === 'tft-no-access' && !hasTftKey ? 'denied' : 'granted'
+  }
+}
 
 /**
  * The server connection, as module state so the harness behaves like the real
@@ -156,17 +191,34 @@ let applicationLimits: RiotKeyLimits = { burstLimit: 500, sustainedLimit: 30_000
  *
  * Reachable by ?scenario=server-connected, which is how the connected shape of
  * the Server settings page is reviewed without standing a .NET server up — as
- * the head admin, or as a plain admin under ?scenario=server-admin.
+ * the head admin, or as a plain admin under ?scenario=server-admin, a member
+ * with no admin pages under ?scenario=server-member, and the owner of a server
+ * set up today under ?scenario=server-fresh.
  */
+const SIGNED_IN_AS =
+  scenario === 'server-admin'
+    ? { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
+    : scenario === 'server-member'
+      ? { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false }
+      : { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true }
+
+/** What the mock server offers: League alone under ?scenario=tft-off, whose host has not turned TFT on. */
+const MOCK_GAMES: GameId[] = scenario === 'tft-off' ? ['lol'] : ['lol', 'tft']
+
 let serverState: ServerState =
   scenario === 'server-connected' ||
+  scenario === 'server-fresh' ||
   scenario === 'server-degraded' ||
   scenario === 'server-admin' ||
+  scenario === 'server-member' ||
   scenario === 'insights-unsupported' ||
   scenario === 'email-off' ||
   scenario === 'email-held' ||
   scenario === 'unverified' ||
-  scenario === 'email-change-pending'
+  scenario === 'email-change-pending' ||
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen' ||
+  scenario === 'tft-off'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
@@ -174,19 +226,15 @@ let serverState: ServerState =
           {
             url: MOCK_SERVER_URL,
             name: 'The Fox Den',
-            username: scenario === 'server-admin' ? 'Sova' : 'Faker',
+            username: SIGNED_IN_AS.username,
             isActive: true
           }
         ],
-        session: {
-          url: MOCK_SERVER_URL,
-          username: scenario === 'server-admin' ? 'Sova' : 'Faker',
-          email: scenario === 'server-admin' ? 'sova@example.com' : 'faker@example.com',
-          isAdmin: true,
-          isHeadAdmin: scenario !== 'server-admin'
-        },
+        session: { url: MOCK_SERVER_URL, ...SIGNED_IN_AS },
         upgradeRequired: null,
         serverOutdated: false,
+        publicAccess: false,
+        games: MOCK_GAMES,
         riotKeyRejected: scenario === 'server-degraded'
       }
     : scenario === 'server-outdated' || scenario === 'server-behind'
@@ -209,10 +257,12 @@ let serverState: ServerState =
           },
           upgradeRequired: scenario === 'server-outdated' ? '0.14.0' : null,
           serverOutdated: scenario === 'server-behind',
+          publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }
       : { activeUrl: null, servers: [], session: null, publicUrl: null, upgradeRequired: null,
-        serverOutdated: false, riotKeyRejected: false }
+        serverOutdated: false, publicAccess: false, games: MOCK_GAMES, riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
@@ -359,6 +409,8 @@ export const mockApi: Api = {
               publicSignup: null,
               publicUrl: null,
               email: null,
+              publicAccess: null,
+              games: null,
               compatibility: 'unknown'
             }
           : {
@@ -374,6 +426,9 @@ export const mockApi: Api = {
               publicUrl: url,
               // "no-mail" is a server with no email provider: no "Forgot password?".
               email: !url.includes('no-mail'),
+              // "open" is a server anybody can read without signing in.
+              publicAccess: url.includes('open'),
+              games: MOCK_GAMES,
               // "too-old" is this build behind the server; "old-server" is the
               // server behind this build.
               compatibility: url.includes('too-old')
@@ -393,7 +448,7 @@ export const mockApi: Api = {
               usable: false,
               serverName: 'The Fox Den',
               email: null,
-              message: 'This invite link is not valid for this server.'
+              message: 'This invite link is not valid for this server. Check that you copied all of it.'
             }
           : {
               usable: true,
@@ -425,6 +480,8 @@ export const mockApi: Api = {
             publicUrl: url,
             upgradeRequired: null,
             serverOutdated: false,
+            publicAccess: false,
+            games: MOCK_GAMES,
             riotKeyRejected: false
           })
         },
@@ -456,6 +513,8 @@ export const mockApi: Api = {
                 publicUrl: url,
                 upgradeRequired: null,
                 serverOutdated: false,
+                publicAccess: false,
+                games: MOCK_GAMES,
                 riotKeyRejected: false
               })
             },
@@ -472,6 +531,8 @@ export const mockApi: Api = {
           publicUrl: null,
           upgradeRequired: null,
           serverOutdated: false,
+          publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }),
         300,
@@ -509,6 +570,8 @@ export const mockApi: Api = {
     accountEmail: fixture.account.email,
     resendEmailConfirmation: fixture.account.resendEmailConfirmation,
     cancelEmailChange: fixture.account.cancelEmailChange,
+    createShareLink: fixture.shares.create,
+    revokeShareLink: fixture.shares.revoke,
 
     changeUsername: (username: string): Promise<ServerAuthResult> =>
       delay(
@@ -533,6 +596,8 @@ export const mockApi: Api = {
           publicUrl: url,
           upgradeRequired: null,
           serverOutdated: false,
+          publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }),
         200,
@@ -548,6 +613,8 @@ export const mockApi: Api = {
           publicUrl: serverState.activeUrl === url ? null : serverState.publicUrl,
           upgradeRequired: null,
           serverOutdated: false,
+          publicAccess: false,
+          games: MOCK_GAMES,
           riotKeyRejected: false
         }),
         200,
@@ -574,18 +641,7 @@ export const mockApi: Api = {
     }
   },
   settings: {
-    get: (): Promise<AppSettingsPublic> =>
-      delay(
-        {
-          hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired',
-          keyType,
-          applicationLimits
-        },
-        180,
-        false
-      ),
+    get: (): Promise<AppSettingsPublic> => delay(mockSettings(), 180, false),
     setApiKey: (key: string): Promise<ValidateResult> =>
       delay(
         key.startsWith('RGAPI-')
@@ -593,21 +649,25 @@ export const mockApi: Api = {
           : { ok: false, message: 'That does not look like a Riot API key.' },
         600
       ),
-    clearApiKey: (): Promise<AppSettingsPublic> =>
-      delay({ hasApiKey: false, homeAccountId: 1, keyRejected: false, keyType, applicationLimits }),
-    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits): Promise<AppSettingsPublic> => {
-      keyType = next
-      if (limits) applicationLimits = limits
-      return delay(
-        {
-          hasApiKey: scenario !== 'no-key',
-          homeAccountId: scenario === 'no-accounts' ? null : 1,
-          keyRejected: scenario === 'key-expired',
-          keyType,
-          applicationLimits
-        },
-        180
-      )
+    clearApiKey: (): Promise<AppSettingsPublic> => delay({ ...mockSettings(), hasApiKey: false, keyRejected: false }),
+    setKeyType: (next: RiotKeyType, limits?: RiotKeyLimits, scope?: RiotKeyScope): Promise<AppSettingsPublic> => {
+      if (scope === 'tft') {
+        tftKeyType = next
+        if (limits) tftApplicationLimits = limits
+      } else {
+        keyType = next
+        if (limits) applicationLimits = limits
+      }
+      return delay(mockSettings(), 180)
+    },
+    setTftApiKey: (key: string): Promise<ValidateResult> => {
+      const ok = key.startsWith('RGAPI-')
+      if (ok) hasTftKey = true
+      return delay(ok ? { ok: true } : { ok: false, message: 'That does not look like a Riot API key.' }, 600)
+    },
+    clearTftApiKey: (): Promise<AppSettingsPublic> => {
+      hasTftKey = false
+      return delay(mockSettings())
     },
     onKeyInvalid: (cb: () => void) => {
       keyInvalidListeners.add(cb)
@@ -666,6 +726,7 @@ export const mockApi: Api = {
 
   champions: fixture.champions,
   seasons: fixture.seasons,
+  tft: fixture.tft,
   mastery: fixture.mastery,
 
   rank: {
@@ -716,6 +777,26 @@ export const mockApi: Api = {
       delay({ runInTray: false, launchAtStartup: false, lcuInstallPath: null, ...patch }, 150)
   },
 
+  // Remembered for the page, and that is all: the size is Electron's zoom,
+  // which a browser tab has no equivalent of. Use the browser's own zoom to see
+  // a layout at another size.
+  display: (() => {
+    let settings: DisplaySettings = { zoom: 1 }
+    const listeners = new Set<(settings: DisplaySettings) => void>()
+    return {
+      get: (): Promise<DisplaySettings> => delay(settings, 50),
+      set: (patch: Partial<DisplaySettings>): Promise<DisplaySettings> => {
+        settings = { ...settings, ...patch }
+        for (const listener of listeners) listener(settings)
+        return delay(settings, 50)
+      },
+      onChanged: (cb: (settings: DisplaySettings) => void) => {
+        listeners.add(cb)
+        return () => listeners.delete(cb)
+      }
+    }
+  })(),
+
   search: fixture.search,
   favorites: fixture.favorites,
   /**
@@ -729,8 +810,9 @@ export const mockApi: Api = {
    * 4-minute sync against a key that expires daily.
    */
   /**
-   * Capture, as it looks on a machine with OBS running and set up. The 'no-obs'
-   * scenario is the other half — the state most people will meet first.
+   * Capture, as it looks recording a game — natively on an NVIDIA card, or with
+   * OBS running and set up once the picker is switched. 'no-obs' and
+   * 'no-ffmpeg' are each recorder's way of being unable to.
    */
   capture: {
     getSettings: (): Promise<CaptureSettings> => delay(CAPTURE_SETTINGS, 150, false),
@@ -753,6 +835,8 @@ export const mockApi: Api = {
       delay(
         scenario === 'no-obs'
           ? { state: 'error', message: 'No OBS listening — is it running?' }
+          : scenario === 'no-ffmpeg' && CAPTURE_SETTINGS.driver === 'native'
+            ? { state: 'error', message: "Foxfire's FFmpeg is missing. Reinstall Foxfire to record without OBS." }
           : scenario === 'not-live'
             ? { state: 'idle' }
             : { state: 'recording', recordingId: 1, startedAt: Date.now() - 640_000 },
@@ -782,11 +866,30 @@ export const mockApi: Api = {
     // No OBS to screenshot in a browser, so the empty-preview copy is what the
     // harness exercises.
     preview: (): Promise<string | null> => delay(null, 200, false),
-    reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false)
+    reconnect: (): Promise<CaptureStatus> => delay({ state: 'connecting' }, 100, false),
+    // Slow on purpose: the real one opens every encoder in turn.
+    nativeCheck: (): Promise<NativeCaptureCheck> =>
+      delay(
+        scenario === 'no-ffmpeg'
+          ? { ffmpeg: 'missing', version: null, encoder: null, encoders: [], displayHz: 144 }
+          : { ffmpeg: 'ok', version: 'n9.0.2-36-g6882969ce9', encoder: 'nvenc', encoders: ['nvenc', 'mf-hw', 'mf'], displayHz: 144 },
+        900,
+        false
+      ),
+    listMicrophones: (): Promise<CaptureMicrophone[]> =>
+      delay(
+        [
+          { deviceId: 'mic-shure', label: 'Microphone (Shure MV7)' },
+          { deviceId: 'mic-headset', label: 'Headset Microphone (HyperX Cloud II)' },
+          { deviceId: 'mic-webcam', label: 'Microphone (Logitech BRIO)' }
+        ],
+        300,
+        false
+      )
   },
   recordings: {
-    list: (accountId: string, page?: PageOptions): Promise<Page<Recording>> =>
-      delay(pageOf(RECORDINGS[accountId] ?? [], page), 220),
+    list: (accountId: string, page?: PageOptions, game?: GameId | null): Promise<Page<Recording>> =>
+      delay(pageOf((RECORDINGS[accountId] ?? []).filter((r) => !game || r.game === game), page), 220),
     // Everything that could go up, whole — what "select all" selects, pages or no pages.
     eligible: (accountId: string): Promise<Recording[]> =>
       delay((RECORDINGS[accountId] ?? []).filter(canUploadRecording), 180),
@@ -842,6 +945,23 @@ export const mockApi: Api = {
     draft: (recordingId: number): Promise<UploadDraft> => {
       const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
       const match = recording?.match
+      if (recording?.game === 'tft') {
+        const facts = tftTitleFacts(recording, recording.tftMatch, tftDisplayName)
+        return delay(
+          {
+            recordingId,
+            title: renderTftRecordingTitle(
+              facts.placement === null ? UNMATCHED_TFT_TITLE_TEMPLATE : youtubeSettings.tftTitleTemplate,
+              facts
+            ),
+            description: buildTftRecordingDescription(),
+            privacy: youtubeSettings.defaultPrivacy,
+            durationSeconds: recording.durationSeconds
+          },
+          250,
+          false
+        )
+      }
       return delay(
         {
           recordingId,

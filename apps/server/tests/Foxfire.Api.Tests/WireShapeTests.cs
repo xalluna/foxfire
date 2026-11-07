@@ -214,12 +214,14 @@ public class WireShapeTests(FoxfireServerFixture server)
         [
             "/api/search?q=",
             $"/api/riot-accounts/{accountId}/matches",
+            $"/api/riot-accounts/{accountId}/tft/matches",
             "/api/admin/users/",
             "/api/admin/invites/used",
             "/api/admin/storage/replays",
             "/api/admin/insights/logs",
             "/api/admin/email/messages",
-            "/api/admin/email/suppressions"
+            "/api/admin/email/suppressions",
+            "/api/admin/shares"
         ];
 
         foreach (var route in paged)
@@ -325,6 +327,30 @@ public class WireShapeTests(FoxfireServerFixture server)
 
         AssertHasAll(progress, "accountId", "phase", "current", "total", "message", "trigger", "cooldownUntil");
         Assert.Equal(expected, progress.GetProperty("phase").GetString());
+        Assert.Equal("auto", progress.GetProperty("trigger").GetString());
+    }
+
+    /// <summary>
+    /// The clients know two triggers, and keep quiet for auto. A background
+    /// sweep is nobody watching either — and a value a desktop already
+    /// installed has never seen must not reach it, or it would draw a spinner
+    /// for every account every half hour.
+    /// </summary>
+    [Fact]
+    public void A_background_sync_goes_out_as_auto()
+    {
+        var protocol = server.Services.GetServices<IHubProtocol>().Single(p => p.Name == "json");
+        var output = new ArrayBufferWriter<byte>();
+
+        protocol.WriteMessage(
+            new InvocationMessage(
+                HubEvents.SyncProgress,
+                [new SyncProgressEvent(Guid.NewGuid(), SyncPhase.Delta, 1, 2, null, SyncTrigger.Background)]),
+            output);
+
+        var frame = Encoding.UTF8.GetString(output.WrittenSpan).TrimEnd('\u001e');
+        var progress = JsonDocument.Parse(frame).RootElement.GetProperty("arguments")[0];
+
         Assert.Equal("auto", progress.GetProperty("trigger").GetString());
     }
 
@@ -459,9 +485,9 @@ public class WireShapeTests(FoxfireServerFixture server)
             new Uri($"/api/riot-accounts/{accountId}/rank/history?queueType=RANKED_SOLO_5x5&range=all",
                 UriKind.Relative));
 
-        // "before" is there even when it is null, so a client can tell a range
-        // with nothing ahead of it from a server too old to say.
-        AssertHasAll(history, "snapshots", "milestones", "before");
+        // "before" and "peakBefore" are there even when null, so a client can
+        // tell a range with nothing ahead of it from a server too old to say.
+        AssertHasAll(history, "snapshots", "milestones", "before", "peakBefore");
 
         var snapshot = history.GetProperty("snapshots").EnumerateArray().First();
 
@@ -546,7 +572,7 @@ public class WireShapeTests(FoxfireServerFixture server)
         var seasons = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/seasons", UriKind.Relative));
         var season = seasons.EnumerateArray().First();
 
-        AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank");
+        AssertHasAll(season, "id", "label", "startsAt", "isPreseason", "resetsRank", "game");
     }
 
     [Fact]

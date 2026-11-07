@@ -12,7 +12,11 @@ namespace Foxfire.Api.Features.Ranks;
 public sealed record SeasonRequest(int? Id, string Label, long StartsAt, bool IsPreseason, bool ResetsRank);
 
 /// <summary>
-/// Replaces the whole season table, and then rebuilds everything derived from it.
+/// Replaces one game's whole season list, and then rebuilds everything derived from it.
+///
+/// One game's, and League's when the request names none. A desktop from before
+/// TFT saves its list with no game, and if that replaced the whole table it
+/// would delete TFT's sets — or, saved back, file them as League's.
 ///
 /// Whole rather than row-by-row because the boundaries are only meaningful as a
 /// series: a season runs until the next one starts, so inserting one changes
@@ -24,13 +28,15 @@ public sealed record SeasonRequest(int? Id, string Label, long StartsAt, bool Is
 /// boundaries and is replayed from scratch — so a mistaken boundary does not
 /// fail, it quietly produces different numbers for everybody on the server.
 /// </summary>
-public sealed record SaveSeasonsRequest(IReadOnlyList<SeasonRequest> Seasons) : IValidatedRequest;
+public sealed record SaveSeasonsRequest(IReadOnlyList<SeasonRequest> Seasons, string? Game = null) : IValidatedRequest;
 
 internal sealed class SaveSeasonsRequestValidator : AbstractValidator<SaveSeasonsRequest>
 {
-    public SaveSeasonsRequestValidator()
+    public SaveSeasonsRequestValidator(ServerGames games)
     {
         ClassLevelCascadeMode = CascadeMode.Stop;
+
+        RuleFor(x => x.Game).MustNameAGame(games);
 
         RuleFor(x => x.Seasons)
             .Must(seasons => seasons is { Count: > 0 })
@@ -54,7 +60,9 @@ internal sealed class SaveSeasonsRequestValidator : AbstractValidator<SaveSeason
 
 internal sealed class SaveSeasonsRequestHandler(
     FoxfireDbContext db,
-    AttributionRunner attribution,
+    IServiceScopeFactory scopes,
+    IHostApplicationLifetime lifetime,
+    IIdentityContext me,
     ILogger<SaveSeasonsRequestHandler> logger)
     : IValidatedRequestHandler<SaveSeasonsRequest>
 {
@@ -62,7 +70,9 @@ internal sealed class SaveSeasonsRequestHandler(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        await db.Seasons.ExecuteDeleteAsync(cancellationToken);
+        var game = GameParam.Parse(request.Game);
+
+        await db.Seasons.Where(s => s.Game == game).ExecuteDeleteAsync(cancellationToken);
 
         foreach (var season in request.Seasons.OrderBy(s => s.StartsAt))
         {
@@ -71,7 +81,8 @@ internal sealed class SaveSeasonsRequestHandler(
                 Label = season.Label.Trim(),
                 StartsAt = season.StartsAt,
                 IsPreseason = season.IsPreseason,
-                ResetsRank = season.ResetsRank
+                ResetsRank = season.ResetsRank,
+                Game = game
             });
         }
 
@@ -85,20 +96,37 @@ internal sealed class SaveSeasonsRequestHandler(
         // leaving them alone would mean the graph and the season picker agreed
         // with the new boundaries while the numbers on the match rows still
         // described the old ones.
-        var accounts = await db.RiotAccounts.AsNoTracking()
-            .Select(a => new { a.Id, a.Puuid })
-            .ToListAsync(cancellationToken);
+        var accounts = await db.RiotAccounts.AsNoTracking().ToListAsync(cancellationToken);
 
         foreach (var account in accounts)
         {
-            foreach (var queue in RankedQueues.All)
+            // A rebuild deletes a ladder's figures and then works them out
+            // again, so it runs on the host's token rather than the request's:
+            // a client that stops waiting must not leave an account between the
+            // two with its LP gone. And a scope per account, so the rows one
+            // rebuild tracks are gone before the next begins.
+            await using var scope = scopes.CreateAsyncScope();
+            var attribution = scope.ServiceProvider.GetRequiredService<AttributionRunner>();
+            var stopping = lifetime.ApplicationStopping;
+
+            // TFT's games are filed under the TFT key's id where there is one,
+            // and an account never resolved under it has none to rebuild yet.
+            var puuid = game == Game.Tft
+                ? await scope.ServiceProvider.GetRequiredService<TftIdentity>().KnownPuuidAsync(account, stopping)
+                : account.Puuid;
+            if (puuid is null) continue;
+
+            foreach (var queue in RankedQueues.Of(game))
             {
-                await attribution.RebuildAsync(account.Id, account.Puuid, queue, cancellationToken);
+                await attribution.RebuildAsync(account.Id, puuid, queue, stopping);
             }
         }
 
-        logger.LogInformation(
-            "An admin rewrote the season table ({Count} boundaries); LP was recomputed for {Accounts} account(s)",
+        // A Warning, because it rewrites every member's LP history.
+        logger.LogWarning(
+            "{Actor} rewrote the {Game} season table ({Count} boundaries); LP was recomputed for {Accounts} account(s)",
+            me.Username,
+            game.Slug(),
             request.Seasons.Count,
             accounts.Count);
 

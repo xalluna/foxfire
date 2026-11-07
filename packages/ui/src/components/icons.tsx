@@ -223,6 +223,21 @@ export function Skull(props: IconProps): JSX.Element {
   )
 }
 
+/**
+ * An assist on the recording timeline: a hand in somebody else's kill.
+ *
+ * Its own shape, filled like Skull, rather than the kill's crossed swords in
+ * a quieter colour — on a 10px seek bar the colour was the only difference,
+ * and that is not one everybody can see.
+ */
+export function Shield(props: IconProps): JSX.Element {
+  return (
+    <Icon fill="currentColor" stroke="none" {...props}>
+      <path d="M12 2 4 5v6.2c0 5 3.4 9.4 8 10.8 4.6-1.4 8-5.8 8-10.8V5z" />
+    </Icon>
+  )
+}
+
 export function Play(props: IconProps): JSX.Element {
   return (
     <Icon fill="currentColor" stroke="none" {...props}>
@@ -341,6 +356,16 @@ export function Replay(props: IconProps): JSX.Element {
   )
 }
 
+/** A screen — how large this PC draws the interface. */
+export function Display(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </Icon>
+  )
+}
+
 /** About. */
 export function Info(props: IconProps): JSX.Element {
   return (
@@ -357,6 +382,16 @@ export function Link(props: IconProps): JSX.Element {
     <Icon {...props}>
       <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" />
       <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" />
+    </Icon>
+  )
+}
+
+/** Back and forth between two things — a rank somebody kept crossing over. */
+export function ArrowsLeftRight(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 8h16m-4-4 4 4-4 4" />
+      <path d="M20 16H4m4-4-4 4 4 4" />
     </Icon>
   )
 }

@@ -1,4 +1,5 @@
 import type { ConnectionState, FoxfireClient, Unsubscribe } from '../client'
+import { offeredGames } from '../games/registry'
 import type { AssetManifest, SyncProgressEvent, VersionInfo } from '../types'
 import { silentLogger, type Logger } from '../log'
 import { createServerApi, type ServerApi } from './api'
@@ -89,6 +90,8 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
             isHeadAdmin: user.isHeadAdmin ?? false
           }
         : null,
+      publicAccess: version?.publicAccess ?? false,
+      games: offeredGames(version?.games),
       riotKeyRejected,
       upgradeRequired: upgradeRequired ? 'reload' : null
     }
@@ -156,6 +159,8 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
 
     account: api.account,
 
+    shares: api.shares,
+
     admin: {
       users: api.admin.users,
       updateUser: api.admin.updateUser,
@@ -168,7 +173,22 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
       revokeInvite: api.admin.revokeInvite,
       emailInvite: api.admin.emailInvite,
       getSettings: api.admin.getSettings,
-      setSettings: api.admin.setSettings,
+
+      async setSettings(patch) {
+        const settings = await api.admin.setSettings(patch)
+
+        // The handshake is read once, and whether the server is open is the
+        // one thing on it an admin can change from here — so the change is
+        // carried into it rather than waiting for a reload to be noticed.
+        if (version && settings.publicAccess !== undefined && settings.publicAccess !== version.publicAccess) {
+          version = { ...version, publicAccess: settings.publicAccess }
+          announce()
+        }
+
+        return settings
+      },
+
+      shareLinks: api.admin.shareLinks,
       storage: api.admin.storage,
       storedReplays: api.admin.storedReplays,
       removeReplay: api.admin.removeReplay,

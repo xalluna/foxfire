@@ -27,16 +27,23 @@ import type {
   QueueType,
   RankHistory,
   RankRange,
+  RankSnapshot,
   RankTrend,
   Season,
   SeasonInput,
   ServerAdminSettings,
   ServerStorageUsage,
+  ShareLink,
   SyncProgressEvent,
-  SyncState
+  SyncState,
+  GameId,
+  TftLadder
 } from '@foxfire/core'
 import {
+  GAME_IDS,
   compareSearchResults,
+  ladderMovementFor,
+  lastResetAt,
   pageOf,
   rankMovement,
   rankTrend,
@@ -50,16 +57,30 @@ import { favoritesOver } from '@foxfire/core/server'
 import { isPlayer } from '@foxfire/core/routes'
 import { DEV_SEASONS } from './seasons'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
+import { TFT_MANIFEST } from './tftManifest'
+import {
+  TFT_SEASONS,
+  clearTftManual,
+  saveTftManual,
+  tftDashboardFor,
+  tftEditableFor,
+  tftLobbyFor,
+  tftMatchesFor,
+  tftSnapshotsFor
+} from './tftFixtures'
 import {
   ACCOUNTS,
   COMMUNITY,
+  GENERATED_MEMBER_COUNT,
   LEAGUE_ENTRIES,
   MASTERY,
   MATCHES,
   MATCH_DETAILS,
   MATCH_RECORDINGS,
   RANK_SNAPSHOTS,
-  championStatsFor
+  championStatsFor,
+  generatedMemberClaims,
+  generatedMemberName
 } from './fixtures'
 import { clearManualRank, editableMatches, saveManualRanks } from './manualRank'
 import { fixtureInsights, fixtureServerLogs } from './insightsFixtures'
@@ -130,8 +151,34 @@ function notifyEdited(accountId: string): void {
   for (const listener of editedListeners) listener(accountId)
 }
 
+/**
+ * The season's best reading before a range, as the servers answer
+ * `peakBefore`: highest ladder position since the last reset, the later of a
+ * tie. Null when the range has no start.
+ */
+function peakBeforeOf(series: RankSnapshot[], sinceMs: number | null, seasons: Season[]): RankSnapshot | null {
+  if (sinceMs === null) return null
+  const resetAt = lastResetAt(seasons, sinceMs)
+  let peak: RankSnapshot | null = null
+  for (const s of series) {
+    if (s.capturedAt >= sinceMs || (resetAt !== null && s.capturedAt < resetAt)) continue
+    if (s.ladderPosition === null) continue
+    if (peak === null || s.ladderPosition >= (peak.ladderPosition ?? 0)) peak = s
+  }
+  return peak
+}
+
+/**
+ * ?scenario=server-fresh: a server on the day it was set up. Its owner has
+ * signed in and nobody else has; nothing is claimed, invited, shared or stored,
+ * and there is no mail provider or replay store yet. Seeded below rather than
+ * branched in each read, so making the first invite or changing a setting
+ * still works.
+ */
+const FRESH = scenario === 'server-fresh'
+
 function accounts(): Account[] {
-  return scenario === 'no-accounts' ? [] : ACCOUNTS
+  return scenario === 'no-accounts' || FRESH ? [] : ACCOUNTS
 }
 
 function matchesFor(accountId: string): MatchSummary[] {
@@ -181,7 +228,7 @@ function syncTooSoon(accountId: string): AdminActionResult | null {
 }
 
 /** Drives a believable progress sequence so the progress bar can be designed against motion. */
-function runFakeSync(accountId: string): void {
+function runFakeSync(accountId: string, game: GameId = 'lol'): void {
   if (scenario === 'sync-error') {
     setTimeout(() => {
       for (const cb of progressListeners) {
@@ -191,7 +238,8 @@ function runFakeSync(accountId: string): void {
           current: 0,
           total: 100,
           message: 'Riot API unreachable',
-          trigger: 'manual'
+          trigger: 'manual',
+          game
         })
       }
     }, 400)
@@ -214,6 +262,7 @@ function runFakeSync(accountId: string): void {
         // The harness exists to design the progress bar against motion, and an
         // auto-triggered sync deliberately renders nothing.
         trigger: 'manual',
+        game,
         ...(done && { cooldownUntil: cooldownUntil(accountId) })
       })
     }
@@ -225,32 +274,46 @@ function runFakeSync(accountId: string): void {
  * Where the harness says its data comes from.
  *
  * Local-only by default, which is the desktop's ordinary state. The server
- * scenarios are the connected shapes: the head admin on a healthy server, a
- * plain admin on one, a server whose own Riot key has expired, and a server that
- * has been upgraded past this client.
+ * scenarios are the connected shapes: the head admin on a healthy server, or
+ * on one set up today; a plain admin on one; a member who is no admin at all; a
+ * server whose own Riot key has expired; and a server that has been upgraded
+ * past this client.
  */
+const games: GameId[] = scenario === 'tft-off' ? ['lol'] : [...GAME_IDS]
+
 const connection: ConnectionState =
   scenario === 'server-connected' ||
+  scenario === 'server-fresh' ||
   scenario === 'server-degraded' ||
   scenario === 'insights-unsupported' ||
   scenario === 'email-off' ||
   scenario === 'email-held' ||
   scenario === 'unverified' ||
-  scenario === 'email-change-pending'
+  scenario === 'email-change-pending' ||
+  scenario === 'admin-email-pinned' ||
+  scenario === 'signup-unchosen' ||
+  scenario === 'tft-off'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
         serverName: 'The Fox Den',
         session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
+        publicAccess: false,
+        games,
         riotKeyRejected: scenario === 'server-degraded',
         upgradeRequired: null
       }
-    : scenario === 'server-admin'
+    : scenario === 'server-admin' || scenario === 'server-member'
       ? {
           mode: 'server',
           publicUrl: MOCK_SERVER_URL,
           serverName: 'The Fox Den',
-          session: { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false },
+          session:
+            scenario === 'server-admin'
+              ? { username: 'Sova', email: 'sova@example.com', isAdmin: true, isHeadAdmin: false }
+              : { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false },
+          publicAccess: false,
+          games,
           riotKeyRejected: false,
           upgradeRequired: null
         }
@@ -260,17 +323,33 @@ const connection: ConnectionState =
             publicUrl: MOCK_SERVER_URL,
             serverName: 'The Fox Den',
             session: { username: 'Faker', email: 'faker@example.com', isAdmin: false, isHeadAdmin: false },
+            publicAccess: false,
+            games,
             riotKeyRejected: false,
             upgradeRequired: '0.14.0'
           }
-        : {
-            mode: 'local',
-            publicUrl: null,
-            serverName: null,
-            session: null,
-            riotKeyRejected: false,
-            upgradeRequired: null
-          }
+        : scenario === 'public-signed-out' || scenario === 'shared-link'
+          ? {
+              // Nobody signed in: reading an open server, or one profile on a link.
+              mode: 'server',
+              publicUrl: MOCK_SERVER_URL,
+              serverName: 'The Fox Den',
+              session: null,
+              publicAccess: scenario === 'public-signed-out',
+              games,
+              riotKeyRejected: false,
+              upgradeRequired: null
+            }
+          : {
+              mode: 'local',
+              publicUrl: null,
+              serverName: null,
+              session: null,
+              publicAccess: false,
+              games,
+              riotKeyRejected: false,
+              upgradeRequired: null
+            }
 
 /**
  * Why the person signed in may not do this to somebody, as the server words
@@ -290,6 +369,10 @@ function mockRefusal(target: AdminUser | undefined, change: AdminUserPatch | 'de
   if (target.isConfiguredAdmin && (demoting || disabling || change === 'delete')) {
     const verb = change === 'delete' ? 'removed' : demoting ? 'demoted' : 'disabled'
     return `${target.username} is the head admin this server's configuration names, so they cannot be ${verb} from here. Change Admin__Email and restart the server to hand it to somebody else.`
+  }
+
+  if (isYou && disabling) {
+    return 'You cannot disable your own account. Ask another admin, or change your password if you think it has leaked.'
   }
 
   if (me?.isHeadAdmin) return null
@@ -349,6 +432,8 @@ const MOCK_STORED_REPLAYS: AdminReplay[] = [
  * appears, withdraw an invite and it leaves the list. Reachable under
  * ?scenario=server-connected, whose session is Faker, the configured head
  * admin, and ?scenario=server-admin, whose session is Sova, a plain admin.
+ * ?scenario=server-member is phantomduval, who sees none of it; and
+ * ?scenario=server-fresh is Faker on the day the server was set up, alone in it.
  */
 let mockUsers: AdminUser[] = [
   {
@@ -451,18 +536,20 @@ let mockUsers: AdminUser[] = [
     emailSuppressed: MAIL_ON
   },
   // Enough more that the page has pages: 120 people, in three of them.
-  ...Array.from({ length: 117 }, (_, i): AdminUser => {
+  // Their claims are the generated accounts in COMMUNITY, which is why the count
+  // and the names come from there.
+  ...Array.from({ length: GENERATED_MEMBER_COUNT }, (_, i): AdminUser => {
     const n = String(i + 1).padStart(3, '0')
     return {
       id: `u-gen-${n}`,
-      username: `Summoner${n}`,
+      username: generatedMemberName(i),
       email: `summoner${n}@example.net`,
       isAdmin: false,
       isHeadAdmin: false,
       isConfiguredAdmin: false,
       isDisabled: i % 23 === 0,
       createdAt: new Date(Date.UTC(2026, 5, 1) + i * 3_600_000 * 11).toISOString(),
-      linkedRiotAccounts: i % 3,
+      linkedRiotAccounts: generatedMemberClaims(i),
       activeSessions: i % 4 === 0 ? 0 : 1,
       passwordReset: null,
       emailConfirmed: i % 5 !== 0
@@ -583,10 +670,60 @@ function isMemberMatch(user: AdminUser, needle: string): boolean {
 }
 
 // Uncapped, which is the default a host has to choose away from.
+//
+// Sign-up is open and chosen — a host who decided to keep it so. A server set up
+// today starts invite-only, as a real one does; ?scenario=signup-unchosen is an
+// older server, open by a default nobody chose, which the admin pages ask about.
 let mockServerSettings: ServerAdminSettings = {
-  publicSignup: true,
+  publicSignup: !FRESH,
+  publicSignupChosen: scenario !== 'signup-unchosen',
+  publicAccess: false,
   backfillTarget: 200,
-  replayByteCap: 0
+  tftBackfillTarget: 200,
+  replayByteCap: 0,
+  backgroundSync: false,
+  backgroundSyncMinutes: 30,
+  backgroundSyncSkipMinutes: 15
+}
+
+const DAY_MS = 24 * 3600_000
+
+/** A profile a member shared, as the server describes one: a week from when it was made. */
+function shareLinkFor(account: Pick<Account, 'id' | 'gameName' | 'tagLine'>, createdBy: string, daysAgo: number): ShareLink {
+  const createdAt = Date.now() - daysAgo * DAY_MS
+  return {
+    id: `share-${account.id}-${createdBy}`,
+    riotAccountId: account.id,
+    gameName: account.gameName,
+    tagLine: account.tagLine,
+    token: `${account.id}-${createdBy}-harness-share-token`,
+    createdAt: new Date(createdAt).toISOString(),
+    expiresAt: new Date(createdAt + 7 * DAY_MS).toISOString(),
+    createdBy
+  }
+}
+
+/** The open links the admin list shows: two written by hand, the rest generated. */
+let mockShareLinks: ShareLink[] = [
+  shareLinkFor({ id: '1', gameName: 'Faker', tagLine: 'NA1' }, 'Faker', 1),
+  shareLinkFor({ id: 'c2', gameName: 'Fakest', tagLine: 'NA1' }, 'Sova', 5),
+  // A community's worth behind those, every one still inside its week, so the
+  // list has pages. One per account, so no two share an id.
+  ...COMMUNITY.filter((account) => account.id.startsWith('g'))
+    .slice(0, 60)
+    .map((account, i) =>
+      shareLinkFor(account, ['Faker', 'Sova', 'phantomduval', account.ownerUsername ?? 'Faker'][i % 4], i % 7)
+    )
+]
+
+// The day-one server: everything above, emptied, with the owner alone in it.
+if (FRESH) {
+  mockUsers = mockUsers
+    .filter((user) => user.isConfiguredAdmin)
+    .map((user) => ({ ...user, linkedRiotAccounts: 0, activeSessions: 1, emailConfirmed: false }))
+  mockInvites = []
+  mockShareLinks = []
+  MOCK_STORED_REPLAYS.length = 0
 }
 
 export interface FixtureClientOptions {
@@ -598,7 +735,7 @@ export interface FixtureClientOptions {
   /**
    * Whether everybody else on the harness's server is there to be found. Not
    * on a desktop playing at being local-only, whose database has nobody but
-   * its own accounts. Always, when left out.
+   * its own accounts. Always when left out, except on a server set up today.
    */
   community?: () => boolean
 }
@@ -635,7 +772,7 @@ function seededFavorites(): string {
 
 export function createFixtureClient(options: FixtureClientOptions = {}): FoxfireClient {
   const describe = options.describe ?? ((account: Account) => account)
-  const community = options.community ?? (() => true)
+  const community = options.community ?? (() => !FRESH)
   const everyone = (): Account[] => [...accounts(), ...(community() ? COMMUNITY : [])].map(describe)
 
   // Kept the way a browser keeps them, for as long as the page is open.
@@ -759,20 +896,102 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     },
 
     sync: {
-      start: (accountId: string): Promise<AdminActionResult> => {
+      start: (accountId: string, game?: GameId): Promise<AdminActionResult> => {
         const refused = syncTooSoon(accountId)
         if (refused) return delay(refused, 100)
 
-        runFakeSync(accountId)
+        runFakeSync(accountId, game)
         return delay({ ok: true, error: null }, 100)
       },
-      getState: (accountId: string): Promise<SyncState | null> => delay(syncState(accountId))
+      getState: (accountId: string, game?: GameId): Promise<SyncState | null> =>
+        delay({ ...syncState(accountId), ...(game === 'tft' ? { game } : {}) })
+    },
+
+    // The home account's set of TFT, generated once per load; see tftFixtures.
+    tft: {
+      dashboard: async (accountId: string) => {
+        const account = everyone().find((a) => a.id === accountId)
+        if (!account) return delay(null)
+        return delay(tftDashboardFor(account, scenario === 'tft-no-access' ? 'denied' : 'granted'), 260)
+      },
+
+      matchList: (accountId: string, limit: number, offset: number, queueId: number | null) => {
+        const account = everyone().find((a) => a.id === accountId)
+        const rows = account && scenario !== 'no-matches' ? tftMatchesFor(account, queueId) : []
+        return delay(pageOf(rows, { limit, offset }), 320)
+      },
+
+      matchSummary: (accountId: string, matchId: string) => {
+        const account = everyone().find((a) => a.id === accountId)
+        return delay(account ? (tftMatchesFor(account, null).find((r) => r.matchId === matchId) ?? null) : null)
+      },
+
+      lobby: (_accountId: string, matchId: string) => delay(tftLobbyFor(matchId, everyone()), 240),
+
+      rank: {
+        history: (accountId: string, queueType: QueueType, range: RankRange): Promise<RankHistory> => {
+          const account = everyone().find((a) => a.id === accountId)
+          const { sinceMs, untilMs } = rangeBounds(range, TFT_SEASONS)
+          const series = account ? tftSnapshotsFor(account, queueType as TftLadder) : []
+          const snapshots = series.filter(
+            (s) => (sinceMs === null || s.capturedAt >= sinceMs) && (untilMs === null || s.capturedAt < untilMs)
+          )
+          const before = sinceMs === null ? null : (series.filter((s) => s.capturedAt < sinceMs).at(-1) ?? null)
+          // As League's below, on whichever scale the ladder climbs.
+          const milestones = snapshots
+            .flatMap((snapshot, i) => {
+              if (i === 0 || resetsBetween(TFT_SEASONS, snapshots[i - 1].capturedAt, snapshot.capturedAt)) return []
+              const movement = ladderMovementFor(queueType, snapshots[i - 1], snapshot)
+              if (movement === 'none') return []
+              return [
+                {
+                  queueType,
+                  movement,
+                  tier: snapshot.tier,
+                  rank: snapshot.rank,
+                  capturedAt: snapshot.capturedAt,
+                  ratedTier: snapshot.ratedTier ?? null
+                }
+              ]
+            })
+            .reverse()
+          const peakBefore = peakBeforeOf(series, sinceMs, TFT_SEASONS)
+          return delay({ snapshots, milestones, before, peakBefore }, 280)
+        },
+
+        trend: (accountId: string, queueType: QueueType): Promise<RankTrend> => {
+          const account = everyone().find((a) => a.id === accountId)
+          const series = account ? tftSnapshotsFor(account, queueType as TftLadder) : []
+          return delay(rankTrend(series, TFT_SEASONS, Date.now()), 220)
+        },
+
+        periods: (): Promise<Season[]> => delay(TFT_SEASONS.slice().reverse(), 120),
+
+        editable: (accountId: string, queueType: QueueType) => {
+          const account = everyone().find((a) => a.id === accountId)
+          return delay(account ? tftEditableFor(account, queueType as TftLadder) : [], 200)
+        },
+
+        saveManual: (accountId: string, queueType: QueueType, edits) => {
+          const account = everyone().find((a) => a.id === accountId)
+          const fresh = account ? saveTftManual(account, queueType as TftLadder, edits) : []
+          notifyEdited(accountId)
+          return delay(fresh, 250)
+        },
+
+        clearManual: (accountId: string, queueType: QueueType, matchId: string) => {
+          const account = everyone().find((a) => a.id === accountId)
+          const fresh = account ? clearTftManual(account, queueType as TftLadder, matchId) : []
+          notifyEdited(accountId)
+          return delay(fresh, 250)
+        }
+      }
     },
 
     assets: {
       // Real Data Dragon metadata, so champion, item, spell and rune art all load
       // from the CDN exactly as it does in the app.
-      get: (): Promise<AssetManifest> => delay(DDRAGON_MANIFEST, 60, false)
+      get: (): Promise<AssetManifest> => delay({ ...DDRAGON_MANIFEST, tft: TFT_MANIFEST }, 60, false)
     },
 
     account: {
@@ -782,6 +1001,33 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       email: fixtureAccountEmail,
       resendEmailConfirmation: fixtureResendConfirmation,
       cancelEmailChange: fixtureCancelEmailChange
+    },
+
+    // As the server does it: the same member sharing the same profile within a
+    // day is handed the link they already have.
+    shares: {
+      create: async (accountId: string): Promise<ShareLink> => {
+        const who = connection.session?.username ?? 'Faker'
+        const existing = mockShareLinks.find(
+          (link) =>
+            link.riotAccountId === accountId &&
+            link.createdBy === who &&
+            Date.now() - Date.parse(link.createdAt) < DAY_MS
+        )
+        if (existing) return delay(existing, 300, false)
+
+        const account = [...ACCOUNTS, ...COMMUNITY].find((a) => a.id === accountId)
+        if (!account) return fail('There is no such account on this server.')
+
+        const link = { ...shareLinkFor(account, who, 0), id: `share-${accountId}-${Date.now()}` }
+        mockShareLinks = [link, ...mockShareLinks]
+        return delay(link, 300, false)
+      },
+
+      revoke: (id: string): Promise<AdminActionResult> => {
+        mockShareLinks = mockShareLinks.filter((link) => link.id !== id)
+        return delay({ ok: true, error: null }, 200, false)
+      }
     },
 
     champions: {
@@ -797,10 +1043,10 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
     // rewriting it at runtime would desync the already-stamped fixture
     // snapshots from the list the pickers are built from.
     seasons: {
-      list: (): Promise<Season[]> => delay(DEV_SEASONS, 120),
-      save: (seasons: SeasonInput[]): Promise<Season[]> =>
+      list: (game?: GameId): Promise<Season[]> => delay(game === 'tft' ? TFT_SEASONS : DEV_SEASONS, 120),
+      save: (seasons: SeasonInput[], game?: GameId): Promise<Season[]> =>
         delay(
-          seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i })),
+          seasons.map((s, i) => ({ ...s, id: s.id ?? 1000 + i, ...(game === 'tft' ? { game } : {}) })),
           200
         )
     },
@@ -852,7 +1098,8 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
           })
           .reverse()
 
-        return delay({ snapshots, milestones, before }, 280)
+        const peakBefore = peakBeforeOf(series, sinceMs, DEV_SEASONS)
+        return delay({ snapshots, milestones, before, peakBefore }, 280)
       },
 
       // The whole series is handed over: the rule only looks backwards from
@@ -937,22 +1184,26 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       // Numbers a host would actually be looking at: a match history that is
       // nowhere near troubling a 10 GB database, beside replays that are the
-      // thing which will fill a volume.
-      storage: (): Promise<ServerStorageUsage> =>
-        delay(
+      // thing which will fill a volume. The accounts are counted off the finder's
+      // list, so "Accounts tracked" agrees with the page beside it and moves when
+      // one is added or unlinked here.
+      storage: (): Promise<ServerStorageUsage> => {
+        const tracked = everyone()
+        return delay(
           {
-            replaysConfigured: true,
+            replaysConfigured: !FRESH,
             replayCount: MOCK_STORED_REPLAYS.length,
             replayBytes: MOCK_STORED_REPLAYS.reduce((total, replay) => total + (replay.fileBytes ?? 0), 0),
             replayRecords: MOCK_STORED_REPLAYS.length,
-            matches: 4_812,
-            matchParticipants: 48_120,
-            riotAccounts: 7,
-            unclaimedAccounts: 2,
-            rankReadings: 1_904
+            matches: FRESH ? 0 : 4_812,
+            matchParticipants: FRESH ? 0 : 48_120,
+            riotAccounts: tracked.length,
+            unclaimedAccounts: tracked.filter((account) => account.ownerUsername == null).length,
+            rankReadings: FRESH ? 0 : 1_904
           },
           220
-        ),
+        )
+      },
 
       storedReplays: (page?: PageOptions): Promise<Page<AdminReplay>> =>
         delay(pageOf(MOCK_STORED_REPLAYS, page), 240),
@@ -1119,6 +1370,17 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
       createInvite: (email?: string): Promise<AdminInvite> => {
         const address = email?.trim() || null
+
+        // An address with an account is refused, in the server's words.
+        const member = address === null ? undefined : mockUsers.find((u) => u.email.toLowerCase() === address.toLowerCase())
+        if (member) {
+          return Promise.reject(
+            new Error(
+              `That address belongs to ${member.username}, who is already a member.${member.isDisabled ? ' Their account is disabled; turn it back on from Members.' : ''}`
+            )
+          )
+        }
+
         // Only an address is deduplicated, as on the server: each link without
         // one is for a different somebody.
         const existing = address === null ? undefined : mockInvites.find((i) => i.email === address && i.isOpen)
@@ -1172,9 +1434,32 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
       getSettings: (): Promise<ServerAdminSettings> => delay(mockServerSettings, 180, false),
 
       setSettings: (patch: Partial<ServerAdminSettings>): Promise<ServerAdminSettings> => {
-        mockServerSettings = { ...mockServerSettings, ...patch }
+        const next = { ...mockServerSettings, ...patch }
+
+        // The one rule worth seeing refused in the harness, the way the
+        // server words it: a window as long as the interval skips everybody.
+        if ((next.backgroundSyncSkipMinutes ?? 15) >= (next.backgroundSyncMinutes ?? 30)) {
+          return Promise.reject(
+            new Error(
+              'Accounts synced recently are left alone for at least a minute and for less than the interval — '
+                + 'otherwise every other sweep would leave everybody alone.'
+            )
+          )
+        }
+
+        mockServerSettings = { ...next, publicSignupChosen: next.publicSignupChosen || patch.publicSignup !== undefined }
         return delay(mockServerSettings, 180, false)
-      }
+      },
+
+      shareLinks: (page?: PageOptions): Promise<Page<ShareLink>> =>
+        delay(
+          pageOf(
+            [...mockShareLinks].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+            page
+          ),
+          200,
+          false
+        )
     },
 
     events: {
@@ -1212,8 +1497,9 @@ let fixtureImportRuns = 0
  *
  * Each run is a different outcome, in turn, so all of them can be looked at by
  * pressing the button: the first import of a file, the same file again three
- * days later (mostly already there, some new, a few problems), and the same
- * file again with nothing new in it.
+ * days later (mostly already there, some new, a few problems), the same file
+ * again with nothing new in it, and a run whose last step — working out LP —
+ * stopped after everything had landed.
  */
 export async function runFixtureImport(
   onProgress: (progress: ImportProgress) => void
@@ -1232,8 +1518,12 @@ export async function runFixtureImport(
     }
   }
 
+  // A page of accounts at a time, counted, as a server from 0.6.0 answers.
   onProgress({ phase: 'finishing', current: 0, total: 0 })
-  await new Promise((resolve) => setTimeout(resolve, 400))
+  for (const current of [10, 20, 30, 34]) {
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    onProgress({ phase: 'finishing', current, total: 34 })
+  }
   onProgress({ phase: 'done', current: 0, total: 0 })
 
   return outcome.result
@@ -1309,6 +1599,28 @@ const FIXTURE_IMPORTS: Array<{
       // Stops where the last copy did — what a file read without its
       // write-ahead log looks like.
       newest: { matchAt: Date.now() - 3 * DAY, readingAt: Date.now() - 3 * DAY }
+    }
+  },
+  {
+    total: 450,
+    matches: 19,
+    readings: 12,
+    result: {
+      ok: true,
+      message: null,
+      accounts: 3,
+      matches: 19,
+      readings: 12,
+      seasons: 0,
+      attributed: 6,
+      // Everything landed; the server stopped answering while it worked out LP.
+      lpUnfinished: true,
+      unresolved: [],
+      alreadyThere: { matches: 431, readings: 190, seasons: 1 },
+      matchesFailed: 0,
+      readingsUnplaced: 0,
+      healed: 0,
+      newest: { matchAt: Date.now() - 600_000, readingAt: Date.now() - 600_000 }
     }
   }
 ]

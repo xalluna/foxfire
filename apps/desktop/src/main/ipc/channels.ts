@@ -31,6 +31,8 @@ export const CH = {
     accountEmail: 'server:accountEmail',
     resendEmailConfirmation: 'server:resendEmailConfirmation',
     cancelEmailChange: 'server:cancelEmailChange',
+    createShareLink: 'server:createShareLink',
+    revokeShareLink: 'server:revokeShareLink',
     setActive: 'server:setActive',
     forget: 'server:forget',
     changed: 'server:changed'
@@ -57,6 +59,7 @@ export const CH = {
     sendTestEmail: 'serverAdmin:sendTestEmail',
     getSettings: 'serverAdmin:getSettings',
     setSettings: 'serverAdmin:setSettings',
+    shareLinks: 'serverAdmin:shareLinks',
     storage: 'serverAdmin:storage',
     storedReplays: 'serverAdmin:storedReplays',
     removeReplay: 'serverAdmin:removeReplay',
@@ -73,7 +76,9 @@ export const CH = {
     setApiKey: 'settings:setApiKey',
     clearApiKey: 'settings:clearApiKey',
     setKeyType: 'settings:setKeyType',
-    keyInvalid: 'settings:keyInvalid'
+    keyInvalid: 'settings:keyInvalid',
+    setTftApiKey: 'settings:setTftApiKey',
+    clearTftApiKey: 'settings:clearTftApiKey'
   },
   accounts: {
     mine: 'accounts:mine',
@@ -106,6 +111,19 @@ export const CH = {
     start: 'sync:start',
     getState: 'sync:getState',
     progress: 'sync:progress'
+  },
+  // One account's TFT, answered by the server or this PC as everything else is.
+  tft: {
+    dashboard: 'tft:dashboard',
+    matchList: 'tft:matchList',
+    matchSummary: 'tft:matchSummary',
+    lobby: 'tft:lobby',
+    rankHistory: 'tft:rankHistory',
+    rankTrend: 'tft:rankTrend',
+    rankPeriods: 'tft:rankPeriods',
+    editable: 'tft:editable',
+    saveManual: 'tft:saveManual',
+    clearManual: 'tft:clearManual'
   },
   // Separate from mastery:get on purpose. Champion stats are pure SQLite, so
   // they must not sit behind a channel that can reach out to Riot and fail.
@@ -146,6 +164,14 @@ export const CH = {
     get: 'background:get',
     set: 'background:set'
   },
+  // How large this PC draws the interface. `changed` is pushed whatever moved
+  // it — the settings page or the zoom keys in any window — so an open Display
+  // page shows the size every window is actually at.
+  display: {
+    get: 'display:get',
+    set: 'display:set',
+    changed: 'display:changed'
+  },
   // Recording the game as it is played. Settings and status are separate reads
   // for the same reason telemetry splits them: the status pill polls, and the
   // settings form does not.
@@ -163,8 +189,14 @@ export const CH = {
     validate: 'capture:validate',
     /** A single frame of the capture source, so setup can be checked by eye. */
     preview: 'capture:preview',
-    reconnect: 'capture:reconnect'
+    reconnect: 'capture:reconnect',
+    /** Whether the native recorder can record here: its FFmpeg, and which encoder. */
+    nativeCheck: 'capture:nativeCheck',
+    /** The microphones the native recorder can mix in. */
+    listMicrophones: 'capture:listMicrophones'
   },
+  // The native recorder's hidden audio page has channels of its own, in
+  // shared/captureAudio.ts — its preload must not import this file.
   recordings: {
     list: 'recordings:list',
     detail: 'recordings:detail',

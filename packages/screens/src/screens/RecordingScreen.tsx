@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import type { Account, MatchSummary } from '@foxfire/core'
+import { useQuery, type UseQueryOptions } from '@tanstack/react-query'
+import type { Account, GameId, MatchSummary, TftMatchSummary } from '@foxfire/core'
 import { paths } from '@foxfire/core/routes'
 import { youtubeWatchUrl } from '@foxfire/core/youtube'
 import {
@@ -10,28 +10,13 @@ import {
   MatchListSkeleton,
   RecordingHeader,
   RecordingPlayer,
-  recordingActionClass,
-  type RecordingHeaderFacts
+  recordingActionClass
 } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
+import { useOffersGame } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
+import { headerFactsFor, isTftRow, tftHeaderFactsFor } from '../match/recordingFacts'
 import { queryKeys } from '../queries/keys'
-
-/** What the header says about a game, from its row in the player's history. */
-export function headerFactsFor(match: MatchSummary | null | undefined, durationSeconds: number | null): RecordingHeaderFacts {
-  return {
-    championId: match?.championId ?? null,
-    championName: match?.championName ?? null,
-    queueId: match?.queueId ?? null,
-    gameMode: match?.gameMode ?? null,
-    durationSeconds: durationSeconds ?? match?.gameDuration ?? null,
-    playedAt: match?.gameCreation ?? null,
-    win: match ? match.win : null,
-    kills: match?.kills ?? null,
-    deaths: match?.deaths ?? null,
-    assists: match?.assists ?? null
-  }
-}
 
 /**
  * One player's recording of one game, from YouTube, with its markers.
@@ -41,15 +26,23 @@ export function headerFactsFor(match: MatchSummary | null | undefined, durationS
  * deleted. Always the named account's view: the page asks the server for that
  * account's recording of that game and nothing else, so a link to Ahri's
  * recording never shows Riven's, even of the same game.
+ *
+ * A match id is unique across games, so the recording itself needs no game.
+ * Its row does: `game` says which history to ask first, and the other is asked
+ * only when that one has no such game — so a link that left the hint off
+ * still finds a TFT game, one request later.
  */
 export function RecordingScreen({
   account,
   matchId,
+  game = 'lol',
   back,
   actions
 }: {
   account: Account
   matchId: string
+  /** Which game the link said this was. */
+  game?: GameId
   /** The way back, where the host has one to offer. */
   back?: ReactNode
   /** Buttons of the host's own, beside the ones every client has. */
@@ -60,7 +53,6 @@ export function RecordingScreen({
   const share = useShareLink()
 
   const readRecording = client.matchRecordings?.get
-  const readSummary = client.dashboard.matchSummary
 
   const recording = useQuery({
     queryKey: queryKeys.matchRecording(account.id, matchId),
@@ -68,13 +60,37 @@ export function RecordingScreen({
     enabled: readRecording !== undefined
   })
 
-  const summary = useQuery({
-    queryKey: queryKeys.matchSummary(account.id, matchId),
-    queryFn: () => readSummary!(account.id, matchId),
-    enabled: readSummary !== undefined
-  })
+  // The row, from the history the link named, then from the other. A client
+  // that cannot read one League row on its own skips League's.
+  const readLeague = client.dashboard.matchSummary
+  const rowQuery = (which: GameId, enabled: boolean): UseQueryOptions<MatchSummary | TftMatchSummary | null> =>
+    which === 'tft'
+      ? {
+          queryKey: queryKeys.tftMatchSummary(account.id, matchId),
+          queryFn: () => client.tft.matchSummary(account.id, matchId),
+          enabled
+        }
+      : {
+          queryKey: queryKeys.matchSummary(account.id, matchId),
+          queryFn: () => readLeague!(account.id, matchId),
+          enabled: enabled && readLeague !== undefined
+        }
 
-  const facts = headerFactsFor(summary.data, recording.data?.durationSeconds ?? null)
+  // TFT's history only where TFT is on offer: a server whose host has not
+  // turned it on has no TFT rows, and League's is then the only one to ask.
+  const tftOffered = useOffersGame('tft')
+  const offered = (which: GameId): boolean => which === 'lol' || tftOffered === true
+  const asked: GameId = tftOffered === false ? 'lol' : game
+  const otherGame: GameId = asked === 'tft' ? 'lol' : 'tft'
+
+  const named = useQuery(rowQuery(asked, offered(asked)))
+  const other = useQuery(rowQuery(otherGame, offered(otherGame) && named.data === null))
+  const row = named.data ?? other.data ?? null
+
+  const durationSeconds = recording.data?.durationSeconds ?? null
+  const facts =
+    row && isTftRow(row) ? tftHeaderFactsFor(row, durationSeconds) : headerFactsFor(row, durationSeconds)
+  const rowGame: GameId = row && isTftRow(row) ? 'tft' : asked
 
   const body = ((): JSX.Element => {
     if (!readRecording) {
@@ -165,7 +181,9 @@ export function RecordingScreen({
                 Open on YouTube
               </a>
             )}
-            {share && video && <CopyLinkButton onCopy={() => share(paths.recording(account, matchId))} />}
+            {share && video && (
+              <CopyLinkButton onCopy={() => share(paths.recording(account, matchId, { game: rowGame }))} />
+            )}
           </>
         }
       />

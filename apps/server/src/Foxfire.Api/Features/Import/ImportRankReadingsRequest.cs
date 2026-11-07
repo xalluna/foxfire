@@ -18,7 +18,9 @@ public sealed record ImportRankReading(
     int? Losses,
     string Source,
     long CapturedAt,
-    string? MatchId);
+    string? MatchId,
+    string? RatedTier = null,
+    int? RatedRating = null);
 
 /// <summary>
 /// Stores a page of rank readings, mapped onto the accounts they belong to.
@@ -35,7 +37,7 @@ public sealed record ImportRankReadingsRequest(IReadOnlyList<ImportRankReading> 
 
 internal sealed class ImportRankReadingsRequestValidator : ImportBatchValidator<ImportRankReadingsRequest>;
 
-internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
+internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db, ServerGames games)
     : IValidatedRequestHandler<ImportRankReadingsRequest, ImportBatchResult>
 {
     public async Task<Response<ImportBatchResult>> Handle(
@@ -64,7 +66,11 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
                 continue;
             }
 
-            if (RankedQueues.FromRiotName(incoming.QueueType) is null)
+            // Any offered game's ladder: a stats.db from a desktop that tracked
+            // TFT holds TFT's readings beside League's, under the same account.
+            // With TFT off here they are left behind, and an import run again
+            // once it is on brings them across.
+            if (RankedQueues.FromRiotName(incoming.QueueType) is not { } queue || !games.Offers(queue.Game()))
             {
                 unplaced++;
                 continue;
@@ -89,6 +95,7 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
             // does with anything it cannot place.
             var tier = RankTiers.FromRiotName(incoming.Tier);
             var division = RankDivisions.FromRiotName(incoming.Division);
+            var rated = queue.Scale() == LadderScale.Rated;
 
             db.RankSnapshots.Add(new RankSnapshot
             {
@@ -104,7 +111,12 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
                 // the ladder maths has moved since some of those rows were
                 // written — a stale position would plot a graph nothing else on
                 // this server agrees with.
-                LadderPosition = Ladder.LadderPosition(new Rank(tier, division, incoming.LeaguePoints)),
+                LadderPosition = Ladders.PositionOf(
+                    queue, new Rank(tier, division, incoming.LeaguePoints), rated ? incoming.RatedRating : null),
+
+                // Hyper Roll's colour and rating, on the one ladder that has them.
+                RatedTier = rated ? RatedTiers.FromRiotName(incoming.RatedTier) : null,
+                RatedRating = rated ? incoming.RatedRating : null,
 
                 Source = incoming.Source,
                 CapturedAt = incoming.CapturedAt,

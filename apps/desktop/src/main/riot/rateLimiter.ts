@@ -53,10 +53,22 @@ export class RiotApiError extends Error {
      * previous API key. Distinguished from every other 400 because it is the
      * one that the app can repair by itself — see services/identityService.ts.
      */
-    public readonly staleIdentity = false
+    public readonly staleIdentity = false,
+    /**
+     * A 403 that means this key was never granted the product it asked — TFT on
+     * a key registered for League alone — rather than that the key is no
+     * good. Riot gives both the same status; only the caller knows which it
+     * asked for. See client.ts, tftRequest.
+     */
+    public readonly noProductAccess = false
   ) {
     super(message)
     this.name = 'RiotApiError'
+  }
+
+  /** Whether Riot refused the key itself: what stops a queue until a new key arrives. */
+  get isKeyRejection(): boolean {
+    return this.status === 401 || (this.status === 403 && !this.noProductAccess)
   }
 }
 
@@ -209,7 +221,9 @@ export class RiotRateLimiter extends EventEmitter {
       return
     }
 
-    if (err instanceof RiotApiError && (err.status === 401 || err.status === 403)) {
+    // A 403 that only means "no TFT on this key" fails its one request and
+    // leaves the queue running; League's next call does not care.
+    if (err instanceof RiotApiError && err.isKeyRejection) {
       this.paused = true
       this.fatalError = err
       this.emit('key-invalid', err)

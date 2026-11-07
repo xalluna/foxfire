@@ -203,6 +203,14 @@ public static class RequestLogging
             properties.Add(("UserId", userId));
         }
 
+        // Which share link let an outsider in — its id, never its token. Only
+        // the request's own line has it: the link is checked by authorization,
+        // after the lines this context is pushed for have begun.
+        if (context.Items[Auth.ShareAccess.ItemKey] is Guid shareLinkId)
+        {
+            properties.Add(("ShareLinkId", shareLinkId));
+        }
+
         return properties;
     }
 }

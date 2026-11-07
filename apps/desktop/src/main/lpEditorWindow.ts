@@ -2,6 +2,7 @@ import { join } from 'path'
 import { BrowserWindow, shell } from 'electron'
 import { windowRoutes } from '@shared/windowRoutes'
 import { loadRoute } from './rendererUrl'
+import { attachZoom, currentZoom } from './zoom'
 import { CH } from './ipc/channels'
 import type { QueueType } from '@shared/types'
 
@@ -57,7 +58,8 @@ export function openLpEditorWindow(
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      zoomFactor: currentZoom()
     }
   })
 
@@ -83,6 +85,7 @@ function loadEditor(
   queueType: QueueType,
   matchId: string
 ): void {
+  attachZoom(window)
   loadRoute(window, windowRoutes.lpEditor(accountId, queueType, matchId))
 }
 

@@ -23,6 +23,7 @@ export default {
         surface: token('surface'),
         'surface-2': token('surface-2'),
         hairline: token('hairline'),
+        edge: token('edge'),
         accent: token('accent'),
         'accent-dim': token('accent-dim'),
         teal: token('teal'),
@@ -41,13 +42,16 @@ export default {
         display: ['Marcellus', 'Georgia', 'serif']
       },
       fontSize: {
-        // The UI lives between 10 and 13px; these carry line-heights so dense
-        // rows stay on a predictable rhythm.
-        '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
-        xs: ['0.6875rem', { lineHeight: '1rem' }],
-        sm: ['0.75rem', { lineHeight: '1.125rem' }],
-        base: ['0.8125rem', { lineHeight: '1.25rem' }],
-        lg: ['0.9375rem', { lineHeight: '1.375rem' }],
+        // The UI lives between 11 and 14px; these carry line-heights so dense
+        // rows stay on a predictable rhythm. Each step was a pixel smaller
+        // until 0.17.0, and 10px was too small to read. 2xs is the floor —
+        // badges, chips, eyebrows, a meta line under a primary one — and
+        // anything read as a sentence, or typed into, is xs or larger.
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
+        xs: ['0.75rem', { lineHeight: '1.125rem' }],
+        sm: ['0.8125rem', { lineHeight: '1.25rem' }],
+        base: ['0.875rem', { lineHeight: '1.375rem' }],
+        lg: ['1rem', { lineHeight: '1.5rem' }],
         xl: ['1.125rem', { lineHeight: '1.5rem' }],
         '2xl': ['1.5rem', { lineHeight: '1.875rem' }],
         '3xl': ['2rem', { lineHeight: '2.375rem' }]

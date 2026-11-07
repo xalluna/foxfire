@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type {
   AdminActionResult,
@@ -9,7 +9,7 @@ import type {
 } from '@foxfire/core'
 import { inputClass } from '../components/settings/controls'
 import { SettingsCard, SettingsPage } from '../components/settings/SettingsCard'
-import { SettingsBlock, SettingsRow, StatusRow } from '../components/settings/SettingsRow'
+import { SettingsBlock, SettingsRow, StatusRow, ToggleRow } from '../components/settings/SettingsRow'
 import { ghostButtonClass, primaryButtonClass } from '../components/settings/controls'
 import { EmptyState } from '../components/EmptyState'
 import { ShowMoreButton } from '../components/ShowMore'
@@ -46,6 +46,24 @@ export interface ServerDataPageProps {
   replayCap: number | undefined
   onSaveReplayCap: (bytes: number) => Promise<void>
 
+  /**
+   * How many games a newly added account's history goes back, per game.
+   * Undefined while the settings are loading; TFT's is absent from a server
+   * older than it.
+   */
+  backfill?: { league: number; tft: number | undefined }
+  /** Rejects with why not — the server keeps both between 1 and 1000. */
+  onSaveBackfill?: (patch: { backfillTarget?: number; tftBackfillTarget?: number }) => Promise<void>
+
+  /**
+   * Whether the server syncs everybody on a timer, how often, and whom it
+   * leaves alone, in minutes. Undefined while the settings are loading, and
+   * from a server older than the switch.
+   */
+  backgroundSync?: { enabled: boolean; minutes: number; skipMinutes: number }
+  /** Rejects with why not — the window has to be shorter than the interval. */
+  onSaveBackgroundSync?: (patch: BackgroundSyncPatch) => Promise<void>
+
   /** The pages of the replay library fetched so far, biggest first. Undefined while the first loads. */
   replays: AdminReplay[] | undefined
   /** Whether there is another page of the library after `replays`. */
@@ -53,6 +71,13 @@ export interface ServerDataPageProps {
   loadingMoreReplays: boolean
   onShowMoreReplays: () => void
   onRemoveReplay: (matchId: string) => Promise<AdminActionResult>
+}
+
+/** The background sync switches one save changes — usually the one somebody touched. */
+export interface BackgroundSyncPatch {
+  backgroundSync?: boolean
+  backgroundSyncMinutes?: number
+  backgroundSyncSkipMinutes?: number
 }
 
 /**
@@ -79,6 +104,10 @@ export function ServerDataPage({
   storage,
   replayCap,
   onSaveReplayCap,
+  backfill,
+  onSaveBackfill,
+  backgroundSync,
+  onSaveBackgroundSync,
   replays,
   hasMoreReplays,
   loadingMoreReplays,
@@ -148,6 +177,10 @@ export function ServerDataPage({
 
       {storage !== undefined && (
         <StorageCard storage={storage} replayCap={replayCap} onSaveReplayCap={onSaveReplayCap} />
+      )}
+      {backfill && onSaveBackfill && <BackfillCard backfill={backfill} onSave={onSaveBackfill} />}
+      {backgroundSync && onSaveBackgroundSync && (
+        <BackgroundSyncCard settings={backgroundSync} onSave={onSaveBackgroundSync} />
       )}
       <ReplayLibraryCard
         replays={replays}
@@ -292,6 +325,7 @@ function ReplayCapRow({
               if (e.key === 'Enter') commit()
             }}
             placeholder="none"
+            aria-label="Replay storage cap, in GB"
             inputMode="decimal"
             className={clsx(inputClass, 'w-20 text-right tabular-nums')}
           />
@@ -303,6 +337,175 @@ function ReplayCapRow({
 }
 
 const GIGABYTE = 1024 * 1024 * 1024
+
+/**
+ * How far back a newly added account's history goes, per game.
+ *
+ * Each game backfills on its own and both draw on the one Riot budget — a
+ * request a game, about a hundred every two minutes for the whole server — so
+ * a host with a busy community, or a key with TFT on it that League also
+ * needs, can keep one short without the other.
+ */
+function BackfillCard({
+  backfill,
+  onSave
+}: {
+  backfill: { league: number; tft: number | undefined }
+  onSave: (patch: { backfillTarget?: number; tftBackfillTarget?: number }) => Promise<void>
+}): JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+
+  const save = (patch: { backfillTarget?: number; tftBackfillTarget?: number }): Promise<void> =>
+    onSave(patch).then(
+      () => setError(null),
+      (err: unknown) => setError(err instanceof Error ? err.message : String(err))
+    )
+
+  return (
+    <SettingsCard
+      title="History backfill"
+      description={
+        'How many games back a newly added account’s history goes. Each costs about one Riot request, '
+        + 'from the budget every sync on this server shares, so a long backfill for a big community '
+        + 'is minutes of everybody waiting. Games after that are fetched as they are played.'
+      }
+    >
+      {error !== null && <StatusRow tone="error">{error}</StatusRow>}
+      <TargetRow
+        label="League games"
+        value={backfill.league}
+        unit="games"
+        onSave={(games) => save({ backfillTarget: games })}
+      />
+      {backfill.tft !== undefined && (
+        <TargetRow
+          label="TFT games"
+          value={backfill.tft}
+          unit="games"
+          onSave={(games) => save({ tftBackfillTarget: games })}
+        />
+      )}
+    </SettingsCard>
+  )
+}
+
+/**
+ * Keeping everybody's history current without anybody asking.
+ *
+ * Off, an account syncs when its owner's Foxfire sees a game end, when
+ * somebody presses Sync now, or when another member's sync finds it in a
+ * game — so the LP graph of somebody who is not running Foxfire, or of an
+ * account nobody has claimed, stops between those. On, the server sweeps
+ * everybody itself. The copy is about the cost, because that is the decision:
+ * a few requests per account per game per sweep, from the budget every sync
+ * on the server shares.
+ */
+function BackgroundSyncCard({
+  settings,
+  onSave
+}: {
+  settings: { enabled: boolean; minutes: number; skipMinutes: number }
+  onSave: (patch: BackgroundSyncPatch) => Promise<void>
+}): JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+
+  // The switch moves when it is clicked rather than when the settings come
+  // back, and goes back if the save is refused.
+  const [pending, setPending] = useState<boolean | null>(null)
+  useEffect(() => setPending(null), [settings.enabled])
+
+  const save = (patch: BackgroundSyncPatch): Promise<void> =>
+    onSave(patch).then(
+      () => setError(null),
+      (err: unknown) => {
+        setPending(null)
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    )
+
+  return (
+    <SettingsCard
+      title="Background sync"
+      description={
+        'Keeps everybody’s match history and LP graph current, including members who are not running '
+        + 'Foxfire and accounts nobody has claimed. Each sweep is a few Riot requests for every account '
+        + 'and game, from the budget every sync on this server shares — they wait behind anybody searching '
+        + 'and every game that just ended.'
+      }
+    >
+      {error !== null && <StatusRow tone="error">{error}</StatusRow>}
+      <ToggleRow
+        label="Sync every account on a timer"
+        description="Off, an account syncs when its owner’s Foxfire sees a game end, when somebody presses Sync now, or when another member’s sync finds it in a game."
+        checked={pending ?? settings.enabled}
+        disabled={pending !== null}
+        onChange={(on) => {
+          setPending(on)
+          void save({ backgroundSync: on })
+        }}
+      />
+      <TargetRow
+        label="Sweep every"
+        value={settings.minutes}
+        unit="minutes"
+        onSave={(minutes) => save({ backgroundSyncMinutes: minutes })}
+      />
+      <TargetRow
+        label="Leave alone anybody synced in the last"
+        value={settings.skipMinutes}
+        unit="minutes"
+        onSave={(minutes) => save({ backgroundSyncSkipMinutes: minutes })}
+      />
+    </SettingsCard>
+  )
+}
+
+/** A whole number with its unit, saved when the field is left or Enter is pressed. */
+function TargetRow({
+  label,
+  value,
+  unit,
+  onSave
+}: {
+  label: string
+  value: number
+  unit: string
+  onSave: (value: number) => Promise<void>
+}): JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? String(value)
+
+  function commit(): void {
+    const next = Number(shown.trim())
+    if (!Number.isInteger(next) || next === value) {
+      setDraft(null)
+      return
+    }
+    void onSave(next).then(() => setDraft(null))
+  }
+
+  return (
+    <SettingsRow
+      label={label}
+      control={
+        <div className="flex items-center gap-2">
+          <input
+            value={shown}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+            }}
+            inputMode="numeric"
+            aria-label={label}
+            className={clsx(inputClass, 'w-20 text-right tabular-nums')}
+          />
+          <span className="text-sm text-text-mute">{unit}</span>
+        </div>
+      }
+    />
+  )
+}
 
 /**
  * The library, biggest first, a page at a time, with a way to remove one.
@@ -447,6 +650,7 @@ function ProgressRow({ progress }: { progress: ImportProgress }): JSX.Element {
         <span className="tabular-nums">
           {' — '}
           {progress.current} of {progress.total}
+          {progress.phase === 'finishing' && ' accounts'}
         </span>
       )}
     </StatusRow>
@@ -499,6 +703,16 @@ function ResultRows({ result }: { result: ImportResult }): JSX.Element {
           ' If that is older than you expected, this copy is missing Foxfire’s latest changes — close Foxfire on that PC and choose the file again.'}
       </StatusRow>
 
+      {result.lpUnfinished && (
+        // Everything landed; only the last step stopped. Saying so is the
+        // difference between an admin re-importing and an admin assuming the
+        // whole run failed.
+        <StatusRow tone="warn">
+          Everything was added, but LP was not worked out for every account. Import the same file
+          again to finish — nothing is sent twice.
+        </StatusRow>
+      )}
+
       {result.healed > 0 && (
         // Games an earlier run stored when it could not yet tell whose they
         // were. Said out loud because it is the one thing an import does to rows
@@ -513,6 +727,16 @@ function ResultRows({ result }: { result: ImportResult }): JSX.Element {
         <StatusRow tone="warn">
           {count(result.matchesFailed, 'game', 'games')} in the file could not be read by the server and{' '}
           {result.matchesFailed === 1 ? 'was' : 'were'} left out.
+        </StatusRow>
+      )}
+
+      {(result.tftLeftBehind ?? 0) > 0 && (
+        // Not a failure: the host chose a server without TFT. Importing the
+        // same file again once it is on sends these and nothing else.
+        <StatusRow tone="mute">
+          {count(result.tftLeftBehind ?? 0, 'TFT game', 'TFT games')} stayed in the file, because TFT is off on
+          this server. Import the file again once it is on to bring {result.tftLeftBehind === 1 ? 'it' : 'them'}{' '}
+          across.
         </StatusRow>
       )}
 

@@ -41,16 +41,23 @@ public sealed class RiotClient
     private readonly string _apiKey;
     private readonly ILogger _log;
     private readonly RiotMetrics? _metrics;
+    private readonly bool _tftForbiddenMeansNoAccess;
 
     /// <summary>The named HttpClient this reaches Riot through.</summary>
     public const string HttpClientName = "riot";
 
+    /// <param name="tftForbiddenMeansNoAccess">
+    /// Whether a 403 from a TFT endpoint means this key has no TFT access rather
+    /// than that it was refused. True for the main key when TFT is called with
+    /// it; see <see cref="RiotApiException.NoProductAccess"/>.
+    /// </param>
     public RiotClient(
         IHttpClientFactory httpFactory,
         RiotRateLimiter limiter,
         string apiKey,
         ILogger<RiotClient>? logger = null,
-        RiotMetrics? metrics = null)
+        RiotMetrics? metrics = null,
+        bool tftForbiddenMeansNoAccess = false)
     {
         ArgumentNullException.ThrowIfNull(httpFactory);
         ArgumentNullException.ThrowIfNull(limiter);
@@ -61,6 +68,7 @@ public sealed class RiotClient
         _apiKey = apiKey;
         _log = logger ?? NullLogger<RiotClient>.Instance;
         _metrics = metrics;
+        _tftForbiddenMeansNoAccess = tftForbiddenMeansNoAccess;
     }
 
     /// <summary>Whether Riot has refused the configured key. Reads keep working when it has.</summary>
@@ -245,6 +253,105 @@ public sealed class RiotClient
     }
 
     /// <summary>
+    /// Whether this key can reach TFT at all, or null when Riot did not say.
+    ///
+    /// The TFT status endpoint, which costs one call and means nothing else. A
+    /// 403 from it on the main key is the answer "no": the key is registered for
+    /// League alone. Anything other than an answer — a 5xx, a timeout — is null,
+    /// so a bad minute at Riot is never recorded as a missing product.
+    /// </summary>
+    public async Task<bool?> ValidateTftAccessAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await SendAsync<JsonElement>(
+                endpoint: "/tft/status/v1/platform-data",
+                baseUrl: RiotRegions.PlatformBaseUrl(RiotRegions.DefaultPlatform),
+                path: "/tft/status/v1/platform-data",
+                priority: RiotRequestPriority.Interactive,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return true;
+        }
+        catch (RiotApiException ex) when (ex.NoProductAccess || ex.IsKeyRejection)
+        {
+            return false;
+        }
+        catch (RiotApiException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Riot's page size for a TFT match id list, kept the same as League's.</summary>
+    public const int TftMatchIdsPageSize = 100;
+
+    /// <summary>One page of a player's TFT match ids, newest first. Paging stays out of the endpoint name.</summary>
+    public Task<List<string>> GetTftMatchIdsAsync(
+        string regionalRoute,
+        string puuid,
+        int start,
+        int count,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"/tft/match/v1/matches/by-puuid/{Uri.EscapeDataString(puuid)}/ids?start={start}&count={count}";
+
+        return SendAsync<List<string>>(
+            endpoint: "/tft/match/v1/matches/by-puuid/{puuid}/ids",
+            baseUrl: RiotRegions.RegionalBaseUrl(regionalRoute),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>One whole TFT game, parsed and verbatim, checked the way a League one is.</summary>
+    public async Task<RawTftMatch> GetTftMatchAsync(
+        string regionalRoute,
+        string matchId,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        const string Endpoint = "/tft/match/v1/matches/{matchId}";
+        var path = $"/tft/match/v1/matches/{Uri.EscapeDataString(matchId)}";
+
+        var body = await SendRawAsync(
+            endpoint: Endpoint,
+            baseUrl: RiotRegions.RegionalBaseUrl(regionalRoute),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var match = Parse<TftMatchDto>(body, Endpoint);
+
+        if (string.IsNullOrEmpty(match.Metadata?.MatchId)
+            || match.Info?.Participants is not { Count: > 0 } participants
+            || participants.Any(p => string.IsNullOrEmpty(p.Puuid) || p.Placement < 1))
+        {
+            throw new RiotApiException($"Riot returned a TFT match with no id, no players or no placements ({matchId})", 0);
+        }
+
+        return new RawTftMatch(match, body);
+    }
+
+    /// <summary>Every TFT ladder this account has an entry on.</summary>
+    public Task<List<TftLeagueEntryDto>> GetTftLeagueEntriesAsync(
+        string platform,
+        string puuid,
+        RiotRequestPriority priority,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"/tft/league/v1/by-puuid/{Uri.EscapeDataString(puuid)}";
+
+        return SendAsync<List<TftLeagueEntryDto>>(
+            endpoint: "/tft/league/v1/by-puuid/{puuid}",
+            baseUrl: RiotRegions.PlatformBaseUrl(platform),
+            path: path,
+            priority: priority,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
     /// One request, through the queue, with Riot's failures turned into ours.
     ///
     /// Deserialisation happens after the queue rather than inside it. The pump
@@ -318,7 +425,9 @@ public sealed class RiotClient
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        throw await DescribeFailureAsync(response, endpoint, ct).ConfigureAwait(false);
+                        var failure = await DescribeFailureAsync(response, endpoint, ct).ConfigureAwait(false);
+                        if (failure.NoProductAccess) outcome = "no_access";
+                        throw failure;
                     }
 
                     return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -381,6 +490,17 @@ public sealed class RiotClient
             }
         }
 
-        return new RiotApiException($"Riot API error {status} for {endpoint}", status, retryAfter, staleIdentity);
+        var noProductAccess = status == 403
+            && _tftForbiddenMeansNoAccess
+            && endpoint.StartsWith("/tft/", StringComparison.Ordinal);
+
+        return new RiotApiException(
+            noProductAccess
+                ? $"Riot refused this key for TFT ({endpoint}); it may be registered for League alone"
+                : $"Riot API error {status} for {endpoint}",
+            status,
+            retryAfter,
+            staleIdentity,
+            noProductAccess);
     }
 }

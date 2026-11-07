@@ -19,6 +19,7 @@ import { recordRankSnapshot } from './rankHistoryService'
 import { getAccountByRiotId } from '../riot/endpoints/account'
 import { getSummonerByPuuid } from '../riot/endpoints/summoner'
 import { getLeagueEntriesByPuuid } from '../riot/endpoints/league'
+import { getTftLeagueEntriesByPuuid } from '../riot/endpoints/tftLeague'
 import { DEFAULT_PLATFORM, DEFAULT_REGIONAL_ROUTE, type PlatformId, type RegionalRoute } from '../riot/regions'
 import type { StoredAccount } from '../db/repositories/accounts.repo'
 import type { LeagueEntry, RiotIdInput, SyncState } from '@shared/types'
@@ -118,6 +119,40 @@ export async function refreshRank(accountId: number): Promise<LeagueEntry[]> {
         leaguePoints: entry.leaguePoints,
         wins: entry.wins,
         losses: entry.losses
+      },
+      'league_v4'
+    )
+  }
+
+  return stored
+}
+
+/**
+ * The same for TFT's ladders: Ranked and Double Up's rank, Hyper Roll's colour
+ * and rating. Asked with the id TFT knows the account by, which the caller has
+ * already resolved.
+ */
+export async function refreshTftRank(accountId: number, tftPuuid: string): Promise<LeagueEntry[]> {
+  const db = getDb()
+  const account = getAccountById(db, accountId)
+  if (!account) throw new Error(`Unknown account ${accountId}`)
+
+  const entries = await getTftLeagueEntriesByPuuid(account.platform as PlatformId, tftPuuid)
+  upsertLeagueEntries(db, accountId, entries, 'tft')
+
+  const stored = getLeagueEntries(db, accountId, 'tft')
+  for (const entry of stored) {
+    recordRankSnapshot(
+      accountId,
+      {
+        queueType: entry.queueType,
+        tier: entry.tier,
+        rank: entry.rank,
+        leaguePoints: entry.leaguePoints,
+        wins: entry.wins,
+        losses: entry.losses,
+        ratedTier: entry.ratedTier ?? null,
+        ratedRating: entry.ratedRating ?? null
       },
       'league_v4'
     )

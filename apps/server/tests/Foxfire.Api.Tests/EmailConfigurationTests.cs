@@ -12,7 +12,7 @@ public sealed class EmailConfigurationTests
     private static IReadOnlyList<string> Check(EmailOptions email) =>
         ConfigurationCheck.Validate(
             "Server=db;Database=Foxfire",
-            new ServerOptions { PublicUrl = "https://foxfire.example.com" },
+            new ServerOptions { PublicUrl = "https://test.example.com" },
             new RiotOptions { ApiKey = "RGAPI-test" },
             new AuthOptions
             {

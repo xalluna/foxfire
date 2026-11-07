@@ -1,4 +1,4 @@
-import type { RecordingEvent, YouTubePrivacy } from '@foxfire/core'
+import type { GameId, RecordingEvent, TftAccess, TftTrait, TftUnit, YouTubePrivacy } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -107,6 +107,12 @@ export interface BackgroundSettings {
   lcuInstallPath: string | null
 }
 
+/** How this PC draws Foxfire. Steps and rules in shared/display.ts. */
+export interface DisplaySettings {
+  /** The zoom factor every window is drawn at: one of ZOOM_STEPS. */
+  zoom: number
+}
+
 /**
  * Which kind of Riot key is saved. It decides how fast the app is allowed to
  * ask for things, and whether it should keep warning about a 24-hour expiry —
@@ -138,6 +144,13 @@ export interface AppSettingsPublic {
   keyType: RiotKeyType
   /** Ignored while `keyType` is personal, whose limits are Riot's fixed ones. */
   applicationLimits: RiotKeyLimits
+  /** Whether TFT has a key of its own. Without one it is asked through the main key. */
+  hasTftApiKey: boolean
+  tftKeyRejected: boolean
+  tftKeyType: RiotKeyType
+  tftApplicationLimits: RiotKeyLimits
+  /** Whether the key TFT is asked through can reach it, as last found out. */
+  tftAccess: TftAccess
 }
 
 export type ApiKeyStatus = 'valid' | 'missing' | 'expired' | 'invalid'
@@ -165,13 +178,25 @@ export interface IdentityReport {
 }
 
 /**
- * Which audio OBS is told to record.
+ * Which audio a recording carries. 'game' is everything the PC plays, not the
+ * game's own sound alone — neither recorder can tell the two apart.
  *
- * Only honoured in managed mode. A scene the user built is theirs, and muting
- * inputs inside it would leave their microphone muted if we crashed between
- * setting and restoring — so in manual mode this is reported rather than applied.
+ * In OBS, only honoured in managed mode. A scene the user built is theirs, and
+ * muting inputs inside it would leave their microphone muted if we crashed
+ * between setting and restoring — so in manual mode this is reported rather
+ * than applied. The native recorder always honours it.
  */
 export type CaptureAudio = 'none' | 'game' | 'game+mic'
+
+/**
+ * What writes the video: OBS, or the FFmpeg this app runs itself.
+ *
+ * Native needs nothing installed and records the game's own window, so whatever
+ * covers it never shows up. OBS stays for anybody who already has it set up the
+ * way they want — a fresh install starts on native, and an install that had
+ * capture set up before native existed was pinned to OBS (pinCaptureDriver).
+ */
+export type CaptureDriver = 'obs' | 'native'
 
 /**
  * Whether the app owns the OBS scene it records with, or validates one the user
@@ -185,6 +210,8 @@ export type ObsMode = 'managed' | 'manual'
 
 export interface CaptureSettings {
   enabled: boolean
+  driver: CaptureDriver
+  /** Which OBS setup — see ObsMode. Only read when the driver is OBS. */
   mode: ObsMode
   /** Where recordings are written. Capture cannot arm without one. */
   folder: string | null
@@ -194,8 +221,13 @@ export interface CaptureSettings {
   otherQueues: boolean
   audio: CaptureAudio
   /**
-   * What managed mode records at. Ignored in manual mode, where the user's own
-   * OBS profile decides — see CaptureQuality.
+   * The microphone the native recorder mixes in with 'game+mic', by the
+   * browser's device id. null is the system default. OBS uses its own default.
+   */
+  micDeviceId: string | null
+  /**
+   * What native and managed OBS record at. Ignored in manual mode, where the
+   * user's own OBS profile decides — see CaptureQuality.
    */
   quality: CaptureQuality
   /** Advisory ceiling in bytes. Nothing is ever deleted to honour it; 0 means no cap. */
@@ -224,6 +256,38 @@ export type CaptureStatus =
   | { state: 'armed'; queueId: number | null }
   | { state: 'recording'; recordingId: number; startedAt: number }
   | { state: 'error'; message: string }
+
+/**
+ * Whether the native recorder can record on this PC, and with what.
+ *
+ * 'missing' is a build without its FFmpeg — a dev checkout that never fetched
+ * it, or an install something deleted from. 'tooOld' is an FFmpeg from before
+ * window capture existed (8.1).
+ */
+export interface NativeCaptureCheck {
+  ffmpeg: 'ok' | 'missing' | 'tooOld'
+  /** FFmpeg's own version string, when there is one to read. */
+  version: string | null
+  /** The encoder recordings will use, or null when none worked. */
+  encoder: NativeEncoder | null
+  /** Every H.264 encoder that worked here, best first. */
+  encoders: NativeEncoder[]
+  /** The fastest monitor's refresh rate — what the "at your refresh rate" presets record at. */
+  displayHz: number
+}
+
+/**
+ * The H.264 encoders the native recorder can use: NVIDIA, AMD and Intel's own,
+ * then Windows' Media Foundation on the GPU, then Media Foundation on the CPU,
+ * which every Windows install has.
+ */
+export type NativeEncoder = 'nvenc' | 'amf' | 'qsv' | 'mf-hw' | 'mf'
+
+/** A microphone the native recorder can mix in. */
+export interface CaptureMicrophone {
+  deviceId: string
+  label: string
+}
 
 /** One reason a user-configured OBS cannot be recorded from as it stands. */
 export type ObsProblem =
@@ -277,9 +341,28 @@ export interface LinkedMatchInfo {
   assists: number
 }
 
+/**
+ * The TFT game a recording belongs to: the account's own board in it, as this
+ * PC holds it. A TFT game has a place where League's has a result and a score.
+ */
+export interface LinkedTftMatchInfo {
+  matchId: string
+  gameCreation: number
+  gameDuration: number
+  queueId: number | null
+  placement: number
+  teamPlacement: number | null
+  /** Seconds — when the player went out, which is when their game ended. */
+  timeEliminated: number
+  traits: TftTrait[]
+  units: TftUnit[]
+}
+
 export interface Recording {
   /** This machine's own row id. Recordings never leave the disk they are on. */
   id: number
+  /** Which game it is of; League's for every recording from before TFT. */
+  game: GameId
 
   /** Whose account it was recorded on, as whichever store owns accounts spells it. */
   accountId: string
@@ -298,7 +381,10 @@ export interface Recording {
   endedAt: number | null
   durationSeconds: number | null
   selfChampionId: number | null
+  /** League's bound game. Null for a TFT recording, which has `tftMatch` instead. */
   match: LinkedMatchInfo | null
+  /** A TFT recording's bound game, when this PC holds its board. */
+  tftMatch: LinkedTftMatchInfo | null
 
   /**
    * The file was deleted on purpose, and the row kept because the recording
@@ -410,6 +496,8 @@ export interface YouTubeSettings {
   autoUpload: boolean
   defaultPrivacy: YouTubePrivacy
   titleTemplate: string
+  /** A TFT recording's, which says where it finished where League's says how it went. */
+  tftTitleTemplate: string
 }
 
 /** Everything a recording window needs, fetched once when it opens. */
@@ -597,6 +685,16 @@ export interface ServerState {
    * older than the web client.
    */
   publicUrl: string | null
+  /**
+   * Whether the active server can be read without signing in. False in
+   * local-only mode and from a server too old to say.
+   */
+  publicAccess: boolean
+  /**
+   * The games the active server offers, League first — League alone unless its
+   * host turned TFT on. Every game when no server is active.
+   */
+  games: GameId[]
   /**
    * Set when the active server refused this build outright, and holds the
    * version to install. Everything server-backed is unavailable until then, so

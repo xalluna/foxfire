@@ -19,7 +19,9 @@ public sealed record LeagueEntryResponse(
     int? LeaguePoints,
     int? Wins,
     int? Losses,
-    DateTimeOffset FetchedAt)
+    DateTimeOffset FetchedAt,
+    string? RatedTier,
+    int? RatedRating)
 {
     public static LeagueEntryResponse Describe(LeagueEntry entry)
     {
@@ -32,7 +34,9 @@ public sealed record LeagueEntryResponse(
             entry.LeaguePoints,
             entry.Wins,
             entry.Losses,
-            entry.FetchedAt);
+            entry.FetchedAt,
+            entry.RatedTier?.RiotName(),
+            entry.RatedRating);
     }
 }
 
@@ -67,13 +71,16 @@ internal sealed class GetDashboardRequestHandler(
 
         if (account is null) return Response<DashboardResponse>.NotFound();
 
+        // League's ladders and League's sync: TFT has a dashboard of its own.
+        var ladders = RankedQueues.Of(Game.Lol).Select(q => q.RiotName()).ToList();
+
         var entries = await db.LeagueEntries.AsNoTracking()
-            .Where(l => l.RiotAccountId == id)
+            .Where(l => l.RiotAccountId == id && ladders.Contains(l.QueueType))
             .OrderBy(l => l.QueueType)
             .ToListAsync(cancellationToken);
 
         var state = await db.SyncStates.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.RiotAccountId == id, cancellationToken);
+            .FirstOrDefaultAsync(s => s.RiotAccountId == id && s.Game == Game.Lol, cancellationToken);
 
         return new DashboardResponse(
             RiotAccountResponse.Describe(account, me.UserId),
