@@ -11,7 +11,7 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
-## [0.6.0] — 2026-11-03
+## [0.6.0] — 2026-11-07
 
 Teamfight Tactics, beside League, for a host who turns it on. The server syncs every account's TFT —
 history, boards, its three ladders and the LP each game moved — on its Riot key or one of TFT's own,

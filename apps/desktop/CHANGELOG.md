@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
-## [0.17.0] — 2026-11-03
+## [0.17.0] — 2026-11-07
 
 Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
 and the LP each game moved, and recordings of it — tracked the way League always has been, on a
