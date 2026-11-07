@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ConnectionState } from '@foxfire/core'
+import type { ConnectionState, GameId } from '@foxfire/core'
 import { useClient } from './context'
 import { queryKeys } from '../queries/keys'
 
@@ -30,6 +30,21 @@ export function useConnection(): ConnectionState | undefined {
   )
 
   return data
+}
+
+/**
+ * The games on offer here, League first — League alone on a server whose host
+ * has not turned TFT on. Undefined until the connection has been read, which
+ * a screen that would otherwise send somebody elsewhere has to wait out.
+ */
+export function useGames(): readonly GameId[] | undefined {
+  return useConnection()?.games
+}
+
+/** Whether one game is on offer here, or undefined until that is known. */
+export function useOffersGame(game: GameId): boolean | undefined {
+  const games = useGames()
+  return games === undefined ? undefined : games.includes(game)
 }
 
 /** Whether the person signed in administers the server answering. */

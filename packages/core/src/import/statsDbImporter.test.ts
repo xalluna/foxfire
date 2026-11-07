@@ -119,6 +119,8 @@ function recordingTarget(
     matchAnswer?: Partial<ImportBatchOutcome>
     readingAnswer?: Partial<ImportBatchOutcome>
     seasonAnswer?: Partial<ImportBatchOutcome>
+    /** A server with TFT off, whose TFT route is not there. */
+    noTft?: boolean
   } = {}
 ) {
   const calls: string[] = []
@@ -168,6 +170,7 @@ function recordingTarget(
     },
     tftMatches: async (rows) => {
       calls.push(`tftMatches:${rows.length}`)
+      if (options.noTft) return null
       sent.tftMatches.push(...rows)
       return took(rows)
     },
@@ -239,8 +242,18 @@ describe('importStatsDb', () => {
 
     const result = await importStatsDb(db, target, () => {})
 
-    // One question about every game, then each game's own batch.
-    expect(calls).toEqual(['accounts:2', 'seasons:2', 'unstored:3', 'matches:1', 'tftMatches:1', 'readings:2', 'finish'])
+    // One question about every game, whether the server takes TFT at all, then
+    // each game's own batch.
+    expect(calls).toEqual([
+      'accounts:2',
+      'seasons:2',
+      'unstored:3',
+      'tftMatches:0',
+      'matches:1',
+      'tftMatches:1',
+      'readings:2',
+      'finish'
+    ])
     expect(sent.matches.map((m) => m.matchId)).toEqual(['KR_1'])
     expect(sent.tftMatches.map((m) => m.matchId)).toEqual(['KR_2'])
     expect(result).toMatchObject({ matches: 2, alreadyThere: { matches: 1 } })
@@ -252,6 +265,41 @@ describe('importStatsDb', () => {
     // The rating rides on the reading that has one, and only there.
     expect(sent.readings[0]).toMatchObject({ queueType: 'RANKED_TFT_TURBO', ratedTier: 'BLUE', ratedRating: 2_904 })
     expect(sent.readings[1]).not.toHaveProperty('ratedRating')
+  })
+
+  it('leaves a file’s TFT games behind on a server with TFT off, and says how many', async () => {
+    const db = fakeDb({
+      accounts: ACCOUNTS,
+      matches: [
+        { match_id: 'KR_1', raw_json: '{}', game_creation: 5, game: 'lol' },
+        { match_id: 'KR_2', raw_json: '{"tft":1}', game_creation: 6, game: 'tft' },
+        { match_id: 'KR_3', raw_json: '{"tft":2}', game_creation: 7, game: 'tft' }
+      ]
+    })
+    const { target, calls, sent } = recordingTarget({ noTft: true })
+    const totals = new Set<number>()
+
+    const result = await importStatsDb(db, target, (progress) => {
+      if (progress.phase === 'matches') totals.add(progress.total)
+    })
+
+    // Asked with nothing in it, so no payload goes up only to be refused.
+    expect(calls.filter((call) => call.startsWith('tftMatches'))).toEqual(['tftMatches:0'])
+    expect(sent.tftMatches).toEqual([])
+    expect(sent.matches.map((m) => m.matchId)).toEqual(['KR_1'])
+    expect(result).toMatchObject({ ok: true, matches: 1, matchesFailed: 0, tftLeftBehind: 2 })
+    // The bar counts what is going up.
+    expect([...totals]).toEqual([1])
+  })
+
+  it('does not ask whether a server takes TFT when the file has none to send', async () => {
+    const db = fakeDb({ accounts: ACCOUNTS, matches: [{ match_id: 'KR_1', raw_json: '{}', game_creation: 5 }] })
+    const { target, calls } = recordingTarget({ noTft: true })
+
+    const result = await importStatsDb(db, target, () => {})
+
+    expect(calls.some((call) => call.startsWith('tftMatches'))).toBe(false)
+    expect(result).toMatchObject({ ok: true, tftLeftBehind: 0 })
   })
 
   it('pages matches so a year of history is a few dozen requests rather than one enormous one', async () => {

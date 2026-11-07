@@ -305,6 +305,15 @@ export interface ConnectionState {
    * mode and from a server too old to say.
    */
   publicAccess: boolean
+  /**
+   * The games on offer, League first: what a League | TFT switch offers and
+   * whether a TFT page exists at all.
+   *
+   * A server's are its own to say, and League alone unless its host turned TFT
+   * on — or from a server older than TFT. Every game in local-only mode, where
+   * this machine's own key decides what it can reach.
+   */
+  games: GameId[]
   /** The server's own Riot key has been refused — the host's to fix, not the reader's. */
   riotKeyRejected: boolean
   /** Set when the server refused this client outright, with the version it wants. */

@@ -38,18 +38,19 @@ public sealed record RankReadingResponse(bool Recorded);
 
 internal sealed class RecordRankReadingRequestValidator : AbstractValidator<RecordRankReadingRequest>
 {
-    public RecordRankReadingRequestValidator()
+    public RecordRankReadingRequestValidator(ServerGames games)
     {
         ClassLevelCascadeMode = CascadeMode.Stop;
 
-        // Any game's ladder: the League client reports TFT's ladders beside
-        // League's, and the queue type alone says which game a reading is of.
+        // Any offered game's ladder: the League client reports TFT's ladders
+        // beside League's, and the queue type alone says which game a reading
+        // is of. A server with TFT off tracks none of TFT's.
         RuleFor(x => x.QueueType)
-            .Must(queue => RankedQueues.FromRiotName(queue) is not null)
+            .Must(queue => RankedQueues.FromRiotName(queue) is { } ladder && games.Offers(ladder.Game()))
             .WithErrorCode("unknown_queue")
             .WithMessage(x => $"{x.QueueType} is not a ranked queue this server tracks.");
 
-        RuleFor(x => x.Game).MustNameAGame();
+        RuleFor(x => x.Game).MustNameAGame(games);
 
         // A game named alongside it must agree, or one of the two is wrong.
         RuleFor(x => x)

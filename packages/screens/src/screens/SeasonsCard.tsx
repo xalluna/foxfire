@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { GAMES, GAME_IDS, type GameId } from '@foxfire/core'
+import { GAMES, type GameId } from '@foxfire/core'
 import { Segmented, SeasonsEditor } from '@foxfire/ui'
 import { useClient } from '../client/context'
+import { useGames } from '../client/useConnection'
 import { invalidationsFor } from '../queries/invalidations'
 import { queryKeys } from '../queries/keys'
 
@@ -14,12 +15,16 @@ import { queryKeys } from '../queries/keys'
  * server only an admin may save one, and the server is the one that says so.
  *
  * One game's list at a time, picked at the top: League's seasons and TFT's sets
- * start on different days, and saving one never touches the other.
+ * start on different days, and saving one never touches the other. No picker
+ * where League is the only game on offer — a server whose host has not turned
+ * TFT on has no sets to keep.
  */
 export function SeasonsCard(): JSX.Element {
   const client = useClient()
   const queryClient = useQueryClient()
-  const [game, setGame] = useState<GameId>('lol')
+  const offered = useGames() ?? ['lol']
+  const [picked, setGame] = useState<GameId>('lol')
+  const game = offered.includes(picked) ? picked : 'lol'
 
   const seasons = useQuery({
     queryKey: queryKeys.seasons(game),
@@ -33,12 +38,14 @@ export function SeasonsCard(): JSX.Element {
       key={game}
       game={game}
       picker={
-        <Segmented
-          options={GAME_IDS.map((id): [GameId, string] => [id, GAMES[id].shortName])}
-          value={game}
-          onChange={setGame}
-          size="sm"
-        />
+        offered.length > 1 ? (
+          <Segmented
+            options={offered.map((id): [GameId, string] => [id, GAMES[id].shortName])}
+            value={game}
+            onChange={setGame}
+            size="sm"
+          />
+        ) : undefined
       }
       seasons={seasons.data}
       onSave={async (next) => {

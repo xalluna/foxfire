@@ -36,6 +36,7 @@ builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminO
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
 builder.Services.Configure<LogOptions>(builder.Configuration.GetSection(LogOptions.Section));
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.Section));
+builder.Services.Configure<TftOptions>(builder.Configuration.GetSection(TftOptions.Section));
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new();
 var riotOptions = builder.Configuration.GetSection(RiotOptions.Section).Get<RiotOptions>() ?? new();
@@ -256,7 +257,10 @@ builder.Services.AddSingleton(sp => new RiotClient(
 // and otherwise the main key through the main queue — where a 403 from a TFT
 // endpoint means "this key has no TFT", not "this key is dead". The main
 // RiotClient and RiotRateLimiter are registered exactly as they were, so
-// nothing that injects them changes.
+// nothing that injects them changes. TFT's client is registered whether or not
+// the server offers TFT (ServerGames, from Tft__Enabled), so nothing that
+// injects it has to ask; with TFT off, nothing calls it.
+builder.Services.AddSingleton<ServerGames>();
 builder.Services.AddSingleton<TftAccess>();
 builder.Services.AddSingleton(sp =>
 {
@@ -377,7 +381,16 @@ api.MapRiotLinkEndpoints();
 api.MapSyncEndpoints();
 api.MapDashboardEndpoints();
 api.MapRankEndpoints();
-api.MapTftEndpoints();
+
+// Only on a server that offers TFT — see Common/GameParam.cs. Without it TFT's
+// routes fall through to the JSON 404 below, as YouTube's do in a build
+// without them, and no client connected here asks for them: /version says.
+var games = app.Services.GetRequiredService<ServerGames>();
+if (games.Tft)
+{
+    api.MapTftEndpoints();
+}
+
 api.MapSearchEndpoints();
 api.MapShareLinkEndpoints();
 api.MapReplayEndpoints();
@@ -543,26 +556,41 @@ _ = Task.Run(async () =>
 });
 
 // The same for TFT, whose answer is a different question: not whether the key
-// works, but whether it reaches TFT at all.
-_ = Task.Run(async () =>
+// works, but whether it reaches TFT at all. Not asked on a server that does
+// not offer TFT, which asks Riot nothing about it.
+if (games.Tft)
 {
-    var tft = app.Services.GetRequiredService<TftRiot>();
-    var access = app.Services.GetRequiredService<TftAccess>();
-    var reached = await tft.Client.ValidateTftAccessAsync(app.Lifetime.ApplicationStopping);
+    _ = Task.Run(async () =>
+    {
+        var tft = app.Services.GetRequiredService<TftRiot>();
+        var access = app.Services.GetRequiredService<TftAccess>();
+        var reached = await tft.Client.ValidateTftAccessAsync(app.Lifetime.ApplicationStopping);
 
-    if (reached is true)
-    {
-        access.Grant();
-        startup.LogInformation(
-            tft.HasOwnKey ? "Riot accepted this server's TFT key." : "This server's Riot key reaches TFT.");
-    }
-    else if (reached is false)
-    {
-        access.Deny(tft.HasOwnKey
-            ? "Riot rejected this server's TFT key."
-            : "This server's Riot key has no TFT access. Set Riot__Tft__ApiKey to a key registered for TFT.");
-    }
-});
+        if (reached is true)
+        {
+            access.Grant();
+            startup.LogInformation(
+                tft.HasOwnKey ? "Riot accepted this server's TFT key." : "This server's Riot key reaches TFT.");
+        }
+        else if (reached is false)
+        {
+            access.Deny(tft.HasOwnKey
+                ? "Riot rejected this server's TFT key."
+                : "This server's Riot key has no TFT access. Set Riot__Tft__ApiKey to a key registered for TFT.");
+        }
+    });
+}
+else if (app.Services.GetRequiredService<IConfiguration>()
+    .GetSection($"{RiotOptions.Section}:Tft").Get<TftRiotOptions>() is { IsSet: true })
+{
+    // A key nothing will use is a host who meant TFT to be on.
+    startup.LogWarning(
+        "Riot__Tft__ApiKey is set, but TFT is off, so the key is not used. Set Tft__Enabled=true to offer TFT.");
+}
+else
+{
+    startup.LogInformation("TFT is off. Set Tft__Enabled=true to offer it.");
+}
 
 await app.RunAsync();
 

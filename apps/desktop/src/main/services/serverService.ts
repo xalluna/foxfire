@@ -1,5 +1,14 @@
 import { app } from 'electron'
-import type { AccountEmail, AccountEmailResult, AdminActionResult, SessionUser, ShareLink } from '@foxfire/core'
+import {
+  GAME_IDS,
+  offeredGames,
+  type AccountEmail,
+  type AccountEmailResult,
+  type AdminActionResult,
+  type GameId,
+  type SessionUser,
+  type ShareLink
+} from '@foxfire/core'
 import {
   ServerError,
   createServerApi,
@@ -95,6 +104,13 @@ interface StoredServer {
    * does. Read when the publicUrl is, and kept current by an admin's own switch.
    */
   publicAccess?: boolean | null
+
+  /**
+   * The games the server offers, League first — League alone unless its host
+   * turned TFT on. Read when the publicUrl is. Absent from a row an older
+   * build wrote, which reads as League alone until the next handshake says.
+   */
+  games?: GameId[] | null
 }
 
 /**
@@ -280,6 +296,16 @@ export function isServerMode(): boolean {
   return activeUrl !== null && session !== null
 }
 
+/**
+ * Whether a game is to be asked about wherever the data lives now: always in
+ * local-only mode, where this machine's own key decides what it can reach, and
+ * on a server only when that server offers it. A server whose host has not
+ * turned TFT on refuses every TFT request, so none is made.
+ */
+export function offersGame(game: GameId): boolean {
+  return !isServerMode() || getServerState().games.includes(game)
+}
+
 export function getServerState(): ServerState {
   const active = readActive()
   const known = readKnown()
@@ -313,6 +339,7 @@ export function getServerState(): ServerState {
     session,
     publicUrl: activeServer?.publicUrl ?? null,
     publicAccess: activeServer?.publicAccess ?? false,
+    games: activeServer ? offeredGames(activeServer.games) : [...GAME_IDS],
     upgradeRequired: active ? upgradeRequired : null,
     serverOutdated: active ? serverOutdated : false,
     riotKeyRejected: active ? riotKeyRejected : false
@@ -383,12 +410,20 @@ export async function refreshServerInfo(): Promise<void> {
 
   const name = probed.serverName ?? stored.name
   const publicAccess = probed.publicAccess ?? false
-  if (stored.publicUrl === probed.publicUrl && stored.name === name && (stored.publicAccess ?? false) === publicAccess) {
+  // A host turns TFT on or off with a restart, which this hears as the push
+  // channel connecting again.
+  const games = probed.games ?? offeredGames(stored.games)
+  if (
+    stored.publicUrl === probed.publicUrl &&
+    stored.name === name &&
+    (stored.publicAccess ?? false) === publicAccess &&
+    offeredGames(stored.games).join() === games.join()
+  ) {
     return
   }
 
   writeKnown(
-    readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl, publicAccess } : s))
+    readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl, publicAccess, games } : s))
   )
   announce()
 }
@@ -493,6 +528,7 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
       publicUrl: null,
       email: null,
       publicAccess: null,
+      games: null,
       compatibility: 'unknown'
     }
   }
@@ -576,7 +612,8 @@ async function authenticate(
       isAdmin: user.isAdmin,
       isHeadAdmin: user.isHeadAdmin ?? false,
       publicUrl: probed.publicUrl,
-      publicAccess: probed.publicAccess
+      publicAccess: probed.publicAccess,
+      games: probed.games
     })
 
     writeKnown(known)

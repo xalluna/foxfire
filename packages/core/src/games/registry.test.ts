@@ -4,6 +4,7 @@ import {
   GAME_IDS,
   gameOfLiveSession,
   gameOfQueueId,
+  offeredGames,
   parseGameId,
   queueDefinition,
   queueFolder
@@ -70,6 +71,18 @@ describe('the registry', () => {
     expect(GAMES.tft.bindGiveUpMs).toBeGreaterThan(GAMES.lol.bindGiveUpMs)
     const total = (ms: readonly number[]) => ms.reduce((a, b) => a + b, 0)
     expect(total(GAMES.tft.postGameRetryMs)).toBeGreaterThan(total(GAMES.lol.postGameRetryMs))
+  })
+
+  it('reads the games a server offers as League first, and League alone when it lists none', () => {
+    expect(offeredGames(['lol', 'tft'])).toEqual(['lol', 'tft'])
+    expect(offeredGames(['tft', 'lol'])).toEqual(['lol', 'tft'])
+    // TFT off, and a server from before TFT.
+    expect(offeredGames(['lol'])).toEqual(['lol'])
+    expect(offeredGames(undefined)).toEqual(['lol'])
+    expect(offeredGames(null)).toEqual(['lol'])
+    // A game this build has never heard of is not offered, and League is never left out.
+    expect(offeredGames(['valorant'])).toEqual(['lol'])
+    expect(offeredGames([])).toEqual(['lol'])
   })
 })
 

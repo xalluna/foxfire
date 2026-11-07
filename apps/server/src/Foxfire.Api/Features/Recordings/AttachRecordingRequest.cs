@@ -82,6 +82,7 @@ internal sealed class AttachRecordingRequestHandler(
     IIdentityContext me,
     AccountOwnership ownership,
     TftIdentity tftIdentity,
+    ServerGames games,
     IServerEvents events,
     TimeProvider time,
     ILogger<AttachRecordingRequestHandler> logger)
@@ -107,8 +108,8 @@ internal sealed class AttachRecordingRequestHandler(
 
         // On either game's board: League's by the account's puuid, TFT's by
         // its puuid under TFT's key, which is the same one unless the server
-        // has a TFT key of its own.
-        var tftPuuid = await tftIdentity.KnownPuuidAsync(account, cancellationToken);
+        // has a TFT key of its own. TFT's only while this server offers it.
+        var tftPuuid = games.Tft ? await tftIdentity.KnownPuuidAsync(account, cancellationToken) : null;
 
         var played = await db.MatchParticipants
                 .AnyAsync(p => p.MatchId == request.MatchId && p.Puuid == account.Puuid, cancellationToken)

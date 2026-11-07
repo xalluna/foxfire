@@ -13,12 +13,20 @@ commit, and there is no `[Unreleased]` section.
 
 ## [0.6.0] — 2026-11-03
 
-Teamfight Tactics, beside League. The server syncs every account's TFT — history, boards, its three
-ladders and the LP each game moved — on its Riot key or one of TFT's own, and the web client gains a
-TFT profile and rank page for every player. Everything League had stays as it was: the API is
-version 3 still, and a desktop from before TFT is served as it always was.
+Teamfight Tactics, beside League, for a host who turns it on. The server syncs every account's TFT —
+history, boards, its three ladders and the LP each game moved — on its Riot key or one of TFT's own,
+and the web client gains a TFT profile and rank page for every player. Everything League had stays
+as it was: the API is version 3 still, and a desktop from before TFT is served as it always was.
 
 ### Added
+
+- **TFT is the host's to turn on.** Set `TFT_ENABLED=true` in the server's `.env` and restart to
+  offer it. Until then the server is the League server it was: it asks Riot nothing about TFT, and
+  nobody connected to it — in a browser or on the desktop — is offered TFT at all. There is no
+  League | TFT switch, no TFT pages, seasons or backfill target. TFT needs a Riot key registered for
+  it, and a personal key is registered for one product, so most servers have no TFT to offer.
+  Turning it on later needs no migration, and each account's TFT history fills in from its next
+  sync. A link to somebody's TFT profile on a server without TFT opens their League profile.
 
 - **A TFT profile for every player, in the web client.** `/players/{name}/tft`,
   reached by a League | TFT switch beside a player's tabs: a card for each of
@@ -256,6 +264,18 @@ version 3 still, and a desktop from before TFT is served as it always was.
   failing — a League-only server is a healthy one, and its log should not say
   otherwise for every account at every launch. Both settings are in
   docker-compose and `.env.example`.
+- All of that only with `Tft__Enabled` (`TFT_ENABLED` in docker-compose), read
+  once at startup and off by default. `/version` lists the games the server
+  offers as `games` — `["lol"]` with TFT off, which is also what its absence
+  from an older server means — and both clients read their League | TFT
+  choices from it. Off, the routes under `/api/riot-accounts/{id}/tft` and
+  `/api/admin/import/tft-matches` are not mapped and fall to the API's JSON
+  404, a request naming TFT (`?game=tft`, a TFT ladder's rank reading) is
+  refused as `unknown_game` or `unknown_queue`, the boot probe, syncs, sweeps
+  and post-game ladders leave TFT alone, `/health` says `tftAccess: "off"`, and
+  an import leaves a file's TFT games, sets and readings behind and says how
+  many games. A TFT key set while TFT is off is a warning at boot. What was
+  stored while TFT was on stays in the database, unread.
 - Syncs are per account and per game. A TFT sync fetches TFT's games and
   boards, reads TFT's ladders (Hyper Roll's colour and rating included),
   attributes LP and syncs co-players, on its own sync state, its own cooldown

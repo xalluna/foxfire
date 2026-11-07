@@ -25,7 +25,7 @@ public sealed record ImportSeason(string Label, long StartsAt, bool IsPreseason,
 public sealed record ImportSeasonsRequest(IReadOnlyList<ImportSeason> Seasons)
     : IDomainRequest<ImportBatchResult>;
 
-internal sealed class ImportSeasonsRequestHandler(FoxfireDbContext db)
+internal sealed class ImportSeasonsRequestHandler(FoxfireDbContext db, ServerGames games)
     : IDomainRequestHandler<ImportSeasonsRequest, ImportBatchResult>
 {
     public async Task<Response<ImportBatchResult>> Handle(
@@ -41,8 +41,8 @@ internal sealed class ImportSeasonsRequestHandler(FoxfireDbContext db)
         // Matched within a game: League's season and a TFT set can open on
         // the same day and are not the same boundary. A season that names no
         // game is League's, which is all a stats.db from before TFT holds; one
-        // naming a game this server does not know is skipped rather than
-        // filed as League's.
+        // naming a game this server does not offer — one it has never heard
+        // of, or TFT with TFT off — is skipped rather than filed as League's.
         var existing = await db.Seasons
             .Select(s => new { s.Game, s.StartsAt })
             .ToListAsync(cancellationToken);
@@ -52,7 +52,7 @@ internal sealed class ImportSeasonsRequestHandler(FoxfireDbContext db)
 
         foreach (var incoming in request.Seasons)
         {
-            if (!GameParam.IsValid(incoming.Game)) continue;
+            if (!games.Offers(incoming.Game)) continue;
             var game = GameParam.Parse(incoming.Game);
             if (!known.Add((game, incoming.StartsAt))) continue;
 

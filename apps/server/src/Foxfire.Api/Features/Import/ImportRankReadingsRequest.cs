@@ -37,7 +37,7 @@ public sealed record ImportRankReadingsRequest(IReadOnlyList<ImportRankReading> 
 
 internal sealed class ImportRankReadingsRequestValidator : ImportBatchValidator<ImportRankReadingsRequest>;
 
-internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
+internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db, ServerGames games)
     : IValidatedRequestHandler<ImportRankReadingsRequest, ImportBatchResult>
 {
     public async Task<Response<ImportBatchResult>> Handle(
@@ -66,9 +66,11 @@ internal sealed class ImportRankReadingsRequestHandler(FoxfireDbContext db)
                 continue;
             }
 
-            // Any game's ladder: a stats.db from a desktop that tracked TFT
-            // holds TFT's readings beside League's, under the same account.
-            if (RankedQueues.FromRiotName(incoming.QueueType) is not { } queue)
+            // Any offered game's ladder: a stats.db from a desktop that tracked
+            // TFT holds TFT's readings beside League's, under the same account.
+            // With TFT off here they are left behind, and an import run again
+            // once it is on brings them across.
+            if (RankedQueues.FromRiotName(incoming.QueueType) is not { } queue || !games.Offers(queue.Game()))
             {
                 unplaced++;
                 continue;

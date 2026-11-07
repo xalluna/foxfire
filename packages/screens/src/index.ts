@@ -22,7 +22,14 @@ export {
   type Platform,
   type RecordingTarget
 } from './client/context'
-export { useConnection, useIsHeadAdmin, useIsServerAdmin, useViewer } from './client/useConnection'
+export {
+  useConnection,
+  useGames,
+  useIsHeadAdmin,
+  useIsServerAdmin,
+  useOffersGame,
+  useViewer
+} from './client/useConnection'
 export { useShareLink, type ShareLink } from './client/useShareLink'
 export { useDataEvents } from './client/useDataEvents'
 

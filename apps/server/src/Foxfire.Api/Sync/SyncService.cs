@@ -1,3 +1,4 @@
+using Foxfire.Api.Common;
 using Foxfire.Api.Services;
 using Foxfire.Api.Telemetry;
 using Foxfire.Core;
@@ -44,6 +45,7 @@ public sealed partial class SyncService(
     IServerEvents events,
     ServerMetrics metrics,
     RecentSyncs recent,
+    ServerGames games,
     TimeProvider time,
     ILogger<SyncService> log)
 {
@@ -104,6 +106,10 @@ public sealed partial class SyncService(
     /// Syncs one game's history for an account. Each game's runs are joined and
     /// tracked on their own: a TFT backfill holds up nobody's League sync, and a
     /// League post-game ladder never spends TFT calls.
+    ///
+    /// A game this server does not offer is a run that finds nothing, without
+    /// asking Riot. Every route that names one has refused it already; this is
+    /// the floor under them, for anything inside the server that asks anyway.
     /// </summary>
     public Task<SyncResult> SyncAsync(
         Guid riotAccountId,
@@ -111,6 +117,8 @@ public sealed partial class SyncService(
         SyncTrigger trigger,
         CancellationToken cancellationToken = default)
     {
+        if (!games.Offers(game)) return Task.FromResult(new SyncResult(0, 0));
+
         Task<SyncResult> run;
         var key = (riotAccountId, game);
 

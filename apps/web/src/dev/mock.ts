@@ -8,6 +8,7 @@ import type {
   ShareLinkOpen,
   VersionInfo
 } from '@foxfire/core'
+import { offeredGames } from '@foxfire/core'
 import { ServerError } from '@foxfire/core/server'
 import { isPlayer, paths, rankQueueParam } from '@foxfire/core/routes'
 import type { Platform, RecordingTarget } from '@foxfire/screens'
@@ -74,7 +75,9 @@ const VERSION: VersionInfo = {
   // ?scenario=email-off is a server with no provider: no "Forgot password?".
   // So is ?scenario=server-fresh, which has not set one up yet.
   email: scenario !== 'email-off' && scenario !== 'server-fresh',
-  publicAccess: PUBLIC_ACCESS
+  publicAccess: PUBLIC_ACCESS,
+  // ?scenario=tft-off is a server whose host has not turned TFT on.
+  games: scenario === 'tft-off' ? ['lol'] : ['lol', 'tft']
 }
 
 /** What the server says a share link refused to an outsider looks like. */
@@ -94,6 +97,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
         ? { username: user.username, email: user.email, isAdmin: user.isAdmin, isHeadAdmin: user.isHeadAdmin ?? false }
         : null,
       publicAccess: PUBLIC_ACCESS,
+      games: offeredGames(VERSION.games),
       riotKeyRejected: false,
       upgradeRequired: null
     }

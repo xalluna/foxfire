@@ -3,7 +3,7 @@ import { getAccountById, getAccountByRiotId } from '../db/repositories/accounts.
 import { recordRankSnapshot } from '../services/rankHistoryService'
 import { refreshRank, refreshTftRank } from '../services/accountService'
 import { schedulePostGameSync } from '../services/postGameSync'
-import { authedRequest, isServerMode } from '../services/serverService'
+import { authedRequest, isServerMode, offersGame } from '../services/serverService'
 import { startAllSyncs } from '../services/syncService'
 import { resolveTftPuuid } from '../services/tftIdentity'
 import { LADDERS, type GameId } from '@foxfire/core'
@@ -107,6 +107,10 @@ const serverReporting: LcuReporting = {
   },
 
   recordRank: async (accountId, reading, force) => {
+    // A ladder of a game the server does not offer — TFT's, where its host has
+    // not turned TFT on — is not filed anywhere, rather than sent to be refused.
+    if (!offersGame(LADDERS[reading.queueType].game)) return false
+
     // The server says whether it filed the reading rather than leaving it to a
     // status code, because the watcher acts on the answer exactly as it does on
     // the local path's: a forced reading that was written is what clears its
@@ -134,6 +138,9 @@ const serverReporting: LcuReporting = {
   },
 
   gameEnded: async (accountId, game = 'lol') => {
+    // Nothing to look for in a game the server does not offer.
+    if (!offersGame(game)) return
+
     // The retry ladder belongs to the server: it has to keep running after this
     // laptop closes, and two people who were in the same game must not both
     // walk it. A game named nothing is League's to a server, as it always was.
@@ -166,10 +173,11 @@ export async function startSyncFor(accountId: string): Promise<void> {
   if (isServerMode()) {
     // Each game asked on its own. One after the other, League's refused —
     // synced under two minutes ago, which a restart after a game often is —
-    // meant TFT's was never asked for at all.
+    // meant TFT's was never asked for at all. TFT's only where the server
+    // offers it.
     const asked = await Promise.allSettled([
       authedRequest<void>(`/sync/${accountId}`, { method: 'POST' }),
-      authedRequest<void>(`/sync/${accountId}?game=tft`, { method: 'POST' })
+      ...(offersGame('tft') ? [authedRequest<void>(`/sync/${accountId}?game=tft`, { method: 'POST' })] : [])
     ])
     const refused = asked.find((result): result is PromiseRejectedResult => result.status === 'rejected')
     if (refused) throw refused.reason
