@@ -8,8 +8,8 @@
 export { createFixtureClient, runFixtureImport, type FixtureClientOptions } from './fixtureClient'
 export { KEY_EXPIRED, MOCK_SERVER_URL, delay, fail, scenario, type Scenario } from './scenario'
 export { DEV_SEASONS } from './seasons'
-export { createFakeYouTubeMount } from './fakeYouTube'
-export { FIXTURE_VIDEO_ID, fixtureDescription, fixtureEvents, fixtureRecording } from './recordings'
+export { createFakeMediaMount } from './fakeMedia'
+export { FIXTURE_VIDEO_ID, fixtureEvents, fixtureRecording, fixtureTitle } from './recordings'
 export { DDRAGON_MANIFEST } from './ddragonManifest'
 export { C, DAY, HOUR, NOW, detailFor, perks, type Keystone } from './catalog'
 export {

@@ -92,6 +92,7 @@ export function createServerClient(options: ServerClientOptions): ServerClient {
         : null,
       publicAccess: version?.publicAccess ?? false,
       games: offeredGames(version?.games),
+      recordings: version?.recordings ?? false,
       riotKeyRejected,
       upgradeRequired: upgradeRequired ? 'reload' : null
     }

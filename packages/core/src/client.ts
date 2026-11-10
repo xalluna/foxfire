@@ -10,8 +10,6 @@ import type {
   AdminUserPatch,
   AdminUserQuery,
   AssetManifest,
-  AttachRecordingInput,
-  AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
@@ -29,6 +27,9 @@ import type {
   MasteryData,
   MatchDetail,
   MatchRecording,
+  RecordingEmbed,
+  RecordingUploadInput,
+  RecordingUploadOutcome,
   MatchSummary,
   Page,
   PageOptions,
@@ -233,24 +234,25 @@ export interface FoxfireData {
     refresh: (seen: PlayerSearchResult[]) => Promise<FavoritePlayer[]>
   }
   /**
-   * The YouTube recordings a server holds, one per game per account.
+   * The recordings a server holds on its Foxfire Media, one per game per account.
    *
    * Keyed by the pair on purpose: a recording is one player's screen, so the
    * account whose history is open is part of the question. Only that account's
-   * owner can attach one; its owner or an admin can take it off again, which
-   * never touches the video on YouTube.
+   * owner can upload one; its owner or an admin can take it off again, which
+   * deletes the video.
    *
-   * Optional because local-only has no server to hold one. There, a recording
-   * that went to YouTube keeps its video on the desktop's own recording row.
+   * Optional because local-only has no server to hold one, and a server
+   * without Foxfire Media holds none either (`ConnectionState.recordings`).
    */
   matchRecordings?: {
     get: (accountId: string, matchId: string) => Promise<MatchRecording | null>
-    attach: (
+    upload: (
       accountId: string,
       matchId: string,
-      input: AttachRecordingInput
-    ) => Promise<AttachRecordingOutcome>
-    detach: (accountId: string, matchId: string) => Promise<AdminActionResult>
+      input: RecordingUploadInput
+    ) => Promise<RecordingUploadOutcome>
+    embed: (accountId: string, matchId: string) => Promise<RecordingEmbed>
+    remove: (accountId: string, matchId: string) => Promise<AdminActionResult>
   }
 }
 
@@ -314,6 +316,12 @@ export interface ConnectionState {
    * this machine's own key decides what it can reach.
    */
   games: GameId[]
+  /**
+   * Whether the server keeps recordings, on its Foxfire Media: what decides
+   * whether a row offers uploading or watching one. False in local-only mode,
+   * where there is no server to keep them, and from a server without it.
+   */
+  recordings: boolean
   /** The server's own Riot key has been refused — the host's to fix, not the reader's. */
   riotKeyRejected: boolean
   /** Set when the server refused this client outright, with the version it wants. */

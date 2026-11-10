@@ -1,15 +1,13 @@
-import type { MatchRecording, MatchSummary, RecordingEvent } from '@foxfire/core'
-import { buildRecordingDescription, renderRecordingTitle, DEFAULT_TITLE_TEMPLATE } from '@foxfire/core/youtube'
-import { scenario } from './scenario'
+import type { MatchRecording, MatchSummary, RecordingEvent, RecordingStatus } from '@foxfire/core'
+import { renderRecordingTitle, DEFAULT_TITLE_TEMPLATE } from '@foxfire/core/recordings'
 
 /**
- * Recordings on YouTube, for the harness.
+ * Recordings on the server, for the harness.
  *
- * A real, embeddable video id — Blender's Big Buck Bunny — so pointing a real
- * YouTube mount at the fixtures plays something. The harness's own mount never
- * reaches YouTube at all.
+ * Foxfire Media's ids are eleven characters; this one only ever reaches the
+ * harness's own stand-in player.
  */
-export const FIXTURE_VIDEO_ID = 'aqz-KE-bpKQ'
+export const FIXTURE_VIDEO_ID = 'fixtureVid1'
 
 const VICTIMS = ['Zed', 'Syndra', 'LeBlanc', 'Orianna', 'Yasuo', 'Akali', 'Sylas', 'Azir']
 
@@ -58,10 +56,9 @@ export function fixtureEvents(match: MatchSummary): RecordingEvent[] {
   return events.sort((a, b) => a.videoTime - b.videoTime)
 }
 
-/** A recording as the server would hold it, for one of the fixture rows. */
-export function fixtureRecording(match: MatchSummary, source: 'upload' | 'link'): MatchRecording {
-  const events = source === 'upload' ? fixtureEvents(match) : []
-  const title = renderRecordingTitle(DEFAULT_TITLE_TEMPLATE, {
+/** The title the upload queue would give a fixture row. */
+export function fixtureTitle(match: MatchSummary): string {
+  return renderRecordingTitle(DEFAULT_TITLE_TEMPLATE, {
     champion: match.championName ?? 'Viktor',
     queueId: match.queueId,
     gameMode: match.gameMode,
@@ -71,21 +68,21 @@ export function fixtureRecording(match: MatchSummary, source: 'upload' | 'link')
     assists: match.assists,
     playedAt: match.gameCreation
   })
-
-  return {
-    youtubeVideoId: FIXTURE_VIDEO_ID,
-    privacy: source === 'link' ? null : scenario === 'recording-private' ? 'private' : 'unlisted',
-    hasEvents: source === 'upload',
-    title,
-    durationSeconds: match.gameDuration - 30,
-    source,
-    attachedBy: 'Faker',
-    attachedAt: new Date(match.gameCreation + match.gameDuration * 1000 + 20 * 60_000).toISOString(),
-    events
-  }
 }
 
-/** The description the upload form would prefill for a fixture row, for the desktop's mock. */
-export function fixtureDescription(match: MatchSummary): string {
-  return buildRecordingDescription(fixtureEvents(match))
+/** A recording as the server would hold it, for one of the fixture rows. */
+export function fixtureRecording(match: MatchSummary, status: RecordingStatus = 'ready'): MatchRecording {
+  const uploadedAt = match.gameCreation + match.gameDuration * 1000 + 20 * 60_000
+  return {
+    videoId: FIXTURE_VIDEO_ID,
+    status,
+    hasEvents: true,
+    durationSeconds: status === 'ready' ? match.gameDuration - 30 : null,
+    title: fixtureTitle(match),
+    error: status === 'failed' ? 'The file has no video stream.' : null,
+    attachedBy: 'Faker',
+    attachedAt: new Date(uploadedAt).toISOString(),
+    readyAt: status === 'ready' ? new Date(uploadedAt + 4 * 60_000).toISOString() : null,
+    events: fixtureEvents(match)
+  }
 }

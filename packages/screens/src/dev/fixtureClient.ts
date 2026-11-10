@@ -8,8 +8,6 @@ import type {
   AdminUserPatch,
   AdminUserQuery,
   AssetManifest,
-  AttachRecordingInput,
-  AttachRecordingOutcome,
   ChampionStats,
   ConnectionState,
   DashboardData,
@@ -21,6 +19,10 @@ import type {
   MatchDetail,
   MatchRecording,
   MatchSummary,
+  RecordingEmbed,
+  RecordingStatus,
+  RecordingUploadInput,
+  RecordingUploadOutcome,
   Page,
   PageOptions,
   PlayerSearchResult,
@@ -56,6 +58,7 @@ import {
 import { favoritesOver } from '@foxfire/core/server'
 import { isPlayer } from '@foxfire/core/routes'
 import { DEV_SEASONS } from './seasons'
+import { FIXTURE_VIDEO_ID } from './recordings'
 import { DDRAGON_MANIFEST } from './ddragonManifest'
 import { TFT_MANIFEST } from './tftManifest'
 import {
@@ -123,7 +126,7 @@ const connectionListeners = new Set<(state: ConnectionState) => void>()
 const recordingListeners = new Set<(event: { accountId: string; matchId: string }) => void>()
 
 /**
- * What the harness's server holds on YouTube, as it changes this session.
+ * What the harness's server holds of recordings, as it changes this session.
  *
  * Keyed `account:match` because a recording is one player's view of a game —
  * the same match under the other account is a different key with, here,
@@ -142,7 +145,12 @@ function withRecording(accountId: string, match: MatchSummary): MatchSummary {
   return {
     ...match,
     recording: recording
-      ? { youtubeVideoId: recording.youtubeVideoId, privacy: recording.privacy, hasEvents: recording.hasEvents }
+      ? {
+          videoId: recording.videoId,
+          status: recording.status,
+          hasEvents: recording.hasEvents,
+          durationSeconds: recording.durationSeconds
+        }
       : null
   }
 }
@@ -280,6 +288,7 @@ function runFakeSync(accountId: string, game: GameId = 'lol'): void {
  * past this client.
  */
 const games: GameId[] = scenario === 'tft-off' ? ['lol'] : [...GAME_IDS]
+const keepsRecordings = scenario !== 'media-off'
 
 const connection: ConnectionState =
   scenario === 'server-connected' ||
@@ -292,7 +301,12 @@ const connection: ConnectionState =
   scenario === 'email-change-pending' ||
   scenario === 'admin-email-pinned' ||
   scenario === 'signup-unchosen' ||
-  scenario === 'tft-off'
+  scenario === 'tft-off' ||
+  scenario === 'media-queue' ||
+  scenario === 'media-backlog' ||
+  scenario === 'media-off' ||
+  scenario === 'recording-failed' ||
+  scenario === 'recording-unplayable'
     ? {
         mode: 'server',
         publicUrl: MOCK_SERVER_URL,
@@ -300,6 +314,7 @@ const connection: ConnectionState =
         session: { username: 'Faker', email: 'faker@example.com', isAdmin: true, isHeadAdmin: true },
         publicAccess: false,
         games,
+        recordings: keepsRecordings,
         riotKeyRejected: scenario === 'server-degraded',
         upgradeRequired: null
       }
@@ -314,6 +329,7 @@ const connection: ConnectionState =
               : { username: 'phantomduval', email: 'duval@example.com', isAdmin: false, isHeadAdmin: false },
           publicAccess: false,
           games,
+          recordings: keepsRecordings,
           riotKeyRejected: false,
           upgradeRequired: null
         }
@@ -325,6 +341,7 @@ const connection: ConnectionState =
             session: { username: 'Faker', email: 'faker@example.com', isAdmin: false, isHeadAdmin: false },
             publicAccess: false,
             games,
+            recordings: keepsRecordings,
             riotKeyRejected: false,
             upgradeRequired: '0.14.0'
           }
@@ -337,6 +354,7 @@ const connection: ConnectionState =
               session: null,
               publicAccess: scenario === 'public-signed-out',
               games,
+              recordings: keepsRecordings,
               riotKeyRejected: false,
               upgradeRequired: null
             }
@@ -347,6 +365,7 @@ const connection: ConnectionState =
               session: null,
               publicAccess: false,
               games,
+              recordings: keepsRecordings,
               riotKeyRejected: false,
               upgradeRequired: null
             }
@@ -851,8 +870,11 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
         delay(recordings.get(recordingKey(accountId, matchId)) ?? null, 220),
 
       // The server's rules, so the harness refuses what it would: only the
-      // account's owner attaches, and a second one asks first.
-      attach: (accountId: string, matchId: string, input: AttachRecordingInput): Promise<AttachRecordingOutcome> => {
+      // account's owner uploads, and a second one asks first. Nothing is sent
+      // anywhere — the ticket points at nowhere and the row goes straight to
+      // processing, then ready a few seconds later, so a screen can be watched
+      // moving through both.
+      upload: (accountId: string, matchId: string, input: RecordingUploadInput): Promise<RecordingUploadOutcome> => {
         const account = everyone().find((a) => a.id === accountId)
         if (account?.isMine === false) {
           return delay({ ok: false, reason: 'failed', message: 'That League account is not linked to your Foxfire account.' }, 300)
@@ -860,35 +882,76 @@ export function createFixtureClient(options: FixtureClientOptions = {}): Foxfire
 
         const key = recordingKey(accountId, matchId)
         const existing = recordings.get(key)
-        if (existing && !input.replace) {
+        if (existing && existing.status !== 'uploading' && existing.status !== 'upload_failed' && !input.replace) {
           return delay(
             {
               ok: false,
               reason: 'exists',
               message: existing.title
-                ? `This game already has a recording attached: “${existing.title}”.`
-                : 'This game already has a recording attached.'
+                ? `This game already has a recording on the server: “${existing.title}”.`
+                : 'This game already has a recording on the server.'
             },
             300
           )
         }
 
+        const settle = (status: RecordingStatus): void => {
+          const current = recordings.get(key)
+          if (!current) return
+          recordings.set(key, {
+            ...current,
+            status,
+            durationSeconds: status === 'ready' ? (input.durationSeconds ?? 1_800) : null,
+            readyAt: status === 'ready' ? new Date().toISOString() : null
+          })
+          notifyRecording(accountId, matchId)
+        }
+
         recordings.set(key, {
-          youtubeVideoId: input.youtubeVideoId,
-          privacy: input.privacy ?? null,
+          videoId: FIXTURE_VIDEO_ID,
+          status: 'uploading',
           hasEvents: input.events !== undefined,
-          title: input.title ?? null,
-          durationSeconds: input.durationSeconds ?? null,
-          source: input.source,
+          durationSeconds: null,
+          title: input.title,
+          error: null,
           attachedBy: 'Faker',
           attachedAt: new Date().toISOString(),
+          readyAt: null,
           events: input.events ?? []
         })
         notifyRecording(accountId, matchId)
-        return delay({ ok: true }, 300)
+        window.setTimeout(() => settle('processing'), 2_000)
+        window.setTimeout(() => settle('ready'), 6_000)
+
+        return delay(
+          {
+            ok: true,
+            ticket: {
+              videoId: FIXTURE_VIDEO_ID,
+              uploadUrl: 'https://media.invalid/uploads/tus',
+              uploadToken: 'fixture-token',
+              expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+              maxBytes: input.sizeBytes
+            }
+          },
+          300
+        )
       },
 
-      detach: (accountId: string, matchId: string): Promise<AdminActionResult> => {
+      embed: (accountId: string, matchId: string): Promise<RecordingEmbed> => {
+        const recording = recordings.get(recordingKey(accountId, matchId))
+        if (recording?.status !== 'ready') return Promise.reject(new Error('This recording is not ready to watch yet.'))
+        return delay(
+          {
+            embedUrl: `https://media.invalid/embed/${recording.videoId}?controls=0`,
+            posterUrl: null,
+            expiresAt: new Date(Date.now() + 60 * 60_000).toISOString()
+          },
+          180
+        )
+      },
+
+      remove: (accountId: string, matchId: string): Promise<AdminActionResult> => {
         const removed = recordings.delete(recordingKey(accountId, matchId))
         if (removed) notifyRecording(accountId, matchId)
         return delay({ ok: removed, error: removed ? null : 'There is no recording on that game.' }, 250)

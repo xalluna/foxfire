@@ -38,6 +38,16 @@ namespace Foxfire.Api.Features.Meta;
 /// on (<see cref="ServerGames"/>). Missing from a server from before TFT,
 /// which means League alone.
 /// </param>
+/// <param name="Recordings">
+/// Whether this server keeps recordings — has Foxfire Media configured — and so
+/// whether a client offers uploading and watching them. Missing from a server
+/// from before it could, which means no.
+/// </param>
+/// <param name="MediaOrigin">
+/// Foxfire Media's origin, while <paramref name="Recordings"/> is on: where its
+/// player is framed from. The desktop needs it before it opens one, to let its
+/// own window frame it; it is in the web client's CSP anyway.
+/// </param>
 public sealed record VersionResponse(
     string ServerName,
     string ServerVersion,
@@ -49,7 +59,9 @@ public sealed record VersionResponse(
     string PublicUrl,
     bool Email,
     bool PublicAccess,
-    IReadOnlyList<string> Games);
+    IReadOnlyList<string> Games,
+    bool Recordings,
+    string? MediaOrigin);
 
 /// <summary>
 /// The handshake.
@@ -72,7 +84,8 @@ internal sealed class GetVersionRequestHandler(
     IOptions<ServerOptions> server,
     ServerSettingsService settings,
     ActiveEmailProvider email,
-    ServerGames games)
+    ServerGames games,
+    IOptions<MediaOptions> media)
     : IDomainRequestHandler<GetVersionRequest, VersionResponse>
 {
     public async Task<Response<VersionResponse>> Handle(
@@ -89,7 +102,9 @@ internal sealed class GetVersionRequestHandler(
             PublicUrl: server.Value.PublicUrl.TrimEnd('/'),
             Email: email.IsEnabled,
             PublicAccess: await settings.IsPublicAccessEnabledAsync(cancellationToken),
-            Games: [.. games.All.Select(game => game.Slug())]);
+            Games: [.. games.All.Select(game => game.Slug())],
+            Recordings: media.Value.IsEnabled,
+            MediaOrigin: media.Value.IsEnabled ? media.Value.Origin : null);
 }
 
 /// <summary>Whether the server can currently reach Riot, and how busy the queue is.</summary>

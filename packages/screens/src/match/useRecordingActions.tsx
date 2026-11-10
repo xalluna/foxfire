@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { Account, AttachRecordingOutcome, GameId } from '@foxfire/core'
-import { AttachLinkDialog, ConfirmDialog } from '@foxfire/ui'
+import type { Account, GameId } from '@foxfire/core'
+import { ConfirmDialog } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useConnection } from '../client/useConnection'
 import { queryKeys } from '../queries/keys'
@@ -11,26 +11,23 @@ import type { MatchMenuActions, MatchMenuContext } from './matchMenu'
 /** A row's game, as far as its recording goes. League's and TFT's rows are both one. */
 type RecordableMatch = RecordingTarget['match']
 
-type RecordingMenuActions = Pick<
-  MatchMenuActions,
-  'onWatchRecording' | 'onUploadRecording' | 'onAttachRecordingLink' | 'onDetachRecording'
->
+type RecordingMenuActions = Pick<MatchMenuActions, 'onWatchRecording' | 'onUploadRecording' | 'onDetachRecording'>
 
 /**
  * Everything a match row can do with a recording, for one account's history.
  *
  * Shared by the history and the page for a single game, because both offer
- * the same four things and both need the same two questions asked on the way:
- * which link to attach, and whether to really take a recording off. The
- * answers are always about the account whose history this is — the row's
- * player — which is what keeps somebody else's recording off it.
+ * the same three things and both need the same question asked on the way:
+ * whether to really take a recording off. The answers are always about the
+ * account whose history this is — the row's player — which is what keeps
+ * somebody else's recording off it.
  */
 export function useRecordingActions(
   account: Account,
   game: GameId = 'lol'
 ): {
   actionsFor: (match: RecordableMatch) => RecordingMenuActions
-  menuContext: Pick<MatchMenuContext, 'isAdmin' | 'serverMode'>
+  menuContext: Pick<MatchMenuContext, 'isAdmin'>
   dialogs: JSX.Element
 } {
   const client = useClient()
@@ -38,16 +35,15 @@ export function useRecordingActions(
   const queryClient = useQueryClient()
   const connection = useConnection()
 
-  const [attaching, setAttaching] = useState<RecordableMatch | null>(null)
   const [detaching, setDetaching] = useState<RecordableMatch | null>(null)
   const [detachBusy, setDetachBusy] = useState(false)
   const [detachError, setDetachError] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
-  // Attaching and removing are YouTube's, so only where YouTube plays: a client
-  // built without it has no player, and offers neither.
-  const youtube = platform.youtube !== undefined
-  const serverRecordings = youtube ? client.matchRecordings : undefined
-  const canAttach = youtube && (platform.attachRecordingLink !== undefined || serverRecordings !== undefined)
+  // Uploading and removing are the server's, so only where the server keeps
+  // recordings and this client has a player for them.
+  const recordings = connection?.recordings === true && platform.media !== undefined
+  const serverRecordings = recordings ? client.matchRecordings : undefined
 
   const refresh = (): void => {
     void queryClient.invalidateQueries({
@@ -55,14 +51,19 @@ export function useRecordingActions(
     })
   }
 
+  const upload = async (match: RecordableMatch): Promise<void> => {
+    const outcome = await platform.uploadRecording?.({ account, match, game })
+    if (!outcome) return
+    if (outcome.ok) refresh()
+    else setUploadError(outcome.message ?? 'The recording could not be queued.')
+  }
+
   const actionsFor = (match: RecordableMatch): RecordingMenuActions => ({
     onWatchRecording: platform.watchRecording
       ? () => platform.watchRecording?.({ account, match, game })
       : undefined,
-    onUploadRecording: platform.uploadRecording
-      ? () => platform.uploadRecording?.({ account, match, game })
-      : undefined,
-    onAttachRecordingLink: canAttach ? () => setAttaching(match) : undefined,
+    onUploadRecording:
+      recordings && platform.uploadRecording ? () => void upload(match) : undefined,
     onDetachRecording: serverRecordings
       ? () => {
           setDetachError(null)
@@ -71,29 +72,11 @@ export function useRecordingActions(
       : undefined
   })
 
-  /**
-   * The desktop's own recording first, because it carries the markers; the
-   * server directly when this machine has none of the game, as a browser
-   * always does.
-   */
-  const attach = async (match: RecordableMatch, videoId: string, replace: boolean): Promise<AttachRecordingOutcome> => {
-    const fromThisMachine = await platform.attachRecordingLink?.({ account, match, game, videoId, replace })
-
-    const outcome: AttachRecordingOutcome =
-      fromThisMachine ??
-      (serverRecordings
-        ? await serverRecordings.attach(account.id, match.matchId, { youtubeVideoId: videoId, source: 'link', replace })
-        : { ok: false, reason: 'failed', message: 'There is nowhere to attach a link to from here.' })
-
-    if (outcome.ok) refresh()
-    return outcome
-  }
-
   const detach = async (match: RecordableMatch): Promise<void> => {
     if (!serverRecordings) return
     setDetachBusy(true)
     try {
-      const result = await serverRecordings.detach(account.id, match.matchId)
+      const result = await serverRecordings.remove(account.id, match.matchId)
       if (result.ok) {
         setDetaching(null)
         refresh()
@@ -107,23 +90,13 @@ export function useRecordingActions(
 
   const dialogs = (
     <>
-      {attaching && (
-        <AttachLinkDialog
-          replacing={Boolean(attaching.recording || attaching.local?.recordingVideoId)}
-          withMarkers={
-            platform.attachRecordingLink !== undefined && (attaching.local?.recordingId ?? null) !== null
-          }
-          onAttach={(videoId, replace) => attach(attaching, videoId, replace)}
-          onClose={() => setAttaching(null)}
-        />
-      )}
       {detaching && (
         <ConfirmDialog
           title="Remove this recording?"
           message={
             <>
-              It comes off {account.gameName}&rsquo;s history on this server, for everybody. The video
-              itself stays on YouTube — Foxfire never deletes anything there.
+              It comes off {account.gameName}&rsquo;s history on this server, for everybody, and its
+              video is deleted from the server. A copy still on the PC that recorded it stays there.
             </>
           }
           confirmLabel="Remove"
@@ -134,15 +107,21 @@ export function useRecordingActions(
           onCancel={() => setDetaching(null)}
         />
       )}
+      {uploadError && (
+        <ConfirmDialog
+          title="The recording was not queued"
+          message={uploadError}
+          confirmLabel="OK"
+          onConfirm={() => setUploadError(null)}
+          onCancel={() => setUploadError(null)}
+        />
+      )}
     </>
   )
 
   return {
     actionsFor,
-    menuContext: {
-      isAdmin: connection?.session?.isAdmin ?? false,
-      serverMode: connection?.mode === 'server'
-    },
+    menuContext: { isAdmin: connection?.session?.isAdmin ?? false },
     dialogs
   }
 }

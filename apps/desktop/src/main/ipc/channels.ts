@@ -97,14 +97,15 @@ export const CH = {
     /** One game as one player's row — the header over a recording that has no file here. */
     matchSummary: 'dashboard:matchSummary'
   },
-  // The recordings a server holds on YouTube, one per game per account. Named
-  // apart from `recordings`, which are this disk's files: a server's copy can
-  // be somebody else's, and can outlive the file it came from.
+  // The recordings a server holds on its Foxfire Media, one per game per
+  // account. Named apart from `recordings`, which are this disk's files: a
+  // server's copy can be somebody else's, and can outlive the file it came from.
   matchRecordings: {
     get: 'matchRecordings:get',
-    attach: 'matchRecordings:attach',
-    detach: 'matchRecordings:detach',
-    /** Pushed from the server's hub when one is attached, replaced or removed. */
+    /** A page that plays one, for the player to frame. */
+    embed: 'matchRecordings:embed',
+    remove: 'matchRecordings:remove',
+    /** Pushed from the server's hub when one is uploaded, ready, or removed. */
     changed: 'matchRecordings:changed'
   },
   sync: {
@@ -210,36 +211,34 @@ export const CH = {
     changed: 'recordings:changed',
     /** A recording window asking the main window to show its match. */
     showMatch: 'recordings:showMatch',
-    /** Removes a recording's row once its file is gone. Never touches YouTube or a server. */
+    /** Removes a recording's row once its file is gone. Never touches a server. */
     forget: 'recordings:forget',
-    /** Opens a window for a recording this machine has no file of, from YouTube. */
+    /** Opens a window for a recording this machine has no file of, from the server. */
     openRemote: 'recordings:openRemote',
-    /** Every recording that can go to YouTube, whole, for "select all". YouTube builds only. */
+    /** Opens the server's copy of one of this PC's own recordings — one whose file went after upload. */
+    openServerCopy: 'recordings:openServerCopy',
+    /** Every recording that can go to the server, whole, for "select all". */
     eligible: 'recordings:eligible'
   },
-  // Putting recordings on YouTube. The Google connection lives in the main
-  // process — its refresh token never crosses IPC — and the renderer only ever
-  // sees whether there is one and whose it is.
-  youtube: {
-    getState: 'youtube:getState',
-    connect: 'youtube:connect',
-    cancelConnect: 'youtube:cancelConnect',
-    disconnect: 'youtube:disconnect',
-    getSettings: 'youtube:getSettings',
-    setSettings: 'youtube:setSettings',
-    /** The upload form's starting point for one recording, from the templates. */
-    draft: 'youtube:draft',
-    enqueue: 'youtube:enqueue',
-    /** Many recordings at once, titled from the template, with one privacy for all. */
-    enqueueMany: 'youtube:enqueueMany',
-    cancel: 'youtube:cancel',
-    retry: 'youtube:retry',
-    /** Attaches a hand-uploaded video to a recording on this disk, markers and all. */
-    attachLink: 'youtube:attachLink',
-    /** Tells the active server about a recording's video again, replacing what is there. */
-    reattach: 'youtube:reattach',
-    /** Pushed when the connection or the queue changes. */
-    changed: 'youtube:changed'
+  // Sending recordings to the server's Foxfire Media. The upload tokens live in
+  // the main process — none crosses IPC — and the renderer only ever sees the
+  // queue and what it is doing.
+  media: {
+    getSettings: 'media:getSettings',
+    setSettings: 'media:setSettings',
+    getQueue: 'media:getQueue',
+    /** Some recordings, titled from the template — one, or a selection. */
+    enqueue: 'media:enqueue',
+    /** Every recording on this PC the server does not have yet. */
+    enqueueAll: 'media:enqueueAll',
+    /** How many that is, and how big, before somebody queues them. */
+    backlog: 'media:backlog',
+    cancel: 'media:cancel',
+    retry: 'media:retry',
+    pauseAll: 'media:pauseAll',
+    resumeAll: 'media:resumeAll',
+    /** Pushed when the queue changes, and with progress while one is going up. */
+    changed: 'media:changed'
   },
   // Riot's own replays. Separate from `recordings` throughout: the two are
   // different artefacts with different lifecycles, and one shared domain would

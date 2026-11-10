@@ -36,6 +36,19 @@ export function onServerSyncComplete(listener: SyncCompleteListener): () => void
   return () => syncCompleteListeners.delete(listener)
 }
 
+type RecordingChangedListener = (event: { accountId: string; matchId: string }) => void
+const recordingChangedListeners = new Set<RecordingChangedListener>()
+
+/**
+ * A recording on the server changed — uploaded, ready, removed. The upload
+ * queue listens, so a recording it sent is seen ready the moment the server
+ * hears, rather than at its next poll.
+ */
+export function onServerRecordingChanged(listener: RecordingChangedListener): () => void {
+  recordingChangedListeners.add(listener)
+  return () => recordingChangedListeners.delete(listener)
+}
+
 /** The server this connection belongs to, so a switch can be told from a reconnect. */
 let connectedTo: string | null = null
 
@@ -69,7 +82,10 @@ export async function connectHub(
           for (const listener of syncCompleteListeners) listener(event.accountId)
         }
       },
-      onRecordingChanged: (event) => broadcast(CH.matchRecordings.changed, event),
+      onRecordingChanged: (event) => {
+        broadcast(CH.matchRecordings.changed, event)
+        for (const listener of recordingChangedListeners) listener(event)
+      },
       onRankEdited: (accountId) => broadcast(CH.rank.edited, accountId),
       onRankChanged: (accountId) => broadcast(CH.lcu.rankChanged, accountId),
 

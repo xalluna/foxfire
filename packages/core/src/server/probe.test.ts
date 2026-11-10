@@ -68,4 +68,19 @@ describe('probeServer', () => {
     expect(silent.email).toBe(false)
     expect(older.email).toBeNull()
   })
+
+  it('says whether the server keeps recordings, and where its player is framed from', async () => {
+    const keeps = await probeServer('https://fox.example', DESKTOP, {
+      fetch: version({ recordings: true, mediaOrigin: 'https://media.fox.example' })
+    })
+    const none = await probeServer('https://fox.example', DESKTOP, {
+      fetch: version({ recordings: false, mediaOrigin: 'https://media.fox.example' })
+    })
+    const older = await probeServer('https://fox.example', DESKTOP, { fetch: version() })
+
+    expect(keeps).toMatchObject({ recordings: true, mediaOrigin: 'https://media.fox.example' })
+    // An origin without recordings means nothing to frame, so none is passed on.
+    expect(none).toMatchObject({ recordings: false, mediaOrigin: null })
+    expect(older).toMatchObject({ recordings: false, mediaOrigin: null })
+  })
 })

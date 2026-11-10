@@ -211,9 +211,9 @@ export function DashboardScreen({
 
   const slug = playerSlug(account)
 
-  // A client that cannot play YouTube is not offered the server's recordings.
+  // A client that cannot play the server's recordings is not offered them.
   const flat = pageItems(matches.data, (match) => match.matchId)
-  const rows = platform.youtube ? flat : flat.map(withoutServerRecording)
+  const rows = platform.media ? flat : flat.map(withoutServerRecording)
 
   return (
     <>

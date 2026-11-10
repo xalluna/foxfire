@@ -47,7 +47,7 @@ export function MatchScreen({ matchId, player }: { matchId: string; player?: str
   })
 
   // As on the history: no server recording where nothing here can play it.
-  const row = summary.data && !platform.youtube ? withoutServerRecording(summary.data) : summary.data
+  const row = summary.data && !platform.media ? withoutServerRecording(summary.data) : summary.data
 
   const notFound = (detail.isSuccess && detail.data === null) || (detail.isError && isNotFound(detail.error))
 

@@ -16,13 +16,13 @@ namespace Foxfire.Api.Reads;
 public sealed record MatchSharedReplay(string? Patch, long? FileBytes);
 
 /// <summary>
-/// The YouTube recording of a game from one row's player, as the row advertises it.
+/// The recording of a game from one row's player, as the row advertises it.
 ///
-/// Enough to offer "Watch recording" and no more; the markers come with the
-/// recording itself, when somebody opens it. Spelled YoutubeVideoId so the
-/// wire says youtubeVideoId, which is what the TypeScript side reads.
+/// Enough to offer "Watch recording" — or say it is still on its way — and no
+/// more; the markers come with the recording itself, when somebody opens it.
+/// Status is one of Features/Recordings/RecordingStatuses.
 /// </summary>
-public sealed record MatchRecordingSummary(string YoutubeVideoId, string? Privacy, bool HasEvents);
+public sealed record MatchRecordingSummary(string VideoId, string Status, bool HasEvents, int? DurationSeconds);
 
 /// <summary>What one game was worth, when it could be worked out.</summary>
 public sealed record MatchRankSummary(
@@ -71,9 +71,9 @@ internal sealed record MatchRankRow(
 /// can answer them. The desktop fills those from its own SQLite after this
 /// arrives.
 ///
-/// A recording on YouTube is different, and so it is here: the video is on the
-/// internet rather than on a disk, so the server can say whether this row's
-/// player attached one.
+/// A recording on the server's Foxfire Media is different, and so it is here:
+/// the video is on the server's side rather than on one disk, so the server can
+/// say whether this row's player uploaded one.
 /// </summary>
 public sealed record MatchSummaryResponse(
     string MatchId,
@@ -275,17 +275,10 @@ public sealed class MatchReads(FoxfireDbContext db)
                 // one player's view: the same game in somebody else's history
                 // answers with their recording or with nothing, and a search
                 // row with no account (a null id) answers with nothing.
-                //
-                // A build without YouTube asks nothing: the field is always
-                // null, and the query carries no subquery for it.
-#if FEATURE_YOUTUBE
                 Recording = db.MatchRecordings
                     .Where(r => r.MatchId == x.p.MatchId && r.RiotAccountId == riotAccountId)
-                    .Select(r => new MatchRecordingSummary(r.YouTubeVideoId, r.Privacy, r.EventsJson != null))
+                    .Select(r => new MatchRecordingSummary(r.VideoId, r.Status, r.EventsJson != null, r.DurationSeconds))
                     .FirstOrDefault()
-#else
-                Recording = (MatchRecordingSummary?)null
-#endif
             })
             .ToListAsync(cancellationToken);
 

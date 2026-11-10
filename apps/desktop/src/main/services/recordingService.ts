@@ -1,5 +1,4 @@
 import { shell } from 'electron'
-import { rmSync } from 'node:fs'
 import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
@@ -24,10 +23,9 @@ import {
   markRecordingUnmatched,
   takenMatchIds
 } from '../db/repositories/recordings.repo'
-import { reconcileAttachments } from '../youtube/attach'
-import { onRecordingSettled } from '../youtube/autoUpload'
-import { cancelUpload } from '../youtube/queue'
-import { YOUTUBE_ENABLED } from '@shared/features'
+import { onRecordingSettled } from '../media/autoUpload'
+import { deleteRecordingFile } from '../media/files'
+import { cancelUpload } from '../media/queue'
 import {
   BIND_RETRY_HORIZON_MS,
   findMatchForRecording,
@@ -39,7 +37,6 @@ import {
 } from '../capture/matchBinding'
 import type { BindableRecording } from '../db/repositories/recordings.repo'
 import { getCaptureSettings } from './captureSettings'
-import { pruneEmptyFolders } from '../capture/fileRecording'
 import type { Page, PageOptions, Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
 import { clampPage, type GameId } from '@foxfire/core'
 
@@ -63,16 +60,17 @@ export async function listRecordings(
 }
 
 /**
- * Every recording of an account's that can go to YouTube — whole, for "select
- * all". One of the two lists that grow which are not paged; see CLAUDE.md.
+ * Every recording of an account's that can go to the server — whole, for
+ * "select all". One of the two lists that grow which are not paged; see CLAUDE.md.
  */
 export async function listUploadableRecordings(accountId: string): Promise<Recording[]> {
-  return getUploadableRecordings(getDb(), await accountContext(accountId))
+  const serverKey = isServerMode() && getServerState().recordings ? getServerState().activeUrl : null
+  return getUploadableRecordings(getDb(), await accountContext(accountId), serverKey)
 }
 
 export function getRecordingDetail(recordingId: number): RecordingDetail | null {
   const db = getDb()
-  const recording = getRecording(db, recordingId, getServerState().activeUrl)
+  const recording = getRecording(db, recordingId)
   if (!recording) return null
   return { recording, events: getRecordingEvents(db, recordingId) }
 }
@@ -88,15 +86,13 @@ export function getDiskUsage(): RecordingDiskUsage {
 }
 
 /**
- * Deletes a recording's file, and its row unless the recording is on YouTube.
+ * Deletes a recording's file, and its row unless the recording is on a server.
  *
- * On YouTube, the file is the only thing that goes: the row stays, with its
- * markers and its video, so the recording still plays — which is what freeing
- * the disk of a recording that is already somewhere else should mean. Forget
- * is what takes the row. Neither touches YouTube or a server.
- *
- * A build without YouTube has nothing to play one from, so there it deletes
- * the row too — what its Recordings tab says Delete does.
+ * On a server, the file is the only thing that goes: the row stays, with its
+ * markers and its place in the history, so the recording still plays — from
+ * the server — which is what freeing the disk of a recording that is already
+ * somewhere else should mean. Forget is what takes the row. Neither touches
+ * the server's copy; taking that off is the row's menu's.
  */
 export function removeRecording(recordingId: number): void {
   const db = getDb()
@@ -106,11 +102,10 @@ export function removeRecording(recordingId: number): void {
   // An upload reading the file has to stop before the file goes.
   cancelUpload(recordingId)
 
-  if (YOUTUBE_ENABLED && identity.youtubeVideoId) {
-    deleteFile(identity.filePath)
-    markFileDeleted(db, recordingId, Date.now())
+  if (identity.serverVideoId) {
+    if (deleteRecordingFile(identity.filePath)) markFileDeleted(db, recordingId, Date.now())
   } else {
-    deleteFile(deleteRecording(db, recordingId))
+    deleteRecordingFile(deleteRecording(db, recordingId))
   }
   broadcastRecordingsChanged()
 }
@@ -118,28 +113,13 @@ export function removeRecording(recordingId: number): void {
 /**
  * Forgets a recording entirely: the row, its markers and its upload.
  *
- * Offered once the file is gone. The video stays on YouTube, and a server's
- * copy stays on the server, where it belongs to that account's history now.
+ * Offered once the file is gone. A server's copy stays on the server, where it
+ * belongs to that account's history now.
  */
 export function forgetRecording(recordingId: number): void {
   cancelUpload(recordingId)
-  deleteFile(deleteRecording(getDb(), recordingId))
+  deleteRecordingFile(deleteRecording(getDb(), recordingId))
   broadcastRecordingsChanged()
-}
-
-function deleteFile(path: string | null): void {
-  if (!path) return
-  try {
-    rmSync(path, { force: true })
-  } catch (err) {
-    // The recording has left the app either way. A file locked by a player
-    // still open on it is the usual cause.
-    log.debug('Could not delete recording file', { path, error: String(err) })
-    return
-  }
-
-  // The player, game and mode folders it was filed in, if it was their last.
-  pruneEmptyFolders(getCaptureSettings().folder, path)
 }
 
 /** The one-click cleanup offered when the advisory cap is crossed. */
@@ -397,12 +377,9 @@ export async function bindPendingRecordings(
 
   if (bound > 0) broadcastRecordingsChanged()
 
-  // A recording that now knows its game can go to YouTube by itself, if that
-  // is turned on, and one already there can be attached on the server.
-  if (YOUTUBE_ENABLED) {
-    for (const id of settled) void onRecordingSettled(id)
-    if (bound > 0) void reconcileAttachments()
-  }
+  // A recording that now knows its game can go to the server by itself, if
+  // that is turned on.
+  for (const id of settled) onRecordingSettled(id)
 
   return bound
 }

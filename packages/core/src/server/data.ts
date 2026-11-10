@@ -102,8 +102,9 @@ export function createServerData(
 
     matchRecordings: {
       get: api.matchRecordings.get,
-      attach: api.matchRecordings.attach,
-      detach: api.matchRecordings.detach
+      upload: api.matchRecordings.upload,
+      embed: api.matchRecordings.embed,
+      remove: api.matchRecordings.remove
     }
   }
 }

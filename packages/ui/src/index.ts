@@ -56,15 +56,18 @@ export { ChartCard, TimeSeriesChart, type Series } from './components/TimeSeries
 export * as Icon from './components/icons'
 
 // Recordings
-export { AttachLinkDialog } from './recording/AttachLinkDialog'
 export { EventTimeline } from './recording/EventTimeline'
 export {
   INITIAL_PLAYBACK,
+  playbackState,
+  videoController,
+  type MediaMount,
   type PlaybackController,
   type PlaybackState,
-  type PlayerSource,
-  type YouTubeMount
+  type PlayerSource
 } from './recording/playback'
+export { mountFoxfirePlayer } from './recording/mediaController'
+export { FoxfirePlayer, type FoxfirePlayerEvent, type FoxfirePlayerState } from './recording/foxfirePlayer'
 export {
   RecordingHeader,
   recordingActionClass,

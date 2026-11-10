@@ -9,8 +9,6 @@ import type {
   AdminUser,
   AdminUserPatch,
   AdminUserQuery,
-  AttachRecordingInput,
-  AttachRecordingOutcome,
   ChampionStats,
   DashboardData,
   EditableMatch,
@@ -26,6 +24,10 @@ import type {
   MasteryData,
   MatchDetail,
   MatchRecording,
+  RecordingEmbed,
+  RecordingUploadInput,
+  RecordingUploadOutcome,
+  RecordingUploadTicket,
   MatchSummary,
   Page,
   PageOptions,
@@ -402,14 +404,14 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
     },
 
     /**
-     * One account's YouTube recording of one game.
+     * One account's recording of one game, on the server's Foxfire Media.
      *
      * The path names both, because the recording is that player's screen and
      * nobody else's — the same game on somebody else's history is a different
      * address with a different answer.
      */
     matchRecordings: {
-      /** Null when that player's view of that game is not on YouTube. */
+      /** Null when that player's view of that game is not on the server. */
       get: async (accountId: string, matchId: string): Promise<MatchRecording | null> => {
         try {
           return await request<MatchRecording>(recordingPath(accountId, matchId))
@@ -420,34 +422,41 @@ export function createServerApi(request: AuthedRequest, options: { log?: Logger 
       },
 
       /**
-       * Attaches a video to the game, as its account's owner.
+       * A ticket to upload the game's recording to Foxfire Media, as its
+       * account's owner — or, asked again, to carry an upload on.
        *
-       * A game that already has one answers `exists` rather than failing, so the
-       * screen can ask whether to replace it and send again with `replace` set.
+       * A game that already has one answers `exists` rather than failing, so
+       * the screen can ask whether to replace it and send again with `replace`.
        */
-      attach: async (
+      upload: async (
         accountId: string,
         matchId: string,
-        input: AttachRecordingInput
-      ): Promise<AttachRecordingOutcome> => {
+        input: RecordingUploadInput
+      ): Promise<RecordingUploadOutcome> => {
         try {
-          await request<MatchRecording>(recordingPath(accountId, matchId), {
-            method: 'PUT',
+          const ticket = await request<RecordingUploadTicket>(`${recordingPath(accountId, matchId)}/upload`, {
+            method: 'POST',
             body: input
           })
-          return { ok: true }
+          return { ok: true, ticket }
         } catch (err) {
-          if (!(err instanceof ServerError)) log.error('Attaching a recording failed', err)
+          if (!(err instanceof ServerError)) log.error('Starting a recording upload failed', err)
           const message = err instanceof Error ? err.message : String(err)
-          if (err instanceof ServerError && err.code === 'recording_exists') {
-            return { ok: false, reason: 'exists', message }
+          if (err instanceof ServerError) {
+            if (err.code === 'recording_exists') return { ok: false, reason: 'exists', message }
+            if (err.code === 'upload_in_progress') return { ok: false, reason: 'in_progress', message }
+            if (err.code === 'media_full') return { ok: false, reason: 'full', message }
           }
           return { ok: false, reason: 'failed', message }
         }
       },
 
-      /** Takes the recording off the game. The video itself stays on YouTube. */
-      detach: (accountId: string, matchId: string) =>
+      /** A page to frame that plays the recording. Throws when it cannot be played yet. */
+      embed: (accountId: string, matchId: string) =>
+        request<RecordingEmbed>(`${recordingPath(accountId, matchId)}/embed`, { method: 'POST' }),
+
+      /** Takes the recording off the game, and deletes its video from Foxfire Media. */
+      remove: (accountId: string, matchId: string) =>
         attempt(() => request<void>(recordingPath(accountId, matchId), { method: 'DELETE' }))
     },
 

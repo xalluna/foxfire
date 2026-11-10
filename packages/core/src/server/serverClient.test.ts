@@ -92,6 +92,7 @@ describe('createServerClient', () => {
       // list its games offers League alone.
       publicAccess: false,
       games: ['lol'],
+      recordings: false,
       riotKeyRejected: false,
       upgradeRequired: null
     })

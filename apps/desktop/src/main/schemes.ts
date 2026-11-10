@@ -1,6 +1,4 @@
 import { protocol } from 'electron'
-import { YOUTUBE_ENABLED } from '@shared/features'
-import { YOUTUBE_HOST_SCHEME } from '@shared/youtubeHost'
 import { RECORDING_SCHEME } from './recordingProtocol'
 
 /**
@@ -13,24 +11,15 @@ import { RECORDING_SCHEME } from './recordingProtocol'
  *
  * - `recording` streams a video off disk to a <video>, so it needs to stream,
  *   and fetch, and to be a secure origin the renderer's CSP can name.
- * - `foxfire-youtube` is the page YouTube's player lives in. Standard and
- *   secure so it has a real origin of its own — which is the whole point of
- *   it: an origin the preload never runs in. See shared/youtubeHost.ts. Only
- *   in a build made with YouTube; without it the scheme does not exist.
+ *
+ * A recording on the server needs no scheme of ours: it plays in Foxfire
+ * Media's own page, framed through the server's relay — see media/embedHeaders.ts.
  */
 export function registerPrivilegedSchemes(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: RECORDING_SCHEME,
       privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true }
-    },
-    ...(YOUTUBE_ENABLED
-      ? [
-          {
-            scheme: YOUTUBE_HOST_SCHEME,
-            privileges: { standard: true, secure: true }
-          }
-        ]
-      : [])
+    }
   ])
 }

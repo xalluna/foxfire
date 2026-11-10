@@ -624,26 +624,40 @@ namespace Foxfire.Data.Migrations
                     b.Property<Guid?>("AttachedByUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("CheckedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<int?>("DurationSeconds")
                         .HasColumnType("int");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("EventsJson")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Privacy")
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("ReadyAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("nvarchar(8)");
-
                     b.Property<string>("Title")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("YouTubeVideoId")
+                    b.Property<string>("VideoId")
                         .IsRequired()
                         .HasMaxLength(11)
                         .HasColumnType("nvarchar(11)");
@@ -653,6 +667,8 @@ namespace Foxfire.Data.Migrations
                     b.HasIndex("AttachedByUserId");
 
                     b.HasIndex("RiotAccountId");
+
+                    b.HasIndex("VideoId");
 
                     b.ToTable("MatchRecordings");
                 });

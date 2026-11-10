@@ -11,7 +11,7 @@ import type {
   SyncProgressEvent,
   ImportProgress,
   UpdateState,
-  YouTubeState
+  UploadQueueState
 } from '@shared/types'
 import { CH } from '../main/ipc/channels'
 
@@ -121,9 +121,8 @@ const api: Api = {
   },
   matchRecordings: {
     get: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.get, accountId, matchId),
-    attach: (accountId, matchId, input) =>
-      ipcRenderer.invoke(CH.matchRecordings.attach, accountId, matchId, input),
-    detach: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.detach, accountId, matchId),
+    embed: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.embed, accountId, matchId),
+    remove: (accountId, matchId) => ipcRenderer.invoke(CH.matchRecordings.remove, accountId, matchId),
     onChanged: (cb) => {
       const listener = (_e: IpcRendererEvent, event: { accountId: string; matchId: string }): void => cb(event)
       ipcRenderer.on(CH.matchRecordings.changed, listener)
@@ -264,27 +263,24 @@ const api: Api = {
     },
     forget: (recordingId) => ipcRenderer.invoke(CH.recordings.forget, recordingId),
     openRemote: (accountId, matchId) => ipcRenderer.invoke(CH.recordings.openRemote, accountId, matchId),
+    openServerCopy: (recordingId) => ipcRenderer.invoke(CH.recordings.openServerCopy, recordingId),
     eligible: (accountId) => ipcRenderer.invoke(CH.recordings.eligible, accountId)
   },
-  youtube: {
-    getState: () => ipcRenderer.invoke(CH.youtube.getState),
-    connect: () => ipcRenderer.invoke(CH.youtube.connect),
-    cancelConnect: () => ipcRenderer.invoke(CH.youtube.cancelConnect),
-    disconnect: () => ipcRenderer.invoke(CH.youtube.disconnect),
-    getSettings: () => ipcRenderer.invoke(CH.youtube.getSettings),
-    setSettings: (patch) => ipcRenderer.invoke(CH.youtube.setSettings, patch),
-    draft: (recordingId) => ipcRenderer.invoke(CH.youtube.draft, recordingId),
-    enqueue: (request) => ipcRenderer.invoke(CH.youtube.enqueue, request),
-    enqueueMany: (recordingIds, privacy) => ipcRenderer.invoke(CH.youtube.enqueueMany, recordingIds, privacy),
-    cancel: (recordingId) => ipcRenderer.invoke(CH.youtube.cancel, recordingId),
-    retry: (recordingId) => ipcRenderer.invoke(CH.youtube.retry, recordingId),
-    attachLink: (recordingId, videoId, replace) =>
-      ipcRenderer.invoke(CH.youtube.attachLink, recordingId, videoId, replace),
-    reattach: (recordingId) => ipcRenderer.invoke(CH.youtube.reattach, recordingId),
+  media: {
+    getSettings: () => ipcRenderer.invoke(CH.media.getSettings),
+    setSettings: (patch) => ipcRenderer.invoke(CH.media.setSettings, patch),
+    getQueue: () => ipcRenderer.invoke(CH.media.getQueue),
+    enqueue: (recordingIds, options) => ipcRenderer.invoke(CH.media.enqueue, recordingIds, options),
+    enqueueAll: (options) => ipcRenderer.invoke(CH.media.enqueueAll, options),
+    backlog: () => ipcRenderer.invoke(CH.media.backlog),
+    cancel: (recordingId) => ipcRenderer.invoke(CH.media.cancel, recordingId),
+    retry: (recordingId) => ipcRenderer.invoke(CH.media.retry, recordingId),
+    pauseAll: () => ipcRenderer.invoke(CH.media.pauseAll),
+    resumeAll: () => ipcRenderer.invoke(CH.media.resumeAll),
     onChanged: (cb) => {
-      const listener = (_e: IpcRendererEvent, state: YouTubeState): void => cb(state)
-      ipcRenderer.on(CH.youtube.changed, listener)
-      return () => ipcRenderer.removeListener(CH.youtube.changed, listener)
+      const listener = (_e: IpcRendererEvent, state: UploadQueueState): void => cb(state)
+      ipcRenderer.on(CH.media.changed, listener)
+      return () => ipcRenderer.removeListener(CH.media.changed, listener)
     }
   },
   // Synchronous and local: webUtils reads the path off a File the user already

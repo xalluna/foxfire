@@ -415,13 +415,15 @@ public static class ConfigurationCheck
         RateLimitOptions rateLimits,
         LogOptions logs,
         TelemetryOptions? telemetry = null,
-        EmailOptions? email = null)
+        EmailOptions? email = null,
+        MediaOptions? media = null)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(rateLimits);
         ArgumentNullException.ThrowIfNull(logs);
         telemetry ??= new TelemetryOptions();
         email ??= new EmailOptions();
+        media ??= new MediaOptions();
 
         List<string> problems = [];
 
@@ -549,8 +551,93 @@ public static class ConfigurationCheck
         }
 
         CheckEmail(problems, email);
+        CheckMedia(problems, media);
 
         return problems;
+    }
+
+    /// <summary>
+    /// Recordings are optional too, and a half-configured Foxfire Media is the
+    /// same trap a half-configured mail provider is: every upload refused while
+    /// the host believes it works. So one of the two without the other stops
+    /// the server, and so does an address video and keys would travel to in the clear.
+    /// </summary>
+    private static void CheckMedia(List<string> problems, MediaOptions media)
+    {
+        var hasUrl = !string.IsNullOrWhiteSpace(media.BaseUrl);
+        var hasKey = !string.IsNullOrWhiteSpace(media.ApiKey);
+
+        if (hasUrl != hasKey)
+        {
+            problems.Add(hasUrl
+                ? "Media__ApiKey is not set. It is this server's application key on Foxfire Media — its ApiKeys__<Name>."
+                : "Media__BaseUrl is not set. It is Foxfire Media's public address, e.g. https://media.example.com.");
+            return;
+        }
+
+        if (!hasUrl) return;
+
+        if (!Uri.TryCreate(media.BaseUrl.Trim(), UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
+        {
+            problems.Add($"Media__BaseUrl is not a URL: '{media.BaseUrl}'.");
+            return;
+        }
+
+        if (url.Scheme != Uri.UriSchemeHttps && !IsLocalHost(url))
+        {
+            problems.Add(
+                $"Media__BaseUrl is '{media.BaseUrl}'. Anything other than localhost, this network or a container "
+                + "beside this one must be https — the application key travels over it.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(media.PublicUrl))
+        {
+            if (!Uri.TryCreate(media.PublicUrl.Trim(), UriKind.Absolute, out var publicUrl) || publicUrl.Scheme is not ("http" or "https"))
+            {
+                problems.Add($"Media__PublicUrl is not a URL: '{media.PublicUrl}'.");
+            }
+            else if (publicUrl.Scheme != Uri.UriSchemeHttps && !publicUrl.IsLoopback && !IsPrivateAddress(publicUrl))
+            {
+                problems.Add(
+                    $"Media__PublicUrl is '{media.PublicUrl}'. Browsers fetch recordings and upload tokens from it, so "
+                    + "anything other than localhost or this network must be https.");
+            }
+        }
+
+        if (media.EmbedLifetime < TimeSpan.FromMinutes(5) || media.EmbedLifetime > TimeSpan.FromHours(24))
+        {
+            problems.Add(
+                $"Media__EmbedLifetime is {media.EmbedLifetime}. Foxfire Media keeps an embed between five minutes "
+                + "and a day — 01:00:00 is plenty.");
+        }
+    }
+
+    /// <summary>
+    /// Where plain http is no risk to the key: loopback, this network, or a name
+    /// only a private network resolves — a container beside this one
+    /// (<c>foxfire-media</c>, <c>host.docker.internal</c>), a <c>.local</c> or <c>.lan</c> machine.
+    /// </summary>
+    private static bool IsLocalHost(Uri url)
+    {
+        if (url.IsLoopback || IsPrivateAddress(url)) return true;
+        if (System.Net.IPAddress.TryParse(url.Host, out _)) return false;
+
+        var host = url.Host;
+        return !host.Contains('.', StringComparison.Ordinal)
+            || host.EndsWith(".internal", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".lan", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".home.arpa", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A private-network address: a homelab's Foxfire Media on the same LAN.</summary>
+    private static bool IsPrivateAddress(Uri url)
+    {
+        if (!System.Net.IPAddress.TryParse(url.Host, out var ip)) return false;
+        if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return ip.IsIPv6UniqueLocal || ip.IsIPv6LinkLocal;
+
+        var b = ip.GetAddressBytes();
+        return b[0] == 10 || (b[0] == 172 && b[1] is >= 16 and <= 31) || (b[0] == 192 && b[1] == 168);
     }
 
     /// <summary>

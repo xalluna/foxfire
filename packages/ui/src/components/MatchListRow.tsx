@@ -235,15 +235,15 @@ export function MatchListRow({
       */}
       <div className="flex shrink-0 items-center gap-1">
         <span className="w-3.5" title={watchableTitle(match)}>
-          {(holdsLocally(match) || match.recording || match.sharedReplay) && (
+          {(holdsLocally(match) || onServer(match) || match.sharedReplay) && (
             <Icon.Film
               width={14}
               height={14}
               // Dimmer only for a replay that is on the server rather than on
-              // this disk. A recording on YouTube plays straight from the menu,
-              // which is as close as a file here is, so it gets the full mark.
+              // this disk. A recording on the server plays straight from the
+              // menu, which is as close as a file here is, so it gets the full mark.
               className={
-                holdsLocally(match) || match.recording ? 'text-accent/60' : 'text-text-mute'
+                holdsLocally(match) || onServer(match) ? 'text-accent/60' : 'text-text-mute'
               }
             />
           )}
@@ -271,11 +271,16 @@ function holdsLocally(match: MatchSummary): boolean {
   return (match.local?.recordingId ?? null) !== null || (match.local?.replayId ?? null) !== null
 }
 
+/** A recording of this game on the server that can be watched now — not one still on its way. */
+function onServer(match: MatchSummary): boolean {
+  return match.recording?.status === 'ready'
+}
+
 /** What the row marker promises, which depends on which artefacts exist. */
 function watchableTitle(match: MatchSummary): string | undefined {
-  // A recording on YouTube is this row's player's own, like one on this disk;
-  // the server only ever puts it on the row of the account it belongs to.
-  const hasRecording = (match.local?.recordingId ?? null) !== null || Boolean(match.recording)
+  // A recording on the server is this row's player's own, like one on this
+  // disk; the server only ever puts it on the row of the account it belongs to.
+  const hasRecording = (match.local?.recordingId ?? null) !== null || onServer(match)
   const hasReplay = (match.local?.replayId ?? null) !== null
 
   if (hasRecording && hasReplay) return 'Recording and Riot replay — right-click to watch'

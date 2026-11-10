@@ -1,28 +1,22 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
-import { tftHeaderFactsFor, usePlatform } from '@foxfire/screens'
-import { youtubeWatchUrl } from '@foxfire/core/youtube'
+import { tftHeaderFactsFor } from '@foxfire/screens'
 import {
-  AttachLinkDialog,
   EmptyState,
   Icon,
   MatchListSkeleton,
   RecordingHeader,
   RecordingPlayer,
-  Segmented,
   recordingActionClass,
   recordingPrimaryActionClass,
-  type PlayerSource,
   type RecordingHeaderFacts
 } from '@foxfire/ui'
-import { useRecordingUpdates, useYouTubeUpdates } from '../hooks/useDesktopUpdates'
-import { YouTubeUploadDialogHost } from '../youtube/YouTubeUploadDialog'
-import { openUploadDialog } from '../youtube/uploadDialog'
-import { uploadPending, uploadStatusText } from '../youtube/uploadStatus'
-import { youtubeHostMount } from './youtubeHostMount'
+import { canUploadRecording } from '@shared/uploadEligibility'
+import { useMediaUpdates, useRecordingUpdates } from '../hooks/useDesktopUpdates'
+import { uploadStatusText } from '../media/uploadStatus'
+import { useUploadServer } from '../media/useMedia'
 import type { Recording } from '@shared/types'
-import { YOUTUBE_ENABLED } from '@shared/features'
 
 /**
  * A window that owns one recording.
@@ -32,10 +26,9 @@ import { YOUTUBE_ENABLED } from '@shared/features'
  * gone — so unlike the telemetry panel and the LP editor this is not a
  * singleton on the main side. See recordingWindow.ts.
  *
- * Once a recording is on YouTube it plays from there by default, with a switch
- * back to the file while the file is still on this disk: YouTube is the copy
- * everybody else watches, and the file is the one with thumbnails on the seek
- * bar and slow motion.
+ * Plays the file on this disk, which is the one with thumbnails on the seek
+ * bar and nothing to wait for. Once the file was deleted after upload, it
+ * hands over to the server's copy, in a window of its own.
  *
  * Loads the same renderer bundle as everything else, at `/recording/<id>` —
  * see router.tsx.
@@ -45,26 +38,23 @@ function recordingIdFrom(param: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
-type Source = 'youtube' | 'file'
-
 export function RecordingApp(): JSX.Element {
   const { id } = useParams({ from: '/_window/recording/$id' })
   const recordingId = recordingIdFrom(id)
-  const mount = usePlatform().youtube ?? youtubeHostMount
+  const server = useUploadServer()
+  const [queueing, setQueueing] = useState(false)
+  const [queueError, setQueueError] = useState<string | null>(null)
 
-  // An upload finishing, a link attached, the file deleted — all change what
-  // this window can play, so it follows the same broadcasts the list does.
+  // An upload finishing, the file deleted — both change what this window can
+  // play, so it follows the same broadcasts the list does.
   useRecordingUpdates()
-  useYouTubeUpdates()
+  useMediaUpdates()
 
   const detail = useQuery({
     queryKey: ['recordings', 'detail', recordingId],
     queryFn: () => window.api.recordings.detail(recordingId!),
     enabled: recordingId !== null
   })
-
-  const [chosen, setChosen] = useState<Source | null>(null)
-  const [attaching, setAttaching] = useState(false)
 
   if (recordingId === null) {
     return (
@@ -103,60 +93,40 @@ export function RecordingApp(): JSX.Element {
   }
 
   const { recording, events } = detail.data
-  // A build without YouTube plays the file and nothing else, whatever the row says.
-  const videoId = YOUTUBE_ENABLED ? (recording.youtube?.videoId ?? null) : null
-  const hasFile = recording.fileExists
+  const onServer = recording.server !== null && recording.server.serverKey === server
+  const uploadable = canUploadRecording(recording, server)
 
-  // YouTube once there is a copy there, the file otherwise — and whichever is
-  // left when the one somebody picked goes away underneath them.
-  const preferred: Source = chosen ?? (videoId ? 'youtube' : 'file')
-  const source: Source | null =
-    preferred === 'youtube' ? (videoId ? 'youtube' : hasFile ? 'file' : null) : hasFile ? 'file' : videoId ? 'youtube' : null
-
-  const playerSource: PlayerSource | null =
-    source === 'youtube' && videoId
-      ? { kind: 'youtube', videoId, mount }
-      : source === 'file'
-        ? { kind: 'file', src: `recording://media/${recording.id}` }
-        : null
+  const upload = async (): Promise<void> => {
+    setQueueing(true)
+    setQueueError(null)
+    try {
+      const result = await window.api.media.enqueue([recording.id])
+      if (result.queued === 0) setQueueError(result.skipped[0]?.reason ?? 'It could not be queued.')
+    } finally {
+      setQueueing(false)
+    }
+  }
 
   return (
     <Shell>
       <RecordingHeader
         facts={factsFor(recording)}
-        status={statusFor(recording)}
+        status={queueError ?? statusFor(recording)}
         actions={
           <>
-            {videoId && hasFile && (
-              <Segmented
-                options={[
-                  ['youtube', 'YouTube'],
-                  ['file', 'This PC']
-                ]}
-                value={source ?? 'youtube'}
-                onChange={setChosen}
-              />
-            )}
-            {YOUTUBE_ENABLED && hasFile && !videoId && !uploadPending(recording.upload) && (
-              <button type="button" className={recordingActionClass} onClick={() => openUploadDialog(recording.id)}>
-                Upload to YouTube
+            {uploadable && (
+              <button type="button" className={recordingActionClass} disabled={queueing} onClick={() => void upload()}>
+                {queueing ? 'Queueing…' : 'Upload to server'}
               </button>
             )}
-            {YOUTUBE_ENABLED && (
-              <button type="button" className={recordingActionClass} onClick={() => setAttaching(true)}>
-                {videoId ? 'Replace YouTube link' : 'Attach YouTube link'}
-              </button>
-            )}
-            {videoId && (
-              <a
-                href={youtubeWatchUrl(videoId)}
-                target="_blank"
-                rel="noreferrer"
-                className={`${recordingActionClass} inline-flex items-center gap-1.5`}
+            {onServer && recording.fileExists && (
+              <button
+                type="button"
+                className={recordingActionClass}
+                onClick={() => void window.api.recordings.openServerCopy(recording.id)}
               >
-                <Icon.ExternalLink width={13} height={13} />
-                Open on YouTube
-              </a>
+                Watch on the server
+              </button>
             )}
             {(recording.match ?? recording.tftMatch) && (
               <button
@@ -177,8 +147,23 @@ export function RecordingApp(): JSX.Element {
         }
       />
 
-      {playerSource ? (
-        <RecordingPlayer key={source} source={playerSource} events={events} />
+      {recording.fileExists ? (
+        <RecordingPlayer source={{ kind: 'file', src: `recording://media/${recording.id}` }} events={events} />
+      ) : onServer ? (
+        <EmptyState
+          icon={<Icon.Film />}
+          title="This recording plays from the server"
+          description="Its file was deleted from this PC once the server had it."
+          action={
+            <button
+              type="button"
+              className={recordingPrimaryActionClass}
+              onClick={() => void window.api.recordings.openServerCopy(recording.id)}
+            >
+              Watch it
+            </button>
+          }
+        />
       ) : (
         <EmptyState
           icon={<Icon.Film />}
@@ -187,16 +172,6 @@ export function RecordingApp(): JSX.Element {
           tone="warning"
         />
       )}
-
-      {attaching && (
-        <AttachLinkDialog
-          replacing={videoId !== null}
-          withMarkers
-          onAttach={(id, replace) => window.api.youtube.attachLink(recording.id, id, replace)}
-          onClose={() => setAttaching(false)}
-        />
-      )}
-      {YOUTUBE_ENABLED && <YouTubeUploadDialogHost canOpenSettings={false} />}
     </Shell>
   )
 }
@@ -242,9 +217,8 @@ function factsFor(recording: Recording): RecordingHeaderFacts {
 
 /** The quiet note beside the buttons: where the upload is, or the bind. */
 function statusFor(recording: Recording): string | undefined {
-  const upload = YOUTUBE_ENABLED ? uploadStatusText(recording) : null
+  const upload = uploadStatusText(recording)
   if (upload) return upload
-  if (YOUTUBE_ENABLED && recording.youtube?.forcedPrivate) return 'Private on YouTube until Foxfire passes YouTube’s review'
   if (recording.bindState === 'pending') return 'Still looking for this game…'
   if (recording.bindState === 'unmatched') return 'No match history entry'
   return undefined

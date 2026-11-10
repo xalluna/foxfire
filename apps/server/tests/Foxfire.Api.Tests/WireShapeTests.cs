@@ -400,7 +400,6 @@ public class WireShapeTests(FoxfireServerFixture server)
             "recording");
     }
 
-#if FEATURE_YOUTUBE
     [Fact]
     public async Task A_recording_carries_every_field_the_player_page_reads()
     {
@@ -411,31 +410,35 @@ public class WireShapeTests(FoxfireServerFixture server)
 
         var uri = new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording", UriKind.Relative);
 
-        (await client.PutAsJsonAsync(uri, new
+        var upload = await client.PostAsJsonAsync(new Uri($"{uri}/upload", UriKind.Relative), new
         {
-            youtubeVideoId = "dQw4w9WgXcQ",
-            source = "upload",
-            privacy = "unlisted",
+            filename = "a.mp4",
+            sizeBytes = 10,
             title = "Lee Sin · Ranked Solo/Duo · Victory · 8/4/6",
             durationSeconds = 1790,
             events = new[]
             {
                 new { eventId = 3, name = "ChampionKill", gameTime = 342.5, videoTime = 252.5, role = "kill", label = "Ahri" }
             }
-        })).EnsureSuccessStatusCode();
+        });
+        upload.EnsureSuccessStatusCode();
+
+        // @foxfire/core RecordingUploadTicket.
+        AssertHasAll(await upload.Content.ReadFromJsonAsync<JsonElement>(), "videoId", "uploadUrl", "uploadToken", "expiresAt", "maxBytes");
 
         var recording = await client.GetFromJsonAsync<JsonElement>(uri);
 
         AssertHasAll(
             recording,
-            "youtubeVideoId",
-            "privacy",
+            "videoId",
+            "status",
             "hasEvents",
             "title",
             "durationSeconds",
-            "source",
+            "error",
             "attachedBy",
             "attachedAt",
+            "readyAt",
             "events");
 
         AssertHasAll(
@@ -450,9 +453,8 @@ public class WireShapeTests(FoxfireServerFixture server)
         var page = await client.GetFromJsonAsync<JsonElement>(
             new Uri($"/api/riot-accounts/{accountId}/matches", UriKind.Relative));
 
-        AssertHasAll(page.GetProperty("items")[0].GetProperty("recording"), "youtubeVideoId", "privacy", "hasEvents");
+        AssertHasAll(page.GetProperty("items")[0].GetProperty("recording"), "videoId", "status", "hasEvents", "durationSeconds");
     }
-#endif
 
     [Fact]
     public async Task A_dashboard_carries_the_three_things_the_account_page_opens_with()

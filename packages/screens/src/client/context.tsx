@@ -1,7 +1,6 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react'
 import type {
   Account,
-  AttachRecordingOutcome,
   FoxfireClient,
   GameId,
   ImportProgress,
@@ -9,7 +8,7 @@ import type {
   MatchSummary,
   QueueType
 } from '@foxfire/core'
-import type { YouTubeMount } from '@foxfire/ui'
+import type { MediaMount } from '@foxfire/ui'
 
 /**
  * One player's view of one game — which is what a recording is of — in either
@@ -52,35 +51,27 @@ export interface Platform {
    * Opens one player's recording of a game.
    *
    * A window of its own on the desktop — this disk's file when it has one,
-   * YouTube when it does not — and the recording page in a browser. Takes the
+   * the server's copy when it does not — and the recording page in a browser. Takes the
    * row rather than an id, because which recording to open depends on whose
    * history the row is in.
    */
   watchRecording?: (target: RecordingTarget) => void
 
   /**
-   * Plays a YouTube recording inside the shared player.
+   * Plays a recording from the server's Foxfire Media inside the shared player.
    *
    * The platform's to give, because how the frame is reached differs: a
-   * browser loads YouTube's IFrame API into the page, and the desktop keeps it
-   * in a separate origin so Google's script never shares a window with the
-   * bridge to the main process.
+   * browser frames Foxfire Media's player directly, from the server's own
+   * origin, and the desktop — whose window is a file:// page Foxfire Media will
+   * not be framed by — through the server's relay page.
    */
-  youtube?: YouTubeMount
-
-  /** Opens the upload form for this machine's recording of a game. Only a desktop has a file to send. */
-  uploadRecording?: (target: RecordingTarget) => void
+  media?: MediaMount
 
   /**
-   * Attaches a link from this machine's recording of the game, markers and all.
-   *
-   * Null when this machine has no recording of it — then the screen attaches
-   * through the client, as a browser always does, and the video plays without
-   * markers.
+   * Queues this machine's recording of a game for upload to the server. Only a
+   * desktop has a file to send. Resolves once it is queued, not uploaded.
    */
-  attachRecordingLink?: (
-    target: RecordingTarget & { videoId: string; replace: boolean }
-  ) => Promise<AttachRecordingOutcome | null>
+  uploadRecording?: (target: RecordingTarget) => Promise<ActionOutcome>
 
   /** Hands a Riot replay to the League client. Can fail for a reason worth saying — no client plays that patch. */
   launchReplay?: (replayId: number) => Promise<ActionOutcome>

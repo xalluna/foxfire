@@ -70,8 +70,8 @@ export function DialogActions({ children }: { children: ReactNode }): JSX.Elemen
 /**
  * "Are you sure?", for the few things here worth asking about.
  *
- * The message says what will and will not happen — "the video stays on
- * YouTube" — because a confirmation that only repeats the button's label is
+ * The message says what will and will not happen — "the file stays on this
+ * PC" — because a confirmation that only repeats the button's label is
  * one people learn to click through.
  */
 export function ConfirmDialog({

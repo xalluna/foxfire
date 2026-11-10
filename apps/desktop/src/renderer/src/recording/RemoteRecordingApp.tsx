@@ -6,8 +6,8 @@ import { RecordingScreen, useAccount } from '@foxfire/screens'
  * A recording this machine has no file of, in a window of its own.
  *
  * Somebody else's — a friend's view of a game, opened from their history — or
- * this machine's own after its file was forgotten. Either way it is the
- * server's copy, played from YouTube, so the window is the shared recording
+ * this machine's own after its file was deleted. Either way it is the
+ * server's copy, played from its Foxfire Media, so the window is the shared recording
  * screen the web shows, rather than the local player with its file and its
  * upload buttons.
  */

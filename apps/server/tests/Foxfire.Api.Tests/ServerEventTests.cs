@@ -247,9 +247,8 @@ public class ServerEventTests(FoxfireServerFixture server)
         Assert.Empty(events.RankEdited);
     }
 
-#if FEATURE_YOUTUBE
     [Fact]
-    public async Task Attaching_and_removing_a_recording_tells_every_window_which_row_changed()
+    public async Task Uploading_and_removing_a_recording_tells_every_window_which_row_changed()
     {
         var (host, client, events, accountId, matchId) = await RiggedAsync();
         await using var _host = host;
@@ -257,7 +256,7 @@ public class ServerEventTests(FoxfireServerFixture server)
 
         var uri = new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording", UriKind.Relative);
 
-        (await client.PutAsJsonAsync(uri, new { youtubeVideoId = "dQw4w9WgXcQ", source = "link" }))
+        (await client.PostAsJsonAsync(new Uri($"{uri}/upload", UriKind.Relative), new { title = "t", filename = "a.mp4", sizeBytes = 10 }))
             .EnsureSuccessStatusCode();
         (await client.DeleteAsync(uri)).EnsureSuccessStatusCode();
 
@@ -273,14 +272,13 @@ public class ServerEventTests(FoxfireServerFixture server)
         await using var _host = host;
         using var _client = client;
 
-        var refused = await client.PutAsJsonAsync(
-            new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording", UriKind.Relative),
-            new { youtubeVideoId = "nope", source = "link" });
+        var refused = await client.PostAsJsonAsync(
+            new Uri($"/api/riot-accounts/{accountId}/matches/{matchId}/recording/upload", UriKind.Relative),
+            new { title = "", filename = "a.mp4", sizeBytes = 10 });
 
         Assert.False(refused.IsSuccessStatusCode);
         Assert.Empty(events.RecordingChanged);
     }
-#endif
 
     [Fact]
     public async Task A_rank_that_moved_tells_every_window()

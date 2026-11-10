@@ -1,9 +1,9 @@
 import { strongestTrait, type TftMatchSummary } from '@foxfire/core'
-import type { TftRecordingTitleFacts } from '@foxfire/core/youtube'
+import type { TftRecordingTitleFacts } from '@foxfire/core/recordings'
 import type { LinkedTftMatchInfo, Recording } from './types'
 
 /**
- * What a TFT recording's YouTube title is made from: the place it finished,
+ * What a TFT recording's title is made from: the place it finished,
  * the team's in Double Up, and the trait its board is remembered by.
  *
  * Shared by the upload form's draft in main and the batch dialog's preview in

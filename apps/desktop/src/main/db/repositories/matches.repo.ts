@@ -114,7 +114,8 @@ interface MatchSummaryRow {
   is_demotion: number | null
   has_manual_rank: number
   recording_id: number | null
-  recording_video_id: string | null
+  recording_on_server: number | null
+  recording_file_deleted: number | null
   recording_upload_pending: number | null
   replay_id: number | null
 }
@@ -182,14 +183,19 @@ export function getMatchSummaries(
                 WHERE rp.match_id = p.match_id
                   AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
                 ORDER BY rp.id DESC LIMIT 1) AS recording_id,
-              -- Its copy on YouTube, and whether an upload of it is on its way,
-              -- so the menu offers an upload only where there is not one.
-              (SELECT rp.youtube_video_id FROM recordings rp
+              -- Whether the server has it and the file is still here, and whether
+              -- an upload of it is on its way, so the menu offers an upload only
+              -- where there is not one.
+              (SELECT CASE WHEN rp.server_video_id IS NULL THEN 0 ELSE 1 END FROM recordings rp
                 WHERE rp.match_id = p.match_id
                   AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
-                ORDER BY rp.id DESC LIMIT 1) AS recording_video_id,
+                ORDER BY rp.id DESC LIMIT 1) AS recording_on_server,
+              (SELECT CASE WHEN rp.file_deleted_at IS NULL THEN 0 ELSE 1 END FROM recordings rp
+                WHERE rp.match_id = p.match_id
+                  AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
+                ORDER BY rp.id DESC LIMIT 1) AS recording_file_deleted,
               (SELECT 1 FROM recordings rp
-                 JOIN youtube_uploads yu ON yu.recording_id = rp.id
+                 JOIN media_uploads yu ON yu.recording_id = rp.id
                 WHERE rp.match_id = p.match_id
                   AND rp.account_id = (SELECT id FROM accounts WHERE puuid = p.puuid)
                   AND yu.state IN (${PENDING_UPLOAD_STATES})
@@ -266,7 +272,8 @@ export function getMatchSummaries(
     hasManualRank: row.has_manual_rank === 1,
     local: {
       recordingId: row.recording_id,
-      recordingVideoId: row.recording_video_id,
+      recordingOnServer: row.recording_on_server === 1,
+      recordingFileDeleted: row.recording_file_deleted === 1,
       recordingUploadPending: row.recording_upload_pending === 1,
       replayId: row.replay_id
     }

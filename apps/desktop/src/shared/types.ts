@@ -1,4 +1,4 @@
-import type { GameId, RecordingEvent, TftAccess, TftTrait, TftUnit, YouTubePrivacy } from '@foxfire/core'
+import type { GameId, RecordingEvent, TftAccess, TftTrait, TftUnit } from '@foxfire/core'
 import type { CaptureQuality } from './captureQuality'
 
 export type { CaptureQuality } from './captureQuality'
@@ -66,11 +66,12 @@ export type {
   AdminActionResult,
   PasswordChange,
   EmailChange,
-  YouTubePrivacy,
   MatchRecording,
   MatchRecordingSummary,
-  AttachRecordingInput,
-  AttachRecordingOutcome
+  RecordingEmbed,
+  RecordingUploadInput,
+  RecordingUploadOutcome,
+  RecordingUploadTicket
 } from '@foxfire/core'
 
 /**
@@ -387,17 +388,15 @@ export interface Recording {
   tftMatch: LinkedTftMatchInfo | null
 
   /**
-   * The file was deleted on purpose, and the row kept because the recording
-   * is on YouTube. Distinct from `fileExists`, which also turns false for a
-   * file that went missing behind the app's back.
+   * The file was deleted on purpose — "delete after upload" — and the row kept
+   * because the recording is on the server. Distinct from `fileExists`, which
+   * also turns false for a file that went missing behind the app's back.
    */
   fileDeleted: boolean
-  /** The copy on YouTube, once there is one. */
-  youtube: RecordingYouTube | null
+  /** The server's copy, as this PC last heard: there once the server said it was ready. */
+  server: RecordingServerCopy | null
   /** An upload of this recording, queued, running, or finished. */
   upload: RecordingUpload | null
-  /** Whether the active server has been told about the video. Null in local-only mode. */
-  attachment: RecordingAttachment | null
 }
 
 /**
@@ -406,95 +405,91 @@ export interface Recording {
  */
 export type { RecordingEvent, RecordingEventRole } from '@foxfire/core'
 
-/** A recording's copy on YouTube. */
-export interface RecordingYouTube {
+/** A recording's copy on a server's Foxfire Media. */
+export interface RecordingServerCopy {
+  /** Foxfire Media's id for the video. */
   videoId: string
-  /** As YouTube reported it, which is not always what was asked for. */
-  privacy: YouTubePrivacy | null
-  /** Asked for public or unlisted and given private: the Google project has not been audited yet. */
-  forcedPrivate: boolean
-  source: 'upload' | 'link'
-  title: string | null
-  /** Epoch milliseconds. */
+  /** The server it is on, as `server_key` spells it: its URL. */
+  serverKey: string
+  /** When it was ready, epoch milliseconds. */
   at: number
 }
 
-export type UploadState =
-  | 'queued'
-  | 'uploading'
-  | 'paused'
-  | 'waiting_quota'
-  | 'waiting_auth'
-  | 'failed'
-  | 'done'
-  | 'cancelled'
+/**
+ * Where an upload is.
+ *
+ * - `queued` — waiting its turn, or a retry after a backoff.
+ * - `uploading` — bytes on their way to Foxfire Media.
+ * - `paused` — held: a game is on, the app is not on the server it is for, or
+ *   the server's storage is full. `error` says which.
+ * - `processing` — all of it is there; waiting for the server to say ready.
+ * - `done`, `failed`, `cancelled` — finished, one way or another.
+ */
+export type UploadState = 'queued' | 'uploading' | 'paused' | 'processing' | 'failed' | 'done' | 'cancelled'
+
+export type UploadTrigger = 'manual' | 'bulk' | 'auto'
 
 /** An upload, as the Recordings tab draws it. */
 export interface RecordingUpload {
   state: UploadState
-  trigger: 'manual' | 'auto'
+  trigger: UploadTrigger
   bytesSent: number
   fileBytes: number | null
+  /** The file goes from this PC once the server has it ready. */
+  deleteAfter: boolean
   /** Why it stopped, or what it is waiting for, in words. */
   error: string | null
   /** When the queue will try again, epoch milliseconds, when it is waiting on something. */
   resumesAt: number | null
 }
 
-export type AttachmentState = 'attached' | 'conflict' | 'not_owner' | 'failed'
-
-export interface RecordingAttachment {
-  state: AttachmentState
-  message: string | null
-}
-
-/** What the upload form opens with, from the templates in settings. */
-export interface UploadDraft {
-  recordingId: number
-  title: string
-  description: string
-  privacy: YouTubePrivacy
-  durationSeconds: number | null
-}
-
-/** What the upload form sends back. */
-export interface UploadRequest {
-  recordingId: number
-  title: string
-  description: string
-  privacy: YouTubePrivacy
+/** What queueing one or many recordings asks for beyond which ones. */
+export interface EnqueueOptions {
+  /** Delete each file once the server has it ready. The setting's answer when absent. */
+  deleteAfter?: boolean
 }
 
 /** What queueing a batch did: how many went into the queue, and why the rest did not. */
 export interface BulkUploadResult {
   queued: number
+  /** The size of what was queued, bytes — what a 500 GB backlog is measured in. */
+  queuedBytes: number
   skipped: Array<{ recordingId: number; reason: string }>
 }
 
-/** Foxfire's Google connection on this machine, and the queue behind it. */
-export interface YouTubeState {
-  /**
-   * Whether this build carries Foxfire's Google client at all. A build made
-   * without it — a contributor's, or CI's — has no uploads, and says so rather
-   * than offering a button that cannot work.
-   */
-  configured: boolean
-  /** The Google account uploads go to, once connected. */
-  email: string | null
-  /** A sign-in is open in the browser, waiting for Google to hand it back. */
-  connecting: boolean
-  /** Why the last connect failed, or why the connection was dropped. */
-  error: string | null
-  /** The queue is holding because a game is on. */
-  pausedForGame: boolean
-  /** YouTube's daily upload quota is spent until this time, epoch milliseconds. */
-  quotaResumesAt: number | null
+/** Why the whole queue is holding, when it is. */
+export type UploadHold = 'game' | 'local_only' | 'no_recordings' | 'other_server' | 'server_full' | 'paused'
+
+/** The queue, as one answer for Settings and the Recordings tab. */
+export interface UploadQueueState {
+  /** The server this PC is on keeps recordings — has Foxfire Media. False in local-only mode. */
+  recordings: boolean
+  /** Why nothing is moving, or null while uploads can run. */
+  held: UploadHold | null
+  /** The upload under way, if any. */
+  current: {
+    recordingId: number
+    bytesSent: number
+    fileBytes: number
+    /** Over the last half minute or so; null until it is known. */
+    bytesPerSecond: number | null
+  } | null
+  /** Queued, uploading or paused, waiting to send. */
+  waiting: number
+  /** Sent, waiting for the server to say ready. */
+  processing: number
+  failed: number
+  /** Bytes still to send across everything waiting, the current upload's remainder included. */
+  remainingBytes: number
+  /** At the current rate, how long the rest will take, seconds; null until a rate is known. */
+  etaSeconds: number | null
 }
 
-export interface YouTubeSettings {
-  /** Put every new recording on YouTube once it finds its match. Off unless somebody turns it on. */
+export interface MediaSettings {
+  /** Upload every new recording once it finds its game. Off unless somebody turns it on. */
   autoUpload: boolean
-  defaultPrivacy: YouTubePrivacy
+  /** What happens to a file once the server has it ready. Kept unless somebody says otherwise. */
+  afterUpload: 'keep' | 'delete'
   titleTemplate: string
   /** A TFT recording's, which says where it finished where League's says how it went. */
   tftTitleTemplate: string
@@ -695,6 +690,13 @@ export interface ServerState {
    * host turned TFT on. Every game when no server is active.
    */
   games: GameId[]
+  /**
+   * Whether the active server keeps recordings — has Foxfire Media. False in
+   * local-only mode, where there is no server to keep them.
+   */
+  recordings: boolean
+  /** Foxfire Media's origin, while `recordings` is on: where its player is framed from. */
+  mediaOrigin: string | null
   /**
    * Set when the active server refused this build outright, and holds the
    * version to install. Everything server-backed is unavailable until then, so

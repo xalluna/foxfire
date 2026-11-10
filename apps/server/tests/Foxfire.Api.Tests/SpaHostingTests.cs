@@ -37,6 +37,38 @@ public class SpaHostingTests(FoxfireServerFixture server)
     }
 
     [Fact]
+    public async Task The_relay_a_desktop_plays_recordings_through_may_be_framed_and_frames_only_foxfire_media()
+    {
+        using var browser = server.AnonymousClient();
+
+        var response = await browser.GetAsync(new Uri("/media-relay", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(FoxfireServerFixture.RelayMarker, await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var csp = string.Join(" ", response.Headers.GetValues("Content-Security-Policy"));
+        Assert.Contains("default-src 'none'", csp, StringComparison.Ordinal);
+        Assert.Contains($"frame-src {FakeMedia.BaseUrl};", csp, StringComparison.Ordinal);
+        Assert.DoesNotContain("frame-ancestors", csp, StringComparison.Ordinal);
+        Assert.False(response.Headers.Contains("X-Frame-Options"));
+    }
+
+    [Fact]
+    public async Task A_server_without_foxfire_media_has_no_relay_and_frames_nothing()
+    {
+        await using var host = FakeMedia.Off(server.Factory);
+        using var browser = host.CreateClient();
+
+        var relay = await browser.GetAsync(new Uri("/media-relay", UriKind.Relative));
+        Assert.DoesNotContain(FoxfireServerFixture.RelayMarker, await relay.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var page = await browser.GetAsync(new Uri("/players/Faker-KR1", UriKind.Relative));
+        var csp = string.Join(" ", page.Headers.GetValues("Content-Security-Policy"));
+        Assert.DoesNotContain("frame-src", csp, StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeMedia.BaseUrl, csp, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_page_is_sent_with_its_protections_and_is_never_cached_stale()
     {
         using var browser = server.AnonymousClient();
@@ -49,17 +81,11 @@ public class SpaHostingTests(FoxfireServerFixture server)
         Assert.Contains("frame-ancestors 'none'", csp, StringComparison.Ordinal);
         Assert.Contains("https://ddragon.leagueoflegends.com", csp, StringComparison.Ordinal);
 
-#if FEATURE_YOUTUBE
-        // A recording plays in YouTube's privacy-enhanced player, driven by its
-        // IFrame API — and that is the only frame and the only foreign script.
-        Assert.Contains("frame-src https://www.youtube-nocookie.com;", csp, StringComparison.Ordinal);
-        Assert.Contains("script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com;", csp, StringComparison.Ordinal);
-#else
-        // A build without recordings lets nothing of YouTube's into the page.
+        // A recording plays in Foxfire Media's player, in a frame, driven over
+        // postMessage: its frame and its posters, and no script of anybody else's.
+        Assert.Contains($"frame-src {FakeMedia.BaseUrl};", csp, StringComparison.Ordinal);
+        Assert.Contains($"img-src 'self' data: https://ddragon.leagueoflegends.com {FakeMedia.BaseUrl};", csp, StringComparison.Ordinal);
         Assert.Contains("script-src 'self' 'wasm-unsafe-eval';", csp, StringComparison.Ordinal);
-        Assert.DoesNotContain("youtube", csp, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("frame-src", csp, StringComparison.Ordinal);
-#endif
 
         Assert.Equal("noindex, nofollow", string.Join(",", headers.GetValues("X-Robots-Tag")));
         Assert.Equal("same-origin", string.Join(",", headers.GetValues("Referrer-Policy")));

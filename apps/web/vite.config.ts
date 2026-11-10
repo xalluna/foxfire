@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { featureDefines } from '../../tooling/vite/features'
+import { resolve } from 'node:path'
 import { fsAllow } from '../../tooling/vite/fsAllow'
 
 /**
@@ -18,14 +18,14 @@ import { fsAllow } from '../../tooling/vite/fsAllow'
  *
  * `--mode mock` needs no server at all: it renders the fixture client, for
  * design work. See src/dev/mock.ts.
+ *
+ * Two pages: the client, and the relay the desktop plays recordings through
+ * (src/mediaRelay), which the server serves at /media-relay.
  */
 export default defineConfig(({ mode }) => {
   const server = process.env.FOXFIRE_SERVER ?? 'http://localhost:8080'
 
   return {
-    // Build-time feature switches, the same ones the server is compiled with
-    // when a release builds both — see tooling/vite/features.ts.
-    define: featureDefines(),
     plugins: [react()],
     server: {
       port: 5173,
@@ -43,7 +43,13 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: true
+      sourcemap: true,
+      rollupOptions: {
+        input: {
+          main: resolve(__dirname, 'index.html'),
+          relay: resolve(__dirname, 'media-relay.html')
+        }
+      }
     }
   }
 })

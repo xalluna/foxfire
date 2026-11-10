@@ -1,7 +1,6 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { featureDefines } from '../../tooling/vite/features'
 import { fsAllow } from '../../tooling/vite/fsAllow'
 
 /**
@@ -17,9 +16,6 @@ import { fsAllow } from '../../tooling/vite/fsAllow'
  */
 export default defineConfig({
   root: 'src/renderer',
-  // The same switches as a real build, so the harness shows what the
-  // installer would: FOXFIRE_FEATURE_YOUTUBE=1 npm run dev:web for YouTube.
-  define: featureDefines(),
   resolve: {
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src'),
