@@ -32,9 +32,9 @@ import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 
 const PIN = {
-  release: 'autobuild-2026-10-27-18-38',
-  name: 'ffmpeg-n9.0.2-36-g6882969ce9-win64-lgpl-9.0',
-  sha256: '79e8ff30c01ac58a2bc4e820c86be81d426ea0bee10df8030fc6ac3c72fe785c'
+  release: 'autobuild-2026-11-10-12-39',
+  name: 'ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0',
+  sha256: '3c3faf2d691c1e3038b04fda8e38dbc790a1358a9b12b6e796072c5c5f97c821'
 }
 
 const URL = `https://github.com/BtbN/FFmpeg-Builds/releases/download/${PIN.release}/${PIN.name}.zip`

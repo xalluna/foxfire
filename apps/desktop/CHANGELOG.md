@@ -71,6 +71,9 @@ YouTube, which never shipped, is gone.
   cannot name a `file://` page).
 - The `foxfire-youtube://` scheme, the YouTube referer hook, the Google client and the
   `FOXFIRE_FEATURE_YOUTUBE` build switch are gone, from this build and from the release workflow.
+- FFmpeg moves to BtbN's autobuild of 2026-11-10 (`n9.0.2-48-gd4070a14ce`), the same 9.0.2 line
+  twelve commits on. The 2026-10-27 build it was pinned to had been pruned, so the installer could
+  not be built.
 
 ## [0.17.0] — 2026-11-07
 
