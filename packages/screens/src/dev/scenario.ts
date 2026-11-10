@@ -48,16 +48,15 @@ export type Scenario =
   | 'update-downloading'
   | 'update-held'
   | 'just-installed'
-  // Recordings on YouTube. The queue in every state it can be in; a build with
-  // no Google client in it; one with a client and nobody connected; and a
-  // recording that plays for nobody but its owner.
-  | 'youtube-queue'
-  // A season of games recorded and none of them on YouTube yet, for the
-  // batch upload: select all, one privacy, queue the lot.
-  | 'youtube-backlog'
-  | 'youtube-unconfigured'
-  | 'youtube-disconnected'
-  | 'recording-private'
+  // Recordings on the server. The upload queue in every state it can be in; a
+  // season of games recorded and none of them uploaded yet, for the bulk
+  // upload; a server that keeps no recordings; a recording the server could
+  // not process; and one whose player will not play.
+  | 'media-queue'
+  | 'media-backlog'
+  | 'media-off'
+  | 'recording-failed'
+  | 'recording-unplayable'
   // Signed in as an admin to a server too old to report insights, which
   // answers the page's routes with a 404.
   | 'insights-unsupported'

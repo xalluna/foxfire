@@ -1,6 +1,5 @@
 import { GAME_IDS, type ConnectionState, type FoxfireClient } from '@foxfire/core'
 import type { Api } from '@shared/api'
-import { YOUTUBE_ENABLED } from '@shared/features'
 import type { ServerState } from '@shared/types'
 
 /**
@@ -56,17 +55,19 @@ export function createIpcClient(api: Api): FoxfireClient {
     favorites: api.favorites,
 
     // Answered by the server when connected to one; local-only has none, and
-    // says so rather than pretending. Absent altogether from a build without
-    // YouTube, whose main process answers none of these channels.
-    ...(YOUTUBE_ENABLED
-      ? {
-          matchRecordings: {
-            get: api.matchRecordings.get,
-            attach: api.matchRecordings.attach,
-            detach: api.matchRecordings.detach
-          }
-        }
-      : {}),
+    // says so rather than pretending. Uploading is not the screens' to do
+    // here — the main process has the file and runs the queue — so the
+    // platform's uploadRecording is the way in, and this refuses.
+    matchRecordings: {
+      get: api.matchRecordings.get,
+      embed: api.matchRecordings.embed,
+      remove: api.matchRecordings.remove,
+      upload: async () => ({
+        ok: false,
+        reason: 'failed',
+        message: 'Recordings are uploaded from the Recordings tab, where their files are.'
+      })
+    },
     assets: api.assets,
 
     account: {
@@ -112,7 +113,7 @@ export function createIpcClient(api: Api): FoxfireClient {
       onSyncProgress: api.sync.onProgress,
       onRankEdited: api.rank.onEdited,
       onRankChanged: api.lcu.onRankChanged,
-      onRecordingChanged: YOUTUBE_ENABLED ? api.matchRecordings.onChanged : () => () => undefined
+      onRecordingChanged: api.matchRecordings.onChanged
     }
   }
 }
@@ -147,6 +148,7 @@ export function connectionFrom(state: ServerState): ConnectionState {
     // The server's to say while reading from it; local-only, this machine's
     // own key decides what it can reach, and every game is offered.
     games: connected ? state.games : [...GAME_IDS],
+    recordings: connected && state.recordings,
     riotKeyRejected: state.riotKeyRejected,
     upgradeRequired: state.upgradeRequired
   }

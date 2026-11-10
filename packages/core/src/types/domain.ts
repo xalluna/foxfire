@@ -99,9 +99,9 @@ export type RecordingEventRole = 'kill' | 'death' | 'assist' | 'multikill'
 /**
  * One thing that happened to the player whose screen a recording is.
  *
- * Moved here from the desktop when recordings started reaching YouTube: the
- * events travel to a server with the video, so the web draws the same markers
- * the desktop always did, from the same shape.
+ * Moved here from the desktop when recordings started reaching a server: the
+ * events travel there with the video, so the web draws the same markers the
+ * desktop always did, from the same shape.
  */
 export interface RecordingEvent {
   /** The game's own EventID, which is stable within a game and makes the poll idempotent. */
@@ -117,48 +117,55 @@ export interface RecordingEvent {
 }
 
 /**
- * Who can watch a YouTube video. The uploader picks, which YouTube requires.
+ * Where a recording on a server is in its life. Foxfire Media's own states,
+ * folded to the ones a client acts on:
  *
- * A private video attaches to a server like any other; it plays for nobody
- * but its owner signed in to YouTube, and the player says so rather than the
- * row pretending there is nothing there.
+ * - `uploading` — waiting for its file, or receiving it.
+ * - `upload_failed` — the upload stopped; the desktop asks for a new token and
+ *   sends the file again.
+ * - `processing` — all of it is there, and Foxfire Media is making it playable.
+ * - `ready` — playable, and the one state a desktop may delete its own copy in.
+ * - `failed` — Foxfire Media could not process it; `error` says why.
  */
-export type YouTubePrivacy = 'public' | 'unlisted' | 'private'
+export type RecordingStatus = 'uploading' | 'upload_failed' | 'processing' | 'ready' | 'failed'
 
 /**
- * The YouTube recording a server holds for one account's view of one game.
+ * The recording a server holds for one account's view of one game, on its
+ * Foxfire Media.
  *
  * A recording is one player's screen, so it belongs to a (match, account) pair
  * and never to the match: in Ahri's history this is Ahri's video, in Riven's it
  * is Riven's, and a history that is neither has none. The row carries only
- * enough to offer "Watch recording"; the events come with the recording itself.
+ * enough to offer "Watch recording", or say it is on its way; the events come
+ * with the recording itself.
  */
 export interface MatchRecordingSummary {
-  youtubeVideoId: string
-  /** As the uploader chose it, or null for a link pasted with nothing to say. */
-  privacy: YouTubePrivacy | null
-  /** Whether markers come with it — false for a link pasted in a browser. */
+  /** Foxfire Media's id for the video. Never a URL: a client asks the server for an embed. */
+  videoId: string
+  status: RecordingStatus
+  /** Whether markers come with it. */
   hasEvents: boolean
+  durationSeconds: number | null
 }
 
 /** The recording in full, as its page and the player read it. */
 export interface MatchRecording extends MatchRecordingSummary {
   title: string | null
-  durationSeconds: number | null
-  /** Uploaded by Foxfire, or a link to a video somebody uploaded themselves. */
-  source: 'upload' | 'link'
-  /** The username that attached it; null once that user is gone. */
+  /** Why it failed, when it did. */
+  error: string | null
+  /** The username that uploaded it; null once that user is gone. */
   attachedBy: string | null
   attachedAt: string
+  readyAt: string | null
   events: RecordingEvent[]
 }
 
-/** What attaching a recording to a game sends. */
-export interface AttachRecordingInput {
-  youtubeVideoId: string
-  source: 'upload' | 'link'
-  privacy?: YouTubePrivacy | null
-  title?: string | null
+/** What starting a recording's upload sends. Asking again carries an upload on. */
+export interface RecordingUploadInput {
+  title: string
+  /** The file's own name — Foxfire Media keeps its extension to know what it is. */
+  filename: string
+  sizeBytes: number
   durationSeconds?: number | null
   events?: RecordingEvent[]
   /** Set once somebody has been asked and said yes: one recording per game per account. */
@@ -166,16 +173,44 @@ export interface AttachRecordingInput {
 }
 
 /**
- * How an attach went.
+ * Where to send a recording's file, and the one-time token that lets it in.
  *
- * `exists` is its own answer rather than an error string because the screen
- * turns it into a question — replace the video already on this game? — and
- * resends with `replace` when the answer is yes.
+ * The file goes to Foxfire Media over tus, never through the server. The
+ * token has to start the upload before `expiresAt`, is spent by starting it,
+ * and afterwards resumes only that same upload. It is a credential: nothing
+ * logs it, and the desktop keeps it in its secret store.
  */
-export type AttachRecordingOutcome =
-  | { ok: true }
-  | { ok: false; reason: 'exists'; message: string }
-  | { ok: false; reason: 'failed'; message: string }
+export interface RecordingUploadTicket {
+  videoId: string
+  uploadUrl: string
+  uploadToken: string
+  expiresAt: string
+  maxBytes: number
+}
+
+/**
+ * A page that plays one recording, for framing. Good only for loading — the
+ * player keeps its own playback going after that — so it is asked for each
+ * time a recording is opened, never stored.
+ */
+export interface RecordingEmbed {
+  /** Foxfire Media's player, its own controls hidden; Foxfire draws its own. */
+  embedUrl: string
+  posterUrl: string | null
+  expiresAt: string
+}
+
+/**
+ * How starting an upload went.
+ *
+ * `exists` and `in_progress` are their own answers rather than error strings:
+ * the first turns into a question — replace the recording already on this
+ * game? — and the second means wait, an upload of it is running. `full` is the
+ * server's video storage out of room, which no retry soon will fix.
+ */
+export type RecordingUploadOutcome =
+  | { ok: true; ticket: RecordingUploadTicket }
+  | { ok: false; reason: 'exists' | 'in_progress' | 'full' | 'failed'; message: string }
 
 /**
  * What this machine holds for one game, as a match row carries it.
@@ -187,12 +222,17 @@ export interface LocalArtefacts {
   /** The recording of this game, when one exists. Scoped to the account it was recorded on. */
   recordingId: number | null
   /**
-   * The YouTube copy of that recording, once it has one.
-   *
-   * Optional because only the desktop's own recordings table can answer it,
-   * and a row built before it knew to ask simply has nothing on YouTube.
+   * Whether that recording reached the server this PC is signed in to, as
+   * this PC last heard. The row's own `recording` is the server's answer and
+   * wins; this is what the desktop knows before a sync brings that.
    */
-  recordingVideoId?: string | null
+  recordingOnServer?: boolean
+  /**
+   * The recording's file was deleted from this PC once the server had it —
+   * "delete after upload". The row still has the recording; it plays from the
+   * server, and there is nothing here left to upload.
+   */
+  recordingFileDeleted?: boolean
   /** An upload of that recording is queued or running, so the menu does not offer another. */
   recordingUploadPending?: boolean
   /**
@@ -276,13 +316,12 @@ export interface MatchSummary {
   sharedReplay?: SharedReplaySummary | null
 
   /**
-   * The YouTube recording of this game from this row's player, when a server holds one.
+   * The recording of this game from this row's player, when a server holds one.
    *
    * Scoped the way the row is: a server answers it for the account whose
    * history this is, so the same game in two people's histories carries two
-   * different recordings, or one, or none. Null in local-only mode, where a
-   * video on YouTube lives on the recording itself and reaches the row
-   * through `local`.
+   * different recordings, or one, or none. Null in local-only mode, where
+   * there is no server to hold one.
    */
   recording?: MatchRecordingSummary | null
 

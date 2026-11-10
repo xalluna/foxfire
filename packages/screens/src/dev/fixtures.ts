@@ -12,7 +12,8 @@ import type {
   RankSnapshot,
 } from '@foxfire/core'
 import { ladderPosition, rankAtPosition, rankMovement, rangeBounds } from '@foxfire/core'
-import { FIXTURE_VIDEO_ID, fixtureRecording } from './recordings'
+import { fixtureRecording } from './recordings'
+import { scenario } from './scenario'
 import { devSeasonIdAt } from './seasons'
 import {
   C,
@@ -608,9 +609,9 @@ const FAKER_MATCHES: MatchSummary[] = SEEDS.map((s, i) => ({
     // The first three games were recorded; the rest were not, so the context
     // menu is exercised both enabled and disabled without switching scenario.
     recordingId: i < 3 ? i + 1 : null,
-    // Of those, the newest is already on YouTube and the third is on its way —
-    // so the menu shows upload offered, upload pending, and neither.
-    recordingVideoId: i === 0 ? FIXTURE_VIDEO_ID : null,
+    // Of those, the newest is already on the server and the third is on its
+    // way — so the menu shows upload offered, upload pending, and neither.
+    recordingOnServer: i === 0,
     recordingUploadPending: i === 2,
     // Overlaps the recordings deliberately: the mock has to exercise a row with
     // both artefacts, one with each, and one with neither.
@@ -635,15 +636,20 @@ export const MATCHES: Record<string, MatchSummary[]> = {
 }
 
 /**
- * What the harness's server holds on YouTube, keyed `account:match`.
+ * What the harness's server holds of recordings, keyed `account:match`.
  *
- * Faker's newest game, which is also on this disk, and his fourth, which only
- * the server has — a link somebody pasted, so it plays without markers. The
- * second account has none, so its rows show the other side of every question.
+ * Faker's newest game, which is also on this disk; his fourth, which only the
+ * server has — its file was deleted after upload; and his sixth, still
+ * processing. The second account has none, so its rows show the other side of
+ * every question.
  */
 export const MATCH_RECORDINGS: Record<string, MatchRecording> = {
-  [`1:${FAKER_MATCHES[0]!.matchId}`]: fixtureRecording(FAKER_MATCHES[0]!, 'upload'),
-  [`1:${FAKER_MATCHES[3]!.matchId}`]: fixtureRecording(FAKER_MATCHES[3]!, 'link')
+  [`1:${FAKER_MATCHES[0]!.matchId}`]: fixtureRecording(FAKER_MATCHES[0]!),
+  [`1:${FAKER_MATCHES[3]!.matchId}`]: fixtureRecording(FAKER_MATCHES[3]!),
+  [`1:${FAKER_MATCHES[5]!.matchId}`]: fixtureRecording(
+    FAKER_MATCHES[5]!,
+    scenario === 'recording-failed' ? 'failed' : 'processing'
+  )
 }
 
 /** Keyed by match id across both accounts, which is how the detail view looks them up. */

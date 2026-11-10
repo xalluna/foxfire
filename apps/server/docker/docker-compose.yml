@@ -69,6 +69,11 @@ services:
       Email__Resend__MonthlyLimit: "${RESEND_MONTHLY_LIMIT:-3000}"
       Email__Resend__MonthlyResetDay: "${RESEND_MONTHLY_RESET_DAY:-1}"
 
+      # Recordings, on Foxfire Media, when MEDIA_URL is set. See .env.example.
+      Media__BaseUrl: "${MEDIA_URL:-}"
+      Media__ApiKey: "${MEDIA_API_KEY:-}"
+      Media__PublicUrl: "${MEDIA_PUBLIC_URL:-}"
+
       # Logs go to the console and to a `logs` container in the blob store
       # above. See .env.example.
       Serilog__MinimumLevel__Default: "${LOG_LEVEL:-Information}"

@@ -108,8 +108,7 @@ import {
 import { openTelemetryWindow } from '../telemetryWindow'
 import { openLpEditorWindow } from '../lpEditorWindow'
 import { openRecordingWindow } from '../recordingWindow'
-import { YOUTUBE_ENABLED } from '@shared/features'
-import { registerYouTubeHandlers } from './youtubeHandlers'
+import { registerMediaHandlers } from './mediaHandlers'
 import {
   clearObsPassword,
   getCaptureSettings,
@@ -490,9 +489,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
   ipcMain.handle(CH.recordings.forget, (_e, recordingId: number) => forgetRecording(recordingId))
 
-  // YouTube, and a server's recordings, only in a build made with them. Without,
-  // nothing answers those channels — and nothing in the renderer asks.
-  if (YOUTUBE_ENABLED) registerYouTubeHandlers()
+  // A server's recordings, and the queue that sends this PC's there.
+  registerMediaHandlers()
 
   /* Riot's own replays. No detail handler and no window: the League client is
      the player, and Foxfire only ever hands it a path. */

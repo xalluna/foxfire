@@ -94,10 +94,13 @@ export const httpApi: ServerBackedApi = {
     }
   },
 
-  // The same routes the web client calls. Attaching from here, with the
-  // markers this machine captured, goes through youtube/attach.ts instead;
-  // this is the plain path, for a link with nothing on this disk behind it.
-  matchRecordings: serverApi().matchRecordings
+  // The same routes the web client calls. Uploading from here goes through
+  // media/queue.ts, which has the file.
+  matchRecordings: {
+    get: (accountId, matchId) => serverApi().matchRecordings.get(accountId, matchId),
+    embed: (accountId, matchId) => serverApi().matchRecordings.embed(accountId, matchId),
+    remove: (accountId, matchId) => serverApi().matchRecordings.remove(accountId, matchId)
+  }
 }
 
 /**
@@ -148,7 +151,8 @@ async function withLocalArtefacts(
       ...row,
       local: {
         recordingId: recording?.recordingId ?? null,
-        recordingVideoId: recording?.videoId ?? null,
+        recordingOnServer: recording?.onServer ?? false,
+        recordingFileDeleted: recording?.fileDeleted ?? false,
         recordingUploadPending: recording?.uploadPending ?? false,
         replayId: replays.get(row.matchId) ?? null
       }

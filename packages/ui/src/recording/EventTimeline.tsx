@@ -17,10 +17,10 @@ import { clusterEvents, describeCluster, leadEvent, seekTargetFor } from './time
  * and "what happened to me at fourteen minutes" is the question a recording is
  * opened to answer.
  *
- * Drawn under the video, never over it, which for a YouTube copy is a rule and
- * not a taste: nothing may sit on top of YouTube's player. The hover preview
- * needs a second decoder of the same video, so only a file on this machine
- * gets one; over YouTube the bar still shows the time under the pointer.
+ * Drawn under the video rather than over it, so the HUD's corners stay clear.
+ * The hover preview needs a second decoder of the same video, so only a file on
+ * this machine gets one; over the server's copy the bar still shows the time
+ * under the pointer, and how much of the video has loaded.
  */
 
 const ROLE_STYLE: Record<RecordingEvent['role'], string> = {
@@ -43,6 +43,7 @@ export function EventTimeline({
   events,
   duration,
   currentTime,
+  buffered = [],
   onSeek
 }: {
   /** Same source as the player, for the hover preview's own decoder. Absent means no thumbnails. */
@@ -50,6 +51,8 @@ export function EventTimeline({
   events: readonly RecordingEvent[]
   duration: number
   currentTime: number
+  /** What has loaded, as [start, end] seconds — drawn behind the progress. */
+  buffered?: ReadonlyArray<readonly [number, number]>
   onSeek: (seconds: number) => void
 }): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
@@ -173,6 +176,14 @@ export function EventTimeline({
             onSeek(to)
           }}
         >
+          {duration > 0 &&
+            buffered.map(([start, end]) => (
+              <div
+                key={start}
+                className="pointer-events-none absolute inset-y-0 rounded-full bg-text-mute/30"
+                style={{ left: `${(start / duration) * 100}%`, width: `${((end - start) / duration) * 100}%` }}
+              />
+            ))}
           <div
             className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-accent/70"
             style={{ width: `${progress}%` }}

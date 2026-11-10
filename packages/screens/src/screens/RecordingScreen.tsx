@@ -1,17 +1,8 @@
-import type { ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query'
-import type { Account, GameId, MatchSummary, TftMatchSummary } from '@foxfire/core'
+import type { Account, GameId, MatchSummary, RecordingStatus, TftMatchSummary } from '@foxfire/core'
 import { paths } from '@foxfire/core/routes'
-import { youtubeWatchUrl } from '@foxfire/core/youtube'
-import {
-  CopyLinkButton,
-  EmptyState,
-  Icon,
-  MatchListSkeleton,
-  RecordingHeader,
-  RecordingPlayer,
-  recordingActionClass
-} from '@foxfire/ui'
+import { CopyLinkButton, EmptyState, Icon, MatchListSkeleton, RecordingHeader, RecordingPlayer } from '@foxfire/ui'
 import { useClient, usePlatform } from '../client/context'
 import { useOffersGame } from '../client/useConnection'
 import { useShareLink } from '../client/useShareLink'
@@ -19,7 +10,7 @@ import { headerFactsFor, isTftRow, tftHeaderFactsFor } from '../match/recordingF
 import { queryKeys } from '../queries/keys'
 
 /**
- * One player's recording of one game, from YouTube, with its markers.
+ * One player's recording of one game, from the server, with its markers.
  *
  * What "Watch recording" opens in a browser, and what a desktop opens for a
  * recording it has no file of — somebody else's, or its own after the file was
@@ -53,11 +44,25 @@ export function RecordingScreen({
   const share = useShareLink()
 
   const readRecording = client.matchRecordings?.get
+  const askEmbed = client.matchRecordings?.embed
+  const media = platform.media
+
+  // Stable for the player, which asks for a fresh embed each time it mounts the frame.
+  const embed = useCallback(() => {
+    if (!askEmbed) return Promise.reject(new Error('This app is not connected to a server.'))
+    return askEmbed(account.id, matchId)
+  }, [askEmbed, account.id, matchId])
 
   const recording = useQuery({
     queryKey: queryKeys.matchRecording(account.id, matchId),
     queryFn: () => readRecording!(account.id, matchId),
-    enabled: readRecording !== undefined
+    enabled: readRecording !== undefined,
+    // Something on its way is asked about again until it is there, which is
+    // also what has the server check on it when no webhook can reach it.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'uploading' || status === 'upload_failed' || status === 'processing' ? 15_000 : false
+    }
   })
 
   // The row, from the history the link named, then from the other. A client
@@ -98,7 +103,7 @@ export function RecordingScreen({
         <EmptyState
           icon={<Icon.Film />}
           title="Recordings live on a server"
-          description="Connect to a Foxfire Server to watch recordings people have put on YouTube."
+          description="Connect to a Foxfire Server to watch the recordings people have uploaded to it."
         />
       )
     }
@@ -127,27 +132,38 @@ export function RecordingScreen({
         <EmptyState
           icon={<Icon.Film />}
           title="No recording of this game"
-          description={`${account.gameName} has not put their view of this game on YouTube.`}
+          description={`${account.gameName} has not uploaded their view of this game to this server.`}
         />
       )
     }
 
-    if (!platform.youtube) {
+    if (!media) {
       return (
         <EmptyState
           icon={<Icon.Film />}
-          title="This app cannot play YouTube recordings"
-          description="Open it on YouTube instead."
+          title="This app cannot play the server's recordings"
+          description="Open this recording in Foxfire, on the desktop or in a browser."
         />
       )
     }
 
-    return (
-      <RecordingPlayer
-        source={{ kind: 'youtube', videoId: recording.data.youtubeVideoId, mount: platform.youtube }}
-        events={recording.data.events}
-      />
-    )
+    if (recording.data.status !== 'ready') {
+      const failed = recording.data.status === 'failed'
+      return (
+        <EmptyState
+          icon={failed ? <Icon.Warning /> : <Icon.Film />}
+          {...(failed ? { tone: 'error' as const } : {})}
+          title={notReadyTitle(recording.data.status)}
+          description={
+            failed
+              ? (recording.data.error ?? undefined)
+              : 'It plays here as soon as the server has it ready.'
+          }
+        />
+      )
+    }
+
+    return <RecordingPlayer source={{ kind: 'media', embed, mount: media }} events={recording.data.events} />
   })()
 
   const video = recording.data ?? null
@@ -160,27 +176,10 @@ export function RecordingScreen({
 
       <RecordingHeader
         facts={facts}
-        status={
-          video?.privacy === 'private'
-            ? 'Private on YouTube — it only plays for its owner'
-            : video?.attachedBy
-              ? `Attached by ${video.attachedBy}`
-              : undefined
-        }
+        status={video?.attachedBy ? `Uploaded by ${video.attachedBy}` : undefined}
         actions={
           <>
             {actions}
-            {video && (
-              <a
-                href={youtubeWatchUrl(video.youtubeVideoId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${recordingActionClass} inline-flex items-center gap-1.5`}
-              >
-                <Icon.ExternalLink width={13} height={13} />
-                Open on YouTube
-              </a>
-            )}
             {share && video && (
               <CopyLinkButton onCopy={() => share(paths.recording(account, matchId, { game: rowGame }))} />
             )}
@@ -191,4 +190,15 @@ export function RecordingScreen({
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
     </div>
   )
+}
+
+function notReadyTitle(status: RecordingStatus): string {
+  switch (status) {
+    case 'processing':
+      return 'This recording is processing'
+    case 'failed':
+      return 'The server could not process this recording'
+    default:
+      return 'This recording is still uploading'
+  }
 }

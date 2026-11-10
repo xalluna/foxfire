@@ -86,7 +86,7 @@ export interface TftMatchSummary extends TftBoard {
   /** As League's: null for an unranked queue, or one no LP could be attributed to. */
   rank: MatchRankInfo | null
   hasManualRank: boolean
-  /** The YouTube recording a server holds for this player's view of this game. */
+  /** The recording a server holds for this player's view of this game. */
   recording?: MatchRecordingSummary | null
   /** This machine's files for the game; the desktop's alone. */
   local?: LocalArtefacts

@@ -53,6 +53,14 @@ export interface ServerProbe {
    */
   games: GameId[] | null
   /**
+   * Whether the server keeps recordings, on its Foxfire Media. False from a
+   * server older than recordings or without Foxfire Media; null when it
+   * could not be reached.
+   */
+  recordings: boolean | null
+  /** Foxfire Media's origin, where its player is framed from, while `recordings` is on. */
+  mediaOrigin: string | null
+  /**
    * How this build stands against that server's stated range. Advisory only:
    * the server's allow list is a set rather than a range, so a version between
    * the minimum and the newest can still be absent from it. This decides what
@@ -95,6 +103,13 @@ export interface VersionInfo {
    * TFT, which means League alone. Read it through `offeredGames`.
    */
   games?: string[]
+  /**
+   * Whether the server keeps recordings — has Foxfire Media configured.
+   * Absent from a server older than recordings, which means no.
+   */
+  recordings?: boolean
+  /** Foxfire Media's origin while `recordings` is on; where its player is framed from. */
+  mediaOrigin?: string | null
 }
 
 /** Who you are on a server, as the server says it. */

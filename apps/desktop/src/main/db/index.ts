@@ -18,6 +18,7 @@ import serverModeSql from './migrations/013_server_mode.sql?raw'
 import youtubeSql from './migrations/014_youtube.sql?raw'
 import attributionByGameEndSql from './migrations/015_attribution_by_game_end.sql?raw'
 import tftSql from './migrations/016_tft.sql?raw'
+import mediaSql from './migrations/017_media.sql?raw'
 
 let db: DatabaseSync | null = null
 
@@ -39,7 +40,8 @@ const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
   { name: '013_server_mode.sql', sql: serverModeSql },
   { name: '014_youtube.sql', sql: youtubeSql },
   { name: '015_attribution_by_game_end.sql', sql: attributionByGameEndSql },
-  { name: '016_tft.sql', sql: tftSql }
+  { name: '016_tft.sql', sql: tftSql },
+  { name: '017_media.sql', sql: mediaSql }
 ]
 
 function applyMigrations(database: DatabaseSync): void {

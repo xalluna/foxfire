@@ -45,10 +45,20 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
     private readonly MsSqlContainer _sql = new MsSqlBuilder(SqlServerImage).Build();
     private readonly AzuriteContainer _blob = new AzuriteBuilder(AzuriteImage).Build();
     private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"foxfire-web-{Guid.NewGuid():N}");
+    private WebApplicationFactory<Program>? _root;
     private WebApplicationFactory<Program>? _factory;
+
+    /// <summary>
+    /// The Foxfire Media behind this server and every host made from it, so
+    /// recordings work suite-wide. FakeMedia.Off makes a host without it.
+    /// </summary>
+    public FakeMedia Media { get; } = new();
 
     /// <summary>In the stand-in web client's index.html, so a test can tell the page apart from anything else.</summary>
     public const string WebIndexMarker = "<!-- foxfire web client, test build -->";
+
+    /// <summary>In the stand-in relay page, so a test can tell it apart from the web client.</summary>
+    public const string RelayMarker = "<!-- foxfire media relay, test build -->";
 
     /// <summary>A fingerprinted asset in the stand-in web client, the way Vite names one.</summary>
     public const string WebAssetPath = "/assets/app-abc123.js";
@@ -80,6 +90,9 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
             Path.Combine(_webRoot, "index.html"),
             $"<!doctype html><html><head><title>Foxfire</title></head><body>{WebIndexMarker}<div id=\"root\"></div></body></html>");
         await File.WriteAllTextAsync(Path.Combine(_webRoot, "assets", "app-abc123.js"), "console.log('foxfire')");
+        await File.WriteAllTextAsync(
+            Path.Combine(_webRoot, "media-relay.html"),
+            $"<!doctype html><html><head><title>Relay</title></head><body>{RelayMarker}</body></html>");
 
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", _sql.GetConnectionString());
         Environment.SetEnvironmentVariable("ConnectionStrings__Blob", _blob.GetConnectionString());
@@ -113,7 +126,12 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
         // what it does when on. TftOffTests runs a host with it off.
         Environment.SetEnvironmentVariable("Tft__Enabled", "true");
 
-        _factory = new WebApplicationFactory<Program>();
+        // Recordings are kept on Foxfire Media, the fake one, unless a host
+        // switches it off. MediaOffTests runs one that has.
+        foreach (var (key, value) in FakeMedia.Settings) Environment.SetEnvironmentVariable(key, value);
+
+        _root = new WebApplicationFactory<Program>();
+        _factory = _root.WithWebHostBuilder(builder => builder.ConfigureServices(Media.Install));
 
         // Force the host to build now rather than on first request, so a
         // configuration or migration failure surfaces as a fixture failure with
@@ -136,7 +154,7 @@ public sealed class FoxfireServerFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_factory is not null) await _factory.DisposeAsync();
+        if (_root is not null) await _root.DisposeAsync();
         await _sql.DisposeAsync();
         await _blob.DisposeAsync();
 

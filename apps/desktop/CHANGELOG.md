@@ -7,6 +7,71 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.18.0] — 2026-11-10
+
+Recordings go to your Foxfire Server. Send one, a selection, or your whole backlog — hundreds of
+gigabytes, one game after another in the background — or have every game go up by itself once it is
+over. Everybody on the server watches them in Foxfire, with your kills and deaths on the timeline,
+and you choose whether each file stays on this PC or goes once the server has it. Uploading to
+YouTube, which never shipped, is gone.
+
+### Added
+
+- **Upload recordings to your server.** On a server that keeps recordings, the Recordings tab has an
+  Upload button on each recording, and "Select all N not on the server" to send a batch. Each
+  recording is titled from its own game, and goes straight to the server's video storage — not
+  through the server itself — one at a time, oldest game first. A recording that never found its
+  game cannot go: the server keeps each recording against its game.
+- **Upload everything at once.** Settings › Server recordings says how many recordings on this PC
+  the server does not have yet, and how much space they take, across every account you play here,
+  with one button to queue them all. Uploads pause while you are in a game, wait if the server's
+  storage is full, carry on after a restart from where they got to, and can be paused and resumed
+  by hand.
+- **Keep the file, or free the space.** Each batch asks whether to keep each file on this PC or
+  delete it once it is on the server, and Settings sets the default. A file is only deleted after
+  the server says the video is ready to watch, and only if it is the same file that was sent. The
+  recording, its markers and its place in your history stay, and it plays from the server.
+- **Upload every game automatically.** Turn it on in Settings › Server recordings and each new
+  recording goes to the server by itself once it has found its game — after the game is over,
+  with nothing to click.
+- **Watch recordings from the server.** A recording on the server plays in Foxfire's own player —
+  the same controls as a recording on this PC: play and pause, event markers and next and previous
+  event, volume, slow motion and fullscreen — whoever recorded it. A row whose recording is still
+  being processed says so.
+- **A queue you can see.** Above the Recordings tab, and in Settings, a line says what is going up,
+  how much is left, and roughly how long that will take at the speed it is going.
+
+### Changed
+
+- **Settings › YouTube is Settings › Server recordings.** Title templates carry over in spirit — the
+  same tokens, for League and TFT — but start from their defaults.
+- **The recording player has one set of controls.** Whether it plays this PC's file or the server's
+  copy, the bar, the buttons and the keys are the same, and the bar shows how much of a server copy
+  has loaded.
+
+### Removed
+
+- **YouTube.** Uploading to YouTube, linking a YouTube video to a game, and the Google sign-in are
+  gone. They were never in a released build.
+
+### Under the hood
+
+- A migration (017) drops the YouTube upload queue and attachment tables and the YouTube columns,
+  keeps `file_deleted_at`, records the server's copy of a recording (`server_video_*`), and adds
+  `media_uploads`: the queue, with each upload's tus address on Foxfire Media and how much it has
+  confirmed. The one-time upload token each upload runs on is kept in the encrypted secret store,
+  never in the database, and cleared when the upload finishes.
+- Uploads use tus in 50 MB chunks from the main process, with Node's own fetch, so Foxfire Media
+  takes them as an application's rather than a browser's. Tokens are minted just in time — one per
+  recording, when its turn comes — because each has to start its upload within a quarter of an
+  hour.
+- The player for a server copy is Foxfire Media's embed with its controls hidden, driven over its
+  postMessage control API. The recording window frames it through the server's relay page, and the
+  main process lets this app's own windows frame Foxfire Media's player (its `frame-ancestors`
+  cannot name a `file://` page).
+- The `foxfire-youtube://` scheme, the YouTube referer hook, the Google client and the
+  `FOXFIRE_FEATURE_YOUTUBE` build switch are gone, from this build and from the release workflow.
+
 ## [0.17.0] — 2026-11-07
 
 Teamfight Tactics, beside League. The same Riot ID's TFT — its history and boards, its three ladders
@@ -1657,6 +1722,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.18.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.17.0...desktop-v0.18.0
 [0.17.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.1...desktop-v0.17.0
 [0.16.1]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.0...desktop-v0.16.1
 [0.16.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.15.0...desktop-v0.16.0

@@ -47,6 +47,8 @@ export async function probeServer(
     email: null,
     publicAccess: null,
     games: null,
+    recordings: null,
+    mediaOrigin: null,
     compatibility: 'unknown'
   })
 
@@ -67,6 +69,8 @@ export async function probeServer(
       email: version.email ?? null,
       publicAccess: version.publicAccess ?? null,
       games: offeredGames(version.games),
+      recordings: version.recordings ?? false,
+      mediaOrigin: version.recordings ? (version.mediaOrigin ?? null) : null,
       compatibility:
         identity.kind === 'desktop'
           ? judge(identity.version, version.minimumDesktop, version.recommendedDesktop)

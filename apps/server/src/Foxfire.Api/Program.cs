@@ -6,6 +6,7 @@ using Foxfire.Api.Configuration;
 using Foxfire.Api.Email;
 using Foxfire.Api.Endpoints;
 using Foxfire.Api.Logging;
+using Foxfire.Api.Media;
 using Foxfire.Api.Reads;
 using Foxfire.Api.Services;
 using Foxfire.Api.Startup;
@@ -46,6 +47,7 @@ var rateLimitOptions = builder.Configuration.GetSection(RateLimitOptions.Section
 var logOptions = builder.Configuration.GetSection(LogOptions.Section).Get<LogOptions>() ?? new();
 var telemetryOptions = builder.Configuration.GetSection(TelemetryOptions.Section).Get<TelemetryOptions>() ?? new();
 var emailOptions = builder.Configuration.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new();
+var mediaOptions = builder.Configuration.GetSection(MediaOptions.Section).Get<MediaOptions>() ?? new();
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
 // Everything wrong with the configuration, in one message, before anything
@@ -54,7 +56,7 @@ var connectionString = builder.Configuration.GetConnectionString("Default");
 // that refused — half of these produce failures that look like something else.
 var problems = ConfigurationCheck.Validate(
     connectionString, serverOptions, riotOptions, authOptions, adminOptions, rateLimitOptions, logOptions,
-    telemetryOptions, emailOptions);
+    telemetryOptions, emailOptions, mediaOptions);
 if (problems.Count > 0)
 {
     var message = new StringBuilder()
@@ -80,6 +82,10 @@ builder.Services.AddFoxfireTelemetry(builder.Configuration);
 // Mail, when a provider is configured: the outbox features queue into, and the
 // dispatcher that sends it within the provider's limits. See Email/.
 builder.Services.AddFoxfireEmail(builder.Configuration);
+
+// Recordings, when Foxfire Media is configured: the client that mints its
+// upload tokens and embeds. See Media/.
+builder.Services.AddFoxfireMedia(builder.Configuration);
 
 builder.Services.AddDbContext<FoxfireDbContext>((services, options) => options
     .AddInterceptors(services.GetRequiredService<DbCommandTimer>())
@@ -203,6 +209,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTyp
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IIdentityContext, HttpIdentityContext>();
 builder.Services.AddScoped<AccountOwnership>();
+builder.Services.AddScoped<Foxfire.Api.Features.Recordings.RecordingAccess>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ServerSettingsService>();
@@ -383,8 +390,8 @@ api.MapDashboardEndpoints();
 api.MapRankEndpoints();
 
 // Only on a server that offers TFT — see Common/GameParam.cs. Without it TFT's
-// routes fall through to the JSON 404 below, as YouTube's do in a build
-// without them, and no client connected here asks for them: /version says.
+// routes fall through to the JSON 404 below, as recordings' do on a server
+// without Foxfire Media, and no client connected here asks for them: /version says.
 var games = app.Services.GetRequiredService<ServerGames>();
 if (games.Tft)
 {
@@ -395,10 +402,10 @@ api.MapSearchEndpoints();
 api.MapShareLinkEndpoints();
 api.MapReplayEndpoints();
 
-// Only in a build made with YouTube — see Foxfire.Core/BuildFeatures.cs. Without it
-// the routes fall through to the JSON 404 below, which a desktop built with
-// YouTube reads as a server that has no recordings rather than as a refusal.
-if (BuildFeatures.YouTubeRecordings)
+// Only on a server with Foxfire Media configured — see Media/. Without it the
+// routes fall through to the JSON 404 below, which a desktop reads as a server
+// that takes no recordings rather than as a refusal; /version says so first.
+if (app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<MediaOptions>>().Value.IsEnabled)
 {
     api.MapRecordingEndpoints();
 }

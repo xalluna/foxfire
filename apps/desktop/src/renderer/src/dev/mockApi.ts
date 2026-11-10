@@ -36,11 +36,9 @@ import type {
   InvitePreview,
   ImportProgress,
   UpdateState,
-  AttachRecordingOutcome,
   BulkUploadResult,
-  UploadDraft,
-  YouTubeSettings,
-  YouTubeState
+  MediaSettings,
+  UploadQueueState
 } from '@shared/types'
 import type {
   LcuTelemetry,
@@ -53,24 +51,13 @@ import type {
 import {
   ACCOUNTS,
   MOCK_SERVER_URL,
-  NOW,
   createFixtureClient,
   delay,
   runFixtureImport,
   scenario
 } from '@foxfire/screens/dev'
-import {
-  DEFAULT_TFT_TITLE_TEMPLATE,
-  DEFAULT_TITLE_TEMPLATE,
-  UNMATCHED_TFT_TITLE_TEMPLATE,
-  UNMATCHED_TITLE_TEMPLATE,
-  buildRecordingDescription,
-  buildTftRecordingDescription,
-  renderRecordingTitle,
-  renderTftRecordingTitle
-} from '@foxfire/core/youtube'
-import { pageOf, tftDisplayName, type GameId, type RiotKeyScope } from '@foxfire/core'
-import { tftTitleFacts } from '@shared/tftRecordingTitle'
+import { DEFAULT_TFT_TITLE_TEMPLATE, DEFAULT_TITLE_TEMPLATE } from '@foxfire/core/recordings'
+import { pageOf, type GameId, type RiotKeyScope } from '@foxfire/core'
 import { canUploadRecording } from '@shared/uploadEligibility'
 import {
   RECORDINGS,
@@ -94,29 +81,48 @@ const fixture = createFixtureClient({
 })
 
 /**
- * The Google connection, as the three YouTube scenarios need it: a build with
- * no client in it, one with a client and nobody connected, and — everywhere
- * else — connected, so the upload form and the queue are what gets reviewed.
+ * The upload queue, as the media scenarios need it: something going up with a
+ * backlog behind it for ?scenario=media-queue, a server without recordings for
+ * ?scenario=media-off, and quiet everywhere else.
  */
-let youtubeState: YouTubeState = {
-  configured: scenario !== 'youtube-unconfigured',
-  email: scenario === 'youtube-unconfigured' || scenario === 'youtube-disconnected' ? null : 'faker@example.com',
-  connecting: false,
-  error: null,
-  pausedForGame: false,
-  quotaResumesAt: scenario === 'youtube-queue' ? NOW + 5 * 60 * 60_000 : null
+/** The harness server keeps recordings unless the scenario says it does not. */
+const MOCK_RECORDINGS = scenario !== 'media-off'
+const MOCK_MEDIA_ORIGIN = MOCK_RECORDINGS ? 'https://media.example.com' : null
+
+let mediaQueue: UploadQueueState = {
+  recordings: scenario !== 'media-off',
+  held: scenario === 'media-off' ? 'no_recordings' : null,
+  current:
+    scenario === 'media-queue'
+      ? { recordingId: 2, bytesSent: 462_000_000, fileBytes: 1_100_000_000, bytesPerSecond: 6_500_000 }
+      : null,
+  waiting: scenario === 'media-queue' ? 4 : 0,
+  processing: scenario === 'media-queue' ? 1 : 0,
+  failed: scenario === 'media-queue' ? 1 : 0,
+  remainingBytes: scenario === 'media-queue' ? 4_838_000_000 : 0,
+  etaSeconds: scenario === 'media-queue' ? 744 : null
 }
-let youtubeSettings: YouTubeSettings = {
+let mediaSettings: MediaSettings = {
   autoUpload: false,
-  defaultPrivacy: 'unlisted',
+  afterUpload: 'keep',
   titleTemplate: DEFAULT_TITLE_TEMPLATE,
   tftTitleTemplate: DEFAULT_TFT_TITLE_TEMPLATE
 }
-const youtubeListeners = new Set<(state: YouTubeState) => void>()
+const mediaListeners = new Set<(state: UploadQueueState) => void>()
 
-function setYouTubeState(patch: Partial<YouTubeState>): void {
-  youtubeState = { ...youtubeState, ...patch }
-  for (const listener of youtubeListeners) listener(youtubeState)
+function setMediaQueue(patch: Partial<UploadQueueState>): void {
+  mediaQueue = { ...mediaQueue, ...patch }
+  for (const listener of mediaListeners) listener(mediaQueue)
+}
+
+/** What a batch of the harness's recordings would come to. */
+function mockBatch(recordingIds: readonly number[]): BulkUploadResult {
+  const rows = (RECORDINGS[1] ?? []).filter((recording) => recordingIds.includes(recording.id))
+  return {
+    queued: rows.length,
+    queuedBytes: rows.reduce((total, recording) => total + (recording.fileBytes ?? 0), 0),
+    skipped: []
+  }
 }
 
 /**
@@ -218,7 +224,12 @@ let serverState: ServerState =
   scenario === 'email-change-pending' ||
   scenario === 'admin-email-pinned' ||
   scenario === 'signup-unchosen' ||
-  scenario === 'tft-off'
+  scenario === 'tft-off' ||
+  scenario === 'media-queue' ||
+  scenario === 'media-backlog' ||
+  scenario === 'media-off' ||
+  scenario === 'recording-failed' ||
+  scenario === 'recording-unplayable'
     ? {
         activeUrl: MOCK_SERVER_URL,
         publicUrl: MOCK_SERVER_URL,
@@ -235,6 +246,8 @@ let serverState: ServerState =
         serverOutdated: false,
         publicAccess: false,
         games: MOCK_GAMES,
+        recordings: MOCK_RECORDINGS,
+        mediaOrigin: MOCK_MEDIA_ORIGIN,
         riotKeyRejected: scenario === 'server-degraded'
       }
     : scenario === 'server-outdated' || scenario === 'server-behind'
@@ -259,10 +272,12 @@ let serverState: ServerState =
           serverOutdated: scenario === 'server-behind',
           publicAccess: false,
           games: MOCK_GAMES,
+          recordings: MOCK_RECORDINGS,
+          mediaOrigin: MOCK_MEDIA_ORIGIN,
           riotKeyRejected: false
         }
       : { activeUrl: null, servers: [], session: null, publicUrl: null, upgradeRequired: null,
-        serverOutdated: false, publicAccess: false, games: MOCK_GAMES, riotKeyRejected: false }
+        serverOutdated: false, publicAccess: false, games: MOCK_GAMES, recordings: false, mediaOrigin: null, riotKeyRejected: false }
 
 const serverListeners = new Set<(state: ServerState) => void>()
 const importListeners = new Set<(progress: ImportProgress) => void>()
@@ -411,6 +426,8 @@ export const mockApi: Api = {
               email: null,
               publicAccess: null,
               games: null,
+              recordings: null,
+              mediaOrigin: null,
               compatibility: 'unknown'
             }
           : {
@@ -429,6 +446,8 @@ export const mockApi: Api = {
               // "open" is a server anybody can read without signing in.
               publicAccess: url.includes('open'),
               games: MOCK_GAMES,
+              recordings: MOCK_RECORDINGS,
+              mediaOrigin: MOCK_MEDIA_ORIGIN,
               // "too-old" is this build behind the server; "old-server" is the
               // server behind this build.
               compatibility: url.includes('too-old')
@@ -482,6 +501,8 @@ export const mockApi: Api = {
             serverOutdated: false,
             publicAccess: false,
             games: MOCK_GAMES,
+            recordings: MOCK_RECORDINGS,
+            mediaOrigin: MOCK_MEDIA_ORIGIN,
             riotKeyRejected: false
           })
         },
@@ -515,6 +536,8 @@ export const mockApi: Api = {
                 serverOutdated: false,
                 publicAccess: false,
                 games: MOCK_GAMES,
+                recordings: MOCK_RECORDINGS,
+                mediaOrigin: MOCK_MEDIA_ORIGIN,
                 riotKeyRejected: false
               })
             },
@@ -533,6 +556,8 @@ export const mockApi: Api = {
           serverOutdated: false,
           publicAccess: false,
           games: MOCK_GAMES,
+          recordings: MOCK_RECORDINGS,
+          mediaOrigin: MOCK_MEDIA_ORIGIN,
           riotKeyRejected: false
         }),
         300,
@@ -598,6 +623,8 @@ export const mockApi: Api = {
           serverOutdated: false,
           publicAccess: false,
           games: MOCK_GAMES,
+          recordings: MOCK_RECORDINGS,
+          mediaOrigin: MOCK_MEDIA_ORIGIN,
           riotKeyRejected: false
         }),
         200,
@@ -615,6 +642,8 @@ export const mockApi: Api = {
           serverOutdated: false,
           publicAccess: false,
           games: MOCK_GAMES,
+          recordings: MOCK_RECORDINGS,
+          mediaOrigin: MOCK_MEDIA_ORIGIN,
           riotKeyRejected: false
         }),
         200,
@@ -892,7 +921,12 @@ export const mockApi: Api = {
       delay(pageOf((RECORDINGS[accountId] ?? []).filter((r) => !game || r.game === game), page), 220),
     // Everything that could go up, whole — what "select all" selects, pages or no pages.
     eligible: (accountId: string): Promise<Recording[]> =>
-      delay((RECORDINGS[accountId] ?? []).filter(canUploadRecording), 180),
+      delay(
+        serverState.recordings
+          ? (RECORDINGS[accountId] ?? []).filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL))
+          : [],
+        180
+      ),
     detail: (recordingId: number): Promise<RecordingDetail | null> => {
       const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
       return delay(recording ? { recording, events: RECORDING_EVENTS } : null, 220)
@@ -922,77 +956,48 @@ export const mockApi: Api = {
     openRemote: (accountId: string, matchId: string): Promise<void> => {
       window.location.hash = `#${windowRoutes.remoteRecording(accountId, matchId)}`
       return delay(undefined, 0, false)
+    },
+    openServerCopy: (recordingId: number): Promise<void> => {
+      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
+      if (recording?.matchId) window.location.hash = `#${windowRoutes.remoteRecording(recording.accountId, recording.matchId)}`
+      return delay(undefined, 0, false)
     }
   },
   matchRecordings: {
-    ...fixture.matchRecordings!,
+    get: fixture.matchRecordings!.get,
+    embed: fixture.matchRecordings!.embed,
+    remove: fixture.matchRecordings!.remove,
     onChanged: fixture.events.onRecordingChanged
   },
-  youtube: {
-    getState: (): Promise<YouTubeState> => delay(youtubeState, 120, false),
-    connect: async (): Promise<void> => {
-      setYouTubeState({ connecting: true, error: null })
-      await delay(undefined, 1_200, false)
-      setYouTubeState({ connecting: false, email: 'faker@example.com' })
+  media: {
+    getSettings: (): Promise<MediaSettings> => delay(mediaSettings, 120, false),
+    setSettings: (patch: Partial<MediaSettings>): Promise<MediaSettings> => {
+      mediaSettings = { ...mediaSettings, ...patch }
+      return delay(mediaSettings, 120, false)
     },
-    cancelConnect: async (): Promise<void> => setYouTubeState({ connecting: false }),
-    disconnect: async (): Promise<void> => setYouTubeState({ email: null }),
-    getSettings: (): Promise<YouTubeSettings> => delay(youtubeSettings, 120, false),
-    setSettings: (patch: Partial<YouTubeSettings>): Promise<YouTubeSettings> => {
-      youtubeSettings = { ...youtubeSettings, ...patch }
-      return delay(youtubeSettings, 120, false)
+    getQueue: (): Promise<UploadQueueState> => delay(mediaQueue, 120, false),
+    enqueue: (recordingIds: number[]): Promise<BulkUploadResult> => {
+      const result = mockBatch(recordingIds)
+      setMediaQueue({ waiting: mediaQueue.waiting + result.queued, remainingBytes: mediaQueue.remainingBytes + result.queuedBytes })
+      return delay(result, 300, false)
     },
-    draft: (recordingId: number): Promise<UploadDraft> => {
-      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
-      const match = recording?.match
-      if (recording?.game === 'tft') {
-        const facts = tftTitleFacts(recording, recording.tftMatch, tftDisplayName)
-        return delay(
-          {
-            recordingId,
-            title: renderTftRecordingTitle(
-              facts.placement === null ? UNMATCHED_TFT_TITLE_TEMPLATE : youtubeSettings.tftTitleTemplate,
-              facts
-            ),
-            description: buildTftRecordingDescription(),
-            privacy: youtubeSettings.defaultPrivacy,
-            durationSeconds: recording.durationSeconds
-          },
-          250,
-          false
-        )
-      }
-      return delay(
-        {
-          recordingId,
-          title: renderRecordingTitle(match ? youtubeSettings.titleTemplate : UNMATCHED_TITLE_TEMPLATE, {
-            champion: match?.championName ?? 'Ahri',
-            queueId: match?.queueId ?? recording?.queueId ?? null,
-            gameMode: match?.gameMode ?? null,
-            win: match ? match.win : null,
-            kills: match?.kills ?? null,
-            deaths: match?.deaths ?? null,
-            assists: match?.assists ?? null,
-            playedAt: recording?.startedAt ?? NOW
-          }),
-          description: buildRecordingDescription(RECORDING_EVENTS),
-          privacy: youtubeSettings.defaultPrivacy,
-          durationSeconds: recording?.durationSeconds ?? null
-        },
-        250,
-        false
-      )
+    enqueueAll: (): Promise<BulkUploadResult> => {
+      const ids = (RECORDINGS[1] ?? [])
+        .filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL))
+        .map((recording) => recording.id)
+      return delay(mockBatch(ids), 400, false)
     },
-    enqueue: (): Promise<void> => delay(undefined, 200, false),
-    enqueueMany: (recordingIds: number[]): Promise<BulkUploadResult> =>
-      delay({ queued: recordingIds.length, skipped: [] }, 400, false),
+    backlog: (): Promise<{ count: number; bytes: number }> => {
+      const rows = (RECORDINGS[1] ?? []).filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL))
+      return delay({ count: rows.length, bytes: rows.reduce((total, r) => total + (r.fileBytes ?? 0), 0) }, 180, false)
+    },
     cancel: (): Promise<void> => delay(undefined, 100, false),
     retry: (): Promise<void> => delay(undefined, 100, false),
-    attachLink: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),
-    reattach: (): Promise<AttachRecordingOutcome> => delay({ ok: true }, 400, false),
-    onChanged: (cb) => {
-      youtubeListeners.add(cb)
-      return () => youtubeListeners.delete(cb)
+    pauseAll: async (): Promise<void> => setMediaQueue({ held: 'paused' }),
+    resumeAll: async (): Promise<void> => setMediaQueue({ held: null }),
+    onChanged: (cb: (state: UploadQueueState) => void) => {
+      mediaListeners.add(cb)
+      return () => mediaListeners.delete(cb)
     }
   },
   // Riot replays. The fixtures deliberately cover the three states the tab has

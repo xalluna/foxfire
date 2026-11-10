@@ -1,10 +1,8 @@
-import type { Platform, RecordingTarget } from '@foxfire/screens'
+import type { Platform } from '@foxfire/screens'
 import type { ImportProgress } from '@foxfire/core'
 import type { Api } from '@shared/api'
-import { YOUTUBE_ENABLED } from '@shared/features'
 import { LcuIndicator } from '../components/LcuIndicator'
-import { youtubeHostMount } from '../recording/youtubeHostMount'
-import { openUploadDialog } from '../youtube/uploadDialog'
+import { createRelayMount } from '../recording/mediaRelayMount'
 
 /**
  * What this machine can do that a browser cannot, as the shared screens ask
@@ -26,36 +24,25 @@ export function createDesktopPlatform(api: Api): Platform {
     openLpEditor: ({ account, queueType, matchId }) =>
       void api.rank.openEditor(account.id, queueType, matchId),
 
-    // The file on this disk when there is one — it plays from YouTube anyway
-    // if it has gone up, with a switch back to the file. Otherwise, in a build
-    // with YouTube, the server's copy: somebody else's recording, or this
-    // machine's own after its file was forgotten.
+    // The file on this disk when there is one. Otherwise the server's copy:
+    // somebody else's recording, or this machine's own after its file was
+    // deleted once the server had it.
     watchRecording: ({ account, match }) => {
       const recordingId = match.local?.recordingId ?? null
-      if (recordingId !== null) void api.recordings.open(recordingId)
-      else if (YOUTUBE_ENABLED) void api.recordings.openRemote(account.id, match.matchId)
+      if (recordingId !== null && !match.local?.recordingFileDeleted) void api.recordings.open(recordingId)
+      else void api.recordings.openRemote(account.id, match.matchId)
     },
 
-    // Everything below is YouTube's, so only in a build made with it — see
-    // shared/features.ts. Without them the shared screens offer no upload, no
-    // link to attach, and no recording a server holds.
-    ...(YOUTUBE_ENABLED
-      ? {
-          youtube: youtubeHostMount,
+    // The server's player, through its relay page — see recording/mediaRelayMount.ts.
+    media: createRelayMount(api),
 
-          uploadRecording: ({ match }: RecordingTarget) => {
-            const recordingId = match.local?.recordingId ?? null
-            if (recordingId !== null) openUploadDialog(recordingId)
-          },
-
-          // Through this machine's recording when it has one, so the markers go
-          // with the link; otherwise the screen attaches through the server itself.
-          attachRecordingLink: async ({ match, videoId, replace }: RecordingTarget & { videoId: string; replace: boolean }) => {
-            const recordingId = match.local?.recordingId ?? null
-            return recordingId === null ? null : api.youtube.attachLink(recordingId, videoId, replace)
-          }
-        }
-      : {}),
+    // Into the queue, titled from the template. The queue says how it goes.
+    uploadRecording: async ({ match }) => {
+      const recordingId = match.local?.recordingId ?? null
+      if (recordingId === null) return { ok: false, message: 'This PC has no recording of that game.' }
+      const result = await api.media.enqueue([recordingId])
+      return result.queued > 0 ? { ok: true } : { ok: false, message: result.skipped[0]?.reason }
+    },
 
     launchReplay: async (replayId) => {
       const result = await api.replays.open(replayId)

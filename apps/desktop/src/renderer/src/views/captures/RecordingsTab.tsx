@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { youtubeWatchUrl } from '@foxfire/core/youtube'
-import { AttachLinkDialog, Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, PlacementBadge, Segmented, ShowMoreButton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, placementTone, queueName, tftName } from '@foxfire/ui'
+import { Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, PlacementBadge, Segmented, ShowMoreButton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, placementTone, queueName, tftName } from '@foxfire/ui'
 import { DOUBLE_UP_QUEUE_ID, countedPlacement, isTopHalf, strongestTrait, type GameId } from '@foxfire/core'
-import { BulkUploadDialog } from '../../youtube/BulkUploadDialog'
-import { openUploadDialog } from '../../youtube/uploadDialog'
-import { uploadPending, uploadStatusText } from '../../youtube/uploadStatus'
+import { BulkUploadDialog } from '../../media/BulkUploadDialog'
+import { describeQueueHold, queueSummary, uploadPending, uploadStatusText } from '../../media/uploadStatus'
+import { useUploadQueue, useUploadServer } from '../../media/useMedia'
 import { nextOffset, pageItems } from '@foxfire/screens'
 import type { Account, BulkUploadResult, Recording } from '@shared/types'
-import { YOUTUBE_ENABLED } from '@shared/features'
-import { canUploadRecording as canUpload } from '@shared/uploadEligibility'
+import { canUploadRecording } from '@shared/uploadEligibility'
 
 /** Recordings per page of the list. */
 const PAGE_SIZE = 50
@@ -23,7 +21,7 @@ function describeBatch(result: BulkUploadResult): string {
       : `Queued ${result.queued} upload${result.queued === 1 ? '' : 's'} — they go up one at a time, oldest game first.`
   if (result.skipped.length === 0) return queued
 
-  // Grouped by reason: fifty copies of "It is already on YouTube." say one thing.
+  // Grouped by reason: fifty copies of "It is already on the server." say one thing.
   const reasons = new Map<string, number>()
   for (const { reason } of result.skipped) reasons.set(reason, (reasons.get(reason) ?? 0) + 1)
   const left = [...reasons].map(([reason, n]) => `${n} left out: ${reason}`).join(' ')
@@ -63,6 +61,9 @@ const GAME_FILTERS: Array<[GameFilter, string]> = [
 export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   const queryClient = useQueryClient()
   const [game, setGame] = useState<GameFilter>('all')
+  // The server uploads go to, when this PC is on one that keeps recordings.
+  const server = useUploadServer()
+  const canUpload = (recording: Recording): boolean => canUploadRecording(recording, server)
 
   // A page at a time: nothing is ever deleted automatically, so a PC that
   // records every game has a list that only grows. Filtered where the rows
@@ -76,14 +77,14 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
     getNextPageParam: nextOffset
   })
 
-  // Every recording that could go to YouTube, whole rather than paged — "select
-  // all" has to mean all of them, not the ones scrolled to, and the batch dialog
-  // reads each one's size and game. Under the list's key, so whatever refreshes
-  // the list refreshes this. No handler answers it in a build without YouTube.
+  // Every recording that could go to the server, whole rather than paged —
+  // "select all" has to mean all of them, not the ones scrolled to, and the
+  // batch dialog reads each one's size. Under the list's key, so whatever
+  // refreshes the list refreshes this.
   const uploadable = useQuery({
-    queryKey: ['recordings', account.id, 'uploadable'],
+    queryKey: ['recordings', account.id, 'uploadable', server],
     queryFn: () => window.api.recordings.eligible(account.id),
-    enabled: YOUTUBE_ENABLED
+    enabled: server !== null
   })
 
   const usage = useQuery({
@@ -99,7 +100,6 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
 
   const [deleting, setDeleting] = useState<Recording | null>(null)
   const [forgetting, setForgetting] = useState<Recording | null>(null)
-  const [attaching, setAttaching] = useState<Recording | null>(null)
 
   // Recordings picked for a batch upload. Held as ids and read back against
   // the current list, so a row that stopped being eligible — its upload
@@ -199,7 +199,7 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
               checked={allPicked}
               onChange={() => setPicked(allPicked ? new Set() : new Set(eligible.map((recording) => recording.id)))}
             />
-            Select all {eligible.length} not on YouTube
+            Select all {eligible.length} not on the server
           </label>
 
           <div className="ml-auto flex items-center gap-3">
@@ -220,11 +220,13 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
             >
               {selected.length === 0
                 ? 'Upload selected'
-                : `Upload ${selected.length} to YouTube`}
+                : `Upload ${selected.length} to the server`}
             </button>
           </div>
         </div>
       )}
+
+      <QueueBanner />
 
       {batchNote && (
         <p className="mt-3 flex items-start gap-2 rounded-md border border-accent-dim/40 bg-accent/10 px-4 py-2.5 text-xs leading-relaxed text-accent">
@@ -256,7 +258,12 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
                   onToggleSelected={canUpload(recording) ? () => toggle(recording.id) : undefined}
                   onDelete={() => setDeleting(recording)}
                   onForget={() => setForgetting(recording)}
-                  onAttachLink={() => setAttaching(recording)}
+                  canUpload={canUpload(recording)}
+                  onUpload={() =>
+                    void window.api.media.enqueue([recording.id]).then((result) => {
+                      if (result.queued === 0) setBatchNote(describeBatch(result))
+                    })
+                  }
                 />
               ))}
             </ul>
@@ -274,11 +281,11 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         <ConfirmDialog
           title="Delete this recording?"
           message={
-            YOUTUBE_ENABLED && deleting.youtube
-              ? 'The video file on this PC is deleted to free the space. The recording stays, and goes on playing from YouTube with its markers.'
+            deleting.server
+              ? 'The video file on this PC is deleted to free the space. The recording stays, and goes on playing from the server with its markers.'
               : 'The video file and the recording are both deleted from this PC. This cannot be undone.'
           }
-          confirmLabel={YOUTUBE_ENABLED && deleting.youtube ? 'Delete the file' : 'Delete'}
+          confirmLabel={deleting.server ? 'Delete the file' : 'Delete'}
           danger
           busy={remove.isPending}
           onConfirm={() => remove.mutate(deleting.id)}
@@ -290,8 +297,8 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         <ConfirmDialog
           title="Forget this recording?"
           message={
-            YOUTUBE_ENABLED && forgetting.youtube
-              ? 'It comes off this PC, markers and all. The video stays on YouTube, and anything your server holds stays there.'
+            forgetting.server
+              ? 'It comes off this PC, markers and all. The server keeps its copy, on your history there.'
               : 'It comes off this list. The file is already gone.'
           }
           confirmLabel="Forget"
@@ -299,15 +306,6 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
           busy={forget.isPending}
           onConfirm={() => forget.mutate(forgetting.id)}
           onCancel={() => setForgetting(null)}
-        />
-      )}
-
-      {attaching && (
-        <AttachLinkDialog
-          replacing={attaching.youtube !== null}
-          withMarkers
-          onAttach={(videoId, replace) => window.api.youtube.attachLink(attaching.id, videoId, replace)}
-          onClose={() => setAttaching(null)}
         />
       )}
 
@@ -333,17 +331,19 @@ function RecordingRow({
   onToggleSelected,
   onDelete,
   onForget,
-  onAttachLink
+  canUpload,
+  onUpload
 }: {
   recording: Recording
   /** The list is offering a batch upload, so every row keeps a column for the box. */
   selectable: boolean
   selected: boolean
-  /** Absent for a row that cannot go to YouTube, which gets an empty column instead. */
+  /** Absent for a row that cannot go to the server, which gets an empty column instead. */
   onToggleSelected?: () => void
   onDelete: () => void
   onForget: () => void
-  onAttachLink: () => void
+  canUpload: boolean
+  onUpload: () => void
 }): JSX.Element {
   const assets = useAssetManifest()
   const match = recording.match
@@ -353,10 +353,9 @@ function RecordingRow({
   // A TFT game went well in the top half — the team's top two, in Double Up.
   const wentWell = tft ? (board ? isTopHalf(board, board.queueId) : null) : (match?.win ?? null)
   const onDisk = recording.fileExists
-  // A recording on YouTube still plays after its file has gone — in a build
-  // that has YouTube to play it from.
-  const onYouTube = YOUTUBE_ENABLED && recording.youtube !== null
-  const playable = onDisk || onYouTube
+  // A recording on the server still plays after its file has gone — from there.
+  const onServer = recording.server !== null
+  const playable = onDisk || onServer
 
   return (
     <li
@@ -413,7 +412,7 @@ function RecordingRow({
           {' · '}
           {recording.fileDeleted ? 'file deleted' : formatBytes(recording.fileBytes)}
         </p>
-        {YOUTUBE_ENABLED && <YouTubeLine recording={recording} onAttachLink={onAttachLink} />}
+        <ServerLine recording={recording} />
       </div>
 
       {board && (
@@ -443,17 +442,19 @@ function RecordingRow({
         <button
           type="button"
           disabled={!playable}
-          onClick={() => void window.api.recordings.open(recording.id)}
-          title={playable ? 'Watch' : 'The video file is missing'}
+          onClick={() =>
+            void (onDisk ? window.api.recordings.open(recording.id) : window.api.recordings.openServerCopy(recording.id))
+          }
+          title={playable ? (onDisk ? 'Watch' : 'Watch on the server') : 'The video file is missing'}
           className="rounded-md border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Watch
         </button>
-        {canUpload(recording) && (
+        {canUpload && (
           <button
             type="button"
-            onClick={() => openUploadDialog(recording.id)}
-            title="Upload to YouTube"
+            onClick={onUpload}
+            title="Upload to the server"
             className="rounded-md border border-edge px-3 py-1.5 text-sm text-text-dim transition hover:border-accent hover:text-accent"
           >
             Upload
@@ -467,7 +468,7 @@ function RecordingRow({
           <Icon.Folder width={13} height={13} />
         </IconButton>
         {onDisk ? (
-          <IconButton label={onYouTube ? 'Delete the file' : 'Delete recording'} onClick={onDelete} danger>
+          <IconButton label={onServer ? 'Delete the file' : 'Delete recording'} onClick={onDelete} danger>
             <Icon.Trash width={13} height={13} />
           </IconButton>
         ) : (
@@ -526,96 +527,57 @@ function BindBadge({ recording }: { recording: Recording }): JSX.Element | null 
 }
 
 /**
- * Where the recording stands with YouTube, and what can be done about it, in one line.
+ * Where the recording stands with the server, and what can be done about it, in one line.
  *
  * Under the row rather than as more buttons beside it: most rows have nothing
  * going on, and the ones that do need a sentence (why an upload stopped, why
  * the server said no) more than they need another icon.
  */
-function YouTubeLine({ recording, onAttachLink }: { recording: Recording; onAttachLink: () => void }): JSX.Element {
+function ServerLine({ recording }: { recording: Recording }): JSX.Element | null {
   const upload = recording.upload
-  const youtube = recording.youtube
   const status = uploadStatusText(recording)
+  if (!status) return null
 
-  const parts: JSX.Element[] = []
+  const parts: JSX.Element[] = [
+    <span
+      key="status"
+      className={
+        upload?.state === 'failed' ? 'text-red' : upload?.state === 'done' || (!upload && recording.server) ? 'text-teal' : 'text-text-dim'
+      }
+    >
+      {status}
+    </span>
+  ]
 
-  if (status) {
+  if (upload?.error && upload.state !== 'uploading' && upload.state !== 'paused') {
     parts.push(
-      <span key="status" className={upload?.state === 'failed' ? 'text-red' : 'text-text-dim'}>
-        {status}
+      <span key="why" className="text-text-mute">
+        {upload.error}
       </span>
     )
-    if (upload?.error && upload.state !== 'uploading') {
-      parts.push(
-        <span key="why" className="text-text-mute">
-          {upload.error}
-        </span>
-      )
-    }
-    if (uploadPending(upload)) {
-      parts.push(
-        <LineButton key="cancel" onClick={() => void window.api.youtube.cancel(recording.id)}>
-          Cancel
-        </LineButton>
-      )
-    } else if ((upload?.state === 'failed' || upload?.state === 'cancelled') && recording.fileExists && !youtube) {
-      parts.push(
-        <LineButton key="retry" onClick={() => void window.api.youtube.retry(recording.id)}>
-          Try again
-        </LineButton>
-      )
-    }
   }
 
-  if (youtube) {
+  if (upload?.deleteAfter && uploadPending(upload)) {
     parts.push(
-      <span key="on" className="text-teal">
-        On YouTube{youtube.privacy ? ` · ${youtube.privacy}` : ''}
-        {youtube.source === 'link' ? ' · linked' : ''}
+      <span key="after" className="text-text-mute">
+        deleted from this PC once it is ready
       </span>
     )
-    if (youtube.forcedPrivate) {
-      parts.push(
-        <span key="forced" className="text-amber">
-          made private until Foxfire passes YouTube&rsquo;s review
-        </span>
-      )
-    }
-    parts.push(
-      <a key="open" href={youtubeWatchUrl(youtube.videoId)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-        Open
-      </a>
-    )
-
-    if (recording.attachment?.state === 'attached') {
-      parts.push(
-        <span key="server" className="text-text-mute">
-          on your server
-        </span>
-      )
-    } else if (recording.attachment?.state === 'conflict') {
-      parts.push(
-        <span key="conflict" className="text-amber">
-          {recording.attachment.message ?? 'Your server already has a recording of this game.'}
-        </span>,
-        <LineButton key="replace" onClick={() => void window.api.youtube.reattach(recording.id)}>
-          Replace it
-        </LineButton>
-      )
-    } else if (recording.attachment?.state === 'not_owner' || recording.attachment?.state === 'failed') {
-      parts.push(
-        <span key="refused" className="text-text-mute">
-          {recording.attachment.message ?? 'Not on your server.'}
-        </span>
-      )
-    }
   }
 
-  parts.push(
-    <LineButton key="link" onClick={onAttachLink}>
-      {youtube ? 'Replace link' : 'Attach a YouTube link'}
-    </LineButton>
-  )
+  if (uploadPending(upload) && upload?.state !== 'processing') {
+    parts.push(
+      <LineButton key="cancel" onClick={() => void window.api.media.cancel(recording.id)}>
+        Cancel
+      </LineButton>
+    )
+  } else if ((upload?.state === 'failed' || upload?.state === 'cancelled') && recording.fileExists) {
+    parts.push(
+      <LineButton key="retry" onClick={() => void window.api.media.retry(recording.id)}>
+        Try again
+      </LineButton>
+    )
+  }
 
   return (
     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs">
@@ -626,6 +588,38 @@ function YouTubeLine({ recording, onAttachLink }: { recording: Recording; onAtta
         </span>
       ))}
     </p>
+  )
+}
+
+/**
+ * The queue as a whole, above the list: what is going up, how much is left and
+ * how long it will take, with Pause and Resume — the controls a backlog of
+ * hundreds of gigabytes needs, which no one row can give.
+ */
+function QueueBanner(): JSX.Element | null {
+  const queue = useUploadQueue()
+  if (!queue) return null
+  const summary = queueSummary(queue)
+  if (!summary && queue.held !== 'paused') return null
+
+  const paused = queue.held === 'paused'
+  const why = queue.held && queue.held !== 'paused' ? describeQueueHold(queue.held) : null
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-hairline bg-surface/40 px-4 py-2.5 text-xs">
+      <Icon.Server width={13} height={13} className="shrink-0 text-accent" />
+      <span className="min-w-0 flex-1 text-text-dim">
+        {summary ?? 'Uploads are paused.'}
+        {why && <span className="ml-2 text-text-mute">{why}</span>}
+      </span>
+      <button
+        type="button"
+        onClick={() => void (paused ? window.api.media.resumeAll() : window.api.media.pauseAll())}
+        className="rounded-md border border-edge px-2.5 py-1 text-text-dim transition hover:border-accent hover:text-accent"
+      >
+        {paused ? 'Resume uploads' : 'Pause uploads'}
+      </button>
+    </div>
   )
 }
 

@@ -1,5 +1,5 @@
 using Foxfire.Api.Common;
-using Foxfire.Core;
+using Foxfire.Api.Configuration;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Net.Http.Headers;
@@ -25,6 +25,11 @@ public sealed class SpaHosting
 
     private const string IndexFile = "index.html";
 
+    /// <summary>The relay page a desktop frames a recording's player through. See <see cref="RelayPolicy"/>.</summary>
+    public const string RelayPath = "/media-relay";
+
+    private const string RelayFile = "media-relay.html";
+
     /// <summary>
     /// What a browser is allowed to load into a page from here.
     ///
@@ -34,20 +39,17 @@ public sealed class SpaHosting
     /// nothing else. Styles allow inline because the charts set sizes in style
     /// attributes.
     ///
-    /// YouTube is the one other party, for recordings, and only in a build made
-    /// with them (see Foxfire.Core/BuildFeatures.cs): its IFrame API script, which is
-    /// what lets the marker strip under a recording seek the video, and the
-    /// privacy-enhanced player it drives, in a frame. Nothing from YouTube is
-    /// drawn in the page itself. Everything else is this origin or nothing.
+    /// Foxfire Media is the one other party, for recordings, and only on a
+    /// server that has it configured: its player, in a frame, and its poster
+    /// images. No script of its runs in the page — the player is driven over
+    /// postMessage. Everything else is this origin or nothing.
     /// </summary>
-    private static readonly string ContentSecurityPolicy =
+    public static string ContentSecurityPolicy(string? mediaOrigin) =>
         "default-src 'self'; "
-        + (BuildFeatures.YouTubeRecordings
-            ? "script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com; "
-              + "frame-src https://www.youtube-nocookie.com; "
-            : "script-src 'self' 'wasm-unsafe-eval'; ")
+        + "script-src 'self' 'wasm-unsafe-eval'; "
+        + (mediaOrigin is null ? "" : $"frame-src {mediaOrigin}; ")
         + "style-src 'self' 'unsafe-inline'; "
-        + "img-src 'self' data: https://ddragon.leagueoflegends.com; "
+        + $"img-src 'self' data: https://ddragon.leagueoflegends.com{(mediaOrigin is null ? "" : " " + mediaOrigin)}; "
         + "connect-src 'self' https://ddragon.leagueoflegends.com; "
         + "font-src 'self'; "
         + "object-src 'none'; "
@@ -55,7 +57,40 @@ public sealed class SpaHosting
         + "form-action 'self'; "
         + "frame-ancestors 'none'";
 
-    private SpaHosting(string? root) => Root = root;
+    /// <summary>
+    /// The relay page's policy: one script of ours, a frame of Foxfire Media's,
+    /// and nothing else.
+    ///
+    /// It is the one page here that may be framed by anybody. The desktop's
+    /// window is a file:// page, which Foxfire Media's player will neither be
+    /// framed by nor take commands from; this page is on this server's origin,
+    /// which Foxfire Media does accept, so the desktop frames it and it frames
+    /// the player and passes the commands through. It holds nothing — it plays
+    /// an embed its parent hands it, only one of Foxfire Media's, and a page
+    /// that framed it elsewhere would still be refused by the player's own
+    /// frame-ancestors.
+    /// </summary>
+    public static string RelayPolicy(string? mediaOrigin) =>
+        "default-src 'none'; "
+        + "script-src 'self'; "
+        + "style-src 'self'; "
+        + (mediaOrigin is null ? "" : $"frame-src {mediaOrigin}; ")
+        + "base-uri 'none'; "
+        + "form-action 'none'";
+
+    private readonly string _pagePolicy;
+    private readonly string _relayPolicy;
+
+    private SpaHosting(string? root, string? mediaOrigin)
+    {
+        Root = root;
+        MediaOrigin = mediaOrigin;
+        _pagePolicy = ContentSecurityPolicy(mediaOrigin);
+        _relayPolicy = RelayPolicy(mediaOrigin);
+    }
+
+    /// <summary>Foxfire Media's origin, when this server keeps recordings there.</summary>
+    public string? MediaOrigin { get; }
 
     /// <summary>The directory holding the web client's build, or null when there is none.</summary>
     public string? Root { get; }
@@ -88,7 +123,8 @@ public sealed class SpaHosting
         var root = candidates.FirstOrDefault(dir =>
             !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, IndexFile)));
 
-        return new SpaHosting(root);
+        var media = configuration.GetSection(MediaOptions.Section).Get<MediaOptions>() ?? new();
+        return new SpaHosting(root, media.IsEnabled ? media.Origin : null);
     }
 
     /// <summary>
@@ -119,7 +155,11 @@ public sealed class SpaHosting
                     : "no-cache";
                 headers[HeaderNames.XContentTypeOptions] = "nosniff";
 
-                if (context.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(context.File.Name, RelayFile, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddRelayHeaders(context.Context.Response);
+                }
+                else if (context.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
                 {
                     AddPageHeaders(context.Context.Response);
                 }
@@ -144,6 +184,24 @@ public sealed class SpaHosting
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         if (!IsAvailable) return;
+
+        // The relay, at an address without the .html, for the desktop to frame.
+        // Only where there are recordings to relay.
+        if (MediaOrigin is not null && File.Exists(Path.Combine(Root!, RelayFile)))
+        {
+            endpoints.MapMethods(RelayPath, [HttpMethods.Get, HttpMethods.Head], context =>
+            {
+                var response = context.Response;
+                response.ContentType = "text/html; charset=utf-8";
+                response.Headers[HeaderNames.CacheControl] = "no-cache";
+                response.Headers[HeaderNames.XContentTypeOptions] = "nosniff";
+                AddRelayHeaders(response);
+
+                return HttpMethods.IsHead(context.Request.Method)
+                    ? Task.CompletedTask
+                    : response.SendFileAsync(Path.Combine(Root!, RelayFile), context.RequestAborted);
+            });
+        }
 
         endpoints.MapFallback("{**path}", context =>
         {
@@ -177,9 +235,20 @@ public sealed class SpaHosting
     /// a page's address — an invite token, sometimes — from being sent to Data
     /// Dragon with every image the page loads.
     /// </summary>
-    private static void AddPageHeaders(HttpResponse response)
+    private void AddPageHeaders(HttpResponse response)
     {
-        response.Headers[HeaderNames.ContentSecurityPolicy] = ContentSecurityPolicy;
+        response.Headers[HeaderNames.ContentSecurityPolicy] = _pagePolicy;
+        response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+        response.Headers["Referrer-Policy"] = "same-origin";
+    }
+
+    /// <summary>
+    /// The relay's: framable (no frame-ancestors, unlike every other page here)
+    /// and not indexed.
+    /// </summary>
+    private void AddRelayHeaders(HttpResponse response)
+    {
+        response.Headers[HeaderNames.ContentSecurityPolicy] = _relayPolicy;
         response.Headers["X-Robots-Tag"] = "noindex, nofollow";
         response.Headers["Referrer-Policy"] = "same-origin";
     }

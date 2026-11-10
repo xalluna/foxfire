@@ -16,7 +16,6 @@ import { validateLpEditorWindowSearch } from './lpEditor/search'
 import { Captures } from './views/Captures'
 import { Home } from './views/Home'
 import { Settings } from './views/Settings'
-import { YOUTUBE_ENABLED } from '@shared/features'
 
 /*
  * Every window this app opens, as one route table.
@@ -82,7 +81,7 @@ const recording = createRoute({
   component: lazyRouteComponent(() => import('./recording/RecordingApp'), 'RecordingApp')
 })
 
-/** A recording with no file on this machine, played from YouTube. See windowRoutes.remoteRecording. */
+/** A recording with no file on this machine, played from the server. See windowRoutes.remoteRecording. */
 const remoteRecording = createRoute({
   getParentRoute: () => windows,
   path: 'recording/match/$accountId/$matchId',
@@ -117,8 +116,8 @@ const routeTree = root.addChildren([
     telemetry,
     archives,
     recording,
-    // Somebody else's recording, from YouTube — only in a build that has it.
-    ...(YOUTUBE_ENABLED ? [remoteRecording] : []),
+    // A recording that only the server has: somebody else's, or this PC's own after its file went.
+    remoteRecording,
     lpEditor
   ])
 ])

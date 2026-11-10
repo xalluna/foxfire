@@ -11,7 +11,7 @@
     "./import": "./src/import/index.ts",
     "./ddragon": "./src/ddragon/index.ts",
     "./routes": "./src/routes/index.ts",
-    "./youtube": "./src/youtube/index.ts"
+    "./recordings": "./src/recordings/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",

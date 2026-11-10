@@ -353,23 +353,22 @@ public class TftReadTests(FoxfireServerFixture server)
         Assert.False(await stored.TftParticipants.AnyAsync(p => p.MatchId == matchId && p.Puuid == desktopPuuid));
     }
 
-#if FEATURE_YOUTUBE
     [Fact]
-    public async Task A_recording_attaches_to_a_tft_game_and_rides_on_its_row()
+    public async Task A_recording_of_a_tft_game_rides_on_its_row()
     {
         using var seeded = await SeedAsync();
 
-        var attached = await seeded.Client.PutAsJsonAsync(
-            new Uri($"/api/riot-accounts/{seeded.AccountId}/matches/{seeded.MatchIds[0]}/recording", UriKind.Relative),
-            new { youtubeVideoId = "dQw4w9WgXcQ", source = "upload", privacy = "unlisted" });
+        var attached = await seeded.Client.PostAsJsonAsync(
+            new Uri($"/api/riot-accounts/{seeded.AccountId}/matches/{seeded.MatchIds[0]}/recording/upload", UriKind.Relative),
+            new { title = "1st · Ranked · Bastion", filename = "a.mp4", sizeBytes = 10 });
 
         Assert.True(attached.IsSuccessStatusCode, await attached.Content.ReadAsStringAsync());
 
         var row = await seeded.Client.GetFromJsonAsync<JsonElement>(
             new Uri($"/api/riot-accounts/{seeded.AccountId}/tft/matches/{seeded.MatchIds[0]}", UriKind.Relative));
-        Assert.Equal("dQw4w9WgXcQ", row.GetProperty("recording").GetProperty("youtubeVideoId").GetString());
+        var videoId = (await attached.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("videoId").GetString();
+        Assert.Equal(videoId, row.GetProperty("recording").GetProperty("videoId").GetString());
     }
-#endif
 
     private static void AssertHasAll(JsonElement element, params string[] expected)
     {

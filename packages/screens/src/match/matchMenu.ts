@@ -62,41 +62,59 @@ export function lpWriteBlockedReason(isMine?: boolean, isHeadAdmin = false): str
  * have footage and that one not?" is a real question, and an item that silently
  * disappears from half the rows cannot answer it.
  *
- * Two places a recording can be: this machine's disk, and YouTube by way of a
- * server. Both are this row's player's own — a server only puts a recording on
- * the row of the account it belongs to — so the same game in somebody else's
- * history says there is nothing to watch, which is the truth for that view.
+ * Two places a recording can be: this machine's disk, and the server. Both are
+ * this row's player's own — a server only puts a recording on the row of the
+ * account it belongs to — so the same game in somebody else's history says
+ * there is nothing to watch, which is the truth for that view. A server copy
+ * still on its way says so, rather than nothing.
  */
 export function recordingBlockedReason(match: MenuMatch): string | null {
-  if ((match.local?.recordingId ?? null) === null && !match.recording) return 'No recording for this game'
-  return null
+  const onDisk = (match.local?.recordingId ?? null) !== null && !match.local?.recordingFileDeleted
+  if (onDisk) return null
+
+  switch (match.recording?.status) {
+    case 'ready':
+      return null
+    case 'uploading':
+    case 'upload_failed':
+      return 'Recording is still uploading'
+    case 'processing':
+      return 'Recording is processing on the server'
+    case 'failed':
+      return 'The server could not process this recording'
+    default:
+      return match.local?.recordingFileDeleted
+        ? 'Recording was deleted from this PC after upload'
+        : 'No recording for this game'
+  }
 }
 
 /**
- * A row as a client that cannot play YouTube should see it: without the
- * recording a server holds.
+ * A row as a client that cannot play the server's recordings should see it:
+ * without the recording a server holds.
  *
- * A server can hold one while this client was built without YouTube — see the
- * apps' feature switches — and a marker promising a recording that nothing
- * here can play, or a menu offering to watch it, would be a promise broken on
- * the click. The row's own files on this disk are left as they are.
+ * A platform with no Foxfire Media player would otherwise show a marker
+ * promising a recording nothing here can play, or a menu offering to watch it
+ * — a promise broken on the click. The row's own files on this disk are left
+ * as they are.
  */
 export function withoutServerRecording<T extends Pick<MenuMatch, 'recording'>>(match: T): T {
   return match.recording ? { ...match, recording: null } : match
 }
 
 /**
- * Whether this machine's recording of the game could go to YouTube, and why not.
+ * Whether this machine's recording of the game could go to the server, and why not.
  *
  * Null means the item is not offered at all: nothing on this disk to upload,
- * somebody else's account, or already there. A string is the item offered but
+ * somebody else's account, or already there. 'pending' is the item offered but
  * disabled — an upload of this game is already on its way.
  */
-function uploadState(match: MenuMatch, isMine?: boolean): 'offer' | 'pending' | null {
+export function uploadState(match: MenuMatch, isMine?: boolean): 'offer' | 'pending' | null {
   if (isMine === false) return null
-  if ((match.local?.recordingId ?? null) === null) return null
-  if (match.local?.recordingVideoId || match.recording) return null
-  return match.local?.recordingUploadPending ? 'pending' : 'offer'
+  if ((match.local?.recordingId ?? null) === null || match.local?.recordingFileDeleted) return null
+  if (match.local?.recordingUploadPending) return 'pending'
+  if (match.local?.recordingOnServer || match.recording) return null
+  return 'offer'
 }
 
 /**
@@ -148,11 +166,9 @@ export interface MatchMenuActions {
   onEditLp?: () => void
   onClearLp?: () => void
   onWatchRecording?: () => void
-  /** Puts this machine's recording on YouTube. Desktop only. */
+  /** Queues this machine's recording for the server. Desktop only. */
   onUploadRecording?: () => void
-  /** Attaches a video somebody uploaded themselves. */
-  onAttachRecordingLink?: () => void
-  /** Takes the server's recording off this game. The video stays on YouTube. */
+  /** Takes the server's recording off this game, and deletes its video. */
   onDetachRecording?: () => void
   onWatchReplay?: () => void
   onDownloadReplay?: () => void
@@ -167,8 +183,6 @@ export interface MatchMenuContext {
   isAdmin?: boolean
   /** A head admin may also type and clear LP on anybody's account. */
   isHeadAdmin?: boolean
-  /** Connected to a server, where a link can be attached with nothing on this disk behind it. */
-  serverMode?: boolean
   /**
    * Reading without an account — an open server, or a share link. Every item
    * beyond looking and copying is a write or a member's download, which the
@@ -185,7 +199,6 @@ export function matchContextItems(
     isMine,
     isAdmin = false,
     isHeadAdmin = false,
-    serverMode = false,
     outsider = false
   }: MatchMenuContext = {}
 ): ContextMenuItem[] {
@@ -213,24 +226,15 @@ export function matchContextItems(
     })
   }
 
-  // Putting footage on YouTube, or a link to some that is already there. Only
-  // on your own rows: a recording is a claim about whose screen it was, and
-  // the server refuses it for anybody else's account.
+  // Putting this disk's footage on the server. Only on your own rows: a
+  // recording is a claim about whose screen it was, and the server refuses it
+  // for anybody else's account.
   const upload = uploadState(match, isMine)
   if (upload && actions.onUploadRecording) {
     items.push({
-      label: 'Upload recording to YouTube',
+      label: 'Upload recording to server',
       onSelect: actions.onUploadRecording,
       ...(upload === 'pending' ? { disabledReason: 'Uploading…' } : {})
-    })
-  }
-
-  const hasLocalRecording = (match.local?.recordingId ?? null) !== null
-  if (actions.onAttachRecordingLink && isMine !== false && (serverMode || hasLocalRecording)) {
-    items.push({
-      label:
-        match.recording || match.local?.recordingVideoId ? 'Replace YouTube link…' : 'Attach YouTube link…',
-      onSelect: actions.onAttachRecordingLink
     })
   }
 

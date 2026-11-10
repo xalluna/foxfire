@@ -145,7 +145,7 @@ export function TftProfileScreen({
   }
 
   const flat = pageItems(matches.data, (match) => match.matchId)
-  const rows = platform.youtube ? flat : flat.map(withoutServerRecording)
+  const rows = platform.media ? flat : flat.map(withoutServerRecording)
 
   return (
     <>

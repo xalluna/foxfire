@@ -111,6 +111,14 @@ interface StoredServer {
    * build wrote, which reads as League alone until the next handshake says.
    */
   games?: GameId[] | null
+
+  /**
+   * Whether the server keeps recordings, and where its Foxfire Media is. Read
+   * when the publicUrl is. Absent from a row an older build wrote, which reads
+   * as none until the next handshake says.
+   */
+  recordings?: boolean | null
+  mediaOrigin?: string | null
 }
 
 /**
@@ -340,6 +348,8 @@ export function getServerState(): ServerState {
     publicUrl: activeServer?.publicUrl ?? null,
     publicAccess: activeServer?.publicAccess ?? false,
     games: activeServer ? offeredGames(activeServer.games) : [...GAME_IDS],
+    recordings: activeServer?.recordings ?? false,
+    mediaOrigin: activeServer?.recordings ? (activeServer.mediaOrigin ?? null) : null,
     upgradeRequired: active ? upgradeRequired : null,
     serverOutdated: active ? serverOutdated : false,
     riotKeyRejected: active ? riotKeyRejected : false
@@ -413,17 +423,24 @@ export async function refreshServerInfo(): Promise<void> {
   // A host turns TFT on or off with a restart, which this hears as the push
   // channel connecting again.
   const games = probed.games ?? offeredGames(stored.games)
+  // And Foxfire Media, which a host sets up or moves with a restart too.
+  const recordings = probed.recordings ?? false
+  const mediaOrigin = probed.mediaOrigin
   if (
     stored.publicUrl === probed.publicUrl &&
     stored.name === name &&
     (stored.publicAccess ?? false) === publicAccess &&
-    offeredGames(stored.games).join() === games.join()
+    offeredGames(stored.games).join() === games.join() &&
+    (stored.recordings ?? false) === recordings &&
+    (stored.mediaOrigin ?? null) === mediaOrigin
   ) {
     return
   }
 
   writeKnown(
-    readKnown().map((s) => (s.url === url ? { ...s, name, publicUrl: probed.publicUrl, publicAccess, games } : s))
+    readKnown().map((s) =>
+      s.url === url ? { ...s, name, publicUrl: probed.publicUrl, publicAccess, games, recordings, mediaOrigin } : s
+    )
   )
   announce()
 }
@@ -529,6 +546,8 @@ export async function probe(rawUrl: string): Promise<ServerProbe> {
       email: null,
       publicAccess: null,
       games: null,
+      recordings: null,
+      mediaOrigin: null,
       compatibility: 'unknown'
     }
   }
@@ -613,7 +632,9 @@ async function authenticate(
       isHeadAdmin: user.isHeadAdmin ?? false,
       publicUrl: probed.publicUrl,
       publicAccess: probed.publicAccess,
-      games: probed.games
+      games: probed.games,
+      recordings: probed.recordings,
+      mediaOrigin: probed.mediaOrigin
     })
 
     writeKnown(known)

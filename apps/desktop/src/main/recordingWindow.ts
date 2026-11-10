@@ -24,7 +24,7 @@ export function openRecordingWindow(recordingId: number): void {
   openWindowAt(windowRoutes.recording(recordingId))
 }
 
-/** Somebody's recording that lives only on YouTube, by whose view of which game it is. */
+/** A recording that lives only on the server, by whose view of which game it is. */
 export function openRemoteRecordingWindow(accountId: string, matchId: string): void {
   openWindowAt(windowRoutes.remoteRecording(accountId, matchId))
 }
@@ -51,9 +51,8 @@ function openWindowAt(route: string): void {
 
   window.on('ready-to-show', () => window.show())
   window.on('closed', () => windows.delete(window))
-  // Only web addresses reach the browser. YouTube's frame opens links of its
-  // own — the title, "Watch on YouTube" — and a page that could hand
-  // openExternal any scheme it liked could hand it a file or a program.
+  // Only web addresses reach the browser. A page that could hand openExternal
+  // any scheme it liked could hand it a file or a program.
   window.webContents.setWindowOpenHandler((details) => {
     if (/^https?:\/\//i.test(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }

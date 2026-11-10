@@ -5,7 +5,7 @@ import type {
   Replay,
   RoflSettings
 } from '@shared/types'
-import { C, NOW, FIXTURE_VIDEO_ID, matchIdAt, scenario } from '@foxfire/screens/dev'
+import { C, NOW, FIXTURE_VIDEO_ID, MOCK_SERVER_URL, matchIdAt, scenario } from '@foxfire/screens/dev'
 
 /**
  * Fixtures only the desktop draws: recordings, Riot replays on this disk, and
@@ -13,31 +13,33 @@ import { C, NOW, FIXTURE_VIDEO_ID, matchIdAt, scenario } from '@foxfire/screens/
  * @foxfire/screens/dev.
  */
 
-/** What every recording carries about YouTube before anything has happened. */
-const NOT_ON_YOUTUBE = { fileDeleted: false, youtube: null, upload: null, attachment: null } as const
+/** What every recording carries about the server before anything has happened. */
+const NOT_ON_SERVER = { fileDeleted: false, server: null, upload: null } as const
 
 /** A League recording, which has no TFT board. */
 const LEAGUE = { game: 'lol', tftMatch: null } as const
 
-const ON_YOUTUBE = {
-  videoId: FIXTURE_VIDEO_ID,
-  privacy: 'unlisted' as const,
-  forcedPrivate: false,
-  source: 'upload' as const,
-  title: 'Viktor · Ranked Solo/Duo · Victory · 11/3/8',
-  at: NOW - 5 * 60_000
-}
+const ON_SERVER = { videoId: FIXTURE_VIDEO_ID, serverKey: MOCK_SERVER_URL, at: NOW - 5 * 60_000 }
 
 /** An upload in some state, for the rows below. */
 function upload(state: NonNullable<Recording['upload']>['state'], over: Partial<NonNullable<Recording['upload']>> = {}): Recording['upload'] {
-  return { state, trigger: 'manual', bytesSent: 0, fileBytes: 1_400_000_000, error: null, resumesAt: null, ...over }
+  return {
+    state,
+    trigger: 'manual',
+    bytesSent: 0,
+    fileBytes: 1_400_000_000,
+    deleteAfter: false,
+    error: null,
+    resumesAt: null,
+    ...over
+  }
 }
 
 /**
- * The queue in every state it can be in, for ?scenario=youtube-queue: running,
- * waiting its turn, paused for a game, out of quota, failed, done but forced
- * private, on YouTube with the file deleted, and on YouTube but refused by a
- * server that already had a video on that game.
+ * The queue in every state it can be in, for ?scenario=media-queue: waiting
+ * its turn, paused for a game, waiting to retry, failed, processing on the
+ * server, on the server with the file kept, and on the server with the file
+ * deleted after upload.
  */
 function queueStates(): Recording[] {
   const base = (id: number, minutesAgo: number, champion: number): Recording => ({
@@ -54,29 +56,34 @@ function queueStates(): Recording[] {
     selfChampionId: champion,
     match: null,
     ...LEAGUE,
-      ...NOT_ON_YOUTUBE
+    ...NOT_ON_SERVER
   })
 
   return [
-    { ...base(4, 200, C.Ahri), upload: upload('queued') },
+    { ...base(4, 200, C.Ahri), upload: upload('queued', { trigger: 'bulk', deleteAfter: true }) },
     { ...base(5, 260, C.Zed), upload: upload('paused', { bytesSent: 380_000_000, error: 'Paused while a game is on.' }) },
-    { ...base(6, 320, C.Syndra), upload: upload('waiting_quota', { error: "Waiting for YouTube's daily upload quota to come back.", resumesAt: NOW + 5 * 60 * 60_000 }) },
-    { ...base(7, 380, C.Orianna), upload: upload('failed', { error: 'This Google account has no YouTube channel yet. Create one on youtube.com, then try again.' }) },
     {
-      ...base(8, 440, C.Lux),
-      youtube: { ...ON_YOUTUBE, privacy: 'private', forcedPrivate: true },
-      upload: upload('done', { bytesSent: 1_400_000_000, error: 'YouTube made this video private: Foxfire’s Google project has not passed YouTube’s review yet, so nobody else can watch it for now.' })
+      ...base(6, 320, C.Syndra),
+      upload: upload('queued', { error: 'Could not reach the server; trying again shortly.', resumesAt: NOW + 2 * 60_000 })
     },
-    { ...base(9, 500, C.Yone), fileExists: false, fileDeleted: true, fileBytes: null, youtube: ON_YOUTUBE },
+    {
+      ...base(7, 380, C.Orianna),
+      upload: upload('failed', { error: 'Only whoever claimed this League account on the server can upload its recordings.' })
+    },
+    { ...base(8, 440, C.Lux), upload: upload('processing', { bytesSent: 1_400_000_000 }) },
+    { ...base(9, 500, C.Yone), server: ON_SERVER, upload: upload('done', { bytesSent: 1_400_000_000 }) },
     {
       ...base(10, 560, C.Qiyana),
-      youtube: { ...ON_YOUTUBE, source: 'link', title: null, privacy: null },
-      attachment: { state: 'conflict', message: 'This game already has a recording attached: “Qiyana mid, full game”.' }
+      fileExists: false,
+      fileDeleted: true,
+      fileBytes: null,
+      server: ON_SERVER,
+      upload: upload('done', { bytesSent: 1_400_000_000, deleteAfter: true })
     }
   ]
 }
 
-/** Fifty-odd recorded games, none of them uploaded, for ?scenario=youtube-backlog. */
+/** Fifty-odd recorded games, none of them uploaded, for ?scenario=media-backlog. */
 function backlog(): Recording[] {
   const champions = [C.Viktor, C.Ahri, C.Syndra, C.Orianna, C.Zed, C.Lux, C.Yone, C.Qiyana]
   return Array.from({ length: 55 }, (_, i) => {
@@ -112,7 +119,7 @@ function backlog(): Recording[] {
               assists: 4 + (i % 8)
             },
       ...LEAGUE,
-      ...NOT_ON_YOUTUBE
+      ...NOT_ON_SERVER
     } satisfies Recording
   })
 }
@@ -123,7 +130,7 @@ function backlog(): Recording[] {
  * A bound recording, one still hunting for its match, and one that never found a
  * game — the Practice Tool case, which is the normal reason a recording stays
  * unmatched and is exactly the row most likely to be got wrong. The first is
- * already on YouTube; the second is on its way there.
+ * already on the server.
  */
 export const RECORDINGS: Record<string, Recording[]> = {
   1: [
@@ -153,10 +160,9 @@ export const RECORDINGS: Record<string, Recording[]> = {
         assists: 8
       },
       ...LEAGUE,
-      ...NOT_ON_YOUTUBE,
-      youtube: ON_YOUTUBE,
-      upload: upload('done', { bytesSent: 1_820_000_000, fileBytes: 1_820_000_000 }),
-      attachment: scenario === 'server-connected' ? { state: 'attached', message: null } : null
+      ...NOT_ON_SERVER,
+      server: ON_SERVER,
+      upload: upload('done', { bytesSent: 1_820_000_000, fileBytes: 1_820_000_000 })
     },
     {
       id: 2,
@@ -172,9 +178,9 @@ export const RECORDINGS: Record<string, Recording[]> = {
       selfChampionId: C.Ahri,
       match: null,
       ...LEAGUE,
-      ...NOT_ON_YOUTUBE,
+      ...NOT_ON_SERVER,
       upload:
-        scenario === 'youtube-queue'
+        scenario === 'media-queue'
           ? upload('uploading', { bytesSent: 462_000_000, fileBytes: 1_100_000_000 })
           : null
     },
@@ -194,7 +200,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
       selfChampionId: C.LeeSin,
       match: null,
       ...LEAGUE,
-      ...NOT_ON_YOUTUBE
+      ...NOT_ON_SERVER
     },
     // A TFT game, bound to the harness's newest Double Up game, and one still
     // waiting for its match — TFT's are published only once the lobby is done.
@@ -229,7 +235,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
           { characterId: 'TFT18_Jinx', tier: 3, rarity: 4, items: [] }
         ]
       },
-      ...NOT_ON_YOUTUBE
+      ...NOT_ON_SERVER
     },
     {
       id: 12,
@@ -246,10 +252,10 @@ export const RECORDINGS: Record<string, Recording[]> = {
       selfChampionId: null,
       match: null,
       tftMatch: null,
-      ...NOT_ON_YOUTUBE
+      ...NOT_ON_SERVER
     },
-    ...(scenario === 'youtube-queue' ? queueStates() : []),
-    ...(scenario === 'youtube-backlog' ? backlog() : [])
+    ...(scenario === 'media-queue' ? queueStates() : []),
+    ...(scenario === 'media-backlog' ? backlog() : [])
   ],
   2: []
 }

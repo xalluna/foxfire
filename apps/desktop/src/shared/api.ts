@@ -66,13 +66,10 @@ import type {
   ServerState,
   SyncProgressEvent,
   UpdateState,
-  AttachRecordingOutcome,
   BulkUploadResult,
-  UploadDraft,
-  UploadRequest,
-  YouTubePrivacy,
-  YouTubeSettings,
-  YouTubeState
+  EnqueueOptions,
+  MediaSettings,
+  UploadQueueState
 } from './types'
 import type {
   LcuTelemetry,
@@ -283,11 +280,14 @@ export interface Api {
   }
   dashboard: FoxfireData['dashboard']
   /**
-   * The recordings the active server holds on YouTube. Local-only has none to
-   * hold: reads answer null and writes say to connect to a server.
+   * The recordings the active server holds on its Foxfire Media. Local-only has
+   * none to hold: reads answer null and writes say to connect to a server.
+   *
+   * No upload here: an upload needs the file, which only the main process
+   * opens — see `media`.
    */
-  matchRecordings: NonNullable<FoxfireData['matchRecordings']> & {
-    /** A recording was attached to one account's game, replaced, or removed — pushed by the server. */
+  matchRecordings: Pick<NonNullable<FoxfireData['matchRecordings']>, 'get' | 'embed' | 'remove'> & {
+    /** A recording was uploaded to one account's game, made ready, or removed — pushed by the server. */
     onChanged: (cb: (event: { accountId: string; matchId: string }) => void) => () => void
   }
   sync: FoxfireData['sync'] & {
@@ -352,13 +352,11 @@ export interface Api {
     /** A page of an account's recordings, newest first, bound or not, and how many there are — one game's, if asked. */
     list: (accountId: string, page?: PageOptions, game?: GameId | null) => Promise<Page<Recording>>
     /**
-     * Every recording of an account's that can go to YouTube — whole, not a
-     * page, because "select all" has to mean all of them and the batch dialog
-     * reads each one's size and game. One of the two lists that grow which are
-     * deliberately not paged; see CLAUDE.md.
-     *
-     * Registered only in builds with YouTube in them. Anywhere else it has no
-     * handler, so a caller has to check YOUTUBE_ENABLED first.
+     * Every recording of an account's that can go to the server — whole, not
+     * a page, because "select all" has to mean all of them and the batch dialog
+     * reads each one's size. One of the two lists that grow which are
+     * deliberately not paged; see CLAUDE.md. Empty off a server that keeps
+     * recordings.
      */
     eligible: (accountId: string) => Promise<Recording[]>
     detail: (recordingId: number) => Promise<RecordingDetail | null>
@@ -375,43 +373,43 @@ export interface Api {
     /** Opens a game in the main window's history — the TFT history for a TFT game. */
     showMatch: (accountId: string, matchId: string, game?: GameId) => Promise<void>
     onShowMatch: (cb: (accountId: string, matchId: string, game?: GameId) => void) => () => void
-    /** Removes a recording's row once its file is gone. The YouTube video and the server's copy stay. */
+    /** Removes a recording's row once its file is gone. The server's copy stays. */
     forget: (recordingId: number) => Promise<void>
     /** Opens a window for one account's recording of a game that this machine has no file of. */
     openRemote: (accountId: string, matchId: string) => Promise<void>
+    /** Opens the server's copy of one of this PC's recordings, under the server's name for its account. */
+    openServerCopy: (recordingId: number) => Promise<void>
   }
   /**
-   * Putting recordings on YouTube, through this machine's own Google sign-in.
+   * Sending recordings to the active server's Foxfire Media.
    *
-   * The refresh token stays in the main process; the renderer sees only
-   * whether there is a connection and whose. Every upload goes through a queue
-   * that survives restarts and waits out games.
+   * The file goes straight there from the main process, on a one-time token
+   * the server mints; no token crosses IPC. Every upload goes through a queue
+   * that survives restarts, waits out games, and can hold a backlog of
+   * hundreds of gigabytes, one recording at a time.
    */
-  youtube: {
-    getState: () => Promise<YouTubeState>
-    /** Opens Google's consent page in the browser. Resolves once connected; rejects with why not. */
-    connect: () => Promise<void>
-    cancelConnect: () => Promise<void>
-    /** Disconnects and revokes the grant. Videos already on YouTube stay there. */
-    disconnect: () => Promise<void>
-    getSettings: () => Promise<YouTubeSettings>
-    setSettings: (patch: Partial<YouTubeSettings>) => Promise<YouTubeSettings>
-    /** What the upload form opens with for a recording, from the templates. */
-    draft: (recordingId: number) => Promise<UploadDraft>
-    enqueue: (request: UploadRequest) => Promise<void>
+  media: {
+    getSettings: () => Promise<MediaSettings>
+    setSettings: (patch: Partial<MediaSettings>) => Promise<MediaSettings>
+    getQueue: () => Promise<UploadQueueState>
     /**
-     * Queues many recordings at once, oldest game first, each titled and
-     * described from the templates, all with one privacy. Recordings that
-     * cannot go — already on YouTube, file gone — are reported, not queued.
+     * Queues recordings, oldest game first, each titled from the template.
+     * Recordings that cannot go — already there, file gone, no game — are
+     * reported, not queued. `trigger: 'bulk'` marks a selection rather than one row.
      */
-    enqueueMany: (recordingIds: number[], privacy: YouTubePrivacy) => Promise<BulkUploadResult>
+    enqueue: (
+      recordingIds: number[],
+      options?: EnqueueOptions & { trigger?: 'manual' | 'bulk' }
+    ) => Promise<BulkUploadResult>
+    /** Every recording on this PC the server does not have yet. */
+    enqueueAll: (options?: EnqueueOptions) => Promise<BulkUploadResult>
+    /** What enqueueAll would queue: how many recordings, and how many bytes. */
+    backlog: () => Promise<{ count: number; bytes: number }>
     cancel: (recordingId: number) => Promise<void>
     retry: (recordingId: number) => Promise<void>
-    /** Attaches a video somebody uploaded themselves to a recording on this disk, with its markers. */
-    attachLink: (recordingId: number, videoId: string, replace: boolean) => Promise<AttachRecordingOutcome>
-    /** Tells the active server about this recording's video again, replacing whatever the game has. */
-    reattach: (recordingId: number) => Promise<AttachRecordingOutcome>
-    onChanged: (cb: (state: YouTubeState) => void) => () => void
+    pauseAll: () => Promise<void>
+    resumeAll: () => Promise<void>
+    onChanged: (cb: (state: UploadQueueState) => void) => () => void
   }
   /**
    * Riot's own replays. No detail call and no player: a .rofl is handed to the

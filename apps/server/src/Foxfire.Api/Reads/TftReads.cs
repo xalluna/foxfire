@@ -153,14 +153,10 @@ public sealed class TftReads(FoxfireDbContext db, TftIdentity identity, RankRead
                     s.MatchId == x.p.MatchId
                     && s.Source == "manual"
                     && s.RiotAccountId == riotAccountId),
-#if FEATURE_YOUTUBE
                 Recording = db.MatchRecordings
                     .Where(r => r.MatchId == x.p.MatchId && r.RiotAccountId == riotAccountId)
-                    .Select(r => new MatchRecordingSummary(r.YouTubeVideoId, r.Privacy, r.EventsJson != null))
+                    .Select(r => new MatchRecordingSummary(r.VideoId, r.Status, r.EventsJson != null, r.DurationSeconds))
                     .FirstOrDefault()
-#else
-                Recording = (MatchRecordingSummary?)null
-#endif
             })
             .ToListAsync(cancellationToken);
 

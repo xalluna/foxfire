@@ -2,13 +2,7 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { featureDefines } from '../../tooling/vite/features'
 import { fsAllow } from '../../tooling/vite/fsAllow'
-
-// The same build-time feature switches for all three halves, so main, the
-// preload and the renderer cannot be built disagreeing about whether a feature
-// exists. See tooling/vite/features.ts and src/shared/features.ts.
-const features = featureDefines()
 
 /**
  * Fails the build if the preloads share a chunk.
@@ -48,7 +42,6 @@ function preloadsStandAlone(): Plugin {
  */
 export default defineConfig({
   main: {
-    define: features,
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
@@ -64,7 +57,6 @@ export default defineConfig({
     }
   },
   preload: {
-    define: features,
     plugins: [externalizeDepsPlugin(), preloadsStandAlone()],
     resolve: {
       alias: {
@@ -82,7 +74,6 @@ export default defineConfig({
     }
   },
   renderer: {
-    define: features,
     root: 'src/renderer',
     resolve: {
       alias: {

@@ -287,7 +287,6 @@ describe('matchContextItems for somebody who is not signed in', () => {
     onClearLp: () => {},
     onWatchRecording: () => {},
     onUploadRecording: () => {},
-    onAttachRecordingLink: () => {},
     onDetachRecording: () => {},
     onWatchReplay: () => {},
     onDownloadReplay: () => {}
@@ -297,7 +296,7 @@ describe('matchContextItems for somebody who is not signed in', () => {
     const shared = { ...MATCH, sharedReplay: { patch: '15.14', fileBytes: 31_000_000 } }
 
     expect(
-      matchContextItems(shared, EVERYTHING, { isMine: false, serverMode: true, outsider: true }).map(
+      matchContextItems(shared, EVERYTHING, { isMine: false, outsider: true }).map(
         (item) => item.label
       )
     ).toEqual(['Copy link', 'Copy match ID', 'Open match details'])
@@ -326,52 +325,78 @@ describe('matchContextItems and recordings', () => {
     onOpenDetails: () => {},
     onWatchRecording: () => {},
     onUploadRecording: () => {},
-    onAttachRecordingLink: () => {},
     onDetachRecording: () => {}
   }
-  const ON_YOUTUBE = { youtubeVideoId: 'dQw4w9WgXcQ', privacy: 'unlisted' as const, hasEvents: true }
+  const ON_SERVER = { videoId: 'fixtureVid1', status: 'ready' as const, hasEvents: true, durationSeconds: 1790 }
   const LOCAL = { recordingId: 7, replayId: null }
   const item = (items: ReturnType<typeof matchContextItems>, label: string) =>
     items.find((candidate) => candidate.label.startsWith(label))
   const labels = (items: ReturnType<typeof matchContextItems>) => items.map((candidate) => candidate.label)
 
   it('lets a browser watch a recording the server holds for this row', () => {
-    const items = matchContextItems({ ...MATCH, recording: ON_YOUTUBE }, RECORDING_ACTIONS, {
-      isMine: false,
-      serverMode: true
-    })
+    const items = matchContextItems({ ...MATCH, recording: ON_SERVER }, RECORDING_ACTIONS, { isMine: false })
     expect(item(items, 'Watch recording')?.disabledReason).toBeUndefined()
   })
 
   it('says there is nothing to watch on a row whose player has no recording', () => {
-    const items = matchContextItems(MATCH, RECORDING_ACTIONS, { isMine: false, serverMode: true })
+    const items = matchContextItems(MATCH, RECORDING_ACTIONS, { isMine: false })
     expect(item(items, 'Watch recording')?.disabledReason).toBe('No recording for this game')
   })
 
+  it('says where a server copy still on its way has got to', () => {
+    const reason = (status: 'uploading' | 'upload_failed' | 'processing' | 'failed') =>
+      item(
+        matchContextItems({ ...MATCH, recording: { ...ON_SERVER, status } }, RECORDING_ACTIONS, { isMine: false }),
+        'Watch recording'
+      )?.disabledReason
+
+    expect(reason('uploading')).toBe('Recording is still uploading')
+    expect(reason('upload_failed')).toBe('Recording is still uploading')
+    expect(reason('processing')).toBe('Recording is processing on the server')
+    expect(reason('failed')).toBe('The server could not process this recording')
+  })
+
+  it('plays this disk’s file while the server is still processing its copy', () => {
+    const items = matchContextItems(
+      { ...MATCH, local: LOCAL, recording: { ...ON_SERVER, status: 'processing' } },
+      RECORDING_ACTIONS,
+      { isMine: true }
+    )
+    expect(item(items, 'Watch recording')?.disabledReason).toBeUndefined()
+  })
+
+  it('plays the server’s copy once this disk’s file was deleted after upload', () => {
+    const deleted = { ...LOCAL, recordingFileDeleted: true }
+    expect(
+      item(matchContextItems({ ...MATCH, local: deleted, recording: ON_SERVER }, RECORDING_ACTIONS, {}), 'Watch recording')
+        ?.disabledReason
+    ).toBeUndefined()
+    expect(
+      item(matchContextItems({ ...MATCH, local: deleted }, RECORDING_ACTIONS, {}), 'Watch recording')?.disabledReason
+    ).toBe('Recording was deleted from this PC after upload')
+  })
+
   it('offers nothing that writes a recording on somebody else’s account', () => {
-    const items = matchContextItems({ ...MATCH, local: LOCAL, recording: ON_YOUTUBE }, RECORDING_ACTIONS, {
-      isMine: false,
-      serverMode: true
+    const items = matchContextItems({ ...MATCH, local: LOCAL, recording: ON_SERVER }, RECORDING_ACTIONS, {
+      isMine: false
     })
-    expect(labels(items)).not.toContain('Upload recording to YouTube')
-    expect(labels(items).some((label) => label.includes('YouTube link'))).toBe(false)
+    expect(labels(items)).not.toContain('Upload recording to server')
     expect(labels(items)).not.toContain('Remove recording from server')
   })
 
   it('lets an admin take a recording off somebody else’s game, and nothing more', () => {
-    const items = matchContextItems({ ...MATCH, recording: ON_YOUTUBE }, RECORDING_ACTIONS, {
+    const items = matchContextItems({ ...MATCH, recording: ON_SERVER }, RECORDING_ACTIONS, {
       isMine: false,
-      isAdmin: true,
-      serverMode: true
+      isAdmin: true
     })
     expect(labels(items)).toContain('Remove recording from server')
-    expect(labels(items).some((label) => label.includes('YouTube link'))).toBe(false)
+    expect(labels(items)).not.toContain('Upload recording to server')
   })
 
-  it('offers an upload of this machine’s recording until it is on YouTube', () => {
-    const own = { isMine: true, serverMode: true }
+  it('offers an upload of this machine’s recording until it is on the server', () => {
+    const own = { isMine: true }
     expect(labels(matchContextItems({ ...MATCH, local: LOCAL }, RECORDING_ACTIONS, own))).toContain(
-      'Upload recording to YouTube'
+      'Upload recording to server'
     )
 
     const pending = matchContextItems(
@@ -381,32 +406,19 @@ describe('matchContextItems and recordings', () => {
     )
     expect(item(pending, 'Upload recording')?.disabledReason).toBe('Uploading…')
 
-    const uploaded = matchContextItems(
-      { ...MATCH, local: { ...LOCAL, recordingVideoId: 'dQw4w9WgXcQ' } },
-      RECORDING_ACTIONS,
-      own
-    )
-    expect(labels(uploaded)).not.toContain('Upload recording to YouTube')
-    expect(labels(uploaded)).toContain('Replace YouTube link…')
-  })
+    const known = matchContextItems({ ...MATCH, local: { ...LOCAL, recordingOnServer: true } }, RECORDING_ACTIONS, own)
+    expect(labels(known)).not.toContain('Upload recording to server')
 
-  it('attaches a link from a browser with nothing on disk, but only on a server', () => {
-    const web = { onCopyId: () => {}, onOpenDetails: () => {}, onAttachRecordingLink: () => {} }
-    expect(labels(matchContextItems(MATCH, web, { isMine: true, serverMode: true }))).toContain(
-      'Attach YouTube link…'
-    )
+    const onRow = matchContextItems({ ...MATCH, local: LOCAL, recording: ON_SERVER }, RECORDING_ACTIONS, own)
+    expect(labels(onRow)).not.toContain('Upload recording to server')
 
-    // Local-only, a link has to hang off a recording on this disk; there is
-    // nowhere else to keep it.
-    expect(labels(matchContextItems(MATCH, web, {}))).not.toContain('Attach YouTube link…')
-    expect(labels(matchContextItems({ ...MATCH, local: LOCAL }, web, {}))).toContain('Attach YouTube link…')
+    const gone = matchContextItems({ ...MATCH, local: { ...LOCAL, recordingFileDeleted: true } }, RECORDING_ACTIONS, own)
+    expect(labels(gone)).not.toContain('Upload recording to server')
   })
 
   it('never offers an upload in a browser, which has no file to send', () => {
     const web = { onCopyId: () => {}, onOpenDetails: () => {}, onWatchRecording: () => {} }
-    expect(labels(matchContextItems(MATCH, web, { isMine: true, serverMode: true }))).not.toContain(
-      'Upload recording to YouTube'
-    )
+    expect(labels(matchContextItems(MATCH, web, { isMine: true }))).not.toContain('Upload recording to server')
   })
 })
 
@@ -414,7 +426,7 @@ describe('withoutServerRecording', () => {
   it('takes the server’s recording off a row, and leaves what is on this disk', () => {
     const row = {
       ...MATCH,
-      recording: { youtubeVideoId: 'dQw4w9WgXcQ', privacy: 'unlisted' as const, hasEvents: true },
+      recording: { videoId: 'fixtureVid1', status: 'ready' as const, hasEvents: true, durationSeconds: null },
       local: { recordingId: 7, replayId: null }
     }
     const stripped = withoutServerRecording(row)

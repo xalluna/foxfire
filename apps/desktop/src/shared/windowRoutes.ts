@@ -18,7 +18,7 @@ export const windowRoutes = {
 
   /**
    * A recording this machine has no file of — somebody else's, or its own
-   * after the file was deleted — played from YouTube through the server.
+   * after the file was deleted — played from the server.
    * Named by the account and the game, which is what a server keys it on.
    */
   remoteRecording: (accountId: string, matchId: string): string =>

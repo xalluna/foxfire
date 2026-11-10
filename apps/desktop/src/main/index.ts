@@ -21,14 +21,10 @@ import { observeRateLimiter } from './telemetry/limiter'
 import { startResourceSampling, stopResourceSampling } from './telemetry/resources'
 import { startRetention, stopRetention } from './telemetry/retention'
 import { registerRecordingProtocol } from './recordingProtocol'
-import { YOUTUBE_ENABLED } from '@shared/features'
 import { registerPrivilegedSchemes } from './schemes'
-import { registerYouTubeHostProtocol } from './youtube/hostProtocol'
-import { installYouTubeReferer } from './youtube/referer'
-import { reconcileAttachments } from './youtube/attach'
-import { initYouTubeQueue, onUploadFinished, stopYouTubeQueue } from './youtube/queue'
+import { installEmbedHeaders } from './media/embedHeaders'
+import { initMediaQueue, stopMediaQueue } from './media/queue'
 import { onServerSyncComplete } from './server/hub'
-import { onServerState } from './services/serverService'
 import { migrateUserData, verifyMigration } from './migrateUserData'
 import { initCapture, shutdownCapture } from './capture/captureService'
 import { pinCaptureDriver, pinLegacyCaptureFolder } from './services/captureSettings'
@@ -60,8 +56,7 @@ installCrashHandlers()
 
 // Must run before the app is ready — Electron will not accept a privileged
 // scheme afterwards. See recordingProtocol.ts for why the recording window cannot
-// simply point a <video> at a file:// URL, and shared/youtubeHost.ts for why
-// YouTube's player gets an origin of its own.
+// simply point a <video> at a file:// URL.
 registerPrivilegedSchemes()
 
 /**
@@ -126,10 +121,6 @@ function bootstrap(): void {
   startRetention(() => peekTelemetryDb())
   initSettings()
   registerRecordingProtocol()
-  if (YOUTUBE_ENABLED) {
-    registerYouTubeHostProtocol()
-    installYouTubeReferer()
-  }
   registerIpcHandlers()
   // Before the window, because it decides whether there is one to look at: an
   // update installed by the copy that just quit brings the app back the way it
@@ -158,7 +149,7 @@ function bootstrap(): void {
   resumeActiveServer()
   catchUpOnLaunch()
   bindAfterServerSyncs()
-  if (YOUTUBE_ENABLED) initYouTube()
+  initMedia()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -187,35 +178,25 @@ function startsHidden(installed: PendingInstall | null): boolean {
 /**
  * Connected to a server, a recording can first find its game when the
  * server's sync of that account lands — so that is when to look, rather than
- * at the next launch. Then, with YouTube, tell the server about any video
- * that can now be attached: after the binding, so the pass sees what it bound.
+ * at the next launch. A recording that finds its game there can go to the
+ * server by itself, if that is turned on — see recordingService's settle hook.
  */
 function bindAfterServerSyncs(): void {
   onServerSyncComplete((accountId) => {
-    void bindPendingRecordings(accountId)
-      .catch(() => 0)
-      .then(() => {
-        if (YOUTUBE_ENABLED) void reconcileAttachments()
-      })
+    void bindPendingRecordings(accountId).catch(() => 0)
   })
 }
 
 /**
- * Recordings on YouTube: the upload queue, and telling the server about them.
- * Only in a build made with the feature — see shared/features.ts.
+ * Recordings on the server: the upload queue, and letting this app's windows
+ * frame the server's player.
  *
- * The queue resumes whatever was on its way when the app last quit. A server
- * is told about a recording's video whenever something that decides whether it
- * should be changes — an upload finishing, a server finishing a sync (see
- * bindAfterServerSyncs), and signing in to or switching servers.
+ * The queue resumes whatever was on its way when the app last quit, and waits
+ * for a server that keeps recordings when it is not on one.
  */
-function initYouTube(): void {
-  initYouTubeQueue()
-
-  onUploadFinished(() => void reconcileAttachments())
-  onServerState(() => void reconcileAttachments())
-
-  void reconcileAttachments()
+function initMedia(): void {
+  installEmbedHeaders()
+  initMediaQueue()
 }
 
 /**
@@ -298,8 +279,8 @@ app.on('will-quit', () => {
   // already running, possibly mid-stream, is left alone.
   shutdownCapture()
   // Before the database closes: the chunk in flight is abandoned, and the
-  // upload resumes from YouTube's own record of it next launch.
-  stopYouTubeQueue()
+  // upload asks Foxfire Media how far it got next launch.
+  stopMediaQueue()
   cancelAllPostGameSyncs()
   stopResourceSampling()
   stopRetention()

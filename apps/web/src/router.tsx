@@ -33,7 +33,6 @@ import { SharedLinkPage } from './pages/auth/SharedLinkPage'
 import { SignInPage } from './pages/auth/SignInPage'
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
 import { paths } from '@foxfire/core/routes'
-import { YOUTUBE_ENABLED } from './features'
 import { safeRedirect } from './routes/redirect'
 import { canBrowse, useAuth } from './session/session'
 
@@ -212,8 +211,8 @@ const routeTree = root.addChildren([
       player.rank,
       player.tft.addChildren([player.tftProfile, player.tftRank]),
       player.lpEditor,
-      // A recording's page, from YouTube — only in a build that has it.
-      ...(YOUTUBE_ENABLED ? [player.recording] : [])
+      // A recording's page, played from the server's Foxfire Media.
+      player.recording
     ]),
     match,
     account,

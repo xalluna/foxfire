@@ -12,9 +12,7 @@ import { offeredGames } from '@foxfire/core'
 import { ServerError } from '@foxfire/core/server'
 import { isPlayer, paths, rankQueueParam } from '@foxfire/core/routes'
 import type { Platform, RecordingTarget } from '@foxfire/screens'
-import { createFakeYouTubeMount, createFixtureClient, runFixtureImport, scenario } from '@foxfire/screens/dev'
-import { YOUTUBE_ENABLED } from '../features'
-import { createWebYouTubeMount } from '../platform/youtubePlayer'
+import { createFakeMediaMount, createFixtureClient, runFixtureImport, scenario } from '@foxfire/screens/dev'
 import { replaceServerInfoSource } from '../serverInfo'
 import { useAuth } from '../session/session'
 import { LAPSED } from '../session/share'
@@ -98,6 +96,7 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
         : null,
       publicAccess: PUBLIC_ACCESS,
       games: offeredGames(VERSION.games),
+      recordings: scenario !== 'media-off',
       riotKeyRejected: false,
       upgradeRequired: null
     }
@@ -213,21 +212,10 @@ export function startMock(navigate: (path: string) => void): { client: FoxfireCl
     copyText: (text) => navigator.clipboard.writeText(text),
     openLpEditor: ({ account, queueType, matchId }) =>
       navigate(paths.lpEditor(account, { queue: rankQueueParam(queueType), match: matchId })),
-    // As the real page: only when the harness was started with YouTube on —
-    // FOXFIRE_FEATURE_YOUTUBE=1 npm run dev:mock -w @foxfire/web.
-    ...(YOUTUBE_ENABLED
-      ? {
-          watchRecording: ({ account, match }: RecordingTarget) => navigate(paths.recording(account, match.matchId)),
-          // A stand-in with a running clock by default, which is enough to judge
-          // the marker strip against and needs no network. ?youtube=real plays
-          // the fixture video through YouTube's own player instead, to check the
-          // IFrame API wiring end to end.
-          youtube:
-            new URLSearchParams(window.location.search).get('youtube') === 'real'
-              ? createWebYouTubeMount()
-              : createFakeYouTubeMount()
-        }
-      : {}),
+    watchRecording: ({ account, match }: RecordingTarget) => navigate(paths.recording(account, match.matchId)),
+    // A stand-in with a running clock, which is enough to judge Foxfire's
+    // controls and the marker strip against and needs no Foxfire Media.
+    media: createFakeMediaMount(),
     downloadReplay: async () => ({ ok: false, message: 'The harness has no blob store to download from.' }),
     statsDbImport: {
       pick: async () => ({ source: null, label: 'stats.db' }),

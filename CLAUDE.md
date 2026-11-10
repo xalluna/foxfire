@@ -103,7 +103,7 @@ coverage or leaves it out** — without one it is open on an open server and nev
 authentication.
 
 What an outsider is never given, decided in the handlers by there being no user: who claimed an
-account (`RiotAccountResponse.Describe`), a row's YouTube recording or shared replay
+account (`RiotAccountResponse.Describe`), a row's recording or shared replay
 (`Reads/OutsiderView`), and a Riot call (`GetMasteryRequest` serves what is stored). Nothing that
 writes, syncs, downloads, or reaches the hub. The shared screens follow suit through `useViewer`:
 an outsider is offered no Sync, LP, recording or download, and a 401 on a player or game is a
@@ -127,7 +127,7 @@ land on League, as they always did.
 
 **TFT on a server is the host's to turn on, at startup.** `Tft__Enabled` (`TFT_ENABLED` in
 docker-compose) is off by default, because TFT needs a Riot key registered for it and a personal
-key is registered for one product. Unlike YouTube's switch it is runtime, not build-time: one image
+key is registered for one product. It is runtime, not build-time: one image
 serves both. `ServerGames` (`Common/GameParam.cs`) is the server's answer — `/version` lists its
 `games`, the `/tft` routes and the TFT import are mapped only when it is on, `MustNameAGame(games)`
 and `games.Offers(...)` refuse a request naming TFT, and `SyncService.SyncAsync` asks Riot nothing
@@ -235,9 +235,9 @@ Two lists that grow are whole on purpose, and say so where they are read:
   corpus does for LP. Change one and you regenerate the corpus and change the other. The Rank
   page's closes run the same TypeScript on the client and are not ported, so its thirty days and
   the profile's are one line.
-- **Every recording that can go to YouTube** (`recordings.eligible`, in YouTube builds only).
-  "Select all" on the Recordings tab has to mean all of them, and the batch dialog reads each one's
-  size and game. It is bounded by what is on one PC's disk.
+- **Every recording that can go to the server** (`recordings.eligible`), and "upload everything"
+  (`getUploadableRecordingIds`). "Select all" on the Recordings tab has to mean all of them, and the
+  batch dialog reads each one's size. It is bounded by what is on one PC's disk.
 
 The insights charts (`/api/admin/insights/{section}`) are not lists at all: a window is at most 360
 points whatever it spans, and its tables are capped — the fifty busiest routes, the last ten syncs.
@@ -499,14 +499,16 @@ autobuilds, so a pin eventually stops downloading: take the newest dated autobui
 `…-win64-lgpl-<ver>.zip` and its digest, and record a game with it before releasing. The fetch refuses
 a binary without `gfxcapture` or the encoders.
 
-## How recordings reach YouTube
+## How recordings reach the server
 
-A recording starts as an OBS file on one PC. From 0.14.0 it can go to YouTube, and from there be
-watched by everybody on a server — on the desktop and in the browser. The rule everything follows:
+A recording starts as a file on one PC. From 0.18.0 it can go to the server — to the
+[Foxfire Media](https://github.com/xalluna/foxfire-media) its host runs beside it — and from there be
+watched by everybody on that server, on the desktop and in the browser. The rule everything follows:
 **a recording is one player's view of one game**. A server keys it on (match, Riot account), never on
 the match alone, so in a game two members recorded each history plays its own and no other history
 offers either. That rule lives in the row queries in `MatchReads.MatchListAsync` and, for TFT,
 `TftReads.MatchListAsync`, which is where to look if a recording ever turns up on the wrong history.
+A recording that never found its game cannot go up: the server has nothing to keep it against.
 
 A TFT recording is the same thing for a TFT game. It has no roster to be bound by, so it is bound by
 the game's id instead: the League client names the game while it is played, and
@@ -523,55 +525,72 @@ API: nothing on port 2999, so no clock, no events and no roster. A TFT recording
 (`GAME_SOURCES` in `obs/provision.ts`); only the game being played has a window, so the other draws
 nothing, and a new game is a new entry there or it records black.
 
-**It is switched off at build time, everywhere, by one switch.** `FOXFIRE_FEATURE_YOUTUBE` in the
-environment of a build — `1`, `true`, `yes` or `on` — is what includes it, and the release workflows
-read it from the repository variable of the same name, so the installer, the server and the web client
-inside the server are always built with the same answer. Unset, it is off:
+**The server never handles a byte of video.** It is a Foxfire Media *application*, and its key
+(`Media__ApiKey`) mints two short-lived things: an upload ticket — where on Foxfire Media to send the
+file, and a one-time tus token that must start its upload within fifteen minutes, is spent by
+starting it, and afterwards resumes only that upload — and an embed, a page that plays one video,
+good only for loading. The desktop sends the file straight to Foxfire Media; a client frames the
+player straight from it. Each video is named on Foxfire Media `rec_{match}_{account}`
+(`Recordings.ExternalId`), so an upload whose answer was lost finds the video it already made; a
+replacement gets a suffix, because Foxfire Media keeps a deleted video's name until its files go.
 
-- **The desktop and the web client** get `__FEATURE_YOUTUBE__` as a literal from Vite's `define`
-  (`tooling/vite/features.ts`), read through `YOUTUBE_ENABLED` in `apps/desktop/src/shared/features.ts`
-  and `apps/web/src/features.ts`. Main registers no `youtube.*` or `matchRecordings.*` IPC, no
-  `foxfire-youtube://` scheme and no queue; the renderer draws no Settings page, upload button or
-  link; and the bundler drops the rest, the Google client included. The desktop's vitest config
-  turns it on, so the tests cover the code that ships switched off.
-- **The shared screens** have no switch of their own. They offer recordings only where the platform
-  hands them a YouTube player (`platform.youtube`), and strip a server's `recording` off a row where
-  it does not — so a switched-off client never promises a video it has nothing to play in.
-- **The server** compiles it out: Directory.Build.props defines `FEATURE_YOUTUBE`, read through
-  `BuildFeatures.YouTubeRecordings` in `Foxfire.Core`. Off, there are no recording routes (they fall
-  to the API's JSON 404, which a switched-on desktop reads as "this server takes no recordings" and
-  retries later), the row's `recording` is always null, and the CSP has nothing of YouTube's. The
-  `MatchRecordings` table is migrated either way, so switching it on needs no migration. The tests
-  for it are inside `#if FEATURE_YOUTUBE`, and CI runs the server's suites both ways.
+**It is the host's to switch on, at runtime**, like mail: `Media__BaseUrl` and `Media__ApiKey`
+(`MEDIA_URL`, `MEDIA_API_KEY` in docker-compose), both or neither (`ConfigurationCheck`), and
+`Media__PublicUrl` (`MEDIA_PUBLIC_URL`) when browsers reach Foxfire Media somewhere else than the
+server does — the server by its container name on a shared Docker network, browsers by its public
+address. The public one is what `mediaOrigin`, the CSP and the relay name. Off, the
+recording routes are not mapped — they fall to the API's JSON 404, which a desktop reads as "this
+server takes no recordings" — and `/version` says `recordings: false`. On, `/version` also names
+`mediaOrigin`, and the web client's CSP allows that origin's frame and posters and nothing else of
+it. Foxfire Media's own side is an application whose `AllowedOrigins` is this server's public
+address and whose `WebhookUrl` is `/api/media/webhooks`; `MediaStartupCheck` says at startup when
+the key is refused or the address is missing.
 
-Run a harness with it on by setting the variable first — `FOXFIRE_FEATURE_YOUTUBE=1 npm run dev:web`
-in a POSIX shell, `$env:FOXFIRE_FEATURE_YOUTUBE='1'; npm run dev:web` in PowerShell; the server is
-`FOXFIRE_FEATURE_YOUTUBE=1 dotnet test apps/server`. It is an environment variable rather than a
-`.env` entry, because it is read by the build configs, not by the code they build.
+- **The routes** (`Endpoints/RecordingEndpoints.cs`, all `RequireAuthorization()`, so no outsider
+  or share link ever reaches a recording): `GET …/recording`; `POST …/recording/upload`, owner only,
+  admins included in the refusal — asked again it renews the token for the same video, which is
+  how the desktop carries an upload on; `POST …/recording/embed`, any member, with `controls=0` on
+  the URL; `DELETE …/recording`, owner or admin, which deletes the video on Foxfire Media first.
+- **Its state** is `MatchRecording.Status` — `uploading`, `upload_failed`, `processing`, `ready`,
+  `failed` — Foxfire Media's own folded to what a client acts on (`RecordingStatuses`). Webhooks,
+  HMAC-signed with the application key (`MediaSignature`), only ever move it forward
+  (`RecordingStatuses.Rank`). A Foxfire Media that cannot reach the server's address sends none, so
+  a read of a recording that is not ready asks Foxfire Media itself, at most every 30 seconds.
+- **Tests** use `FakeMedia`, which sits behind the fixture's host and every host made from it; a
+  test finds its videos by the ids its own uploads were given. `FakeMedia.Off` is a host without it.
 
-The path, in `apps/desktop/src/main/youtube`:
+The desktop's half is `apps/desktop/src/main/media`:
 
-- **Connect** once per install, in Settings › YouTube: Google's installed-app flow (system browser,
-  a one-request server on 127.0.0.1, PKCE), scopes `youtube.upload` and `openid email` only. The
-  refresh token is a secret in `keyStore`; nothing that crosses IPC carries it.
-- **Upload** through a queue in SQLite (`youtube_uploads`), one at a time, using YouTube's resumable
-  protocol so an upload survives a restart. It holds from champ select until the game is over, and
-  while OBS is recording; it waits out the quota until midnight Pacific. The uploader chooses title,
-  description and privacy every time — YouTube requires it — prefilled from the templates in
-  `@foxfire/core/youtube`.
-- **Attach** on the server, owner only, with the markers from this PC's database: whenever an
-  upload finishes, a recording finds its game, a server sync completes, or the active server
-  changes. `recording_attachments` remembers what each server was told, so a recording somebody took
-  off the server stays off.
+- **The queue** (`queue.ts`, `media_uploads` in SQLite) sends one recording at a time, oldest first,
+  over tus in 50 MB chunks with Node's own fetch — no `Origin`, so Foxfire Media takes it as
+  server-to-server. A ticket is minted only when a recording's turn comes, because of the fifteen
+  minutes; a batch of five hundred is five hundred rows, not five hundred tokens. The token is a
+  credential and lives in `keyStore` (`uploadTokens.ts`), never in SQLite. After a restart an upload
+  asks Foxfire Media how far it got, which works while Foxfire Media still has it: ten minutes
+  without a byte and it lets the upload go, and the queue mints again and starts over.
+- **It holds** (`rules.ts`, pure and tested) from champ select until the game is over and while a
+  recorder rolls, off a server or on one without recordings, for a job queued for another server,
+  when the server's storage is full (507, asked again after half an hour), and when somebody pressed
+  Pause. Holds are checked between chunks.
+- **After the last byte** an upload is `processing`; the queue asks the server until it is ready,
+  and the hub's `recording:changed` makes it ask at once. Ready, it records the server's copy on the
+  recording (`server_video_*`) and — only if the upload was queued to, only then, and only when the
+  file's size and mtime are what was sent — deletes the file (`mayDeleteAfterUpload`). The row and
+  its markers stay; the recording plays from the server.
+- **Automatic upload** (`autoUpload.ts`) is `onRecordingSettled`: off unless turned on, after the
+  game binds, silent.
 
-The player is shared (`packages/ui/src/recording`) and takes a mount function for YouTube, because
-the two clients reach YouTube's frame differently. The web loads the IFrame API into its page — the
-CSP in `SpaHosting.cs` allows exactly that script and the `youtube-nocookie.com` frame — and makes
-the frame itself so it can carry `referrerpolicy`, since YouTube refuses to play for a page that
-sends no Referer. The desktop never loads Google's script into a window that has the preload's
-bridge: the player lives on `foxfire-youtube://player`, a page with no preload, framed by the
-recording window and driven over postMessage, and main puts `https://com.brandonbarr.foxfire/` on
-its requests as the Referer. Nothing may be drawn over YouTube's player; the markers sit beneath it.
+The player is shared (`packages/ui/src/recording`), with Foxfire's own controls over either a
+`<video>` (`videoController`) or Foxfire Media's embed driven through its postMessage control API
+(`foxfirePlayer.ts`, vendored from foxfire-media's `sdk/`, and `mountFoxfirePlayer`). The player only
+takes commands from — and may only be framed by — its application's origins, so the two clients
+reach it differently. The web frames it directly. The desktop's window is a `file://` page, which can
+be neither: it frames the server's `/media-relay` (a second entry in the web client's build, served
+by `SpaHosting` with a CSP of its own and no `frame-ancestors`), which frames the player and carries
+its messages both ways unchanged, so the desktop speaks the same protocol to the relay's origin. The
+embed URL rides in the fragment. And because `frame-ancestors` checks every frame up to the top, main
+drops that one directive from Foxfire Media's `/embed/` responses in this app's own session
+(`embedHeaders.ts`) — nothing else, and nothing for any browser.
 
 Electron accepts `registerSchemesAsPrivileged` once. Every scheme of ours is in the single call in
 `main/schemes.ts` — registering a new one anywhere else silently unregisters the others.
@@ -593,16 +612,6 @@ still open is tried once more two seconds later; any other failure leaves the fi
 it, which is still a recording that plays. Deleting a recording removes the folders it leaves
 empty, up to but never the capture folder itself. Riot replays are not recordings, and keep a
 folder of their own (`<folder>\Replays` unless somebody chose another).
-
-The Google client is baked in at build time from `MAIN_VITE_YOUTUBE_CLIENT_ID` and, optionally,
-`MAIN_VITE_YOUTUBE_CLIENT_SECRET` (repository secrets in the release workflow; `.env.local` for
-development). Neither is a security boundary — anything in an installer can be read back out, and
-Google treats installed apps as unable to keep a secret — so the secret is sent only when a build has
-one, and a build without a client id has no uploads and says so. What protects a channel is the
-user's own refresh token, PKCE, and the loopback-only redirect. The quota is the Google project's,
-shared by every install; until YouTube's audit passes, every upload is forced private.
-`apps/desktop/docs/YOUTUBE_SETUP.md` covers the project, the reviews and the secrets, and
-`apps/desktop/docs/PRIVACY.md` is the policy Google needs a URL for.
 
 ## Patch notes
 

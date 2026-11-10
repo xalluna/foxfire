@@ -11,6 +11,64 @@ The same doctrine applies: any PR that bumps `VersionPrefix` in
 `apps/server/Directory.Build.props` adds that version's section in the same
 commit, and there is no `[Unreleased]` section.
 
+## [0.7.0] — 2026-11-10
+
+Recordings, kept on Foxfire Media. A host who sets it up gives every member somewhere to send their
+recordings and everybody somewhere to watch them — in the browser and on the desktop, with each
+player's kills and deaths on the timeline. The server never handles a byte of video: it mints a
+one-time upload token, the desktop sends the file straight to Foxfire Media, and players are framed
+straight from it. YouTube, which never shipped, is gone. The API is version 3 still.
+
+### Added
+
+- **Recordings on Foxfire Media, for a host who sets it up.** Run
+  [Foxfire Media](https://github.com/xalluna/foxfire-media) beside the server, declare an application
+  for the server there — its `AllowedOrigins` this server's public address, its `WebhookUrl`
+  `/api/media/webhooks` on it — and set `MEDIA_URL` and `MEDIA_API_KEY` in the server's `.env`. Until
+  then the server takes no recordings and says so on `/version`. `.env.example` walks through it,
+  and the server says at startup if Foxfire Media refuses its key or does not list its address.
+  Running the two side by side in Docker, point `MEDIA_URL` at Foxfire Media's container name and
+  set `MEDIA_PUBLIC_URL` to the address browsers use.
+- **Watch recordings in the browser.** A row with a recording offers Watch recording, which plays it
+  on a page of its own in Foxfire's own player — markers, next and previous event, volume, slow
+  motion, fullscreen. A recording still processing says so, and plays once it is ready. Members
+  only: an open server's visitors and share links are never offered one.
+- **Remove a recording.** Its owner or an admin can take a recording off a game, which deletes its
+  video from Foxfire Media too.
+
+### Changed
+
+- **The match row's `recording`** names a Foxfire Media video and where it is — uploading,
+  processing, ready or failed — in place of a YouTube id and its privacy. No released client read
+  the old shape: it only ever existed in builds made with YouTube.
+
+### Removed
+
+- **YouTube.** The routes that attached a YouTube video to a game, the YouTube frame and script in
+  the web client's CSP, and the `FOXFIRE_FEATURE_YOUTUBE` build switch are gone. None of it was in a
+  released build.
+
+### Under the hood
+
+- Recording routes: `GET …/recording`, `POST …/recording/upload` (a ticket for Foxfire Media, which
+  asked again carries the same upload on), `POST …/recording/embed`, `DELETE …/recording`, and the
+  anonymous `POST /api/media/webhooks`, verified against Foxfire Media's HMAC signature with the
+  application key and a five-minute window, which only ever moves a recording forward. Mapped only
+  while Foxfire Media is configured; otherwise they fall to the API's JSON 404.
+- A recording not yet ready is checked on with Foxfire Media when it is read, at most every 30
+  seconds, so a Foxfire Media that cannot reach the server's webhook still gets there.
+- Each video is named on Foxfire Media `rec_{match}_{account}`, so an upload whose answer was lost
+  finds the video it already made; a replacement gets a new name.
+- `/version` adds `recordings` and `mediaOrigin`. The web client's CSP allows Foxfire Media's frame
+  and posters when it is configured, and nothing of it when it is not.
+- `/media-relay`, a page of the web client's own build served with a CSP of its own, which the
+  desktop frames to reach Foxfire Media's player — it accepts commands only from an allowed origin,
+  and a desktop window is a `file://` page.
+- A migration (`MediaRecordings`) reshapes `MatchRecordings` for Foxfire Media and drops any YouTube
+  rows, which no released server ever held.
+- The server tests run once now, with a stand-in Foxfire Media behind every host, rather than once
+  per build switch. Desktop 0.18.0 is on the allow list.
+
 ## [0.6.0] — 2026-11-07
 
 Teamfight Tactics, beside League, for a host who turns it on. The server syncs every account's TFT —
@@ -1340,6 +1398,7 @@ match history for you.
   ingestion, deduplication and re-keying are asserted against the schema that
   actually enforces them.
 
+[0.7.0]: https://github.com/xalluna/foxfire/compare/server-v0.6.0...server-v0.7.0
 [0.6.0]: https://github.com/xalluna/foxfire/compare/server-v0.5.1...server-v0.6.0
 [0.5.1]: https://github.com/xalluna/foxfire/compare/server-v0.5.0...server-v0.5.1
 [0.5.0]: https://github.com/xalluna/foxfire/compare/server-v0.4.0...server-v0.5.0
