@@ -240,12 +240,12 @@ const api: Api = {
     listMicrophones: () => ipcRenderer.invoke(CH.capture.listMicrophones)
   },
   recordings: {
-    list: (accountId, page, game) => ipcRenderer.invoke(CH.recordings.list, accountId, page, game),
+    list: (page, filter) => ipcRenderer.invoke(CH.recordings.list, page, filter),
+    players: () => ipcRenderer.invoke(CH.recordings.players),
     detail: (recordingId) => ipcRenderer.invoke(CH.recordings.detail, recordingId),
     usage: () => ipcRenderer.invoke(CH.recordings.usage),
     remove: (recordingId) => ipcRenderer.invoke(CH.recordings.remove, recordingId),
-    removeOldest: (accountId, count) =>
-      ipcRenderer.invoke(CH.recordings.removeOldest, accountId, count),
+    removeOldest: (count) => ipcRenderer.invoke(CH.recordings.removeOldest, count),
     open: (recordingId) => ipcRenderer.invoke(CH.recordings.open, recordingId),
     reveal: (recordingId) => ipcRenderer.invoke(CH.recordings.reveal, recordingId),
     onChanged: (cb) => {
@@ -262,9 +262,11 @@ const api: Api = {
       return () => ipcRenderer.removeListener(CH.recordings.showMatch, listener)
     },
     forget: (recordingId) => ipcRenderer.invoke(CH.recordings.forget, recordingId),
+    forgetMany: (recordingIds) => ipcRenderer.invoke(CH.recordings.forgetMany, recordingIds),
+    forgetServerOnly: () => ipcRenderer.invoke(CH.recordings.forgetServerOnly),
     openRemote: (accountId, matchId) => ipcRenderer.invoke(CH.recordings.openRemote, accountId, matchId),
     openServerCopy: (recordingId) => ipcRenderer.invoke(CH.recordings.openServerCopy, recordingId),
-    eligible: (accountId) => ipcRenderer.invoke(CH.recordings.eligible, accountId)
+    eligible: () => ipcRenderer.invoke(CH.recordings.eligible)
   },
   media: {
     getSettings: () => ipcRenderer.invoke(CH.media.getSettings),

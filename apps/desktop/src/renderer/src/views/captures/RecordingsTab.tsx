@@ -1,14 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, PlacementBadge, Segmented, ShowMoreButton, checkboxClass, primaryButtonClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, placementTone, queueName, tftName } from '@foxfire/ui'
-import { DOUBLE_UP_QUEUE_ID, countedPlacement, isTopHalf, strongestTrait, type GameId } from '@foxfire/core'
+import { Asset, ConfirmDialog, EmptyState, Icon, MatchListSkeleton, PlacementBadge, Segmented, ShowMoreButton, checkboxClass, dangerButtonClass, primaryButtonClass, selectClass, useAssetManifest, championIconUrl, championName, formatAge, formatClock, kdaRatio, placementTone, queueName, tftName } from '@foxfire/ui'
+import { DOUBLE_UP_QUEUE_ID, countedPlacement, isTopHalf, strongestTrait, type Account, type GameId } from '@foxfire/core'
 import { BulkUploadDialog } from '../../media/BulkUploadDialog'
 import { describeQueueHold, queueSummary, uploadPending, uploadStatusText } from '../../media/uploadStatus'
 import { useUploadQueue, useUploadServer } from '../../media/useMedia'
-import { nextOffset, pageItems } from '@foxfire/screens'
-import type { Account, BulkUploadResult, Recording } from '@shared/types'
-import { canUploadRecording } from '@shared/uploadEligibility'
+import { nextOffset, pageItems, queryKeys, useMyAccounts } from '@foxfire/screens'
+import type { BulkUploadResult, ForgetResult, Recording, RecordingFilter } from '@shared/types'
+import { canUploadRecording, isSomebodyElsesUpload } from '@shared/uploadEligibility'
 
 /** Recordings per page of the list. */
 const PAGE_SIZE = 50
@@ -28,19 +28,21 @@ function describeBatch(result: BulkUploadResult): string {
   return `${queued} ${left}`
 }
 
-/**
- * Every recording, bound to a match or not.
- *
- * The right-click on a match row is the main way into a recording, but it can
- * only ever reach recordings that found their match. A Practice Tool game
- * produces no match-v5 entry and never will, and a sync that never landed
- * leaves one stranded — without this tab that footage would exist on disk and
- * be unreachable from inside the app.
- *
- * It is also where the disk actually gets managed: nothing is ever deleted
- * automatically, so there has to be somewhere to see the total and do something
- * about it.
- */
+/** A sentence on what forgetting did, for the same line. */
+function describeForget(result: ForgetResult): string {
+  const forgot =
+    result.forgotten === 0
+      ? 'Nothing was forgotten.'
+      : `Forgot ${result.forgotten} recording${result.forgotten === 1 ? '' : 's'}.`
+  if (result.kept === 0) return forgot
+  return `${forgot} ${result.kept} ${result.kept === 1 ? 'was' : 'were'} kept, because ${result.kept === 1 ? 'its file' : 'their files'} could not be deleted — close anything playing ${result.kept === 1 ? 'it' : 'them'} and try again.`
+}
+
+/** "1 recording", "3 recordings". */
+function recordings(n: number): string {
+  return `${n} recording${n === 1 ? '' : 's'}`
+}
+
 const GB = 1024 * 1024 * 1024
 
 function formatBytes(bytes: number | null): string {
@@ -58,32 +60,74 @@ const GAME_FILTERS: Array<[GameFilter, string]> = [
   ['tft', 'TFT']
 ]
 
-export function RecordingsTab({ account }: { account: Account }): JSX.Element {
+/**
+ * The player a recording was made on: the row's own Riot ID, or failing that
+ * one of your accounts by its id — a recording written while the server could
+ * not be reached knows only the server's id for it.
+ */
+function playerOf(recording: Recording, mine: readonly Account[]): string | null {
+  if (recording.riotId) return recording.riotId
+  const account = mine.find((candidate) => candidate.id === recording.accountId)
+  return account ? `${account.gameName}#${account.tagLine}` : null
+}
+
+/** Whether a recording is in the list as filtered — the same test main applies to the rows. */
+function inFilter(recording: Recording, filter: RecordingFilter): boolean {
+  if (filter.game && recording.game !== filter.game) return false
+  if (filter.player && recording.riotId?.toLowerCase() !== filter.player.toLowerCase()) return false
+  return true
+}
+
+/**
+ * Every recording on this PC, bound to a match or not, whoever played it.
+ *
+ * The right-click on a match row is the main way into a recording, but it can
+ * only ever reach recordings that found their match. A Practice Tool game
+ * produces no match-v5 entry and never will, and a sync that never landed
+ * leaves one stranded — without this tab that footage would exist on disk and
+ * be unreachable from inside the app.
+ *
+ * It is also where the disk actually gets managed: nothing is ever deleted
+ * automatically, so there has to be somewhere to see the total and do something
+ * about it. Which is why it is not one account's: the files are on this disk
+ * whichever account is picked in the rail, and a list of one account's under a
+ * total of everybody's warned about files it gave no way to reach.
+ */
+export function RecordingsTab(): JSX.Element {
   const queryClient = useQueryClient()
   const [game, setGame] = useState<GameFilter>('all')
-  // The server uploads go to, when this PC is on one that keeps recordings.
+  const [player, setPlayer] = useState<string | null>(null)
+  // The server uploads go to, when this PC is on one that keeps recordings,
+  // and the accounts that are yours there — the only ones it takes an upload for.
   const server = useUploadServer()
-  const canUpload = (recording: Recording): boolean => canUploadRecording(recording, server)
+  const mine = useMyAccounts().data ?? []
+  const canUpload = (recording: Recording): boolean => canUploadRecording(recording, server, mine)
+
+  const filter: RecordingFilter = { game: game === 'all' ? null : game, player }
 
   // A page at a time: nothing is ever deleted automatically, so a PC that
   // records every game has a list that only grows. Filtered where the rows
   // are, so a page of TFT is a page of TFT rather than whatever TFT was in a
   // page of both.
-  const recordings = useInfiniteQuery({
-    queryKey: ['recordings', account.id, 'list', game],
-    queryFn: ({ pageParam }) =>
-      window.api.recordings.list(account.id, { limit: PAGE_SIZE, offset: pageParam }, game === 'all' ? null : game),
+  const list = useInfiniteQuery({
+    queryKey: ['recordings', 'list', filter],
+    queryFn: ({ pageParam }) => window.api.recordings.list({ limit: PAGE_SIZE, offset: pageParam }, filter),
     initialPageParam: 0,
     getNextPageParam: nextOffset
   })
 
-  // Every recording that could go to the server, whole rather than paged —
+  const players = useQuery({
+    queryKey: ['recordings', 'players'],
+    queryFn: () => window.api.recordings.players()
+  })
+
+  // Every recording you could send to the server, whole rather than paged —
   // "select all" has to mean all of them, not the ones scrolled to, and the
   // batch dialog reads each one's size. Under the list's key, so whatever
   // refreshes the list refreshes this.
   const uploadable = useQuery({
-    queryKey: ['recordings', account.id, 'uploadable', server],
-    queryFn: () => window.api.recordings.eligible(account.id),
+    queryKey: ['recordings', 'uploadable', server],
+    queryFn: () => window.api.recordings.eligible(),
     enabled: server !== null
   })
 
@@ -93,20 +137,43 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   })
 
   const refresh = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['recordings', account.id] })
+    void queryClient.invalidateQueries({ queryKey: ['recordings'] })
     void queryClient.invalidateQueries({ queryKey: ['recordingUsage'] })
-    void queryClient.invalidateQueries({ queryKey: ['matchList', account.id] })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.matchLists() })
   }
 
   const [deleting, setDeleting] = useState<Recording | null>(null)
   const [forgetting, setForgetting] = useState<Recording | null>(null)
+  const [forgettingPicked, setForgettingPicked] = useState(false)
+  const [forgettingServerOnly, setForgettingServerOnly] = useState(false)
 
-  // Recordings picked for a batch upload. Held as ids and read back against
-  // the current list, so a row that stopped being eligible — its upload
-  // started, its file went — drops out of the selection by itself.
+  // One selection, for whatever is done to many rows at once: uploading them
+  // or forgetting them. Held as ids and read back against what is loaded, so
+  // a row that went — forgotten, deleted — drops out of it by itself, and
+  // each action takes the rows it applies to: Upload the ones that can go,
+  // Forget all of them.
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set())
   const [bulkOpen, setBulkOpen] = useState(false)
-  const [batchNote, setBatchNote] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  // A different filter is a different list; a selection made in the last one
+  // would act on rows this one does not show.
+  const chooseGame = (next: GameFilter): void => {
+    setGame(next)
+    setPicked(new Set())
+  }
+  const choosePlayer = (next: string | null): void => {
+    setPlayer(next)
+    setPicked(new Set())
+  }
+
+  // A player whose recordings were all forgotten is no longer offered; nor is
+  // a list of nothing.
+  useEffect(() => {
+    if (player && players.data && !players.data.some((p) => p.riotId.toLowerCase() === player.toLowerCase())) {
+      setPlayer(null)
+    }
+  }, [player, players.data])
 
   const remove = useMutation({
     mutationFn: (recordingId: number) => window.api.recordings.remove(recordingId),
@@ -124,15 +191,47 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
     }
   })
 
+  const forgetMany = useMutation({
+    mutationFn: (recordingIds: number[]) => window.api.recordings.forgetMany(recordingIds),
+    onSuccess: (result) => {
+      setForgettingPicked(false)
+      setPicked(new Set())
+      setNote(describeForget(result))
+      refresh()
+    }
+  })
+
+  const forgetServerOnly = useMutation({
+    mutationFn: () => window.api.recordings.forgetServerOnly(),
+    onSuccess: (result) => {
+      setForgettingServerOnly(false)
+      setNote(describeForget(result))
+      refresh()
+    }
+  })
+
   const cleanup = useMutation({
-    mutationFn: (count: number) => window.api.recordings.removeOldest(account.id, count),
+    mutationFn: (count: number) => window.api.recordings.removeOldest(count),
     onSuccess: refresh
   })
 
-  const rows = useMemo(() => pageItems(recordings.data, (recording) => recording.id), [recordings.data])
+  const rows = useMemo(() => pageItems(list.data, (recording) => recording.id), [list.data])
   const eligible = useMemo(() => uploadable.data ?? [], [uploadable.data])
-  const selected = useMemo(() => eligible.filter((recording) => picked.has(recording.id)), [eligible, picked])
-  const allPicked = eligible.length > 0 && selected.length === eligible.length
+  // What "select all" selects: everything you could send, as the list is filtered.
+  const eligibleShown = useMemo(
+    () => eligible.filter((recording) => inFilter(recording, { game: game === 'all' ? null : game, player })),
+    [eligible, game, player]
+  )
+  const known = useMemo(
+    () => new Map([...eligible, ...rows].map((recording) => [recording.id, recording] as const)),
+    [eligible, rows]
+  )
+  const selected = useMemo(
+    () => [...picked].flatMap((id) => known.get(id) ?? []),
+    [picked, known]
+  )
+  const toUpload = selected.filter(canUpload)
+  const allPicked = eligibleShown.length > 0 && eligibleShown.every((recording) => picked.has(recording.id))
 
   const toggle = (recordingId: number): void => {
     setPicked((current) => {
@@ -143,17 +242,47 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
     })
   }
 
+  const toggleAllEligible = (): void => {
+    setPicked((current) => {
+      const next = new Set(current)
+      for (const recording of eligibleShown) {
+        if (allPicked) next.delete(recording.id)
+        else next.add(recording.id)
+      }
+      return next
+    })
+  }
+
+  const playerOptions = players.data ?? []
+  const filtered = game !== 'all' || player !== null
   const overCap =
     usage.data && usage.data.softCapBytes > 0 && usage.data.totalBytes > usage.data.softCapBytes
+  const showBar = eligibleShown.length > 0 || selected.length > 0
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <Segmented options={GAME_FILTERS} value={game} onChange={setGame} size="sm" />
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex items-center gap-3">
+          <Segmented options={GAME_FILTERS} value={game} onChange={chooseGame} size="sm" />
+          {(playerOptions.length > 1 || player !== null) && (
+            <select
+              aria-label="Player"
+              className={clsx(selectClass, 'max-w-[16rem] truncate')}
+              value={player ?? ''}
+              onChange={(event) => choosePlayer(event.target.value === '' ? null : event.target.value)}
+            >
+              <option value="">Every player</option>
+              {playerOptions.map((option) => (
+                <option key={option.riotId} value={option.riotId}>
+                  {option.riotId} ({option.count})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         {usage.data && usage.data.count > 0 && (
           <p className="text-sm tabular-nums text-text-dim">
-            {formatBytes(usage.data.totalBytes)} across {usage.data.count}{' '}
-            {usage.data.count === 1 ? 'recording' : 'recordings'}
+            {formatBytes(usage.data.totalBytes)} on this PC across {recordings(usage.data.count)}
           </p>
         )}
       </div>
@@ -168,7 +297,7 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
             </p>
             <p className="mt-1 text-xs leading-relaxed text-text-dim">
               Nothing has been deleted — this is a reminder, not a limit. Raise the number in
-              Settings, or clear out the oldest games.
+              Settings, or clear out the oldest games on this PC, whoever played them.
             </p>
             <button
               type="button"
@@ -176,7 +305,7 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
               onClick={() => cleanup.mutate(5)}
               className="mt-3 rounded-md border border-amber/40 bg-amber/10 px-3 py-1.5 text-sm font-medium text-amber transition hover:bg-amber/20 disabled:opacity-50"
             >
-              Delete the 5 oldest
+              Delete the {Math.min(5, usage.data.count)} oldest
             </button>
           </div>
         </div>
@@ -190,61 +319,91 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         </p>
       )}
 
-      {eligible.length > 0 && (
+      {usage.data && usage.data.serverOnlyCount > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-hairline bg-surface/40 px-4 py-2.5 text-xs leading-relaxed text-text-mute">
+          <Icon.Server width={13} height={13} className="shrink-0 text-teal" />
+          <span className="min-w-0 flex-1">
+            {usage.data.serverOnlyCount === 1
+              ? '1 recording is on the server and no longer on this PC — all that is left of it here is its place in this list.'
+              : `${usage.data.serverOnlyCount} recordings are on the server and no longer on this PC — all that is left of them here is their place in this list.`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setForgettingServerOnly(true)}
+            className="shrink-0 rounded-md border border-edge px-2.5 py-1 text-text-dim transition hover:border-accent hover:text-accent"
+          >
+            Forget {usage.data.serverOnlyCount === 1 ? 'it' : 'them'}
+          </button>
+        </div>
+      )}
+
+      {showBar && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-text-dim">
-            <input
-              type="checkbox"
-              className={checkboxClass}
-              checked={allPicked}
-              onChange={() => setPicked(allPicked ? new Set() : new Set(eligible.map((recording) => recording.id)))}
-            />
-            Select all {eligible.length} not on the server
-          </label>
+          {eligibleShown.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-text-dim">
+              <input type="checkbox" className={checkboxClass} checked={allPicked} onChange={toggleAllEligible} />
+              Select all {eligibleShown.length} not on the server
+            </label>
+          )}
 
           <div className="ml-auto flex items-center gap-3">
             {selected.length > 0 && (
+              <>
+                <span className="text-2xs tabular-nums text-text-mute">{selected.length} selected</span>
+                <button
+                  type="button"
+                  onClick={() => setPicked(new Set())}
+                  className="text-2xs text-text-mute transition hover:text-text"
+                >
+                  Clear
+                </button>
+                <button type="button" onClick={() => setForgettingPicked(true)} className={dangerButtonClass}>
+                  Forget {selected.length}
+                </button>
+              </>
+            )}
+            {eligibleShown.length > 0 && (
               <button
                 type="button"
-                onClick={() => setPicked(new Set())}
-                className="text-2xs text-text-mute transition hover:text-text"
+                disabled={toUpload.length === 0}
+                onClick={() => setBulkOpen(true)}
+                title={
+                  toUpload.length < selected.length
+                    ? `${selected.length - toUpload.length} of the selected cannot go to the server: they are on it already, on their way, missing their file or their game, or not yours.`
+                    : undefined
+                }
+                className={primaryButtonClass}
               >
-                Clear
+                {toUpload.length === 0 ? 'Upload selected' : `Upload ${toUpload.length} to the server`}
               </button>
             )}
-            <button
-              type="button"
-              disabled={selected.length === 0}
-              onClick={() => setBulkOpen(true)}
-              className={primaryButtonClass}
-            >
-              {selected.length === 0
-                ? 'Upload selected'
-                : `Upload ${selected.length} to the server`}
-            </button>
           </div>
         </div>
       )}
 
       <QueueBanner />
 
-      {batchNote && (
+      {note && (
         <p className="mt-3 flex items-start gap-2 rounded-md border border-accent-dim/40 bg-accent/10 px-4 py-2.5 text-xs leading-relaxed text-accent">
-          <span className="min-w-0 flex-1">{batchNote}</span>
-          <button type="button" aria-label="Dismiss" onClick={() => setBatchNote(null)} className="shrink-0 opacity-70 hover:opacity-100">
+          <span className="min-w-0 flex-1">{note}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setNote(null)} className="shrink-0 opacity-70 hover:opacity-100">
             <Icon.Close width={12} height={12} />
           </button>
         </p>
       )}
 
       <div className="mt-4 overflow-hidden rounded-lg border border-hairline bg-surface/40">
-        {recordings.isPending ? (
+        {list.isPending ? (
           <MatchListSkeleton rows={5} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Icon.Film />}
-            title={game === 'tft' ? 'No TFT recordings yet' : game === 'lol' ? 'No League recordings yet' : 'No recordings yet'}
-            description="Turn on game capture in Settings and play a game in one of the queues you enabled. Recording starts once the game finishes loading."
+            title={emptyTitle(game, player)}
+            description={
+              filtered
+                ? 'Nothing recorded on this PC matches the filter.'
+                : 'Turn on game capture in Settings and play a game in one of the queues you enabled. Recording starts once the game finishes loading.'
+            }
           />
         ) : (
           <>
@@ -253,25 +412,23 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
                 <RecordingRow
                   key={recording.id}
                   recording={recording}
-                  selectable={eligible.length > 0}
-                  selected={picked.has(recording.id) && canUpload(recording)}
-                  onToggleSelected={canUpload(recording) ? () => toggle(recording.id) : undefined}
+                  player={playerOf(recording, mine)}
+                  selected={picked.has(recording.id)}
+                  onToggleSelected={() => toggle(recording.id)}
                   onDelete={() => setDeleting(recording)}
                   onForget={() => setForgetting(recording)}
                   canUpload={canUpload(recording)}
+                  somebodyElses={isSomebodyElsesUpload(recording, server, mine)}
                   onUpload={() =>
                     void window.api.media.enqueue([recording.id]).then((result) => {
-                      if (result.queued === 0) setBatchNote(describeBatch(result))
+                      if (result.queued === 0) setNote(describeBatch(result))
                     })
                   }
                 />
               ))}
             </ul>
-            {recordings.hasNextPage && (
-              <ShowMoreButton
-                onClick={() => void recordings.fetchNextPage()}
-                loading={recordings.isFetchingNextPage}
-              />
+            {list.hasNextPage && (
+              <ShowMoreButton onClick={() => void list.fetchNextPage()} loading={list.isFetchingNextPage} />
             )}
           </>
         )}
@@ -309,13 +466,57 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
         />
       )}
 
+      {forgettingPicked && selected.length > 0 && (
+        <ConfirmDialog
+          title={selected.length === 1 ? 'Forget this recording?' : `Forget ${selected.length} recordings?`}
+          message={<ForgetMessage recordings={selected} />}
+          confirmLabel={`Forget ${selected.length}`}
+          danger
+          busy={forgetMany.isPending}
+          error={forgetMany.error ? errorText(forgetMany.error) : null}
+          onConfirm={() => forgetMany.mutate(selected.map((recording) => recording.id))}
+          onCancel={() => setForgettingPicked(false)}
+        />
+      )}
+
+      {forgettingServerOnly && usage.data && (
+        <ConfirmDialog
+          title={
+            usage.data.serverOnlyCount === 1
+              ? 'Forget the recording that is only on the server?'
+              : `Forget ${usage.data.serverOnlyCount} recordings that are only on the server?`
+          }
+          message={
+            <>
+              <p>
+                {usage.data.serverOnlyCount === 1
+                  ? 'Its file was deleted from this PC after it went up, so all that is left of it here is its row in this list. Forgetting takes that row and its markers off this PC.'
+                  : `Their files were deleted from this PC after they went up, so all that is left of them here is ${usage.data.serverOnlyCount} rows in this list. Forgetting takes those rows and their markers off this PC.`}{' '}
+                This cannot be undone.
+              </p>
+              <p className="mt-2">
+                The server keeps {usage.data.serverOnlyCount === 1 ? 'its copy' : 'every one of them'}, markers and all,
+                and {usage.data.serverOnlyCount === 1 ? 'it' : 'they'} still play from the history there. Nothing with a
+                file still on this PC is touched.
+              </p>
+            </>
+          }
+          confirmLabel={`Forget ${usage.data.serverOnlyCount}`}
+          danger
+          busy={forgetServerOnly.isPending}
+          error={forgetServerOnly.error ? errorText(forgetServerOnly.error) : null}
+          onConfirm={() => forgetServerOnly.mutate()}
+          onCancel={() => setForgettingServerOnly(false)}
+        />
+      )}
+
       {bulkOpen && (
         <BulkUploadDialog
-          recordings={selected}
+          recordings={toUpload}
           onClose={() => setBulkOpen(false)}
           onQueued={(result) => {
             setPicked(new Set())
-            setBatchNote(describeBatch(result))
+            setNote(describeBatch(result))
             refresh()
           }}
         />
@@ -324,25 +525,86 @@ export function RecordingsTab({ account }: { account: Account }): JSX.Element {
   )
 }
 
+/** The empty list's title, as filtered. */
+function emptyTitle(game: GameFilter, player: string | null): string {
+  const what = game === 'tft' ? 'No TFT recordings' : game === 'lol' ? 'No League recordings' : 'No recordings'
+  return player ? `${what} of ${player}` : `${what} yet`
+}
+
+/** An IPC error as somebody reads it, without Electron's wrapping. */
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(err)
+}
+
+/**
+ * What forgetting a selection does, said before it happens: how many rows,
+ * that it cannot be undone, which of them still have a file here that goes
+ * with them — and which of those the server has no copy of — and that the
+ * server keeps what it has.
+ */
+function ForgetMessage({ recordings: picked }: { recordings: Recording[] }): JSX.Element {
+  const one = picked.length === 1
+  const withFile = picked.filter((recording) => recording.fileExists)
+  const onlyCopy = withFile.filter((recording) => recording.server === null)
+  const onServer = picked.filter((recording) => recording.server !== null)
+
+  return (
+    <>
+      <p>
+        {one
+          ? 'It comes off this PC, with its markers and its upload record.'
+          : `All ${picked.length} come off this PC, each with its markers and its upload record.`}{' '}
+        This cannot be undone.
+      </p>
+      {withFile.length > 0 && (
+        <p className="mt-2">
+          {one
+            ? 'Its video is still on this PC, and is deleted with it.'
+            : `${withFile.length} of them still ${withFile.length === 1 ? 'has its' : 'have their'} video on this PC, which is deleted with ${withFile.length === 1 ? 'it' : 'them'}.`}
+          {onlyCopy.length > 0 && (
+            <span className="text-amber">
+              {' '}
+              {one || onlyCopy.length === withFile.length
+                ? `${onlyCopy.length === 1 ? 'It is' : 'They are'} not on the server, so ${onlyCopy.length === 1 ? 'it is' : 'they are'} gone for good.`
+                : `${onlyCopy.length} of those ${onlyCopy.length === 1 ? 'is' : 'are'} not on the server, so ${onlyCopy.length === 1 ? 'it is' : 'they are'} gone for good.`}
+            </span>
+          )}
+        </p>
+      )}
+      {onServer.length > 0 && (
+        <p className="mt-2">
+          {onServer.length === picked.length
+            ? `The server keeps ${one ? 'its copy' : 'its copies'}, markers and all, and ${one ? 'it still plays' : 'they still play'} from the history there.`
+            : onServer.length === 1
+              ? 'The server keeps its copy of the one that is on it, markers and all, and it still plays from the history there.'
+              : `The server keeps its copies of the ${onServer.length} that are on it, markers and all, and they still play from the history there.`}
+        </p>
+      )}
+    </>
+  )
+}
+
 function RecordingRow({
   recording,
-  selectable,
+  player,
   selected,
   onToggleSelected,
   onDelete,
   onForget,
   canUpload,
+  somebodyElses,
   onUpload
 }: {
   recording: Recording
-  /** The list is offering a batch upload, so every row keeps a column for the box. */
-  selectable: boolean
+  /** Who it was recorded on, `gameName#tagLine`, or null when nothing here can say. */
+  player: string | null
   selected: boolean
-  /** Absent for a row that cannot go to the server, which gets an empty column instead. */
-  onToggleSelected?: () => void
+  onToggleSelected: () => void
   onDelete: () => void
   onForget: () => void
   canUpload: boolean
+  /** It would go to the server but for whose it is — not one of your accounts there. */
+  somebodyElses: boolean
   onUpload: () => void
 }): JSX.Element {
   const assets = useAssetManifest()
@@ -370,18 +632,13 @@ function RecordingRow({
               : 'border-l-hairline'
       )}
     >
-      {selectable &&
-        (onToggleSelected ? (
-          <input
-            type="checkbox"
-            aria-label="Select for upload"
-            className={checkboxClass}
-            checked={selected}
-            onChange={onToggleSelected}
-          />
-        ) : (
-          <span className="w-4 shrink-0" />
-        ))}
+      <input
+        type="checkbox"
+        aria-label="Select"
+        className={checkboxClass}
+        checked={selected}
+        onChange={onToggleSelected}
+      />
       {tft ? (
         <TftBadge recording={recording} />
       ) : (
@@ -405,14 +662,16 @@ function RecordingRow({
               : queueName(board?.queueId ?? recording.queueId, tft ? 'TFT' : null)}
           </span>
         </p>
-        <p className="mt-0.5 text-2xs text-text-mute">
+        <p className="mt-0.5 truncate text-2xs text-text-mute">
+          <PlayerName riotId={player} />
+          {' · '}
           {formatAge(recording.startedAt)}
           {' · '}
           {recording.durationSeconds !== null ? formatClock(recording.durationSeconds) : '—'}
           {' · '}
           {recording.fileDeleted ? 'file deleted' : formatBytes(recording.fileBytes)}
         </p>
-        <ServerLine recording={recording} />
+        <ServerLine recording={recording} somebodyElses={somebodyElses} />
       </div>
 
       {board && (
@@ -481,13 +740,19 @@ function RecordingRow({
   )
 }
 
-/**
- * Whether the recording found its game.
- *
- * 'unmatched' is stated plainly rather than hidden: it is the expected outcome
- * for a Practice Tool game, and a user who sees it on a ranked game learns
- * something real about their sync.
- */
+/** Whose recording a row is: the name in the row's own colour, the tag quieter. */
+function PlayerName({ riotId }: { riotId: string | null }): JSX.Element {
+  if (!riotId) return <span>Unknown player</span>
+  const hash = riotId.lastIndexOf('#')
+  if (hash <= 0) return <span className="text-text-dim">{riotId}</span>
+  return (
+    <span>
+      <span className="text-text-dim">{riotId.slice(0, hash)}</span>
+      <span>{riotId.slice(hash)}</span>
+    </span>
+  )
+}
+
 /** A TFT row's name: the trait its board is remembered by, as League's is by its champion. */
 function tftTitle(assets: ReturnType<typeof useAssetManifest>, recording: Recording): string {
   const trait = recording.tftMatch ? strongestTrait(recording.tftMatch.traits) : null
@@ -513,6 +778,13 @@ function TftBadge({ recording }: { recording: Recording }): JSX.Element {
   )
 }
 
+/**
+ * Whether the recording found its game.
+ *
+ * 'unmatched' is stated plainly rather than hidden: it is the expected outcome
+ * for a Practice Tool game, and a user who sees it on a ranked game learns
+ * something real about their sync.
+ */
 function BindBadge({ recording }: { recording: Recording }): JSX.Element | null {
   if (!recording.fileExists && !recording.fileDeleted) {
     return <Badge tone="warning">File missing</Badge>
@@ -531,12 +803,20 @@ function BindBadge({ recording }: { recording: Recording }): JSX.Element | null 
  *
  * Under the row rather than as more buttons beside it: most rows have nothing
  * going on, and the ones that do need a sentence (why an upload stopped, why
- * the server said no) more than they need another icon.
+ * the server said no) more than they need another icon. A row with nothing
+ * going on that would go to the server but is somebody else's says so, where
+ * its Upload button would otherwise be.
  */
-function ServerLine({ recording }: { recording: Recording }): JSX.Element | null {
+function ServerLine({ recording, somebodyElses }: { recording: Recording; somebodyElses: boolean }): JSX.Element | null {
   const upload = recording.upload
   const status = uploadStatusText(recording)
-  if (!status) return null
+  if (!status) {
+    return somebodyElses ? (
+      <p className="mt-1 text-2xs text-text-mute">
+        Not one of your accounts on this server, so it cannot go up from here.
+      </p>
+    ) : null
+  }
 
   const parts: JSX.Element[] = [
     <span
@@ -571,7 +851,7 @@ function ServerLine({ recording }: { recording: Recording }): JSX.Element | null
         Cancel
       </LineButton>
     )
-  } else if ((upload?.state === 'failed' || upload?.state === 'cancelled') && recording.fileExists) {
+  } else if ((upload?.state === 'failed' || upload?.state === 'cancelled') && recording.fileExists && !somebodyElses) {
     parts.push(
       <LineButton key="retry" onClick={() => void window.api.media.retry(recording.id)}>
         Try again

@@ -199,7 +199,10 @@ export const CH = {
   // The native recorder's hidden audio page has channels of its own, in
   // shared/captureAudio.ts — its preload must not import this file.
   recordings: {
+    /** A page of every recording on this PC, whoever's, filtered by game or player. */
     list: 'recordings:list',
+    /** The players with recordings on this PC, for the list's filter. */
+    players: 'recordings:players',
     detail: 'recordings:detail',
     usage: 'recordings:usage',
     remove: 'recordings:remove',
@@ -213,11 +216,15 @@ export const CH = {
     showMatch: 'recordings:showMatch',
     /** Removes a recording's row once its file is gone. Never touches a server. */
     forget: 'recordings:forget',
+    /** Forgets many recordings in one go, announced once. Never touches a server. */
+    forgetMany: 'recordings:forgetMany',
+    /** Forgets every recording whose file is gone from this PC and whose video is on the server. */
+    forgetServerOnly: 'recordings:forgetServerOnly',
     /** Opens a window for a recording this machine has no file of, from the server. */
     openRemote: 'recordings:openRemote',
     /** Opens the server's copy of one of this PC's own recordings — one whose file went after upload. */
     openServerCopy: 'recordings:openServerCopy',
-    /** Every recording that can go to the server, whole, for "select all". */
+    /** Every recording on this PC you can send to the server, whole, for "select all". */
     eligible: 'recordings:eligible'
   },
   // Sending recordings to the server's Foxfire Media. The upload tokens live in

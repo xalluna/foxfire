@@ -367,6 +367,12 @@ export interface Recording {
 
   /** Whose account it was recorded on, as whichever store owns accounts spells it. */
   accountId: string
+  /**
+   * The player it was recorded on, `gameName#tagLine`: the row's own, or this
+   * PC's account of that id when the row never learnt it. Null when neither
+   * knows — a server's id written while the server could not be reached.
+   */
+  riotId: string | null
   matchId: string | null
   bindState: RecordingBindState
   fileBytes: number | null
@@ -501,13 +507,55 @@ export interface RecordingDetail {
   events: RecordingEvent[]
 }
 
+/**
+ * What the recordings take up on this PC, whoever's they are.
+ *
+ * One set of recordings throughout — every one that still has its file here
+ * — so the size, the warning, the missing files and the cleanup that offers to
+ * delete the oldest can never be about different games.
+ */
 export interface RecordingDiskUsage {
+  /** The files that are on disk, added up. */
   totalBytes: number
+  /** How many files that is. */
   count: number
+  /** Of those, how many never found their game. */
   unmatchedCount: number
+  /** Recordings whose file should be here and is not: moved or deleted outside the app. */
   missingCount: number
+  /**
+   * Recordings whose file was deleted from this PC and whose video is on the
+   * server — rows that keep nothing here but a place in the list, which is
+   * what "Forget them" offers to clear.
+   */
+  serverOnlyCount: number
   /** Mirrored from settings so the warning can be drawn without a second query. */
   softCapBytes: number
+}
+
+/** What the Recordings tab narrows its list to. Absent or null is everything. */
+export interface RecordingFilter {
+  game?: GameId | null
+  /** A player's `gameName#tagLine`, compared without regard to case. */
+  player?: string | null
+}
+
+/** A player with recordings on this PC, for the Recordings tab's filter. */
+export interface RecordingPlayer {
+  riotId: string
+  count: number
+}
+
+/** What forgetting a batch of recordings did. */
+export interface ForgetResult {
+  /** Rows taken off this PC, with their markers and uploads. */
+  forgotten: number
+  /**
+   * Rows kept because their file could not be deleted — open in a player,
+   * usually. Forgetting the row would have left the file on disk with nothing
+   * in the app pointing at it.
+   */
+  kept: number
 }
 
 /**

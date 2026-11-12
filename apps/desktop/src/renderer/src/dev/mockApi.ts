@@ -16,9 +16,12 @@ import type {
   PasswordChange,
   QueueType,
   ObsValidation,
+  ForgetResult,
   Recording,
   RecordingDetail,
   RecordingDiskUsage,
+  RecordingFilter,
+  RecordingPlayer,
   Replay,
   ReplayDiskUsage,
   ReplayLaunchResult,
@@ -60,7 +63,7 @@ import { DEFAULT_TFT_TITLE_TEMPLATE, DEFAULT_TITLE_TEMPLATE } from '@foxfire/cor
 import { pageOf, type GameId, type RiotKeyScope } from '@foxfire/core'
 import { canUploadRecording } from '@shared/uploadEligibility'
 import {
-  RECORDINGS,
+  ALL_RECORDINGS,
   RECORDING_EVENTS,
   MOCK_REPLAYS,
   MOCK_ROFL_SETTINGS,
@@ -117,12 +120,41 @@ function setMediaQueue(patch: Partial<UploadQueueState>): void {
 
 /** What a batch of the harness's recordings would come to. */
 function mockBatch(recordingIds: readonly number[]): BulkUploadResult {
-  const rows = (RECORDINGS[1] ?? []).filter((recording) => recordingIds.includes(recording.id))
+  const rows = harnessRecordings().filter((recording) => recordingIds.includes(recording.id))
   return {
     queued: rows.length,
     queuedBytes: rows.reduce((total, recording) => total + (recording.fileBytes ?? 0), 0),
     skipped: []
   }
+}
+
+/** Recordings forgotten in this tab, so Forget visibly takes rows off the list. */
+const forgottenRecordings = new Set<number>()
+
+/** Every recording on the harness's PC, whoever's, less what was forgotten. */
+function harnessRecordings(): Recording[] {
+  return ALL_RECORDINGS.filter((recording) => !forgottenRecordings.has(recording.id))
+}
+
+/** The list's filter, as main applies it to the rows. */
+function inRecordingFilter(recording: Recording, filter: RecordingFilter | undefined): boolean {
+  if (filter?.game && recording.game !== filter.game) return false
+  if (filter?.player && recording.riotId?.toLowerCase() !== filter.player.toLowerCase()) return false
+  return true
+}
+
+/** What you could send to the harness's server: yours, as its "mine" answers. */
+async function harnessUploadable(): Promise<Recording[]> {
+  if (!serverState.recordings) return []
+  const mine = await fixture.accounts.mine()
+  return harnessRecordings().filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL, mine))
+}
+
+function forgetInHarness(recordingIds: readonly number[]): ForgetResult {
+  const known = new Set(harnessRecordings().map((recording) => recording.id))
+  const forgotten = recordingIds.filter((id) => known.has(id))
+  for (const id of forgotten) forgottenRecordings.add(id)
+  return { forgotten: forgotten.length, kept: 0 }
 }
 
 /**
@@ -917,32 +949,51 @@ export const mockApi: Api = {
       )
   },
   recordings: {
-    list: (accountId: string, page?: PageOptions, game?: GameId | null): Promise<Page<Recording>> =>
-      delay(pageOf((RECORDINGS[accountId] ?? []).filter((r) => !game || r.game === game), page), 220),
-    // Everything that could go up, whole — what "select all" selects, pages or no pages.
-    eligible: (accountId: string): Promise<Recording[]> =>
+    // Every recording on the PC, whoever's, newest first — as main lists them.
+    list: (page?: PageOptions, filter?: RecordingFilter): Promise<Page<Recording>> =>
       delay(
-        serverState.recordings
-          ? (RECORDINGS[accountId] ?? []).filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL))
-          : [],
-        180
+        pageOf(
+          harnessRecordings()
+            .filter((recording) => inRecordingFilter(recording, filter))
+            .sort((a, b) => b.startedAt - a.startedAt || b.id - a.id),
+          page
+        ),
+        220
       ),
+    players: (): Promise<RecordingPlayer[]> => {
+      const counts = new Map<string, RecordingPlayer>()
+      for (const { riotId } of harnessRecordings()) {
+        if (!riotId) continue
+        const entry = counts.get(riotId.toLowerCase()) ?? { riotId, count: 0 }
+        counts.set(riotId.toLowerCase(), { ...entry, count: entry.count + 1 })
+      }
+      return delay([...counts.values()].sort((a, b) => b.count - a.count), 120, false)
+    },
+    // Everything that could go up, whole — what "select all" selects, pages or no pages.
+    eligible: (): Promise<Recording[]> => harnessUploadable().then((rows) => delay(rows, 180)),
     detail: (recordingId: number): Promise<RecordingDetail | null> => {
-      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
+      const recording = harnessRecordings().find((item) => item.id === recordingId)
       return delay(recording ? { recording, events: RECORDING_EVENTS } : null, 220)
     },
-    usage: (): Promise<RecordingDiskUsage> =>
-      delay(
+    // Worked out from the rows, as main does, so the header, the warning and
+    // the list agree here too — ?scenario=media-backlog is past the cap.
+    usage: (): Promise<RecordingDiskUsage> => {
+      const withFile = harnessRecordings().filter((recording) => !recording.fileDeleted && recording.endedAt !== null)
+      const present = withFile.filter((recording) => recording.fileExists)
+      return delay(
         {
-          totalBytes: 3_180_000_000,
-          count: (RECORDINGS[1] ?? []).length,
-          unmatchedCount: 1,
-          missingCount: (RECORDINGS[1] ?? []).filter((recording) => !recording.fileExists).length,
+          totalBytes: present.reduce((total, recording) => total + (recording.fileBytes ?? 0), 0),
+          count: present.length,
+          unmatchedCount: present.filter((recording) => recording.bindState === 'unmatched').length,
+          missingCount: withFile.length - present.length,
+          serverOnlyCount: harnessRecordings().filter((recording) => recording.fileDeleted && recording.server !== null)
+            .length,
           softCapBytes: 50 * 1024 * 1024 * 1024
         },
         180,
         false
-      ),
+      )
+    },
     remove: (): Promise<void> => delay(undefined, 120, false),
     removeOldest: (): Promise<number> => delay(1, 200, false),
     open: (): Promise<void> => delay(undefined, 0, false),
@@ -950,7 +1001,21 @@ export const mockApi: Api = {
     onChanged: () => () => undefined,
     showMatch: (): Promise<void> => delay(undefined, 0, false),
     onShowMatch: () => () => undefined,
-    forget: (): Promise<void> => delay(undefined, 120, false),
+    forget: (recordingId: number): Promise<void> => {
+      forgetInHarness([recordingId])
+      return delay(undefined, 120, false)
+    },
+    forgetMany: (recordingIds: number[]): Promise<ForgetResult> => delay(forgetInHarness(recordingIds), 300, false),
+    forgetServerOnly: (): Promise<ForgetResult> =>
+      delay(
+        forgetInHarness(
+          harnessRecordings()
+            .filter((recording) => recording.fileDeleted && recording.server !== null)
+            .map((recording) => recording.id)
+        ),
+        300,
+        false
+      ),
     // The harness has one window, so a recording "window" is a navigation in
     // it, the way the LP editor's is.
     openRemote: (accountId: string, matchId: string): Promise<void> => {
@@ -958,7 +1023,7 @@ export const mockApi: Api = {
       return delay(undefined, 0, false)
     },
     openServerCopy: (recordingId: number): Promise<void> => {
-      const recording = (RECORDINGS[1] ?? []).find((item) => item.id === recordingId)
+      const recording = harnessRecordings().find((item) => item.id === recordingId)
       if (recording?.matchId) window.location.hash = `#${windowRoutes.remoteRecording(recording.accountId, recording.matchId)}`
       return delay(undefined, 0, false)
     }
@@ -981,14 +1046,12 @@ export const mockApi: Api = {
       setMediaQueue({ waiting: mediaQueue.waiting + result.queued, remainingBytes: mediaQueue.remainingBytes + result.queuedBytes })
       return delay(result, 300, false)
     },
-    enqueueAll: (): Promise<BulkUploadResult> => {
-      const ids = (RECORDINGS[1] ?? [])
-        .filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL))
-        .map((recording) => recording.id)
+    enqueueAll: async (): Promise<BulkUploadResult> => {
+      const ids = (await harnessUploadable()).map((recording) => recording.id)
       return delay(mockBatch(ids), 400, false)
     },
-    backlog: (): Promise<{ count: number; bytes: number }> => {
-      const rows = (RECORDINGS[1] ?? []).filter((recording) => canUploadRecording(recording, MOCK_SERVER_URL))
+    backlog: async (): Promise<{ count: number; bytes: number }> => {
+      const rows = await harnessUploadable()
       return delay({ count: rows.length, bytes: rows.reduce((total, r) => total + (r.fileBytes ?? 0), 0) }, 180, false)
     },
     cancel: (): Promise<void> => delay(undefined, 100, false),

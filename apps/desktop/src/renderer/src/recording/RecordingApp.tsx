@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
-import { tftHeaderFactsFor } from '@foxfire/screens'
+import { tftHeaderFactsFor, useMyAccounts } from '@foxfire/screens'
 import {
   EmptyState,
   Icon,
@@ -42,6 +42,7 @@ export function RecordingApp(): JSX.Element {
   const { id } = useParams({ from: '/_window/recording/$id' })
   const recordingId = recordingIdFrom(id)
   const server = useUploadServer()
+  const mine = useMyAccounts().data ?? []
   const [queueing, setQueueing] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
 
@@ -94,7 +95,8 @@ export function RecordingApp(): JSX.Element {
 
   const { recording, events } = detail.data
   const onServer = recording.server !== null && recording.server.serverKey === server
-  const uploadable = canUploadRecording(recording, server)
+  // Yours only: the server takes an upload from whoever claimed the account.
+  const uploadable = canUploadRecording(recording, server, mine)
 
   const upload = async (): Promise<void> => {
     setQueueing(true)

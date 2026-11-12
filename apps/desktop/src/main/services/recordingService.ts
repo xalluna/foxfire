@@ -3,20 +3,23 @@ import { getDb } from '../db'
 import { CH } from '../ipc/channels'
 import { broadcast } from '../ipc/broadcast'
 import { createLogger } from '../telemetry/logger'
-import { authedRequest, getServerState, isServerMode, offersGame } from './serverService'
+import { authedRequest, getServerState, isServerMode, offersGame, serverApi } from './serverService'
 import { getAccountById } from '../db/repositories/accounts.repo'
 import {
   bindRecording,
-  countMissingFiles,
+  countServerOnlyRecordings,
   deleteRecording,
+  deleteRecordings,
   getBindableRecordings,
   getOldestRecordingIds,
   getRecording,
   getRecordingEvents,
   getRecordingFilePath,
+  getRecordingPlayers,
   getRecordingUsage,
   getRecordingIdentity,
   getRecordings,
+  getServerOnlyRecordingIds,
   getUploadableRecordings,
   countRecordings,
   markFileDeleted,
@@ -25,7 +28,7 @@ import {
 } from '../db/repositories/recordings.repo'
 import { onRecordingSettled } from '../media/autoUpload'
 import { deleteRecordingFile } from '../media/files'
-import { cancelUpload } from '../media/queue'
+import { announceQueue, releaseUploads } from '../media/queue'
 import {
   BIND_RETRY_HORIZON_MS,
   findMatchForRecording,
@@ -37,8 +40,17 @@ import {
 } from '../capture/matchBinding'
 import type { BindableRecording } from '../db/repositories/recordings.repo'
 import { getCaptureSettings } from './captureSettings'
-import type { Page, PageOptions, Recording, RecordingDetail, RecordingDiskUsage } from '@shared/types'
-import { clampPage, type GameId } from '@foxfire/core'
+import type {
+  ForgetResult,
+  Page,
+  PageOptions,
+  Recording,
+  RecordingDetail,
+  RecordingDiskUsage,
+  RecordingFilter,
+  RecordingPlayer
+} from '@shared/types'
+import { clampPage } from '@foxfire/core'
 
 import { accountContext } from '../api/accountContext'
 
@@ -48,24 +60,30 @@ export function broadcastRecordingsChanged(): void {
   broadcast(CH.recordings.changed)
 }
 
-/** A page of an account's recordings, newest first, and how many there are. */
-export async function listRecordings(
-  accountId: string,
-  page?: PageOptions,
-  game: GameId | null = null
-): Promise<Page<Recording>> {
+/**
+ * A page of the recordings on this PC, newest first, and how many the filter
+ * leaves. Every account's: the files are on this disk whichever one is picked.
+ */
+export function listRecordings(page?: PageOptions, filter: RecordingFilter = {}): Page<Recording> {
   const db = getDb()
-  const account = await accountContext(accountId)
-  return { items: getRecordings(db, account, clampPage(page), game), total: countRecordings(db, account, game) }
+  return { items: getRecordings(db, filter, clampPage(page)), total: countRecordings(db, filter) }
+}
+
+/** The players with recordings on this PC, for the list's filter. */
+export function listRecordingPlayers(): RecordingPlayer[] {
+  return getRecordingPlayers(getDb())
 }
 
 /**
- * Every recording of an account's that can go to the server — whole, for
- * "select all". One of the two lists that grow which are not paged; see CLAUDE.md.
+ * Every recording on this PC you could send to the server — whole, for
+ * "select all". One of the two lists that grow which are not paged; see
+ * CLAUDE.md. Yours only: the server says which accounts those are, and takes
+ * an upload from nobody else.
  */
-export async function listUploadableRecordings(accountId: string): Promise<Recording[]> {
+export async function listUploadableRecordings(): Promise<Recording[]> {
   const serverKey = isServerMode() && getServerState().recordings ? getServerState().activeUrl : null
-  return getUploadableRecordings(getDb(), await accountContext(accountId), serverKey)
+  if (serverKey === null) return []
+  return getUploadableRecordings(getDb(), serverKey, await serverApi().accounts.mine())
 }
 
 export function getRecordingDetail(recordingId: number): RecordingDetail | null {
@@ -75,12 +93,16 @@ export function getRecordingDetail(recordingId: number): RecordingDetail | null 
   return { recording, events: getRecordingEvents(db, recordingId) }
 }
 
+/**
+ * What the recordings take up on this PC. Every figure is about the same
+ * recordings — this PC's, whoever played them — as the list beneath it and
+ * the cleanup the warning offers.
+ */
 export function getDiskUsage(): RecordingDiskUsage {
   const db = getDb()
-  const usage = getRecordingUsage(db)
   return {
-    ...usage,
-    missingCount: countMissingFiles(db),
+    ...getRecordingUsage(db),
+    serverOnlyCount: countServerOnlyRecordings(db),
     softCapBytes: getCaptureSettings().softCapBytes
   }
 }
@@ -95,19 +117,32 @@ export function getDiskUsage(): RecordingDiskUsage {
  * the server's copy; taking that off is the row's menu's.
  */
 export function removeRecording(recordingId: number): void {
+  removeRecordings([recordingId])
+}
+
+/** {@link removeRecording} for many, announced once. Answers how many there were. */
+function removeRecordings(recordingIds: readonly number[]): number {
+  if (recordingIds.length === 0) return 0
   const db = getDb()
-  const identity = getRecordingIdentity(db, recordingId)
-  if (!identity) return
 
-  // An upload reading the file has to stop before the file goes.
-  cancelUpload(recordingId)
+  // An upload reading a file has to stop before the file goes.
+  const uploadsStopped = releaseUploads(recordingIds)
 
-  if (identity.serverVideoId) {
-    if (deleteRecordingFile(identity.filePath)) markFileDeleted(db, recordingId, Date.now())
-  } else {
-    deleteRecordingFile(deleteRecording(db, recordingId))
+  let removed = 0
+  for (const recordingId of recordingIds) {
+    const identity = getRecordingIdentity(db, recordingId)
+    if (!identity) continue
+    if (identity.serverVideoId) {
+      if (deleteRecordingFile(identity.filePath)) markFileDeleted(db, recordingId, Date.now())
+    } else {
+      deleteRecordingFile(deleteRecording(db, recordingId))
+    }
+    removed += 1
   }
-  broadcastRecordingsChanged()
+
+  if (removed > 0 || uploadsStopped) broadcastRecordingsChanged()
+  if (uploadsStopped) announceQueue()
+  return removed
 }
 
 /**
@@ -117,16 +152,63 @@ export function removeRecording(recordingId: number): void {
  * belongs to that account's history now.
  */
 export function forgetRecording(recordingId: number): void {
-  cancelUpload(recordingId)
-  deleteRecordingFile(deleteRecording(getDb(), recordingId))
-  broadcastRecordingsChanged()
+  forgetRecordings([recordingId])
 }
 
-/** The one-click cleanup offered when the advisory cap is crossed. */
-export async function removeOldestRecordings(accountId: string, count: number): Promise<number> {
-  const ids = getOldestRecordingIds(getDb(), await accountContext(accountId), count)
-  for (const id of ids) removeRecording(id)
-  return ids.length
+/**
+ * Forgets many recordings at once: each row, its markers and its upload, in
+ * one transaction and one announcement — five hundred rows are not five
+ * hundred redraws of the list.
+ *
+ * A recording whose file is still on this PC was picked by hand, and forgetting
+ * it deletes the file too, as forgetting one always has: a file left behind
+ * with no row would take up the disk with nothing in the app to find it by.
+ * So one whose file cannot be deleted — open in a player, usually — keeps its
+ * row, and is counted as kept. The server's copy of any of them stays on the
+ * server, markers and all.
+ */
+export function forgetRecordings(recordingIds: readonly number[]): ForgetResult {
+  const ids = [...new Set(recordingIds)]
+  if (ids.length === 0) return { forgotten: 0, kept: 0 }
+  const db = getDb()
+
+  // An upload reading a file has to stop before the file goes, and one only
+  // queued must not start on a row about to disappear.
+  const uploadsStopped = releaseUploads(ids)
+
+  const forget: number[] = []
+  let kept = 0
+  for (const id of ids) {
+    const identity = getRecordingIdentity(db, id)
+    if (!identity) continue
+    // A file deleted on purpose is not looked for again.
+    if (identity.fileDeleted || deleteRecordingFile(identity.filePath)) forget.push(id)
+    else kept += 1
+  }
+
+  const forgotten = deleteRecordings(db, forget)
+  if (forgotten > 0 || uploadsStopped) broadcastRecordingsChanged()
+  if (uploadsStopped) announceQueue()
+  if (ids.length > 1) log.info('Forgot recordings', { forgotten, kept })
+  return { forgotten, kept }
+}
+
+/**
+ * Forgets every recording that lives only on the server now: its file was
+ * deleted from this PC and the server has its video. Nothing with a file
+ * here is touched.
+ */
+export function forgetServerOnlyRecordings(): ForgetResult {
+  return forgetRecordings(getServerOnlyRecordingIds(getDb()))
+}
+
+/**
+ * The one-click cleanup offered when the advisory cap is crossed: the oldest
+ * files on this PC, whoever's they are — the same files the size it warns
+ * about adds up.
+ */
+export function removeOldestRecordings(count: number): number {
+  return removeRecordings(getOldestRecordingIds(getDb(), count))
 }
 
 export function revealRecording(recordingId: number): void {

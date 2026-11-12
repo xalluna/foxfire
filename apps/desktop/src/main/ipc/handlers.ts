@@ -120,8 +120,11 @@ import { nativeRecorder } from '../capture/native/nativeRecorder'
 import { listMicrophones } from '../capture/native/audioCapture'
 import {
   forgetRecording,
+  forgetRecordings,
+  forgetServerOnlyRecordings,
   getDiskUsage,
   getRecordingDetail,
+  listRecordingPlayers,
   listRecordings,
   removeOldestRecordings,
   removeRecording,
@@ -146,6 +149,7 @@ import type {
   PlayerSearchResult,
   QueueType,
   RankRange,
+  RecordingFilter,
   RiotIdInput,
   RiotKeyLimits,
   RiotKeyType,
@@ -476,18 +480,24 @@ export function registerIpcHandlers(): void {
     return getCaptureStatus()
   })
 
-  ipcMain.handle(CH.recordings.list, (_e, accountId: string, page?: PageOptions, game?: GameId | null) =>
-    listRecordings(accountId, page, game === 'lol' || game === 'tft' ? game : null)
+  ipcMain.handle(CH.recordings.list, (_e, page?: PageOptions, filter?: RecordingFilter) =>
+    listRecordings(page, {
+      game: filter?.game === 'lol' || filter?.game === 'tft' ? filter.game : null,
+      player: typeof filter?.player === 'string' && filter.player !== '' ? filter.player : null
+    })
   )
+  ipcMain.handle(CH.recordings.players, () => listRecordingPlayers())
   ipcMain.handle(CH.recordings.detail, (_e, recordingId: number) => getRecordingDetail(recordingId))
   ipcMain.handle(CH.recordings.usage, () => getDiskUsage())
   ipcMain.handle(CH.recordings.remove, (_e, recordingId: number) => removeRecording(recordingId))
-  ipcMain.handle(CH.recordings.removeOldest, (_e, accountId: string, count: number) =>
-    removeOldestRecordings(accountId, count)
-  )
+  ipcMain.handle(CH.recordings.removeOldest, (_e, count: number) => removeOldestRecordings(count))
   ipcMain.handle(CH.recordings.open, (_e, recordingId: number) => openRecordingWindow(recordingId))
   ipcMain.handle(CH.recordings.reveal, (_e, recordingId: number) => revealRecording(recordingId))
   ipcMain.handle(CH.recordings.forget, (_e, recordingId: number) => forgetRecording(recordingId))
+  ipcMain.handle(CH.recordings.forgetMany, (_e, recordingIds: number[]) =>
+    forgetRecordings(Array.isArray(recordingIds) ? recordingIds.filter((id) => Number.isInteger(id)) : [])
+  )
+  ipcMain.handle(CH.recordings.forgetServerOnly, () => forgetServerOnlyRecordings())
 
   // A server's recordings, and the queue that sends this PC's there.
   registerMediaHandlers()

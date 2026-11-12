@@ -7,6 +7,51 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and t
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with an extra **Under the hood** group for
 changes you would never notice while using the app.
 
+## [0.19.0] — 2026-11-12
+
+The Recordings tab is about this PC now, not about whichever account is picked: it lists every
+recording on the disk, says whose each one is, and its size, warning and cleanup all mean the same
+games. And the rows a PC that deletes after upload fills up with — recordings that live on the
+server now — can be cleared in one go.
+
+### Added
+
+- **Forget many recordings at once.** Every row in the Recordings tab has a checkbox, and "Forget N"
+  takes the ones you picked off this PC — each with its markers and its upload record — after saying
+  how many, which of them still have a video here that goes with them, and which of those the server
+  has no copy of. The server keeps its copies. The same selection uploads: "Upload N" sends the ones
+  that can go.
+- **Forget everything that is only on the server.** When recordings have gone from this PC after
+  upload and only their rows are left, a line above the list says how many and offers to forget
+  them all with one click. Nothing whose file is still here is touched, and the server keeps every
+  one of them, markers and all.
+- **A player filter.** With recordings from more than one account on this PC, the list can be
+  narrowed to one player's, beside All, League and TFT.
+
+### Changed
+
+- **The Recordings tab lists every recording on this PC**, whichever account is picked in the rail,
+  and each row names the player it was recorded on. It used to list only the picked account's while
+  its size counted everybody's, so it could warn about gigabytes it never showed — and "Delete the 5
+  oldest" could not reach them.
+- **The size, the over-the-limit warning, the missing-files note and "Delete the oldest" are about
+  the same recordings**: every file on this PC, whoever played it. The size counts only files that
+  are really there, so a recording moved or deleted outside the app is in the missing-files note
+  rather than in the total.
+- **Only your own recordings are offered for upload.** A game somebody else played on this PC, on an
+  account that is not yours on the server, is listed but has no Upload button and says why: the
+  server takes an upload only from whoever claimed the account. "Select all", the recording window
+  and Settings › Server recordings' "upload everything" leave them out too, where before they were
+  queued and then failed.
+
+### Under the hood
+
+- The recordings list, its total, "select all" and the cleanup are no longer scoped to the picked
+  account. A recording with no Riot ID of its own takes its name from this PC's account of that id.
+- Forgetting many recordings, and the cleanup, delete in one transaction and tell the windows once,
+  rather than once a row. A recording whose file cannot be deleted — open in a player — keeps its
+  row, so no file is left on disk with nothing in the app pointing at it.
+
 ## [0.18.0] — 2026-11-10
 
 Recordings go to your Foxfire Server. Send one, a selection, or your whole backlog — hundreds of
@@ -1725,6 +1770,7 @@ figure coming from Riot's official Developer API rather than scraped from op.gg.
 - Storage uses Node's built-in SQLite rather than a native module, avoiding a compilation step and
   the rebuild machinery that comes with it.
 
+[0.19.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.18.0...desktop-v0.19.0
 [0.18.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.17.0...desktop-v0.18.0
 [0.17.0]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.1...desktop-v0.17.0
 [0.16.1]: https://github.com/xalluna/foxfire/compare/desktop-v0.16.0...desktop-v0.16.1
