@@ -58,7 +58,9 @@ export function Captures({ account }: { account: Account }): JSX.Element {
 
       <div className="mt-4">
         {tab === 'recordings' ? (
-          <RecordingsTab account={account} />
+          // Every recording on this PC rather than the picked account's: the
+          // files are on this disk whoever played them.
+          <RecordingsTab />
         ) : (
           <ReplaysTab account={account} />
         )}

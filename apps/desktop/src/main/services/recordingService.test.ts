@@ -1,14 +1,21 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createRecording,
   finishRecording,
   getRecording,
+  insertRecordingEvents,
+  markFileDeleted,
   markRecordingUnmatched,
   setServerCopy
 } from '../db/repositories/recordings.repo'
+import { enqueueUpload, getUpload } from '../db/repositories/mediaUploads.repo'
 import { insertMatch } from '../db/repositories/matches.repo'
+import { CH } from '../ipc/channels'
 import { applyAllMigrations } from '../db/testMigrations'
 import type { MatchDto } from '../riot/types'
 
@@ -44,6 +51,14 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./captureSettings', () => ({ getCaptureSettings: () => ({ softCapBytes: 0 }) }))
 
+// What the windows are told, so a batch can be held to telling them once.
+const told = vi.hoisted(() => ({ channels: [] as string[] }))
+vi.mock('../ipc/broadcast', () => ({
+  broadcast: (channel: string) => {
+    told.channels.push(channel)
+  }
+}))
+
 // Local-only, which is the mode these tests are about: the binding pass reads
 // this machine's matches, and the server path is a different set of candidates
 // through the same fingerprint. The service reaches for the connection to know
@@ -51,7 +66,8 @@ vi.mock('./captureSettings', () => ({ getCaptureSettings: () => ({ softCapBytes:
 vi.mock('./serverService', () => ({
   isServerMode: () => false,
   getServerState: () => ({ activeUrl: null }),
-  authedRequest: () => Promise.reject(new Error('not connected'))
+  authedRequest: () => Promise.reject(new Error('not connected')),
+  serverApi: () => ({ accounts: { mine: () => Promise.resolve([]) } })
 }))
 
 // What a settled recording sets off — an automatic upload — is the queue's
@@ -63,9 +79,25 @@ vi.mock('../media/autoUpload', () => ({
     settled.ids.push(id)
   }
 }))
-vi.mock('../media/queue', () => ({ cancelUpload: () => {} }))
+// The queue's own tests cover stopping an upload; here it only has to be
+// asked, once, for the whole batch, before anything is deleted.
+const queue = vi.hoisted(() => ({ released: [] as number[][] }))
+vi.mock('../media/queue', () => ({
+  releaseUploads: (ids: readonly number[]) => {
+    queue.released.push([...ids])
+    return false
+  },
+  announceQueue: () => {}
+}))
 
-const { bindPendingRecordings, forgetRecording, removeRecording } = await import('./recordingService')
+const {
+  bindPendingRecordings,
+  forgetRecording,
+  forgetRecordings,
+  forgetServerOnlyRecordings,
+  removeOldestRecordings,
+  removeRecording
+} = await import('./recordingService')
 
 const ME = 'puuid-me'
 const ACCOUNT = '1'
@@ -159,6 +191,8 @@ beforeEach(() => {
   )
   live.db = db
   settled.ids = []
+  told.channels = []
+  queue.released = []
   vi.useFakeTimers()
   vi.setSystemTime(LATER)
 })
@@ -299,5 +333,157 @@ describe('deleting a recording', () => {
     forgetRecording(id)
 
     expect(getRecording(db, id)).toBeNull()
+  })
+})
+
+describe('forgetting and deleting many at once', () => {
+  const ON_SERVER = { videoId: 'abcdefghijk', serverKey: 'https://foxfire.example.com', at: T0 }
+  let folder: string
+
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), 'foxfire-forget-'))
+  })
+
+  afterEach(() => {
+    rmSync(folder, { recursive: true, force: true })
+  })
+
+  /** A finished recording whose file is really on this PC. */
+  function withFile(
+    name: string,
+    startedAt = T0,
+    owner: { accountId: string; riotId: string | null } = { accountId: ACCOUNT, riotId: 'Faker#NA1' }
+  ): { id: number; path: string } {
+    const path = join(folder, `${name}.mp4`)
+    writeFileSync(path, 'not really a video')
+    const id = createRecording(db, {
+      ...owner,
+      serverKey: null,
+      filePath: path,
+      queueId: 420,
+      startedAt,
+      gameTimeOffset: 0,
+      selfChampionId: ROSTER[0],
+      roster: ROSTER
+    })
+    finishRecording(db, id, startedAt + DURATION * 1000, path, 1_000_000)
+    return { id, path }
+  }
+
+  /** Uploaded, and its file deleted from this PC after: the row is all that is left here. */
+  function serverOnly(name: string): number {
+    const id = finishedRecording(name)
+    setServerCopy(db, id, ON_SERVER)
+    markFileDeleted(db, id, T0 + DURATION * 1000)
+    return id
+  }
+
+  function markersOf(id: number): number {
+    return (db.prepare('SELECT COUNT(*) AS n FROM recording_events WHERE recording_id = ?').get(id) as { n: number }).n
+  }
+
+  const changes = (): number => told.channels.filter((channel) => channel === CH.recordings.changed).length
+
+  it('takes every row asked for with its markers and upload, and tells the windows once', () => {
+    const ids = ['a', 'b', 'c'].map(serverOnly)
+    for (const id of ids) {
+      insertRecordingEvents(db, id, [
+        { eventId: 1, name: 'ChampionKill', gameTime: 300, videoTime: 257.5, role: 'kill', label: 'Ahri' }
+      ])
+      enqueueUpload(
+        db,
+        { recordingId: id, serverKey: ON_SERVER.serverKey, trigger: 'bulk', deleteAfter: true, fileBytes: 1, fileMtime: T0 },
+        T0
+      )
+    }
+
+    expect(forgetRecordings(ids)).toEqual({ forgotten: 3, kept: 0 })
+
+    for (const id of ids) {
+      expect(getRecording(db, id)).toBeNull()
+      expect(markersOf(id)).toBe(0)
+      expect(getUpload(db, id)).toBeNull()
+    }
+    // One redraw for the batch, not one a row — and the uploads let go of
+    // together, before anything was deleted.
+    expect(changes()).toBe(1)
+    expect(queue.released).toEqual([ids])
+  })
+
+  it('forgets every recording that lives only on the server, and nothing with a file here', () => {
+    const a = serverOnly('a')
+    const b = serverOnly('b')
+    // On the server with its file still here; only on this PC; and gone
+    // missing with no copy anywhere — none of them is the server's alone.
+    const uploaded = withFile('uploaded')
+    setServerCopy(db, uploaded.id, ON_SERVER)
+    const local = withFile('local')
+    const missing = finishedRecording('missing')
+
+    expect(forgetServerOnlyRecordings()).toEqual({ forgotten: 2, kept: 0 })
+
+    expect(getRecording(db, a)).toBeNull()
+    expect(getRecording(db, b)).toBeNull()
+    for (const id of [uploaded.id, local.id, missing]) expect(getRecording(db, id)).not.toBeNull()
+    expect(existsSync(uploaded.path)).toBe(true)
+    expect(existsSync(local.path)).toBe(true)
+    expect(changes()).toBe(1)
+  })
+
+  it('deletes the file of a recording picked by hand that still has one, as forgetting one always has', () => {
+    const picked = withFile('picked')
+
+    expect(forgetRecordings([picked.id])).toEqual({ forgotten: 1, kept: 0 })
+    expect(getRecording(db, picked.id)).toBeNull()
+    expect(existsSync(picked.path)).toBe(false)
+  })
+
+  it('keeps the row of a file it could not delete, rather than leave the file with nothing pointing at it', () => {
+    // A folder where the file should be will not go as a file does — the
+    // stand-in for a video a player still has open.
+    const path = join(folder, 'open.mp4')
+    mkdirSync(path)
+    const open = createRecording(db, {
+      accountId: ACCOUNT,
+      riotId: 'Faker#NA1',
+      serverKey: null,
+      filePath: path,
+      queueId: 420,
+      startedAt: T0,
+      gameTimeOffset: 0,
+      selfChampionId: ROSTER[0],
+      roster: ROSTER
+    })
+    finishRecording(db, open, T0 + 1_000, path, 1)
+    const other = serverOnly('other')
+
+    expect(forgetRecordings([open, other])).toEqual({ forgotten: 1, kept: 1 })
+    expect(getRecording(db, open)).not.toBeNull()
+    expect(getRecording(db, other)).toBeNull()
+  })
+
+  it('tells nobody anything when there was nothing to forget', () => {
+    finishedRecording('local')
+
+    expect(forgetRecordings([])).toEqual({ forgotten: 0, kept: 0 })
+    expect(forgetServerOnlyRecordings()).toEqual({ forgotten: 0, kept: 0 })
+    expect(told.channels).toEqual([])
+  })
+
+  it('cleans up the oldest files on this PC whoever played them, and tells the windows once', () => {
+    // The other accounts' games are the oldest: the ones the cleanup, when it
+    // was the picked account's, never reached.
+    const smurf = withFile('smurf', T0, { accountId: '2', riotId: 'Smurf#EUW' })
+    const someone = withFile('someone', T0 + MINUTE, { accountId: '0198f2c1-guid', riotId: 'Someone#EUW' })
+    const mine = withFile('mine', T0 + 2 * MINUTE)
+
+    expect(removeOldestRecordings(2)).toBe(2)
+
+    expect(getRecording(db, smurf.id)).toBeNull()
+    expect(getRecording(db, someone.id)).toBeNull()
+    expect(existsSync(smurf.path)).toBe(false)
+    expect(existsSync(someone.path)).toBe(false)
+    expect(getRecording(db, mine.id)).not.toBeNull()
+    expect(changes()).toBe(1)
   })
 })

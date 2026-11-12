@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
-import type { GameId, TftTrait, TftUnit } from '@foxfire/core'
+import type { Account, GameId, TftTrait, TftUnit } from '@foxfire/core'
 import { ownedBy, ownedByParams, type AccountContext } from '../accountScope'
 import {
   canUploadRecording,
+  serverAccountFor,
   PENDING_UPLOAD_STATES as PENDING_UPLOAD_STATES_SHARED
 } from '@shared/uploadEligibility'
 import type {
@@ -11,11 +12,16 @@ import type {
   RecordingBindState,
   RecordingEvent,
   RecordingEventRole,
+  RecordingFilter,
+  RecordingPlayer,
   LinkedMatchInfo,
   LinkedTftMatchInfo,
   UploadState,
   UploadTrigger
 } from '@shared/types'
+
+/** The server's "mine": the accounts an upload may go up under. */
+type OwnAccounts = readonly Pick<Account, 'id' | 'gameName' | 'tagLine' | 'isMine'>[]
 
 /** What is known about a recording at the moment it starts. */
 export interface NewRecording {
@@ -44,6 +50,7 @@ export interface NewRecording {
 interface RecordingRow {
   id: number
   account_id: string
+  riot_id: string | null
   match_id: string | null
   bind_state: string
   file_path: string
@@ -87,6 +94,16 @@ interface RecordingRow {
 }
 
 /**
+ * The player a recording was made on, `gameName#tagLine`: the row's own, and
+ * failing that this PC's account of that id — a local-only id is this
+ * machine's rowid, as text. A row written while the server could not be
+ * reached carries only the server's id, which no account here has, and stays
+ * null.
+ */
+const RECORDING_RIOT_ID = `COALESCE(r.riot_id,
+  (SELECT a.game_name || '#' || a.tag_line FROM accounts a WHERE CAST(a.id AS TEXT) = r.account_id))`
+
+/**
  * The bound match, joined through the tracked account's own participant row.
  *
  * Selected alongside the recording rather than fetched per row: the Recordings view
@@ -94,7 +111,8 @@ interface RecordingRow {
  * query either way. So is its upload.
  */
 const SELECT_RECORDING = `
-  SELECT r.id, r.account_id, r.match_id, r.bind_state, r.file_path, r.file_bytes,
+  SELECT r.id, r.account_id, ${RECORDING_RIOT_ID} AS riot_id,
+         r.match_id, r.bind_state, r.file_path, r.file_bytes,
          r.queue_id, r.started_at, r.ended_at, r.game_time_offset,
          r.self_champion_id, r.roster_json,
          r.server_video_id, r.server_video_key, r.server_video_at, r.file_deleted_at,
@@ -162,6 +180,7 @@ function toRecording(row: RecordingRow): Recording {
   return {
     id: row.id,
     accountId: row.account_id,
+    riotId: row.riot_id,
     matchId: row.match_id,
     bindState: row.bind_state as RecordingBindState,
     fileBytes: row.file_bytes,
@@ -284,90 +303,126 @@ export function insertRecordingEvents(
 }
 
 /**
- * A page of one account's recordings, newest first — one game's, when the
- * Recordings tab is filtered to it, or both.
+ * The Recordings tab's filter as SQL over `r`, with its bind parameters: one
+ * game's, one player's, both, or every recording on this PC.
+ */
+function filterClause(filter: RecordingFilter): { sql: string; params: Array<string | null> } {
+  const game = filter.game ?? null
+  const player = filter.player ?? null
+  return {
+    sql: `(? IS NULL OR r.game = ?) AND (? IS NULL OR lower(${RECORDING_RIOT_ID}) = lower(?))`,
+    params: [game, game, player, player]
+  }
+}
+
+/**
+ * A page of the recordings on this PC, newest first, whoever played them — one
+ * game's or one player's when the Recordings tab is filtered to it.
+ *
+ * Not one account's. The files are on this disk whichever account is picked
+ * in the rail, and a list scoped to one of them left the rest out of reach of
+ * everything the tab offers: the size above it counted them, and nothing in it
+ * could delete them.
  *
  * The id breaks ties so a page boundary cannot fall between two recordings that
  * started in the same millisecond and come back in the other order next time.
  */
 export function getRecordings(
   db: DatabaseSync,
-  account: AccountContext,
-  page: { limit: number; offset: number },
-  game: GameId | null = null
+  filter: RecordingFilter,
+  page: { limit: number; offset: number }
 ): Recording[] {
+  const where = filterClause(filter)
   const rows = db
     .prepare(
       `${SELECT_RECORDING}
-        WHERE ${ownedBy('r.account_id', 'r.riot_id')}
-          AND (? IS NULL OR r.game = ?)
+        WHERE ${where.sql}
         ORDER BY r.started_at DESC, r.id DESC
         LIMIT ? OFFSET ?`
     )
-    .all(...ownedByParams(account), game, game, page.limit, page.offset) as unknown as RecordingRow[]
+    .all(...where.params, page.limit, page.offset) as unknown as RecordingRow[]
   return rows.map(toRecording)
 }
 
-/** How many recordings one account has — the total beside a page of {@link getRecordings}. */
-export function countRecordings(db: DatabaseSync, account: AccountContext, game: GameId | null = null): number {
+/** How many recordings the filter leaves — the total beside a page of {@link getRecordings}. */
+export function countRecordings(db: DatabaseSync, filter: RecordingFilter): number {
+  const where = filterClause(filter)
   const row = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM recordings r
-        WHERE ${ownedBy('r.account_id', 'r.riot_id')} AND (? IS NULL OR r.game = ?)`
-    )
-    .get(...ownedByParams(account), game, game) as { n: number }
+    .prepare(`SELECT COUNT(*) AS n FROM recordings r WHERE ${where.sql}`)
+    .get(...where.params) as { n: number }
   return row.n
 }
 
 /**
- * Every recording of one account's that could go to the server, newest first.
+ * Every player with a recording on this PC, and how many, most first — what
+ * the Recordings tab's player filter offers. Spellings that differ only in
+ * case are one player. A recording nobody can name is in no player's count.
+ */
+export function getRecordingPlayers(db: DatabaseSync): RecordingPlayer[] {
+  const rows = db
+    .prepare(
+      `SELECT MIN(riot_id) AS riot_id, COUNT(*) AS n
+         FROM (SELECT ${RECORDING_RIOT_ID} AS riot_id FROM recordings r)
+        WHERE riot_id IS NOT NULL
+        GROUP BY lower(riot_id)
+        ORDER BY n DESC, lower(riot_id) ASC`
+    )
+    .all() as unknown as Array<{ riot_id: string; n: number }>
+  return rows.map((row) => ({ riotId: row.riot_id, count: row.n }))
+}
+
+/**
+ * Rows on this PC that could go to this server as far as the file goes: on
+ * disk, bound to its game, not on the server, nothing on its way. Whose they
+ * are is left to the caller. A function only because the list of pending
+ * states is defined further down.
+ */
+function uploadableRows(): string {
+  return `
+        WHERE r.file_deleted_at IS NULL
+          AND r.match_id IS NOT NULL
+          AND (r.server_video_key IS NULL OR r.server_video_key <> ?)
+          AND (u.state IS NULL OR u.state NOT IN (${PENDING_UPLOAD_STATES}))`
+}
+
+/**
+ * Every recording on this PC that you could send to the server, newest first.
  *
  * Whole rather than a page, deliberately: it is what "select all" on the
  * Recordings tab selects, and the batch it starts reads each one's size and
  * game. SQL narrows it to rows with a file and a game, not on this server, and
- * no upload on its way;
- * the shared rule then has the last word — it is the one the tab draws its
- * checkboxes by, and it also checks that each file is still on disk.
+ * no upload on its way; the shared rule then has the last word — it is the one
+ * the tab draws its Upload buttons by, it checks that each file is still on
+ * disk, and it keeps only what was recorded on one of `mine`, the server's
+ * answer to whose accounts are yours. Anybody else's game recorded on this PC
+ * is listed, but the server would refuse its upload.
  */
-export function getUploadableRecordings(
-  db: DatabaseSync,
-  account: AccountContext,
-  serverKey: string | null
-): Recording[] {
+export function getUploadableRecordings(db: DatabaseSync, serverKey: string | null, mine: OwnAccounts): Recording[] {
   if (serverKey === null) return []
   const rows = db
-    .prepare(
-      `${SELECT_RECORDING}
-        WHERE ${ownedBy('r.account_id', 'r.riot_id')}
-          AND r.file_deleted_at IS NULL
-          AND r.match_id IS NOT NULL
-          AND (r.server_video_key IS NULL OR r.server_video_key <> ?)
-          AND (u.state IS NULL OR u.state NOT IN (${PENDING_UPLOAD_STATES}))
-        ORDER BY r.started_at DESC, r.id DESC`
-    )
-    .all(...ownedByParams(account), serverKey) as unknown as RecordingRow[]
-  return rows.map(toRecording).filter((recording) => canUploadRecording(recording, serverKey))
+    .prepare(`${SELECT_RECORDING} ${uploadableRows()} ORDER BY r.started_at DESC, r.id DESC`)
+    .all(serverKey) as unknown as RecordingRow[]
+  return rows.map(toRecording).filter((recording) => canUploadRecording(recording, serverKey, mine))
 }
 
 /**
- * Every recording on this PC, whoever's account, that could go to this server:
- * on disk, bound to its game, not on the server, nothing on its way. Oldest
- * first. Whole, because it is what "upload everything" queues — the queue then
- * asks the server, per recording, whose it is.
+ * The same recordings, oldest first, as ids: what "upload everything" queues.
+ * Whole, because a backlog is the point of it.
  */
-export function getUploadableRecordingIds(db: DatabaseSync, serverKey: string): number[] {
+export function getUploadableRecordingIds(db: DatabaseSync, serverKey: string, mine: OwnAccounts): number[] {
   const rows = db
     .prepare(
-      `SELECT r.id, r.file_path FROM recordings r
+      `SELECT r.id, r.account_id, ${RECORDING_RIOT_ID} AS riot_id, r.file_path
+         FROM recordings r
          LEFT JOIN media_uploads u ON u.recording_id = r.id
-        WHERE r.file_deleted_at IS NULL
-          AND r.match_id IS NOT NULL
-          AND (r.server_video_key IS NULL OR r.server_video_key <> ?)
-          AND (u.state IS NULL OR u.state NOT IN (${PENDING_UPLOAD_STATES}))
+       ${uploadableRows()}
         ORDER BY r.started_at ASC, r.id ASC`
     )
-    .all(serverKey) as unknown as Array<{ id: number; file_path: string }>
-  return rows.filter((row) => existsSync(row.file_path)).map((row) => row.id)
+    .all(serverKey) as unknown as Array<{ id: number; account_id: string; riot_id: string | null; file_path: string }>
+  return rows
+    .filter((row) => serverAccountFor({ accountId: row.account_id, riotId: row.riot_id }, mine) !== null)
+    .filter((row) => existsSync(row.file_path))
+    .map((row) => row.id)
 }
 
 /** One recording. */
@@ -632,67 +687,114 @@ export function matchAlreadyBound(db: DatabaseSync, matchId: string): boolean {
   return db.prepare('SELECT 1 AS x FROM recordings WHERE match_id = ?').get(matchId) !== undefined
 }
 
+/** A recording that should have its file on this PC, and whether it does. */
+interface RecordingFile {
+  id: number
+  bytes: number
+  unmatched: boolean
+  present: boolean
+}
+
+/**
+ * Every finished recording that should have its file on this PC — whoever
+ * played it — oldest first, and whether the file is there.
+ *
+ * The one set the disk figures and the cleanup are both read from, so the size
+ * the tab warns about is made of exactly the files "Delete the oldest" can
+ * reach. They used to disagree: the size was this PC's and the cleanup one
+ * account's, and a PC full of another account's games warned about files the
+ * button never touched.
+ *
+ * A file deleted on purpose is not one of them: the row says where it went,
+ * and it takes up nothing. Nor is a recording still being written: it has no
+ * size until it stops, and OBS has not told us its file's name yet.
+ */
+function recordingFiles(db: DatabaseSync): RecordingFile[] {
+  const rows = db
+    .prepare(
+      `SELECT id, file_path, file_bytes, bind_state FROM recordings
+        WHERE file_deleted_at IS NULL AND ended_at IS NOT NULL
+        ORDER BY started_at ASC, id ASC`
+    )
+    .all() as unknown as Array<{ id: number; file_path: string; file_bytes: number | null; bind_state: string }>
+  return rows.map((row) => ({
+    id: row.id,
+    bytes: row.file_bytes ?? 0,
+    unmatched: row.bind_state === 'unmatched',
+    present: existsSync(row.file_path)
+  }))
+}
+
 export interface RecordingUsageRow {
+  /** The files that are there, added up. */
   totalBytes: number
   count: number
   unmatchedCount: number
+  /** Recordings whose file should be here and is not — moved or deleted outside the app. */
+  missingCount: number
 }
 
-/**
- * What the recordings take up on this disk.
- *
- * Only rows with a file: one whose file was deleted to free space, and kept
- * because it is on the server, takes up nothing, and the warning this feeds is
- * about the disk.
- */
+/** What the recordings take up on this disk, and how many of their files have gone missing. */
 export function getRecordingUsage(db: DatabaseSync): RecordingUsageRow {
-  const row = db
-    .prepare(
-      `SELECT COALESCE(SUM(file_bytes), 0) AS total_bytes,
-              COUNT(*) AS count,
-              SUM(CASE WHEN bind_state = 'unmatched' THEN 1 ELSE 0 END) AS unmatched
-         FROM recordings
-        WHERE file_deleted_at IS NULL`
-    )
-    .get() as unknown as { total_bytes: number; count: number; unmatched: number | null }
-
+  const files = recordingFiles(db)
+  const present = files.filter((file) => file.present)
   return {
-    totalBytes: row.total_bytes,
-    count: row.count,
-    unmatchedCount: row.unmatched ?? 0
+    totalBytes: present.reduce((total, file) => total + file.bytes, 0),
+    count: present.length,
+    unmatchedCount: present.filter((file) => file.unmatched).length,
+    missingCount: files.length - present.length
   }
 }
 
-/** How many recording files are no longer on disk, for the missing-files warning. */
-export function countMissingFiles(db: DatabaseSync): number {
-  // A file deleted on purpose is not missing; the row says where it went.
-  const rows = db
-    .prepare('SELECT file_path FROM recordings WHERE file_deleted_at IS NULL')
-    .all() as unknown as Array<{
-    file_path: string
-  }>
-  return rows.filter((row) => !existsSync(row.file_path)).length
+/**
+ * The N oldest recordings on this PC with their file still here — what the
+ * cleanup button deletes, from the same files the size above it adds up. One
+ * whose file is already gone frees nothing, so it is not one of the N.
+ */
+export function getOldestRecordingIds(db: DatabaseSync, count: number): number[] {
+  return recordingFiles(db)
+    .filter((file) => file.present)
+    .slice(0, Math.max(0, count))
+    .map((file) => file.id)
 }
 
 /**
- * The N oldest recordings for an account that still have a file — what the
- * cleanup button deletes. One whose file is already gone frees nothing, so it
- * is not one of the N.
+ * Recordings whose file was deleted from this PC and whose video is on the
+ * server: rows that keep nothing here but a line in the list. What "Forget
+ * them" clears, and nothing else — a recording with its file still here is
+ * never one of them.
  */
-export function getOldestRecordingIds(
-  db: DatabaseSync,
-  account: AccountContext,
-  count: number
-): number[] {
+const SERVER_ONLY = 'file_deleted_at IS NOT NULL AND server_video_id IS NOT NULL'
+
+export function countServerOnlyRecordings(db: DatabaseSync): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM recordings WHERE ${SERVER_ONLY}`).get() as { n: number }).n
+}
+
+export function getServerOnlyRecordingIds(db: DatabaseSync): number[] {
   const rows = db
-    .prepare(
-      `SELECT id FROM recordings
-        WHERE ${ownedBy('account_id', 'riot_id')}
-          AND file_deleted_at IS NULL
-        ORDER BY started_at ASC LIMIT ?`
-    )
-    .all(...ownedByParams(account), count) as unknown as Array<{ id: number }>
+    .prepare(`SELECT id FROM recordings WHERE ${SERVER_ONLY} ORDER BY started_at ASC, id ASC`)
+    .all() as unknown as Array<{ id: number }>
   return rows.map((row) => row.id)
+}
+
+/**
+ * Removes many rows in one transaction — their markers and uploads go with
+ * them, by the foreign keys — and answers how many there were. An id with no
+ * row is passed over.
+ */
+export function deleteRecordings(db: DatabaseSync, recordingIds: readonly number[]): number {
+  if (recordingIds.length === 0) return 0
+  const stmt = db.prepare('DELETE FROM recordings WHERE id = ?')
+  let deleted = 0
+  db.exec('BEGIN')
+  try {
+    for (const id of recordingIds) deleted += Number(stmt.run(id).changes)
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return deleted
 }
 
 /**

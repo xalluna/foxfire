@@ -47,9 +47,12 @@ import type {
   PageOptions,
   PasswordChange,
   QueueType,
+  ForgetResult,
   Recording,
   RecordingDetail,
   RecordingDiskUsage,
+  RecordingFilter,
+  RecordingPlayer,
   Replay,
   ReplayDiskUsage,
   ReplayImportProgress,
@@ -349,21 +352,28 @@ export interface Api {
     listMicrophones: () => Promise<CaptureMicrophone[]>
   }
   recordings: {
-    /** A page of an account's recordings, newest first, bound or not, and how many there are — one game's, if asked. */
-    list: (accountId: string, page?: PageOptions, game?: GameId | null) => Promise<Page<Recording>>
     /**
-     * Every recording of an account's that can go to the server — whole, not
-     * a page, because "select all" has to mean all of them and the batch dialog
-     * reads each one's size. One of the two lists that grow which are
-     * deliberately not paged; see CLAUDE.md. Empty off a server that keeps
-     * recordings.
+     * A page of the recordings on this PC, newest first, bound or not, and how
+     * many there are — whoever played them, whichever account is picked; one
+     * game's or one player's, if asked.
      */
-    eligible: (accountId: string) => Promise<Recording[]>
+    list: (page?: PageOptions, filter?: RecordingFilter) => Promise<Page<Recording>>
+    /** The players with recordings on this PC, most first, for the list's filter. */
+    players: () => Promise<RecordingPlayer[]>
+    /**
+     * Every recording on this PC you can send to the server — whole, not a
+     * page, because "select all" has to mean all of them and the batch dialog
+     * reads each one's size. One of the two lists that grow which are
+     * deliberately not paged; see CLAUDE.md. Only what was recorded on one of
+     * your accounts there; empty off a server that keeps recordings.
+     */
+    eligible: () => Promise<Recording[]>
     detail: (recordingId: number) => Promise<RecordingDetail | null>
+    /** What the recordings on this PC take up — the same recordings the list holds. */
     usage: () => Promise<RecordingDiskUsage>
     remove: (recordingId: number) => Promise<void>
-    /** Deletes the N oldest recordings, for the one-click cleanup on the cap warning. */
-    removeOldest: (accountId: string, count: number) => Promise<number>
+    /** Deletes the N oldest recording files on this PC, for the one-click cleanup on the cap warning. */
+    removeOldest: (count: number) => Promise<number>
     /** Opens a window owning this recording. Called again, it opens another one. */
     open: (recordingId: number) => Promise<void>
     reveal: (recordingId: number) => Promise<void>
@@ -375,6 +385,14 @@ export interface Api {
     onShowMatch: (cb: (accountId: string, matchId: string, game?: GameId) => void) => () => void
     /** Removes a recording's row once its file is gone. The server's copy stays. */
     forget: (recordingId: number) => Promise<void>
+    /**
+     * Forgets many recordings in one go — each row, its markers and its
+     * upload. A file still on this PC goes with its row; one that cannot be
+     * deleted keeps it. The server's copies stay.
+     */
+    forgetMany: (recordingIds: number[]) => Promise<ForgetResult>
+    /** Forgets every recording whose file is gone from this PC and whose video is on the server. */
+    forgetServerOnly: () => Promise<ForgetResult>
     /** Opens a window for one account's recording of a game that this machine has no file of. */
     openRemote: (accountId: string, matchId: string) => Promise<void>
     /** Opens the server's copy of one of this PC's recordings, under the server's name for its account. */

@@ -44,8 +44,8 @@ export function registerMediaHandlers(): void {
   })
 
   // Every recording that could go up, whole, for "select all" on a list that is
-  // otherwise paged.
-  ipcMain.handle(CH.recordings.eligible, (_e, accountId: string) => listUploadableRecordings(accountId))
+  // otherwise paged — this PC's, recorded on one of your accounts there.
+  ipcMain.handle(CH.recordings.eligible, () => listUploadableRecordings())
 
   ipcMain.handle(CH.media.getSettings, () => getMediaSettings())
   ipcMain.handle(CH.media.setSettings, (_e, patch: Partial<MediaSettings>) => setMediaSettings(patch))

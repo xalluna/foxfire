@@ -45,6 +45,7 @@ function queueStates(): Recording[] {
   const base = (id: number, minutesAgo: number, champion: number): Recording => ({
     id,
     accountId: '1',
+    riotId: 'Faker#NA1',
     matchId: matchIdAt(id - 1),
     bindState: 'bound',
     fileBytes: 1_400_000_000,
@@ -93,6 +94,7 @@ function backlog(): Recording[] {
     return {
       id: 100 + i,
       accountId: '1',
+      riotId: 'Faker#NA1',
       matchId: matchIdAt(10 + i),
       bindState: i % 11 === 10 ? 'unmatched' : 'bound',
       fileBytes: 1_100_000_000 + (i % 7) * 90_000_000,
@@ -137,6 +139,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
     {
       id: 1,
       accountId: '1',
+      riotId: 'Faker#NA1',
       matchId: matchIdAt(0),
       bindState: 'bound',
       fileBytes: 1_820_000_000,
@@ -167,6 +170,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
     {
       id: 2,
       accountId: '1',
+      riotId: 'Faker#NA1',
       matchId: null,
       bindState: 'pending',
       fileBytes: 1_100_000_000,
@@ -187,6 +191,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
     {
       id: 3,
       accountId: '1',
+      riotId: 'Faker#NA1',
       matchId: null,
       bindState: 'unmatched',
       fileBytes: 260_000_000,
@@ -208,6 +213,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
       id: 11,
       game: 'tft',
       accountId: '1',
+      riotId: 'Faker#NA1',
       matchId: 'NA1_7399997366',
       bindState: 'bound',
       fileBytes: 1_250_000_000,
@@ -241,6 +247,7 @@ export const RECORDINGS: Record<string, Recording[]> = {
       id: 12,
       game: 'tft',
       accountId: '1',
+      riotId: 'Faker#NA1',
       matchId: null,
       bindState: 'pending',
       fileBytes: 980_000_000,
@@ -255,9 +262,84 @@ export const RECORDINGS: Record<string, Recording[]> = {
       ...NOT_ON_SERVER
     },
     ...(scenario === 'media-queue' ? queueStates() : []),
-    ...(scenario === 'media-backlog' ? backlog() : [])
+    ...(scenario === 'media-backlog' ? backlog() : []),
+    // Gone from this PC after upload and kept only as rows, the way a PC that
+    // deletes after upload fills up with them — what "Forget them" clears.
+    ...serverOnly('1', 'Faker#NA1', 20, [C.Viktor, C.Ahri, C.Viktor])
   ],
-  2: []
+  // The second account in the rail: one game still on this PC, one only on the server.
+  2: [
+    otherGame(30, '2', 'AbsolutelyEnormousName#EUW', 26 * 60, C.Jinx, true),
+    ...serverOnly('2', 'AbsolutelyEnormousName#EUW', 31, [C.Kaisa])
+  ],
+  // A friend who played on this PC with an account that is not yours on the
+  // server, and a recording whose player nothing here can name — written with
+  // a server's id while the server could not be reached.
+  c2: [
+    otherGame(40, 'c2', 'Fakest#NA1', 50 * 60, C.Riven, false),
+    otherGame(41, '0198f2c1-3f1a-7c5e-9c3b-2c0a5f1e4d77', null, 3 * 24 * 60, C.Sett, true)
+  ]
+}
+
+/** Every recording on the harness's PC, whoever's — what the Recordings tab lists. */
+export const ALL_RECORDINGS: Recording[] = Object.values(RECORDINGS).flat()
+
+/** A finished, bound League game with its file still on this PC. */
+function otherGame(
+  id: number,
+  accountId: string,
+  riotId: string | null,
+  minutesAgo: number,
+  championId: number,
+  win: boolean
+): Recording {
+  const startedAt = NOW - minutesAgo * 60_000
+  return {
+    id,
+    accountId,
+    riotId,
+    matchId: matchIdAt(60 + id),
+    bindState: 'bound',
+    fileBytes: 1_530_000_000,
+    fileExists: true,
+    queueId: 420,
+    startedAt,
+    endedAt: startedAt + 1_710_000,
+    durationSeconds: 1_710,
+    selfChampionId: championId,
+    match: {
+      matchId: matchIdAt(60 + id),
+      gameCreation: startedAt - 120_000,
+      gameDuration: 1_710,
+      gameMode: 'CLASSIC',
+      queueId: 420,
+      win,
+      championId,
+      championName: null,
+      kills: win ? 9 : 2,
+      deaths: win ? 3 : 7,
+      assists: win ? 11 : 5
+    },
+    ...LEAGUE,
+    ...NOT_ON_SERVER
+  }
+}
+
+/** Games uploaded and then deleted from this PC: on the server, and nothing here but the row. */
+function serverOnly(accountId: string, riotId: string, firstId: number, champions: number[]): Recording[] {
+  return champions.map((championId, i) => {
+    const startedAt = NOW - (3 * 24 + i * 5) * 60 * 60_000
+    return {
+      ...otherGame(firstId + i, accountId, riotId, (3 * 24 + i * 5) * 60, championId, i % 2 === 0),
+      startedAt,
+      endedAt: startedAt + 1_710_000,
+      fileBytes: null,
+      fileExists: false,
+      fileDeleted: true,
+      server: ON_SERVER,
+      upload: upload('done', { bytesSent: 1_530_000_000, fileBytes: 1_530_000_000, deleteAfter: true })
+    }
+  })
 }
 
 /**

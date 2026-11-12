@@ -1,24 +1,33 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   bindRecording,
-  countMissingFiles,
+  countServerOnlyRecordings,
   createRecording,
   deleteRecording,
+  deleteRecordings,
   finishRecording,
   getOldestRecordingIds,
   getBindableRecordings,
   getRecording,
   getRecordingEvents,
   getRecordingFilePath,
+  getRecordingPlayers,
   getRecordingUsage,
   getRecordings,
+  getServerOnlyRecordingIds,
   countRecordings,
   insertRecordingEvents,
+  markFileDeleted,
   markRecordingUnmatched,
-  matchAlreadyBound
+  matchAlreadyBound,
+  setServerCopy
 } from './recordings.repo'
+import { enqueueUpload } from './mediaUploads.repo'
 import { getMatchSummaries, insertMatch } from './matches.repo'
 import { applyAllMigrations } from '../testMigrations'
 import type { MatchDto } from '../../riot/types'
@@ -44,6 +53,15 @@ const ACCOUNT: AccountContext = { accountId: '1', riotId: 'Faker#NA1', serverKey
 /** More than any test here makes, so a read is every recording. */
 const EVERY = { limit: 100, offset: 0 }
 
+/** No filter: every recording on this PC, whoever played it. */
+const ALL = {}
+
+/** A second account on this PC, which a row made before it had a Riot ID finds its name through. */
+const SMURF = { accountId: '2', riotId: null }
+
+/** Somebody on a server, by the server's id — no account here has it. */
+const SOMEONE = { accountId: '0198f2c1-3f1a-7c5e-9c3b-2c0a5f1e4d77', riotId: 'Someone#EUW' }
+
 const ME = 'puuid-me'
 const T0 = 1_700_000_000_000
 
@@ -63,6 +81,7 @@ function seedAccount(): number {
     'Faker',
     'NA1'
   )
+  db.prepare('INSERT INTO accounts (puuid, game_name, tag_line) VALUES (?, ?, ?)').run('puuid-smurf', 'Smurf', 'EUW')
   return 1
 }
 
@@ -161,9 +180,12 @@ describe('recordings.repo', () => {
 
   it('reports a file that is not on disk as missing rather than hiding the recording', () => {
     const id = newRecording()
+    finishRecording(db, id, T0 + 1_000, FILE, 1_000_000)
 
     expect(getRecording(db, id)?.fileExists).toBe(false)
-    expect(countMissingFiles(db)).toBe(1)
+    expect(getRecordingUsage(db).missingCount).toBe(1)
+    // Nor does a file that is not there count towards the size.
+    expect(getRecordingUsage(db).totalBytes).toBe(0)
   })
 
   it('takes the filename from the stop, because OBS chooses it and not us', () => {
@@ -288,11 +310,11 @@ describe('recordings.repo', () => {
       serverKey: 'https://foxfire.example.com'
     }
 
-    expect(getRecordings(db, onAServer, EVERY).map((r) => r.id)).toEqual([id])
+    expect(getBindableRecordings(db, onAServer, WITHIN_HORIZON).map((r) => r.id)).toEqual([id])
 
-    // And an account that merely shares the server sees none of them.
+    // And an account that merely shares the server is offered none of them.
     const somebodyElse: AccountContext = { ...onAServer, riotId: 'Someone#EUW' }
-    expect(getRecordings(db, somebodyElse, EVERY)).toHaveLength(0)
+    expect(getBindableRecordings(db, somebodyElse, WITHIN_HORIZON)).toHaveLength(0)
   })
 
   it('keeps the footage and the match it names when the match row goes', () => {
@@ -348,43 +370,22 @@ describe('recordings.repo', () => {
     expect(summary?.local?.recordingId).toBeNull()
   })
 
-  it('totals disk use and counts what never found a match', () => {
-    const a = newRecording({ filePath: 'a.mp4' })
-    const b = newRecording({ filePath: 'b.mp4' })
-    finishRecording(db, a, T0 + 1_000, 'a.mp4', 1_000_000)
-    finishRecording(db, b, T0 + 1_000, 'b.mp4', 3_000_000)
-    markRecordingUnmatched(db, b)
-
-    const usage = getRecordingUsage(db)
-    expect(usage.totalBytes).toBe(4_000_000)
-    expect(usage.count).toBe(2)
-    expect(usage.unmatchedCount).toBe(1)
-  })
-
-  it('deletes oldest first, so cleanup keeps the games you just played', () => {
-    const oldest = newRecording({ filePath: 'a.mp4', startedAt: T0 })
-    const middle = newRecording({ filePath: 'b.mp4', startedAt: T0 + 10_000 })
-    newRecording({ filePath: 'c.mp4', startedAt: T0 + 20_000 })
-
-    expect(getOldestRecordingIds(db, ACCOUNT, 2)).toEqual([oldest, middle])
-  })
-
   it('lists newest first, matching how match history reads', () => {
     newRecording({ filePath: 'a.mp4', startedAt: T0 })
     const newest = newRecording({ filePath: 'b.mp4', startedAt: T0 + 60_000 })
 
-    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.id).toBe(newest)
+    expect(getRecordings(db, ALL, EVERY)[0]?.id).toBe(newest)
   })
 
   it('pages newest first, and counts every recording beside the page', () => {
     const ids = [0, 1, 2, 3, 4].map((i) => newRecording({ filePath: `${i}.mp4`, startedAt: T0 + i * 60_000 }))
     const newestFirst = [...ids].reverse()
 
-    expect(getRecordings(db, ACCOUNT, { limit: 2, offset: 0 }).map((r) => r.id)).toEqual(newestFirst.slice(0, 2))
-    expect(getRecordings(db, ACCOUNT, { limit: 2, offset: 2 }).map((r) => r.id)).toEqual(newestFirst.slice(2, 4))
-    expect(getRecordings(db, ACCOUNT, { limit: 2, offset: 4 }).map((r) => r.id)).toEqual(newestFirst.slice(4))
-    expect(countRecordings(db, ACCOUNT)).toBe(5)
-    expect(countRecordings(db, { ...ACCOUNT, accountId: '2', riotId: 'Someone#EUW' })).toBe(0)
+    expect(getRecordings(db, ALL, { limit: 2, offset: 0 }).map((r) => r.id)).toEqual(newestFirst.slice(0, 2))
+    expect(getRecordings(db, ALL, { limit: 2, offset: 2 }).map((r) => r.id)).toEqual(newestFirst.slice(2, 4))
+    expect(getRecordings(db, ALL, { limit: 2, offset: 4 }).map((r) => r.id)).toEqual(newestFirst.slice(4))
+    expect(countRecordings(db, ALL)).toBe(5)
+    expect(countRecordings(db, { player: 'Someone#EUW' })).toBe(0)
   })
 
   it('breaks a tie between two recordings that started together, so no page repeats one', () => {
@@ -392,10 +393,198 @@ describe('recordings.repo', () => {
     const second = newRecording({ filePath: 'b.mp4', startedAt: T0 })
 
     const pages = [
-      ...getRecordings(db, ACCOUNT, { limit: 1, offset: 0 }),
-      ...getRecordings(db, ACCOUNT, { limit: 1, offset: 1 })
+      ...getRecordings(db, ALL, { limit: 1, offset: 0 }),
+      ...getRecordings(db, ALL, { limit: 1, offset: 1 })
     ]
 
     expect(pages.map((r) => r.id)).toEqual([second, first])
+  })
+})
+
+describe('every recording on this PC', () => {
+  // The Recordings tab used to list the account picked in the rail, under a
+  // size that counted everybody's: a PC full of another account's games warned
+  // about files the list never showed and its cleanup never reached.
+
+  it('lists and counts every account’s, naming the player each was recorded on', () => {
+    const faker = newRecording({ filePath: 'faker.mp4', startedAt: T0 })
+    const smurf = newRecording({ filePath: 'smurf.mp4', startedAt: T0 + 60_000, ...SMURF })
+    const someone = newRecording({ filePath: 'someone.mp4', startedAt: T0 + 120_000, ...SOMEONE })
+    const nobody = newRecording({ filePath: 'nobody.mp4', startedAt: T0 + 180_000, accountId: 'an-id-from-a-gone-server', riotId: null })
+
+    const rows = getRecordings(db, ALL, EVERY)
+    expect(rows.map((r) => r.id)).toEqual([nobody, someone, smurf, faker])
+    expect(countRecordings(db, ALL)).toBe(4)
+
+    // The row's own Riot ID; failing that, this PC's account of that id; and
+    // nothing at all when neither can say.
+    expect(rows.map((r) => r.riotId)).toEqual([null, 'Someone#EUW', 'Smurf#EUW', 'Faker#NA1'])
+    expect(getRecording(db, smurf)?.riotId).toBe('Smurf#EUW')
+  })
+
+  it('narrows to one player, whatever the case, and to one game, and counts what it leaves', () => {
+    const faker = newRecording({ filePath: 'faker.mp4', startedAt: T0 })
+    const fakerTft = newRecording({ filePath: 'faker-tft.mp4', startedAt: T0 + 60_000, game: 'tft' })
+    const smurf = newRecording({ filePath: 'smurf.mp4', startedAt: T0 + 120_000, ...SMURF })
+    newRecording({ filePath: 'someone.mp4', startedAt: T0 + 180_000, ...SOMEONE })
+
+    expect(getRecordings(db, { player: 'faker#na1' }, EVERY).map((r) => r.id)).toEqual([fakerTft, faker])
+    expect(countRecordings(db, { player: 'FAKER#NA1' })).toBe(2)
+    // A player named only through this PC's accounts is found the same way.
+    expect(getRecordings(db, { player: 'Smurf#EUW' }, EVERY).map((r) => r.id)).toEqual([smurf])
+    expect(getRecordings(db, { player: 'Faker#NA1', game: 'tft' }, EVERY).map((r) => r.id)).toEqual([fakerTft])
+    expect(countRecordings(db, { game: 'lol' })).toBe(3)
+  })
+
+  it('offers each player once, most recordings first, and leaves out who nobody can name', () => {
+    newRecording({ filePath: 'a.mp4' })
+    newRecording({ filePath: 'b.mp4', riotId: 'faker#na1' })
+    newRecording({ filePath: 'c.mp4', ...SMURF })
+    newRecording({ filePath: 'd.mp4', accountId: 'an-id-from-a-gone-server', riotId: null })
+
+    const players = getRecordingPlayers(db)
+    expect(players.map((p) => p.count)).toEqual([2, 1])
+    expect(players[0]?.riotId.toLowerCase()).toBe('faker#na1')
+    expect(players[1]).toEqual({ riotId: 'Smurf#EUW', count: 1 })
+  })
+})
+
+describe('what the recordings take up, and the cleanup', () => {
+  let folder: string
+
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), 'foxfire-usage-'))
+  })
+
+  afterEach(() => {
+    rmSync(folder, { recursive: true, force: true })
+  })
+
+  /** A finished recording whose file is really there. */
+  function onDisk(
+    name: string,
+    startedAt: number,
+    bytes: number,
+    owner: { accountId: string; riotId: string | null } = { accountId: '1', riotId: 'Faker#NA1' }
+  ): number {
+    const path = join(folder, `${name}.mp4`)
+    writeFileSync(path, 'not really a video')
+    const id = newRecording({ filePath: path, startedAt, ...owner })
+    finishRecording(db, id, startedAt + 1_000, path, bytes)
+    return id
+  }
+
+  it('totals disk use and counts what never found a match', () => {
+    onDisk('a', T0, 1_000_000)
+    const b = onDisk('b', T0 + 1_000, 3_000_000)
+    markRecordingUnmatched(db, b)
+
+    const usage = getRecordingUsage(db)
+    expect(usage.totalBytes).toBe(4_000_000)
+    expect(usage.count).toBe(2)
+    expect(usage.unmatchedCount).toBe(1)
+    expect(usage.missingCount).toBe(0)
+  })
+
+  it('deletes oldest first, so cleanup keeps the games you just played', () => {
+    const oldest = onDisk('a', T0, 1)
+    const middle = onDisk('b', T0 + 10_000, 1)
+    onDisk('c', T0 + 20_000, 1)
+
+    expect(getOldestRecordingIds(db, 2)).toEqual([oldest, middle])
+  })
+
+  it('warns about exactly the files the cleanup can reach, whoever played them', () => {
+    // The other accounts' games are the oldest here — the case the old
+    // cleanup, scoped to the picked account, could not touch.
+    const smurf = onDisk('smurf', T0, 40_000_000, SMURF)
+    const someone = onDisk('someone', T0 + 10_000, 30_000_000, SOMEONE)
+    const faker = onDisk('faker', T0 + 20_000, 20_000_000)
+
+    // Not files on this PC, so in neither the size nor the cleanup: one whose
+    // file was deleted after upload, one that went missing, one still being
+    // written.
+    const uploaded = onDisk('uploaded', T0 - 30_000, 50_000_000)
+    setServerCopy(db, uploaded, { videoId: 'v', serverKey: 'https://foxfire.example.com', at: T0 })
+    rmSync(join(folder, 'uploaded.mp4'))
+    markFileDeleted(db, uploaded, T0)
+    const missing = onDisk('missing', T0 - 20_000, 60_000_000)
+    rmSync(join(folder, 'missing.mp4'))
+    newRecording({ filePath: join(folder, 'recording-now.mp4'), startedAt: T0 + 30_000 })
+
+    const usage = getRecordingUsage(db)
+    expect(usage.totalBytes).toBe(90_000_000)
+    expect(usage.count).toBe(3)
+    expect(usage.missingCount).toBe(1)
+
+    expect(getOldestRecordingIds(db, 2)).toEqual([smurf, someone])
+    // Asked for as many as the size counts, the cleanup reaches every one of
+    // them and nothing else: no byte in the warning is out of its reach.
+    expect(getOldestRecordingIds(db, usage.count)).toEqual([smurf, someone, faker])
+    expect(getOldestRecordingIds(db, 100)).toEqual([smurf, someone, faker])
+    expect(getOldestRecordingIds(db, 100)).not.toContain(missing)
+  })
+})
+
+describe('forgetting many', () => {
+  const ON_SERVER = { videoId: 'abcdefghijk', serverKey: 'https://foxfire.example.com', at: T0 }
+
+  function countOf(table: string, recordingId: number): number {
+    const column = table === 'recordings' ? 'id' : 'recording_id'
+    return (db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`).get(recordingId) as { n: number }).n
+  }
+
+  /** Recorded, uploaded, and its file deleted from this PC: the row is all that is left here. */
+  function serverOnly(name: string): number {
+    const id = newRecording({ filePath: `${name}.mp4` })
+    finishRecording(db, id, T0 + 1_000, `${name}.mp4`, 1_000_000)
+    setServerCopy(db, id, ON_SERVER)
+    markFileDeleted(db, id, T0 + 2_000)
+    return id
+  }
+
+  it('finds what lives only on the server: the file gone from here, the video there', () => {
+    const a = serverOnly('a')
+    const b = serverOnly('b')
+    // On the server with its file still here: not one of them.
+    const kept = newRecording({ filePath: 'kept.mp4' })
+    setServerCopy(db, kept, ON_SERVER)
+    // Its file gone but no server copy: forgetting it would lose the game.
+    const lost = newRecording({ filePath: 'lost.mp4' })
+    markFileDeleted(db, lost, T0)
+
+    expect(getServerOnlyRecordingIds(db)).toEqual([a, b])
+    expect(countServerOnlyRecordings(db)).toBe(2)
+  })
+
+  it('takes each row with its markers and upload, and leaves every other alone', () => {
+    const a = serverOnly('a')
+    const b = serverOnly('b')
+    const other = serverOnly('other')
+    for (const id of [a, b, other]) {
+      insertRecordingEvents(db, id, [event({ eventId: 1 }), event({ eventId: 2, videoTime: 200 })])
+      enqueueUpload(
+        db,
+        { recordingId: id, serverKey: ON_SERVER.serverKey, trigger: 'bulk', deleteAfter: true, fileBytes: 1, fileMtime: T0 },
+        T0
+      )
+    }
+
+    expect(deleteRecordings(db, [a, b, 9_999])).toBe(2)
+
+    for (const id of [a, b]) {
+      expect(countOf('recordings', id)).toBe(0)
+      expect(countOf('recording_events', id)).toBe(0)
+      expect(countOf('media_uploads', id)).toBe(0)
+    }
+    expect(countOf('recordings', other)).toBe(1)
+    expect(countOf('recording_events', other)).toBe(2)
+    expect(countOf('media_uploads', other)).toBe(1)
+  })
+
+  it('takes nothing when asked for nothing', () => {
+    serverOnly('a')
+    expect(deleteRecordings(db, [])).toBe(0)
+    expect(countRecordings(db, ALL)).toBe(1)
   })
 })

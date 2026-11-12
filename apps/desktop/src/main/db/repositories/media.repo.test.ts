@@ -39,6 +39,9 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 
 const SERVER = 'https://foxfire.example.com'
 const ACCOUNT: AccountContext = { accountId: '1', riotId: 'Faker#NA1', serverKey: SERVER }
+
+/** The server's answer to whose accounts are yours: the one above, under the server's own id for it. */
+const MINE = [{ id: '0198f2c1-3f1a-7c5e-9c3b-2c0a5f1e4d77', gameName: 'Faker', tagLine: 'NA1', isMine: true }]
 const T0 = 1_700_000_000_000
 const VIDEO = 'abcdefghijk'
 
@@ -161,7 +164,7 @@ describe('the upload queue', () => {
     enqueueUpload(db, job(id, { deleteAfter: true }), T0)
     updateUpload(db, id, { state: 'uploading', confirmedOffset: 250_000 }, T0 + 1)
 
-    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.upload).toMatchObject({
+    expect(getRecordings(db, {}, EVERY)[0]?.upload).toMatchObject({
       state: 'uploading',
       bytesSent: 250_000,
       fileBytes: 1_000_000,
@@ -203,22 +206,31 @@ describe('a recording on the server', () => {
   it('remembers which server has it', () => {
     const id = recording('game')
     onServer(id)
-    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.server).toEqual({ videoId: VIDEO, serverKey: SERVER, at: T0 })
+    expect(getRecordings(db, {}, EVERY)[0]?.server).toEqual({ videoId: VIDEO, serverKey: SERVER, at: T0 })
     expect(getRecordingIdentity(db, id)).toMatchObject({ serverVideoId: VIDEO, serverVideoKey: SERVER })
 
     setServerCopy(db, id, null)
-    expect(getRecordings(db, ACCOUNT, EVERY)[0]?.server).toBeNull()
+    expect(getRecordings(db, {}, EVERY)[0]?.server).toBeNull()
   })
 
   it('stops counting against the disk once its file is deleted', () => {
-    const kept = recording('kept')
-    const freed = recording('freed', T0 - 1)
-    onServer(freed)
-    markFileDeleted(db, freed, T0 + 1)
+    // The size counts files that are really there, so this one's is.
+    const folder = mkdtempSync(join(tmpdir(), 'foxfire-freed-'))
+    try {
+      const kept = recording('kept')
+      const path = join(folder, 'kept.mp4')
+      writeFileSync(path, 'not really a video')
+      db.prepare('UPDATE recordings SET file_path = ? WHERE id = ?').run(path, kept)
+      const freed = recording('freed', T0 - 1)
+      onServer(freed)
+      markFileDeleted(db, freed, T0 + 1)
 
-    expect(getRecordingUsage(db)).toMatchObject({ totalBytes: 1_000_000, count: 1 })
-    // "Delete the 5 oldest" frees nothing by picking a recording that is already only on the server.
-    expect(getOldestRecordingIds(db, ACCOUNT, 5)).toEqual([kept])
+      expect(getRecordingUsage(db)).toMatchObject({ totalBytes: 1_000_000, count: 1, missingCount: 0 })
+      // "Delete the 5 oldest" frees nothing by picking a recording that is already only on the server.
+      expect(getOldestRecordingIds(db, 5)).toEqual([kept])
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
   })
 })
 
@@ -234,12 +246,17 @@ describe('every recording that can go up', () => {
   })
 
   /** A finished recording whose file is really there and that found its game. */
-  function onDisk(name: string, startedAt: number, matchId: string | null = `NA1_${name}`): number {
+  function onDisk(
+    name: string,
+    startedAt: number,
+    matchId: string | null = `NA1_${name}`,
+    owner: { accountId: string; riotId: string | null } = ACCOUNT
+  ): number {
     const path = join(folder, `${name}.mp4`)
     writeFileSync(path, 'not really a video')
     const id = createRecording(db, {
-      accountId: ACCOUNT.accountId,
-      riotId: ACCOUNT.riotId,
+      accountId: owner.accountId,
+      riotId: owner.riotId,
       serverKey: null,
       filePath: path,
       queueId: 420,
@@ -271,13 +288,29 @@ describe('every recording that can go up', () => {
     enqueueUpload(db, job(failed), T0)
     updateUpload(db, failed, { state: 'failed' }, T0 + 1)
 
-    expect(getUploadableRecordings(db, ACCOUNT, SERVER).map((r) => r.id)).toEqual([elsewhere, failed, newer, older])
-    expect(getUploadableRecordingIds(db, SERVER)).toEqual([older, newer, failed, elsewhere])
+    expect(getUploadableRecordings(db, SERVER, MINE).map((r) => r.id)).toEqual([elsewhere, failed, newer, older])
+    expect(getUploadableRecordingIds(db, SERVER, MINE)).toEqual([older, newer, failed, elsewhere])
   })
 
   it('is nothing off a server', () => {
     onDisk('a', T0)
-    expect(getUploadableRecordings(db, ACCOUNT, null)).toEqual([])
+    expect(getUploadableRecordings(db, null, MINE)).toEqual([])
+  })
+
+  it('is yours only, though the list holds every recording on this PC', () => {
+    // A friend played on this PC with an account they claimed on the server.
+    // Their game is listed — it is on this disk — but the server takes its
+    // upload from nobody but them, so neither "select all" nor "upload
+    // everything" offers it. A recording of yours made in local-only mode is
+    // still yours: its Riot ID finds the account the server knows by a GUID.
+    const mine = onDisk('mine', T0)
+    const theirs = onDisk('theirs', T0 + 60_000, 'NA1_theirs', { accountId: 'their-guid', riotId: 'Someone#EUW' })
+
+    expect(getRecordings(db, {}, EVERY).map((r) => r.id)).toEqual([theirs, mine])
+    expect(getUploadableRecordings(db, SERVER, MINE).map((r) => r.id)).toEqual([mine])
+    expect(getUploadableRecordingIds(db, SERVER, MINE)).toEqual([mine])
+    // Nothing of anybody's, before the server has said whose accounts are yours.
+    expect(getUploadableRecordingIds(db, SERVER, [])).toEqual([])
   })
 
   it('agrees with the rule the Recordings tab draws its checkboxes by', () => {
@@ -288,10 +321,12 @@ describe('every recording that can go up', () => {
     recording('gone', T0 + 180_000)
     enqueueUpload(db, job(queued), T0)
 
-    const byTheTab = getRecordings(db, ACCOUNT, EVERY)
-      .filter((recording) => canUploadRecording(recording, SERVER))
+    onDisk('theirs', T0 + 200_000, 'NA1_theirs', { accountId: 'their-guid', riotId: 'Someone#EUW' })
+
+    const byTheTab = getRecordings(db, {}, EVERY)
+      .filter((recording) => canUploadRecording(recording, SERVER, MINE))
       .map((r) => r.id)
 
-    expect(getUploadableRecordings(db, ACCOUNT, SERVER).map((r) => r.id)).toEqual(byTheTab)
+    expect(getUploadableRecordings(db, SERVER, MINE).map((r) => r.id)).toEqual(byTheTab)
   })
 })

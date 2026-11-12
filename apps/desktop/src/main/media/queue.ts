@@ -227,22 +227,30 @@ export function enqueue(
 }
 
 /**
- * Every recording on this PC that could go to the server, queued at once —
+ * Every recording on this PC you could send to the server, queued at once —
  * Settings' "upload everything", for a backlog.
+ *
+ * Yours only: the PC may hold games somebody else played on an account they
+ * claimed, and the server takes those from nobody but them. Queued anyway,
+ * each would only have failed when its turn came.
  */
-export function enqueueAll(options: EnqueueOptions = {}): BulkUploadResult {
+export async function enqueueAll(options: EnqueueOptions = {}): Promise<BulkUploadResult> {
   const serverKey = activeServer()
-  const ids = serverKey ? getUploadableRecordingIds(getDb(), serverKey) : []
+  const ids = serverKey ? getUploadableRecordingIds(getDb(), serverKey, await serverApi().accounts.mine()) : []
   return enqueue(ids, 'bulk', options)
 }
 
-/** What "upload everything" would queue: how many, and how big. */
-export function backlog(): { count: number; bytes: number } {
+/** What "upload everything" would queue: how many, and how big. Nothing, while the server cannot say whose accounts are yours. */
+export async function backlog(): Promise<{ count: number; bytes: number }> {
   const serverKey = activeServer()
   if (!serverKey) return { count: 0, bytes: 0 }
+  const mine = await serverApi()
+    .accounts.mine()
+    .catch(() => null)
+  if (!mine) return { count: 0, bytes: 0 }
   const db = getDb()
   let bytes = 0
-  const ids = getUploadableRecordingIds(db, serverKey)
+  const ids = getUploadableRecordingIds(db, serverKey, mine)
   for (const id of ids) {
     const path = getRecordingIdentity(db, id)?.filePath
     if (path && existsSync(path)) bytes += statSync(path).size
@@ -252,12 +260,33 @@ export function backlog(): { count: number; bytes: number } {
 
 /** Stops an upload and leaves it cancelled. What Foxfire Media already has is let go. */
 export function cancelUpload(recordingId: number): void {
+  if (stopUpload(recordingId)) changed()
+}
+
+/**
+ * Stops the uploads of many recordings at once — ones about to be deleted or
+ * forgotten — and answers whether any was on its way. Says nothing: the caller
+ * announces the whole batch once, with {@link announceQueue}, rather than the
+ * list redrawing itself for every row.
+ */
+export function releaseUploads(recordingIds: readonly number[]): boolean {
+  let any = false
+  for (const recordingId of recordingIds) any = stopUpload(recordingId) || any
+  return any
+}
+
+/** Tells the windows what the queue is now, after a batch of {@link releaseUploads}. */
+export function announceQueue(): void {
+  changed(false)
+}
+
+function stopUpload(recordingId: number): boolean {
   const job = getUpload(getDb(), recordingId)
-  if (!job || job.state === 'done' || job.state === 'cancelled') return
+  if (!job || job.state === 'done' || job.state === 'cancelled') return false
   if (runningJob === recordingId) inFlight?.abort()
   updateUpload(getDb(), recordingId, { state: 'cancelled', nextAttemptAt: null }, Date.now())
   clearUploadToken(recordingId)
-  changed()
+  return true
 }
 
 /** Tries a failed or cancelled upload again. */
